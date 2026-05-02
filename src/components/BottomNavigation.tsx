@@ -29,21 +29,42 @@ function TabIcon({ id }: { id: NavTab }) {
 export function BottomNavigation({ active, onChange }: Props) {
   return (
     <nav
-      className="flex shrink-0"
+      className="relative flex shrink-0 overflow-hidden"
       style={{
-        background: '#111111',
-        borderTop: '1px solid rgba(201,162,39,0.18)',
+        background:
+          'linear-gradient(180deg, rgba(23,20,15,0.96), rgba(8,8,8,0.98))',
+        borderTop: '1px solid rgba(201,162,39,0.28)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        boxShadow: '0 -10px 30px rgba(0,0,0,0.42), inset 0 1px 0 rgba(245,240,232,0.04)',
       }}
     >
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0"
+        style={{
+          height: 1,
+          background: 'linear-gradient(90deg, transparent, rgba(232,197,71,0.58), transparent)',
+        }}
+      />
       {TABS.map(tab => (
         <button
           key={tab}
           type="button"
           onClick={() => onChange(tab)}
-          className="flex flex-col items-center justify-center gap-1 flex-1 py-3 text-[10px] tracking-wider transition-colors"
-          style={{ color: active === tab ? '#C9A227' : '#666666' }}
+          className="relative flex flex-col items-center justify-center gap-1 flex-1 py-3 text-[10px] tracking-wider transition-colors active:opacity-70"
+          style={{
+            color: active === tab ? '#E8C547' : 'rgba(245,240,232,0.34)',
+            textShadow: active === tab ? '0 0 14px rgba(201,162,39,0.36)' : 'none',
+          }}
         >
+          {active === tab && (
+            <span
+              className="absolute top-1 h-0.5 w-6 rounded-full"
+              style={{
+                background: 'linear-gradient(90deg, transparent, #E8C547, transparent)',
+                boxShadow: '0 0 12px rgba(232,197,71,0.5)',
+              }}
+            />
+          )}
           <TabIcon id={tab} />
           <span>{TAB_LABELS[tab]}</span>
         </button>

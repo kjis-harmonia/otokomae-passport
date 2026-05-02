@@ -78,9 +78,11 @@ export function ReserveScreen() {
         <div
           className="rounded-2xl overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, #1C1C1A 0%, #0E0E0C 60%, #130E02 100%)',
-            border: '1px solid rgba(201,162,39,0.28)',
-            boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+            background:
+              'radial-gradient(circle at 18% 0%, rgba(139,26,42,0.16), transparent 42%), linear-gradient(135deg, #1C1C1A 0%, #0E0E0C 60%, #130E02 100%)',
+            border: '1px solid rgba(201,162,39,0.34)',
+            boxShadow:
+              '0 12px 40px rgba(0,0,0,0.7), inset 0 1px 0 rgba(245,240,232,0.05), inset 0 0 22px rgba(201,162,39,0.045)',
           }}
         >
           <div
@@ -91,11 +93,12 @@ export function ReserveScreen() {
             <div
               className="flex-shrink-0 p-3 rounded-xl"
               style={{
-                background: 'rgba(201,162,39,0.07)',
-                border: '1px solid rgba(201,162,39,0.15)',
+                background: 'linear-gradient(145deg, rgba(201,162,39,0.13), rgba(139,26,42,0.08))',
+                border: '1px solid rgba(201,162,39,0.24)',
+                boxShadow: 'inset 0 0 14px rgba(201,162,39,0.06)',
               }}
             >
-              <CalendarDays size={24} strokeWidth={1.5} style={{ color: 'rgba(201,162,39,0.65)' }} />
+              <CalendarDays size={24} strokeWidth={1.5} style={{ color: 'rgba(201,162,39,0.76)' }} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold" style={{ color: '#F5F0E8' }}>
@@ -109,9 +112,10 @@ export function ReserveScreen() {
               type="button"
               className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold tracking-wider transition-opacity active:opacity-60"
               style={{
-                background: 'rgba(201,162,39,0.1)',
-                border: '1px solid rgba(201,162,39,0.25)',
-                color: 'rgba(201,162,39,0.8)',
+                background: 'linear-gradient(145deg, rgba(201,162,39,0.14), rgba(139,26,42,0.08))',
+                border: '1px solid rgba(201,162,39,0.34)',
+                color: 'rgba(232,197,71,0.86)',
+                boxShadow: 'inset 0 0 12px rgba(201,162,39,0.035)',
               }}
             >
               予約へ
@@ -139,26 +143,33 @@ export function ReserveScreen() {
                 whileTap={{ scale: 0.98 }}
                 className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left"
                 style={{
-                  background: isSelected ? 'rgba(201,162,39,0.06)' : '#1A1A1A',
+                  background: isSelected
+                    ? 'radial-gradient(circle at 0% 50%, rgba(201,162,39,0.12), transparent 38%), linear-gradient(145deg, rgba(34,30,24,0.98), rgba(17,17,16,0.98) 58%, rgba(45,14,20,0.5))'
+                    : 'linear-gradient(145deg, rgba(30,28,24,0.96), rgba(17,17,16,0.98) 58%, rgba(41,14,19,0.42))',
                   border: isSelected
-                    ? '1.5px solid rgba(201,162,39,0.45)'
-                    : '1px solid rgba(255,255,255,0.05)',
-                  boxShadow: isSelected ? '0 0 16px rgba(201,162,39,0.08)' : 'none',
+                    ? '1.5px solid rgba(232,197,71,0.58)'
+                    : '1px solid rgba(201,162,39,0.18)',
+                  boxShadow: isSelected
+                    ? '0 0 20px rgba(201,162,39,0.13), inset 0 1px 0 rgba(245,240,232,0.05)'
+                    : 'inset 0 1px 0 rgba(245,240,232,0.035)',
                 }}
               >
                 <div
                   className="flex-shrink-0 p-2 rounded-lg"
                   style={{
                     background: isSelected
-                      ? 'rgba(201,162,39,0.1)'
-                      : 'rgba(255,255,255,0.03)',
+                      ? 'linear-gradient(145deg, rgba(201,162,39,0.15), rgba(139,26,42,0.08))'
+                      : 'linear-gradient(145deg, rgba(201,162,39,0.055), rgba(255,255,255,0.018))',
+                    border: isSelected
+                      ? '1px solid rgba(201,162,39,0.26)'
+                      : '1px solid rgba(201,162,39,0.08)',
                   }}
                 >
                   <Scissors
                     size={16}
                     strokeWidth={1.8}
                     style={{
-                      color: isSelected ? '#C9A227' : 'rgba(245,240,232,0.25)',
+                      color: isSelected ? '#E8C547' : 'rgba(245,240,232,0.28)',
                       transform: 'rotate(270deg)',
                     }}
                   />
@@ -166,7 +177,7 @@ export function ReserveScreen() {
                 <div className="flex-1 min-w-0">
                   <p
                     className="text-sm font-semibold"
-                    style={{ color: isSelected ? '#F5F0E8' : 'rgba(245,240,232,0.6)' }}
+                    style={{ color: isSelected ? '#F5F0E8' : 'rgba(245,240,232,0.68)' }}
                   >
                     {menu.name}
                   </p>
@@ -176,14 +187,19 @@ export function ReserveScreen() {
                 </div>
                 <span
                   className="flex-shrink-0 text-sm font-bold"
-                  style={{ color: isSelected ? '#C9A227' : 'rgba(201,162,39,0.35)' }}
+                  style={{ color: isSelected ? '#E8C547' : 'rgba(201,162,39,0.48)' }}
                 >
                   {menu.price}
                 </span>
                 {isSelected ? (
                   <div
                     className="flex-shrink-0 flex items-center justify-center rounded-full"
-                    style={{ width: 20, height: 20, background: 'rgba(201,162,39,0.85)' }}
+                    style={{
+                      width: 20,
+                      height: 20,
+                      background: 'linear-gradient(135deg, #E8C547, #C9A227)',
+                      boxShadow: '0 0 12px rgba(201,162,39,0.35)',
+                    }}
                   >
                     <Check size={12} strokeWidth={2.5} style={{ color: '#0D0D0D' }} />
                   </div>
@@ -215,20 +231,25 @@ export function ReserveScreen() {
                 whileTap={{ scale: 0.96 }}
                 className="flex flex-col items-center gap-1.5 py-3.5 rounded-xl"
                 style={{
-                  background: isSelected ? 'rgba(201,162,39,0.07)' : '#1A1A1A',
+                  background: isSelected
+                    ? 'radial-gradient(circle at 50% 0%, rgba(201,162,39,0.12), transparent 42%), linear-gradient(145deg, rgba(34,30,24,0.98), rgba(17,17,16,0.98) 58%, rgba(45,14,20,0.46))'
+                    : 'linear-gradient(145deg, rgba(30,28,24,0.96), rgba(17,17,16,0.98) 58%, rgba(41,14,19,0.38))',
                   border: isSelected
-                    ? '1.5px solid rgba(201,162,39,0.5)'
-                    : '1px solid rgba(255,255,255,0.05)',
+                    ? '1.5px solid rgba(232,197,71,0.58)'
+                    : '1px solid rgba(201,162,39,0.18)',
+                  boxShadow: isSelected
+                    ? '0 0 18px rgba(201,162,39,0.12), inset 0 1px 0 rgba(245,240,232,0.05)'
+                    : 'inset 0 1px 0 rgba(245,240,232,0.035)',
                 }}
               >
                 <Clock
                   size={16}
                   strokeWidth={1.8}
-                  style={{ color: isSelected ? '#C9A227' : 'rgba(245,240,232,0.22)' }}
+                  style={{ color: isSelected ? '#E8C547' : 'rgba(245,240,232,0.28)' }}
                 />
                 <span
                   className="text-sm font-semibold"
-                  style={{ color: isSelected ? '#F5F0E8' : 'rgba(245,240,232,0.5)' }}
+                  style={{ color: isSelected ? '#F5F0E8' : 'rgba(245,240,232,0.62)' }}
                 >
                   {slot.label}
                 </span>
@@ -314,11 +335,11 @@ export function ReserveScreen() {
             style={{
               background: canConfirm
                 ? 'linear-gradient(135deg, #8B1A2A 0%, #B02035 100%)'
-                : 'rgba(74,74,74,0.2)',
-              color: canConfirm ? '#F5F0E8' : '#4A4A4A',
+                : 'linear-gradient(135deg, rgba(74,74,74,0.24), rgba(139,26,42,0.08))',
+              color: canConfirm ? '#F5F0E8' : 'rgba(245,240,232,0.42)',
               border: canConfirm
                 ? '1px solid rgba(176,32,53,0.45)'
-                : '1px solid rgba(74,74,74,0.2)',
+                : '1px solid rgba(201,162,39,0.14)',
             }}
           >
             この内容で相談する

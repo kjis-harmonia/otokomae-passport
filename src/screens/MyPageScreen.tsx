@@ -68,17 +68,25 @@ function ActivityCard({
   const hasValue = value !== null
   return (
     <div
-      className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
+      className="flex items-center gap-3 px-4 py-3.5 rounded-xl relative overflow-hidden"
       style={{
-        background: '#1A1A1A',
+        background: hasValue
+          ? 'linear-gradient(135deg, rgba(29,26,18,0.98) 0%, rgba(13,13,12,0.98) 58%, rgba(44,10,15,0.78) 100%)'
+          : 'linear-gradient(135deg, rgba(24,24,22,0.96) 0%, rgba(12,12,11,0.98) 100%)',
         border: hasValue
-          ? '1px solid rgba(201,162,39,0.18)'
-          : '1px solid rgba(255,255,255,0.04)',
+          ? '1px solid rgba(201,162,39,0.28)'
+          : '1px solid rgba(201,162,39,0.1)',
+        boxShadow: hasValue
+          ? 'inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 24px rgba(0,0,0,0.25)'
+          : 'inset 0 1px 0 rgba(255,255,255,0.03)',
       }}
     >
       <div
         className="flex-shrink-0 p-2 rounded-lg"
-        style={{ background: hasValue ? 'rgba(201,162,39,0.1)' : 'rgba(255,255,255,0.03)' }}
+        style={{
+          background: hasValue ? 'rgba(201,162,39,0.12)' : 'rgba(255,255,255,0.03)',
+          border: hasValue ? '1px solid rgba(201,162,39,0.2)' : '1px solid rgba(255,255,255,0.04)',
+        }}
       >
         {icon}
       </div>
@@ -92,7 +100,7 @@ function ActivityCard({
         {hasValue ? (
           <p className="text-sm font-medium" style={{ color: '#F5F0E8' }}>{value}</p>
         ) : (
-          <p className="text-sm" style={{ color: 'rgba(245,240,232,0.22)' }}>{placeholder}</p>
+          <p className="text-sm" style={{ color: 'rgba(245,240,232,0.34)' }}>{placeholder}</p>
         )}
       </div>
     </div>
@@ -103,11 +111,18 @@ function ListRow({ icon, label, sublabel }: { icon: ReactNode; label: string; su
   return (
     <div
       className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
-      style={{ background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.04)' }}
+      style={{
+        background: 'linear-gradient(135deg, rgba(24,24,22,0.98) 0%, rgba(12,12,11,0.98) 62%, rgba(35,11,15,0.72) 100%)',
+        border: '1px solid rgba(201,162,39,0.13)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+      }}
     >
       <div
         className="flex-shrink-0 p-2 rounded-lg"
-        style={{ background: 'rgba(201,162,39,0.07)' }}
+        style={{
+          background: 'rgba(201,162,39,0.08)',
+          border: '1px solid rgba(201,162,39,0.16)',
+        }}
       >
         {icon}
       </div>
@@ -204,9 +219,10 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
         transition={{ duration: 0.45, ease: 'easeOut' }}
         className="mx-4 rounded-2xl overflow-hidden"
         style={{
-          background: 'linear-gradient(135deg, #1C1C1A 0%, #0E0E0C 60%, #130E02 100%)',
-          border: '1px solid rgba(201,162,39,0.28)',
-          boxShadow: '0 12px 40px rgba(0,0,0,0.7), inset 0 1px 0 rgba(201,162,39,0.1)',
+          background:
+            'radial-gradient(circle at 88% 12%, rgba(176,32,53,0.18) 0%, transparent 34%), linear-gradient(135deg, #241F15 0%, #0D0D0C 54%, #080807 100%)',
+          border: '1px solid rgba(201,162,39,0.36)',
+          boxShadow: '0 18px 44px rgba(0,0,0,0.72), inset 0 1px 0 rgba(245,240,232,0.08), inset 0 -1px 0 rgba(176,32,53,0.18)',
         }}
       >
         {/* Rank badge */}
@@ -236,7 +252,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
           className="mx-5"
           style={{
             height: '1px',
-            background: 'linear-gradient(90deg, transparent, rgba(201,162,39,0.25), transparent)',
+            background: 'linear-gradient(90deg, transparent, rgba(201,162,39,0.34), rgba(176,32,53,0.24), transparent)',
           }}
         />
 
@@ -251,7 +267,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               <span className="text-sm font-normal ml-0.5" style={{ color: 'rgba(245,240,232,0.4)' }}>回</span>
             </p>
           </div>
-          <div style={{ width: '1px', height: 32, background: 'rgba(255,255,255,0.06)' }} />
+          <div style={{ width: '1px', height: 32, background: 'linear-gradient(180deg, transparent, rgba(201,162,39,0.22), transparent)' }} />
           <div>
             <p className="text-[9px] tracking-[0.18em] uppercase" style={{ color: 'rgba(201,162,39,0.45)' }}>
               スタンプ
@@ -273,7 +289,9 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                 style={{
                   width: 8,
                   height: 8,
-                  background: i < memberStatus.stampCount ? 'rgba(201,162,39,0.85)' : 'rgba(255,255,255,0.07)',
+                  background: i < memberStatus.stampCount ? 'linear-gradient(135deg, #E0C46A 0%, #9E7820 100%)' : 'rgba(255,255,255,0.07)',
+                  border: i < memberStatus.stampCount ? '1px solid rgba(245,240,232,0.18)' : '1px solid rgba(201,162,39,0.08)',
+                  boxShadow: i < memberStatus.stampCount ? '0 0 10px rgba(201,162,39,0.22)' : 'none',
                 }}
               />
             ))}
@@ -335,7 +353,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               <Gift
                 size={16}
                 strokeWidth={1.8}
-                style={{ color: gachaValue ? '#C9A227' : 'rgba(245,240,232,0.2)' }}
+                style={{ color: gachaValue ? '#C9A227' : 'rgba(245,240,232,0.28)' }}
               />
             }
             title="本日のガチャ"
@@ -347,7 +365,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               <User
                 size={16}
                 strokeWidth={1.8}
-                style={{ color: tryonValue ? '#C9A227' : 'rgba(245,240,232,0.2)' }}
+                style={{ color: tryonValue ? '#C9A227' : 'rgba(245,240,232,0.28)' }}
               />
             }
             title="試着中スタイル"
@@ -360,7 +378,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                 size={16}
                 strokeWidth={1.8}
                 style={{
-                  color: reserveValue ? '#C9A227' : 'rgba(245,240,232,0.2)',
+                  color: reserveValue ? '#C9A227' : 'rgba(245,240,232,0.28)',
                   transform: 'rotate(270deg)',
                 }}
               />
@@ -383,9 +401,13 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
         {activeCoupons.length === 0 ? (
           <div
             className="px-4 py-3.5 rounded-xl"
-            style={{ background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.04)' }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(24,24,22,0.98) 0%, rgba(12,12,11,0.98) 100%)',
+              border: '1px solid rgba(201,162,39,0.1)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+            }}
           >
-            <p className="text-sm" style={{ color: 'rgba(245,240,232,0.22)' }}>
+            <p className="text-sm" style={{ color: 'rgba(245,240,232,0.34)' }}>
               保有クーポンはまだありません
             </p>
           </div>
@@ -396,13 +418,18 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                 key={coupon.id}
                 className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
                 style={{
-                  background: '#1A1A1A',
-                  border: '1px solid rgba(201,162,39,0.18)',
+                  background:
+                    'radial-gradient(circle at 92% 16%, rgba(176,32,53,0.16) 0%, transparent 30%), linear-gradient(135deg, rgba(32,28,19,0.98) 0%, rgba(12,12,11,0.98) 62%, rgba(27,8,11,0.88) 100%)',
+                  border: '1px solid rgba(201,162,39,0.3)',
+                  boxShadow: '0 12px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(245,240,232,0.055)',
                 }}
               >
                 <div
                   className="flex-shrink-0 p-2 rounded-lg"
-                  style={{ background: 'rgba(139,26,42,0.12)' }}
+                  style={{
+                    background: 'rgba(139,26,42,0.16)',
+                    border: '1px solid rgba(201,162,39,0.18)',
+                  }}
                 >
                   <Tag size={16} strokeWidth={1.8} style={{ color: '#B02035' }} />
                 </div>

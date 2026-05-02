@@ -23,12 +23,11 @@ function App() {
 
   return (
     <div
-      className="flex flex-col h-dvh max-w-[430px] mx-auto overflow-hidden"
-      style={{ background: '#0D0D0D' }}
+      className="app-shell flex flex-col h-dvh max-w-[430px] mx-auto overflow-hidden"
     >
       <PhoneStatusBar />
       <AppHeader />
-      <main className="flex-1 overflow-y-auto">
+      <main className="app-main flex-1 overflow-y-auto">
         {activeTab === 'home' && <HomeScreen member={liveMember} onTabChange={setActiveTab} />}
         {activeTab === 'gacha' && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
         {activeTab === 'tryon' && <TryOnScreen />}

@@ -122,9 +122,11 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
         <div
           className="rounded-2xl overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, #1C1C1A 0%, #0E0E0C 60%, #130E02 100%)',
-            border: '1px solid rgba(201,162,39,0.28)',
-            boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+            background:
+              'radial-gradient(circle at 50% 0%, rgba(139,26,42,0.18), transparent 44%), linear-gradient(135deg, #1C1C1A 0%, #0E0E0C 58%, #16080B 100%)',
+            border: '1px solid rgba(201,162,39,0.36)',
+            boxShadow:
+              '0 14px 44px rgba(0,0,0,0.72), inset 0 1px 0 rgba(245,240,232,0.06), inset 0 0 24px rgba(201,162,39,0.055)',
           }}
         >
           <div
@@ -141,9 +143,11 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
                 width: 108,
                 height: 108,
                 borderRadius: '50%',
-                background: 'radial-gradient(circle at 38% 35%, #2A2A28, #0D0D0B)',
-                border: '2px solid rgba(201,162,39,0.38)',
-                boxShadow: '0 0 32px rgba(201,162,39,0.10), inset 0 1px 0 rgba(201,162,39,0.15)',
+                background:
+                  'radial-gradient(circle at 38% 35%, rgba(201,162,39,0.18), #1C1C18 38%, #0D0D0B 100%)',
+                border: '2px solid rgba(201,162,39,0.46)',
+                boxShadow:
+                  '0 0 34px rgba(201,162,39,0.13), 0 12px 34px rgba(0,0,0,0.42), inset 0 1px 0 rgba(245,240,232,0.08), inset 0 0 18px rgba(139,26,42,0.14)',
               }}
             >
               <Gift size={38} strokeWidth={1.5} style={{ color: 'rgba(201,162,39,0.72)' }} />
@@ -190,11 +194,14 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
               style={{
                 background: played
                   ? 'rgba(74,74,74,0.2)'
-                  : 'linear-gradient(135deg, #8B1A2A 0%, #B02035 100%)',
+                  : 'linear-gradient(135deg, #8B1A2A 0%, #B02035 72%, #7A1523 100%)',
                 color: played ? '#4A4A4A' : '#F5F0E8',
                 border: played
-                  ? '1px solid rgba(74,74,74,0.2)'
-                  : '1px solid rgba(176,32,53,0.45)',
+                  ? '1px solid rgba(74,74,74,0.22)'
+                  : '1px solid rgba(176,32,53,0.58)',
+                boxShadow: played
+                  ? 'inset 0 0 14px rgba(0,0,0,0.16)'
+                  : '0 10px 24px rgba(139,26,42,0.26), inset 0 1px 0 rgba(245,240,232,0.08)',
               }}
             >
               {isSpinning ? '抽選中...' : played ? '本日は終了しました' : 'ガチャを回す'}
@@ -222,16 +229,18 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
             <div
               className="flex items-center gap-4 rounded-xl px-4 py-4"
               style={{
-                background: 'linear-gradient(135deg, #1C1C1A, #0E0E0C)',
-                border: `1px solid ${result.accent}50`,
-                boxShadow: `0 4px 24px ${result.accent}18`,
+                background:
+                  'radial-gradient(circle at 0% 50%, rgba(201,162,39,0.12), transparent 38%), linear-gradient(145deg, rgba(34,30,24,0.98), rgba(17,17,16,0.98) 58%, rgba(45,14,20,0.5))',
+                border: `1px solid ${result.accent}70`,
+                boxShadow: `0 10px 28px rgba(0,0,0,0.44), 0 0 22px ${result.accent}1f, inset 0 1px 0 rgba(245,240,232,0.05)`,
               }}
             >
               <div
                 className="flex-shrink-0 p-3 rounded-xl"
                 style={{
-                  background: `${result.accent}18`,
-                  border: `1px solid ${result.accent}30`,
+                  background: `linear-gradient(145deg, ${result.accent}24, rgba(201,162,39,0.06))`,
+                  border: `1px solid ${result.accent}44`,
+                  boxShadow: `inset 0 0 12px ${result.accent}12`,
                 }}
               >
                 <PrizeIcon id={result.id} size={26} />
@@ -286,13 +295,18 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
               key={prize.id}
               className="flex items-center gap-3 px-4 py-3 rounded-xl"
               style={{
-                background: '#1A1A1A',
-                border: '1px solid rgba(255,255,255,0.04)',
+                background:
+                  'linear-gradient(145deg, rgba(30,28,24,0.96), rgba(17,17,16,0.98) 58%, rgba(41,14,19,0.42))',
+                border: '1px solid rgba(201,162,39,0.18)',
+                boxShadow: 'inset 0 1px 0 rgba(245,240,232,0.035)',
               }}
             >
               <div
                 className="flex-shrink-0 p-2 rounded-lg"
-                style={{ background: `${prize.accent}12` }}
+                style={{
+                  background: `linear-gradient(145deg, ${prize.accent}18, rgba(201,162,39,0.045))`,
+                  border: `1px solid ${prize.accent}24`,
+                }}
               >
                 <PrizeIcon id={prize.id} size={17} />
               </div>

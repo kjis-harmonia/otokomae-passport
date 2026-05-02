@@ -37,13 +37,19 @@ function QuickAction({ icon, label, sublabel, onClick }: { icon: ReactNode; labe
       onClick={onClick}
       className="flex flex-col items-center gap-2 p-4 rounded-xl w-full transition-opacity active:opacity-60"
       style={{
-        background: '#1A1A1A',
-        border: '1px solid rgba(201,162,39,0.13)',
+        background:
+          'linear-gradient(145deg, rgba(30,28,24,0.96), rgba(17,17,16,0.98) 58%, rgba(41,14,19,0.48))',
+        border: '1px solid rgba(201,162,39,0.22)',
+        boxShadow:
+          'inset 0 1px 0 rgba(245,240,232,0.04), inset 0 0 16px rgba(201,162,39,0.035)',
       }}
     >
       <div
         className="p-2.5 rounded-lg"
-        style={{ background: 'rgba(201,162,39,0.07)' }}
+        style={{
+          background: 'linear-gradient(145deg, rgba(201,162,39,0.12), rgba(139,26,42,0.06))',
+          boxShadow: 'inset 0 0 12px rgba(201,162,39,0.05)',
+        }}
       >
         {icon}
       </div>
@@ -91,7 +97,7 @@ export function HomeScreen({ member, onTabChange }: Props) {
   }
 
   return (
-    <div className="py-5 space-y-6">
+    <div className="py-4 space-y-5">
       {/* Greeting */}
       <div className="px-5">
         <p className="text-sm" style={{ color: '#8A8A7A' }}>
@@ -110,8 +116,8 @@ export function HomeScreen({ member, onTabChange }: Props) {
         <div
           className="mx-4 rounded-xl px-4 py-3 flex items-center justify-between"
           style={{
-            background: 'rgba(139,26,42,0.12)',
-            border: '1px solid rgba(139,26,42,0.3)',
+            background: 'rgba(139,26,42,0.105)',
+            border: '1px solid rgba(139,26,42,0.28)',
           }}
         >
           <div className="flex items-center gap-3">
@@ -136,7 +142,7 @@ export function HomeScreen({ member, onTabChange }: Props) {
       {/* Quick actions */}
       <div className="px-4">
         <p
-          className="text-[10px] tracking-[0.2em] uppercase mb-3"
+          className="text-[10px] tracking-[0.2em] uppercase mb-2.5"
           style={{ color: 'rgba(201,162,39,0.45)' }}
         >
           Quick Access
@@ -166,7 +172,7 @@ export function HomeScreen({ member, onTabChange }: Props) {
       {/* Recent activity */}
       <div className="px-4">
         <p
-          className="text-[10px] tracking-[0.2em] uppercase mb-3"
+          className="text-[10px] tracking-[0.2em] uppercase mb-2.5"
           style={{ color: 'rgba(201,162,39,0.45)' }}
         >
           Recent Activity

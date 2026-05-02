@@ -26,7 +26,10 @@ body {
 }
 
 body {
-  background-color: #0D0D0D;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(139, 26, 42, 0.18), transparent 34%),
+    radial-gradient(circle at 50% 100%, rgba(201, 162, 39, 0.09), transparent 36%),
+    #050505;
   font-family: system-ui, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -34,4 +37,50 @@ body {
 
 #root {
   height: 100%;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 16% 14%, rgba(139, 26, 42, 0.22), transparent 30%),
+    radial-gradient(circle at 88% 6%, rgba(201, 162, 39, 0.11), transparent 22%),
+    radial-gradient(circle at 50% 100%, rgba(139, 26, 42, 0.08), transparent 34%),
+    linear-gradient(160deg, #080706 0%, #0d0d0d 48%, #0f0709 100%);
+  box-shadow:
+    0 0 0 1px rgba(201, 162, 39, 0.08),
+    0 24px 80px rgba(0, 0, 0, 0.72);
+}
+
+.app-shell::before,
+.app-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.app-shell::before {
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(232, 197, 71, 0.08) 50%, transparent 100%),
+    repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.018) 0,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  opacity: 0.46;
+}
+
+.app-shell::after {
+  background:
+    radial-gradient(circle at 50% 18%, transparent 0 44%, rgba(0, 0, 0, 0.34) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 18%, rgba(0, 0, 0, 0.18));
+}
+
+.app-main {
+  position: relative;
+  z-index: 0;
 }

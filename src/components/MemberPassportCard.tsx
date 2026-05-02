@@ -24,18 +24,22 @@ export function MemberPassportCard({ member }: Props) {
       className="relative mx-4 rounded-2xl overflow-hidden"
       style={{
         background:
-          'linear-gradient(135deg, #1C1C1A 0%, #0E0E0C 58%, #160D05 100%)',
-        border: '1px solid rgba(201,162,39,0.42)',
+          'radial-gradient(circle at 18% 18%, rgba(139,26,42,0.34), transparent 34%), linear-gradient(135deg, #201713 0%, #0A0A09 48%, #17080C 100%)',
+        border: '1px solid rgba(232,197,71,0.48)',
         boxShadow:
-          '0 14px 44px rgba(0,0,0,0.72), inset 0 1px 0 rgba(245,240,232,0.08), inset 0 0 28px rgba(201,162,39,0.08)',
+          '0 18px 54px rgba(0,0,0,0.76), 0 0 32px rgba(139,26,42,0.16), inset 0 1px 0 rgba(245,240,232,0.12), inset 0 0 34px rgba(201,162,39,0.12)',
       }}
     >
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'linear-gradient(120deg, transparent 0%, rgba(201,162,39,0.08) 38%, transparent 62%)',
+            'linear-gradient(120deg, transparent 0%, rgba(245,240,232,0.08) 35%, rgba(232,197,71,0.08) 44%, transparent 58%)',
         }}
+      />
+      <div
+        className="pointer-events-none absolute inset-3 rounded-xl"
+        style={{ border: '1px solid rgba(201,162,39,0.18)' }}
       />
       <div
         className="pointer-events-none absolute inset-x-0 top-0"
@@ -44,20 +48,39 @@ export function MemberPassportCard({ member }: Props) {
           background: 'linear-gradient(90deg, transparent, rgba(232,197,71,0.8), transparent)',
         }}
       />
+      {['top-3 left-3', 'top-3 right-3', 'bottom-3 left-3', 'bottom-3 right-3'].map((pos) => (
+        <div
+          key={pos}
+          className={`pointer-events-none absolute ${pos} h-3 w-3`}
+          style={{
+            borderStyle: 'solid',
+            borderColor: 'rgba(232,197,71,0.42)',
+            borderTopWidth: pos.includes('top') ? 1 : 0,
+            borderBottomWidth: pos.includes('bottom') ? 1 : 0,
+            borderLeftWidth: pos.includes('left') ? 1 : 0,
+            borderRightWidth: pos.includes('right') ? 1 : 0,
+          }}
+        />
+      ))}
       {/* Header */}
-      <div className="relative flex items-start justify-between px-5 pt-4 pb-1">
+      <div className="relative flex items-start justify-between px-5 pt-3.5 pb-0.5">
         <div>
           <p
-            className="text-[9px] tracking-[0.22em] font-medium"
-            style={{ color: 'rgba(201,162,39,0.72)' }}
+            className="text-[10px] tracking-[0.26em] font-semibold"
+            style={{ color: '#E8C547', textShadow: '0 0 14px rgba(201,162,39,0.26)' }}
           >
             {BRAND.nameEn}
           </p>
+          <p className="mt-0.5 text-[8px] tracking-[0.24em]" style={{ color: 'rgba(245,240,232,0.34)' }}>
+            GINJIRO MEMBERSHIP
+          </p>
           <div
-            className="inline-flex items-center gap-1.5 mt-2 px-2 py-1 rounded-full"
+            className="inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-full"
             style={{
-              background: 'rgba(201,162,39,0.1)',
-              border: '1px solid rgba(201,162,39,0.26)',
+              background:
+                'linear-gradient(135deg, rgba(201,162,39,0.2), rgba(139,26,42,0.18))',
+              border: '1px solid rgba(232,197,71,0.38)',
+              boxShadow: '0 0 18px rgba(201,162,39,0.1), inset 0 0 12px rgba(201,162,39,0.08)',
             }}
           >
             <RankIcon rank={member.rank} />
@@ -72,9 +95,10 @@ export function MemberPassportCard({ member }: Props) {
         <div
           className="rounded-xl p-2.5"
           style={{
-            background: 'rgba(201,162,39,0.09)',
-            border: '1px solid rgba(201,162,39,0.24)',
-            boxShadow: 'inset 0 0 18px rgba(201,162,39,0.08)',
+            background:
+              'linear-gradient(145deg, rgba(12,12,10,0.86), rgba(201,162,39,0.09))',
+            border: '1px solid rgba(201,162,39,0.3)',
+            boxShadow: 'inset 0 0 18px rgba(201,162,39,0.1), 0 8px 18px rgba(0,0,0,0.28)',
           }}
         >
           <QrCode size={44} strokeWidth={1.3} style={{ color: 'rgba(201,162,39,0.55)' }} />
@@ -82,7 +106,7 @@ export function MemberPassportCard({ member }: Props) {
       </div>
 
       {/* Name */}
-      <div className="relative px-5 py-3">
+      <div className="relative px-5 py-2.5">
         <p className="text-2xl font-bold tracking-wide" style={{ color: '#F5F0E8' }}>
           {member.name}
         </p>
@@ -101,12 +125,12 @@ export function MemberPassportCard({ member }: Props) {
       />
 
       {/* Points + ID */}
-      <div className="relative flex items-end justify-between px-5 py-4">
+      <div className="relative flex items-end justify-between px-5 py-3.5">
         <div>
-          <p className="text-[9px] tracking-[0.2em] uppercase" style={{ color: 'rgba(201,162,39,0.45)' }}>
+          <p className="text-[9px] tracking-[0.22em] uppercase" style={{ color: 'rgba(201,162,39,0.58)' }}>
             Points
           </p>
-          <p className="text-[28px] font-bold leading-none mt-1" style={{ color: '#C9A227' }}>
+          <p className="text-[28px] font-bold leading-none mt-1" style={{ color: '#E8C547', textShadow: '0 0 20px rgba(201,162,39,0.22)' }}>
             {formatPoints(member.points)}
             <span
               className="text-[13px] font-normal ml-1"
@@ -132,7 +156,7 @@ export function MemberPassportCard({ member }: Props) {
       </div>
 
       {/* Visit progress */}
-      <div className="relative px-5 pb-4">
+      <div className="relative px-5 pb-3.5">
         <div
           className="flex items-center justify-between text-[10px] mb-1.5"
           style={{ color: 'rgba(245,240,232,0.42)' }}
