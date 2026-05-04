@@ -1,5 +1,6 @@
 import type { MemberStatus, Coupon } from '../data/brand'
 import { DEFAULT_MEMBER_STATUS } from '../data/brand'
+import { getRankByPoints, getSafeRank } from './rank'
 
 export const MEMBER_KEY = 'otokomae_member'
 export const GACHA_DATE_KEY = 'otokomae_gacha_date'
@@ -37,7 +38,17 @@ export function removeStoredValue(key: string): void {
 export const MEMBER_STATUS_KEY = 'otokomae_member_status'
 
 export function loadMemberStatus(): MemberStatus {
-  return getStoredValue<MemberStatus>(MEMBER_STATUS_KEY, DEFAULT_MEMBER_STATUS)
+  const stored = getStoredValue<Partial<MemberStatus>>(MEMBER_STATUS_KEY, DEFAULT_MEMBER_STATUS)
+  const points = typeof stored.points === 'number' ? stored.points : DEFAULT_MEMBER_STATUS.points
+  const currentRank = stored.rank ?? DEFAULT_MEMBER_STATUS.rank
+  const computedRank = getRankByPoints(points)
+
+  return {
+    ...DEFAULT_MEMBER_STATUS,
+    ...stored,
+    points,
+    rank: getSafeRank(currentRank, computedRank),
+  }
 }
 
 export function saveMemberStatus(status: MemberStatus): void {

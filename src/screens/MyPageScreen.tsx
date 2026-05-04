@@ -13,7 +13,8 @@ import {
   RESERVE_MENU_KEY,
   RESERVE_TIME_KEY,
 } from '../utils/storage'
-import { getTodayDate } from '../utils/date'
+import { getTodayDate, formatPoints } from '../utils/date'
+import { getNextRankInfo, RANK_LABEL } from '../utils/rank'
 
 const GACHA_LABELS: Record<string, string> = {
   discount: '100円OFF',
@@ -152,6 +153,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const tryonStyle = getStoredValue<string>(TRYON_STYLE_KEY, '')
   const reserveMenu = getStoredValue<string>(RESERVE_MENU_KEY, '')
   const reserveTime = getStoredValue<string>(RESERVE_TIME_KEY, '')
+  const nextRankInfo = getNextRankInfo(memberStatus.points)
 
   const gachaValue =
     gachaDate === today && gachaResult
@@ -257,7 +259,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
         />
 
         {/* Stats */}
-        <div className="flex items-center gap-6 px-5 py-3">
+        <div className="flex flex-wrap items-center gap-4 px-5 py-3">
           <div>
             <p className="text-[9px] tracking-[0.18em] uppercase" style={{ color: 'rgba(201,162,39,0.45)' }}>
               来店回数
@@ -275,6 +277,21 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
             <p className="text-2xl font-bold leading-none mt-1" style={{ color: '#C9A227' }}>
               {memberStatus.stampCount}
               <span className="text-base font-normal" style={{ color: 'rgba(201,162,39,0.5)' }}>/10</span>
+            </p>
+          </div>
+          <div style={{ width: '1px', height: 32, background: 'linear-gradient(180deg, transparent, rgba(201,162,39,0.22), transparent)' }} />
+          <div className="min-w-0">
+            <p className="text-[9px] tracking-[0.18em] uppercase" style={{ color: 'rgba(201,162,39,0.45)' }}>
+              累計ポイント
+            </p>
+            <p className="text-2xl font-bold leading-none mt-1" style={{ color: '#E8C547' }}>
+              {formatPoints(memberStatus.points)}
+              <span className="text-sm font-normal ml-0.5" style={{ color: 'rgba(201,162,39,0.5)' }}>pt</span>
+            </p>
+            <p className="text-[10px] mt-1" style={{ color: 'rgba(245,240,232,0.42)' }}>
+              {nextRankInfo.nextRank
+                ? `${RANK_LABEL[nextRankInfo.nextRank]}まであと${formatPoints(nextRankInfo.remainingPoints)}pt`
+                : '最高ランク到達'}
             </p>
           </div>
         </div>

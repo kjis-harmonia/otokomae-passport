@@ -22,9 +22,9 @@ export interface Member {
 
 export const RANK_THRESHOLD: Record<MemberRank, number> = {
   ブロンズ: 0,
-  シルバー: 1000,
-  ゴールド: 3000,
-  プラチナ: 10000,
+  シルバー: 20000,
+  ゴールド: 50000,
+  プラチナ: 100000,
 }
 
 export interface MemberStatus {
@@ -33,6 +33,7 @@ export interface MemberStatus {
   visitCount: number
   stampCount: number
   exp: number
+  points: number
 }
 
 export interface Coupon {
@@ -49,6 +50,7 @@ export const DEFAULT_MEMBER_STATUS: MemberStatus = {
   visitCount: 3,
   stampCount: 3,
   exp: 0,
+  points: 4250,
 }
 
 export const MOCK_MEMBER: Member = {

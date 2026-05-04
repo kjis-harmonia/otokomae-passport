@@ -18,6 +18,7 @@ function App() {
   const liveMember = {
     ...MOCK_MEMBER,
     rank: memberStatus.rank,
+    points: memberStatus.points,
     visitCount: memberStatus.visitCount,
   }
 

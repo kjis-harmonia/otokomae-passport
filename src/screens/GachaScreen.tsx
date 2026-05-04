@@ -4,7 +4,7 @@ import { Gift, Star, Tag, Trophy, Sparkles } from 'lucide-react'
 import type { MemberStatus } from '../data/brand'
 import { getStoredValue, setStoredValue, saveMemberStatus, loadCoupons, saveCoupons, GACHA_DATE_KEY, GACHA_RESULT_KEY } from '../utils/storage'
 import { getTodayDate } from '../utils/date'
-import { getRankByExp, RANK_LABEL } from '../utils/rank'
+import { getRankByPoints, getSafeRank, RANK_LABEL } from '../utils/rank'
 
 interface GachaPrize {
   id: string
@@ -55,6 +55,11 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
       setIsSpinning(false)
       setJustPlayed(true)
 
+      const nextPoints = memberStatus.points + 10
+      const computedRank = getRankByPoints(nextPoints)
+      const nextRank = getSafeRank(memberStatus.rank, computedRank)
+      let nextStatus: MemberStatus = { ...memberStatus, points: nextPoints, rank: nextRank }
+
       if (prize.id === 'discount') {
         const couponId = `coupon-100off-${today}`
         const existing = loadCoupons()
@@ -72,22 +77,20 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
           setStampFullMessage('スタンプはすでに満了です')
         } else {
           const nextStamp = memberStatus.stampCount + 1
-          const next = { ...memberStatus, stampCount: nextStamp }
-          onMemberStatusChange(next)
-          saveMemberStatus(next)
+          nextStatus = { ...nextStatus, stampCount: nextStamp }
           if (nextStamp === 10) {
             setStampFullMessage('スタンプ満了。特典を獲得しました')
           }
         }
       } else if (prize.id === 'exp') {
         const nextExp = memberStatus.exp + 1
-        const nextRank = getRankByExp(nextExp)
-        const next = { ...memberStatus, exp: nextExp, rank: nextRank }
-        onMemberStatusChange(next)
-        saveMemberStatus(next)
-        if (nextRank !== memberStatus.rank) {
-          setRankUpMessage(`ランクアップ。${RANK_LABEL[nextRank]}になりました`)
-        }
+        nextStatus = { ...nextStatus, exp: nextExp }
+      }
+
+      onMemberStatusChange(nextStatus)
+      saveMemberStatus(nextStatus)
+      if (nextStatus.rank !== memberStatus.rank) {
+        setRankUpMessage(`ランクアップ。${RANK_LABEL[nextStatus.rank]}になりました`)
       }
     }, 900)
   }
