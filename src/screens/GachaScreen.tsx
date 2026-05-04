@@ -24,6 +24,7 @@ const PRIZES: GachaPrize[] = [
 ]
 
 const MOTION_EASE = [0.22, 1, 0.36, 1] as const
+const IS_DEV_GACHA_UNLIMITED = import.meta.env.DEV
 
 const RARITY_GLOW: Record<Rarity, string> = {
   N: '0 10px 28px rgba(0,0,0,0.44)',
@@ -54,12 +55,13 @@ interface Props {
 export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
   const prefersReducedMotion = useReducedMotion()
   const today = getTodayDate()
-  const hasPlayedToday = getStoredValue<string>(GACHA_DATE_KEY, '') === today
+  const storedDate = getStoredValue<string>(GACHA_DATE_KEY, '')
+  const isAlreadyPlayedToday = !IS_DEV_GACHA_UNLIMITED && storedDate === today
   const savedId = getStoredValue<string>(GACHA_RESULT_KEY, '')
-  const initial = hasPlayedToday ? (PRIZES.find((p) => p.id === savedId) ?? null) : null
+  const initial = isAlreadyPlayedToday ? (PRIZES.find((p) => p.id === savedId) ?? null) : null
 
   const [result, setResult] = useState<GachaPrize | null>(initial)
-  const [played, setPlayed] = useState(hasPlayedToday)
+  const [played, setPlayed] = useState(isAlreadyPlayedToday)
   const [isSpinning, setIsSpinning] = useState(false)
   const [justPlayed, setJustPlayed] = useState(false)
   const [rankUpMessage, setRankUpMessage] = useState<string | null>(null)
@@ -81,7 +83,7 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
       setStoredValue(GACHA_DATE_KEY, today)
       setStoredValue(GACHA_RESULT_KEY, prize.id)
       setResult(prize)
-      setPlayed(true)
+      setPlayed(!IS_DEV_GACHA_UNLIMITED)
       setIsSpinning(false)
       setJustPlayed(true)
 
