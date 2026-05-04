@@ -30,6 +30,25 @@ const TIME_LABELS: Record<string, string> = {
   evening: '夕方',
 }
 
+const RANK_CARD = {
+  ブロンズ: {
+    image: '/images/ranks/rank-card-bronze.png',
+  },
+  シルバー: {
+    image: '/images/ranks/rank-card-silver.png',
+  },
+  ゴールド: {
+    image: '/images/ranks/rank-card-gold.png',
+  },
+  プラチナ: {
+    image: '/images/ranks/rank-card-platinum.png',
+  },
+} as const
+
+function getRankCard(rank: string) {
+  return RANK_CARD[rank as keyof typeof RANK_CARD] ?? RANK_CARD.ブロンズ
+}
+
 function QuickAction({ icon, label, sublabel, onClick }: { icon: ReactNode; label: string; sublabel: string; onClick?: () => void }) {
   return (
     <button
@@ -80,6 +99,7 @@ export function HomeScreen({ member, onTabChange }: Props) {
   const reserveMenu = getStoredValue<string>(RESERVE_MENU_KEY, '')
   const reserveTime = getStoredValue<string>(RESERVE_TIME_KEY, '')
   const activeCoupons = loadCoupons().filter((c) => !c.used)
+  const rankCard = getRankCard(member.rank)
 
   const activities: { label: string; sublabel: string; badge: string }[] = []
   if (gachaDate === today && gachaResult) {
@@ -107,6 +127,31 @@ export function HomeScreen({ member, onTabChange }: Props) {
           {firstName} 様
         </p>
       </div>
+
+      {/* Current rank */}
+      <section className="px-4">
+        <p
+          className="text-[10px] tracking-[0.2em] uppercase mb-2.5"
+          style={{ color: 'rgba(201,162,39,0.48)' }}
+        >
+          現在のランク
+        </p>
+        <div
+          className="relative w-full overflow-hidden rounded-xl"
+          style={{
+            background: 'rgba(5,5,5,0.9)',
+            border: '1px solid rgba(201,162,39,0.34)',
+            boxShadow:
+              '0 12px 30px rgba(0,0,0,0.36), inset 0 1px 0 rgba(245,240,232,0.05), inset 0 0 22px rgba(201,162,39,0.075)',
+          }}
+        >
+          <img
+            src={rankCard.image}
+            alt="現在のランク"
+            className="block h-auto w-full"
+          />
+        </div>
+      </section>
 
       {/* Passport card */}
       <MemberPassportCard member={member} />
