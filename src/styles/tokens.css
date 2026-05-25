@@ -1,0 +1,28 @@
+:root {
+  --bg-leather: #0A0807;
+  --bg-base: #121011;
+  --bg-card: #1A1614;
+  --bg-card-elevated: #221C18;
+
+  --line-soft: rgba(212, 175, 55, 0.12);
+  --line-mid: rgba(212, 175, 55, 0.28);
+
+  --gold-dim: #8A6E3C;
+  --gold-base: #C9A24A;
+  --gold-hi: #E5C063;
+
+  --red-deep: #6B1518;
+  --red-seal: #8C1F1A;
+
+  --text-primary: #EFE6D6;
+  --text-secondary: #B8AC93;
+  --text-mute: #6E6557;
+}
+
+html,
+body,
+#root {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-tap-highlight-color: transparent;
+}
