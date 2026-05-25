@@ -55,6 +55,9 @@ export function saveMemberStatus(status: MemberStatus): void {
   setStoredValue(MEMBER_STATUS_KEY, status)
 }
 
+export const ONBOARDING_DONE_KEY = 'ginjiro:onboarding_done'
+export const ONBOARDING_NAME_KEY = 'ginjiro:member_name'
+
 export const COUPONS_KEY = 'otokomae_coupons'
 
 export function loadCoupons(): Coupon[] {
