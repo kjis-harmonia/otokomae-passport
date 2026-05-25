@@ -1,4 +1,4 @@
-import { Home, Gift, Shirt, CalendarDays, UserCircle } from 'lucide-react'
+import { Home, Gift, Shirt, BookOpen, CalendarDays, UserCircle } from 'lucide-react'
 import type { NavTab } from '../data/brand'
 
 interface Props {
@@ -10,19 +10,21 @@ const TAB_LABELS: Record<NavTab, string> = {
   home: 'ホーム',
   gacha: 'ガチャ',
   tryon: '試着',
+  styles: '図鑑',
   reserve: '予約',
   mypage: 'マイ',
 }
 
-const TABS: NavTab[] = ['home', 'gacha', 'tryon', 'reserve', 'mypage']
+const TABS: NavTab[] = ['home', 'gacha', 'tryon', 'styles', 'reserve', 'mypage']
 
 function TabIcon({ id }: { id: NavTab }) {
   switch (id) {
-    case 'home':    return <Home size={22} strokeWidth={1.8} />
-    case 'gacha':   return <Gift size={22} strokeWidth={1.8} />
-    case 'tryon':   return <Shirt size={22} strokeWidth={1.8} />
-    case 'reserve': return <CalendarDays size={22} strokeWidth={1.8} />
-    case 'mypage':  return <UserCircle size={22} strokeWidth={1.8} />
+    case 'home':    return <Home size={20} strokeWidth={1.8} />
+    case 'gacha':   return <Gift size={20} strokeWidth={1.8} />
+    case 'tryon':   return <Shirt size={20} strokeWidth={1.8} />
+    case 'styles':  return <BookOpen size={20} strokeWidth={1.8} />
+    case 'reserve': return <CalendarDays size={20} strokeWidth={1.8} />
+    case 'mypage':  return <UserCircle size={20} strokeWidth={1.8} />
   }
 }
 

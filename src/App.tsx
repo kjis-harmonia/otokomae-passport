@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { PhoneStatusBar } from './components/PhoneStatusBar'
 import { AppHeader } from './components/AppHeader'
@@ -8,8 +8,11 @@ import { GachaScreen } from './screens/GachaScreen'
 import { TryOnScreen } from './screens/TryOnScreen'
 import { ReserveScreen } from './screens/ReserveScreen'
 import { MyPageScreen } from './screens/MyPageScreen'
+import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
 import { SplashScreen } from './screens/SplashScreen'
 import { OnboardingScreen } from './screens/OnboardingScreen'
+import PremiumGachaExperience from './components/PremiumGachaExperience'
+import type { GachaResult } from './components/PremiumGachaExperience'
 import { MOCK_MEMBER } from './data/brand'
 import type { NavTab, MemberStatus } from './data/brand'
 import { loadMemberStatus, saveMemberStatus, getStoredValue, ONBOARDING_DONE_KEY } from './utils/storage'
@@ -20,6 +23,7 @@ function App() {
   const [phase, setPhase] = useState<AppPhase>('splash')
   const [activeTab, setActiveTab] = useState<NavTab>('home')
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
+  const [isPremiumGachaOpen, setIsPremiumGachaOpen] = useState(false)
 
   function handleSplashDone() {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
@@ -31,6 +35,22 @@ function App() {
     setMemberStatus(nextStatus)
     setPhase('app')
   }
+
+  // Intercept the "gacha" tab to open the premium experience full-screen.
+  const handleTabChange = useCallback((tab: NavTab) => {
+    setActiveTab(tab)
+    if (tab === 'gacha') {
+      setIsPremiumGachaOpen(true)
+    }
+  }, [])
+
+  const handleGachaComplete = useCallback((result: GachaResult) => {
+    console.log('[PremiumGacha] result:', result)
+  }, [])
+
+  const handleGachaClose = useCallback(() => {
+    setIsPremiumGachaOpen(false)
+  }, [])
 
   const liveMember = {
     ...MOCK_MEMBER,
@@ -47,13 +67,14 @@ function App() {
         <PhoneStatusBar />
         <AppHeader />
         <main className="app-main flex-1 overflow-y-auto">
-          {activeTab === 'home' && <HomeScreen member={liveMember} onTabChange={setActiveTab} />}
+          {activeTab === 'home' && <HomeScreen member={liveMember} onTabChange={handleTabChange} />}
           {activeTab === 'gacha' && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
           {activeTab === 'tryon' && <TryOnScreen />}
           {activeTab === 'reserve' && <ReserveScreen />}
+          {activeTab === 'styles' && <StyleLibraryScreen onTabChange={handleTabChange} />}
           {activeTab === 'mypage' && <MyPageScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
         </main>
-        <BottomNavigation active={activeTab} onChange={setActiveTab} />
+        <BottomNavigation active={activeTab} onChange={handleTabChange} />
       </div>
 
       {/* Onboarding overlay — appears above app shell on first launch */}
@@ -73,6 +94,14 @@ function App() {
           <SplashScreen key="splash" onDone={handleSplashDone} />
         )}
       </AnimatePresence>
+
+      {/* Premium Gacha — full-screen, above everything except splash/onboarding */}
+      {isPremiumGachaOpen && (
+        <PremiumGachaExperience
+          onClose={handleGachaClose}
+          onComplete={handleGachaComplete}
+        />
+      )}
     </>
   )
 }
