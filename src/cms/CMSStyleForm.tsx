@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { X, Check, AlertCircle, Image } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { X, Check, AlertCircle, Image, Upload } from 'lucide-react'
 import type { StyleCard, StyleCategory, StyleStats } from '../data/styleCard'
 import {
   STYLE_CATEGORIES, STYLE_CATEGORY_LABELS,
@@ -249,6 +249,8 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [imgError, setImgError] = useState(false)
+  const [fileSizeWarning, setFileSizeWarning] = useState<'warn' | 'danger' | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!isNew) {
@@ -259,12 +261,35 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
     }
     setErrors({})
     setToast(null)
+    setFileSizeWarning(null)
   }, [editingId, isNew])
 
   const set = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }))
   }, [errors])
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      setFileSizeWarning('danger')
+    } else if (file.size > 500 * 1024) {
+      setFileSizeWarning('warn')
+    } else {
+      setFileSizeWarning(null)
+    }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const result = ev.target?.result
+      if (typeof result === 'string') {
+        set('imageUrl', result)
+        setImgError(false)
+      }
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }, [set])
 
   function setStat(key: keyof StyleStats, value: number) {
     setForm((prev) => ({ ...prev, stats: { ...prev.stats, [key]: value } }))
@@ -373,51 +398,102 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
       )}
 
       <div className="space-y-5 px-4 pt-5">
-        {/* Image preview */}
+        {/* Image upload + URL */}
         <div>
-          <Label>画像 URL</Label>
+          <Label>画像</Label>
           <div className="flex flex-col gap-2">
-            {form.imageUrl && !imgError && (
+            {/* Preview area — always 176px tall */}
+            <div
+              className="w-full rounded-xl overflow-hidden flex items-center justify-center"
+              style={{ height: 176, background: '#0D0806', border: '1px solid rgba(201,169,97,0.16)', position: 'relative' }}
+            >
+              {form.imageUrl && !imgError ? (
+                <>
+                  <img
+                    src={form.imageUrl}
+                    alt="プレビュー"
+                    className="w-full h-full"
+                    style={{ objectFit: 'cover', objectPosition: 'center top' }}
+                    onError={() => setImgError(true)}
+                    onLoad={() => setImgError(false)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { set('imageUrl', ''); setImgError(false); setFileSizeWarning(null) }}
+                    className="absolute top-2 right-2 rounded-full p-1 transition-opacity active:opacity-60"
+                    style={{ background: 'rgba(0,0,0,0.62)', border: '1px solid rgba(255,255,255,0.18)' }}
+                    aria-label="画像をクリア"
+                  >
+                    <X size={13} style={{ color: '#F2E6C8' }} />
+                  </button>
+                </>
+              ) : form.imageUrl && imgError ? (
+                <div className="flex flex-col items-center gap-1.5">
+                  <Image size={22} style={{ color: 'rgba(180,50,50,0.5)' }} />
+                  <span className="text-[11px]" style={{ color: 'rgba(180,50,50,0.7)' }}>画像を読み込めませんでした</span>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-1.5">
+                  <Image size={22} style={{ color: 'rgba(201,169,97,0.25)' }} />
+                  <span className="text-[11px]" style={{ color: 'rgba(201,169,97,0.3)' }}>画像未設定</span>
+                </div>
+              )}
+            </div>
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+
+            {/* File picker button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center justify-center gap-2 w-full rounded-lg py-2.5 text-sm transition-opacity active:opacity-70"
+              style={{
+                background: '#0D0806',
+                border: '1px solid rgba(201,169,97,0.32)',
+                color: 'rgba(201,169,97,0.85)',
+              }}
+            >
+              <Upload size={15} />
+              ファイルから選択
+            </button>
+
+            {/* Size warning */}
+            {fileSizeWarning && (
               <div
-                className="w-full rounded-xl overflow-hidden"
-                style={{ height: 160, background: '#0D0806', border: '1px solid rgba(201,169,97,0.16)' }}
+                className="flex items-start gap-2 rounded-lg px-3 py-2.5 text-[11px]"
+                style={{
+                  background: fileSizeWarning === 'danger' ? 'rgba(80,20,20,0.7)' : 'rgba(80,60,10,0.7)',
+                  border: fileSizeWarning === 'danger' ? '1px solid rgba(180,50,50,0.4)' : '1px solid rgba(200,160,30,0.4)',
+                  color: fileSizeWarning === 'danger' ? 'rgba(240,100,100,0.9)' : 'rgba(230,190,60,0.9)',
+                }}
               >
-                <img
-                  src={form.imageUrl}
-                  alt="プレビュー"
-                  className="w-full h-full object-cover"
-                  onError={() => setImgError(true)}
-                  onLoad={() => setImgError(false)}
-                />
+                <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+                {fileSizeWarning === 'danger'
+                  ? '画像が2MBを超えています。LocalStorageの容量に注意してください。'
+                  : '画像が500KBを超えています。なるべく圧縮した画像を使用することを推奨します。'}
               </div>
             )}
-            {form.imageUrl && imgError && (
-              <div
-                className="w-full rounded-xl flex items-center justify-center gap-2"
-                style={{ height: 80, background: '#0D0806', border: '1px solid rgba(180,50,50,0.3)' }}
-              >
-                <Image size={16} style={{ color: 'rgba(180,50,50,0.6)' }} />
-                <span className="text-[11px]" style={{ color: 'rgba(180,50,50,0.7)' }}>
-                  画像を読み込めませんでした
-                </span>
-              </div>
-            )}
-            {!form.imageUrl && (
-              <div
-                className="w-full rounded-xl flex items-center justify-center gap-2"
-                style={{ height: 80, background: '#0D0806', border: '1px dashed rgba(201,169,97,0.2)' }}
-              >
-                <Image size={16} style={{ color: 'rgba(201,169,97,0.3)' }} />
-                <span className="text-[11px]" style={{ color: 'rgba(201,169,97,0.3)' }}>
-                  URLを入力するとプレビューが表示されます
-                </span>
-              </div>
-            )}
+
+            {/* URL divider */}
+            <div className="flex items-center gap-2 mt-1">
+              <div className="flex-1 h-px" style={{ background: 'rgba(201,169,97,0.14)' }} />
+              <span className="text-[10px] tracking-widest" style={{ color: 'rgba(201,169,97,0.4)' }}>または URL を入力</span>
+              <div className="flex-1 h-px" style={{ background: 'rgba(201,169,97,0.14)' }} />
+            </div>
+
+            {/* URL input — hidden value when data: URL is active */}
             <input
               type="url"
-              value={form.imageUrl}
-              onChange={(e) => { set('imageUrl', e.target.value); setImgError(false) }}
-              placeholder="https://example.com/image.jpg"
+              value={form.imageUrl.startsWith('data:') ? '' : form.imageUrl}
+              onChange={(e) => { set('imageUrl', e.target.value); setImgError(false); setFileSizeWarning(null) }}
+              placeholder={form.imageUrl.startsWith('data:') ? 'ファイルが選択されています' : 'https://example.com/image.jpg'}
               className="w-full rounded-lg px-4 py-3 text-sm outline-none"
               style={{
                 background: '#0D0806',
