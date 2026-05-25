@@ -9,6 +9,7 @@ import { TryOnScreen } from './screens/TryOnScreen'
 import { ReserveScreen } from './screens/ReserveScreen'
 import { MyPageScreen } from './screens/MyPageScreen'
 import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
+import { DiagnosisScreen } from './screens/DiagnosisScreen'
 import { SplashScreen } from './screens/SplashScreen'
 import { OnboardingScreen } from './screens/OnboardingScreen'
 import PremiumGachaExperience from './components/PremiumGachaExperience'
@@ -65,13 +66,14 @@ function App() {
       {/* Main app shell — always rendered beneath overlays */}
       <div className="app-shell flex flex-col h-dvh max-w-[430px] mx-auto overflow-hidden">
         <PhoneStatusBar />
-        <AppHeader />
+        {activeTab !== 'home' && <AppHeader />}
         <main className="app-main flex-1 overflow-y-auto">
           {activeTab === 'home' && <HomeScreen member={liveMember} onTabChange={handleTabChange} />}
           {activeTab === 'gacha' && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
           {activeTab === 'tryon' && <TryOnScreen />}
           {activeTab === 'reserve' && <ReserveScreen />}
           {activeTab === 'styles' && <StyleLibraryScreen onTabChange={handleTabChange} />}
+          {activeTab === 'diagnosis' && <DiagnosisScreen onTabChange={handleTabChange} />}
           {activeTab === 'mypage' && <MyPageScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
         </main>
         <BottomNavigation active={activeTab} onChange={handleTabChange} />
