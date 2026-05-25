@@ -1,0 +1,676 @@
+/* ============================================================
+   PremiumGachaExperience
+   Sacred Shinto Realm × Luxury Barber
+   Pitch-black, deep crimson, metallic gold.
+   ============================================================ */
+
+.pg-root {
+  --ink: #050302;
+  --obsidian: #0d0907;
+  --blood: #6b0f12;
+  --blood-deep: #3d0608;
+  --blood-glow: rgba(180, 28, 32, 0.55);
+  --gold: #c9a24a;
+  --gold-bright: #e9c46a;
+  --gold-dim: #7d6232;
+  --gold-soft: rgba(201, 162, 74, 0.18);
+  --paper: #e8dcc4;
+  --serif: "Shippori Mincho", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;        /* fallback */
+  background: var(--ink);
+  color: var(--paper);
+  overflow: hidden;
+  z-index: 9999;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: var(--sans);
+  isolation: isolate;
+}
+
+/* Hide any underlying global chrome while this overlay is mounted. */
+body.pg-active {
+  overflow: hidden;
+}
+
+/* ============================================================
+   Phase containers — each is a full-bleed stage
+   ============================================================ */
+
+.pg-stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms ease-out;
+}
+
+.pg-stage.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pg-stage__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center bottom;
+  display: block;
+  will-change: transform;
+}
+
+/* Soft vignette over every phase for cinematic depth */
+.pg-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      120% 80% at 50% 60%,
+      transparent 40%,
+      rgba(0, 0, 0, 0.35) 75%,
+      rgba(0, 0, 0, 0.7) 100%
+    );
+  z-index: 2;
+}
+
+/* ============================================================
+   PHASE 1 — The Silent Gateway
+   ============================================================ */
+
+.pg-stage--sealed .pg-stage__bg {
+  animation: pg-breathe 9s ease-in-out infinite;
+}
+
+@keyframes pg-breathe {
+  0%, 100% { transform: scale(1.000); }
+  50%      { transform: scale(1.015); }
+}
+
+/* Warm lantern flicker — two soft radial pools left/right */
+.pg-lantern-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.pg-lantern-glow::before,
+.pg-lantern-glow::after {
+  content: "";
+  position: absolute;
+  width: 42vmin;
+  height: 42vmin;
+  border-radius: 50%;
+  filter: blur(28px);
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 168, 86, 0.32),
+    rgba(255, 120, 50, 0.10) 45%,
+    transparent 75%
+  );
+  will-change: opacity, transform;
+}
+
+.pg-lantern-glow::before {
+  top: 18%;
+  left: -6%;
+  animation: pg-flicker 3.7s ease-in-out infinite;
+}
+
+.pg-lantern-glow::after {
+  top: 16%;
+  right: -6%;
+  animation: pg-flicker 4.3s ease-in-out infinite 0.6s;
+}
+
+@keyframes pg-flicker {
+  0%, 100%      { opacity: 0.82; transform: translateY(0) scale(1); }
+  18%           { opacity: 0.96; transform: translateY(-1px) scale(1.02); }
+  32%           { opacity: 0.84; transform: translateY(0.5px) scale(0.99); }
+  47%           { opacity: 1.00; transform: translateY(-0.5px) scale(1.03); }
+  63%           { opacity: 0.88; transform: translateY(0) scale(1); }
+  79%           { opacity: 0.94; transform: translateY(0.5px) scale(1.01); }
+}
+
+/* Swipe affordance at the bottom */
+.pg-swipe-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 38px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  pointer-events: none;
+}
+
+.pg-swipe-track {
+  width: min(72vw, 280px);
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--gold-dim) 30%,
+    var(--gold) 50%,
+    var(--gold-dim) 70%,
+    transparent 100%
+  );
+  opacity: 0.7;
+}
+
+.pg-swipe-text {
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: 13px;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;     /* compensate trailing spacing for true centering */
+  color: var(--gold);
+  text-shadow: 0 0 12px rgba(201, 162, 74, 0.35);
+  animation: pg-pulse-text 2.6s ease-in-out infinite;
+}
+
+.pg-swipe-arrow {
+  display: inline-block;
+  margin-left: 12px;
+  animation: pg-arrow 1.8s ease-in-out infinite;
+  color: var(--gold);
+}
+
+@keyframes pg-pulse-text {
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1; }
+}
+
+@keyframes pg-arrow {
+  0%   { transform: translateX(0);   opacity: 0.4; }
+  50%  { transform: translateX(8px); opacity: 1;   }
+  100% { transform: translateX(0);   opacity: 0.4; }
+}
+
+/* Invisible swipe surface covering the whole phase */
+.pg-swipe-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.pg-swipe-surface:active {
+  cursor: grabbing;
+}
+
+/* ============================================================
+   PHASE 2 — The Breach (0.7s)
+   Sharp vertical beam: crimson glow + gold core
+   ============================================================ */
+
+.pg-breach {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.pg-breach__crimson,
+.pg-breach__gold,
+.pg-breach__shock {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) scaleY(0);
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.pg-breach__crimson {
+  width: 30vw;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(180, 24, 28, 0.85) 0%,
+    rgba(120, 10, 14, 0.5) 30%,
+    transparent 70%
+  );
+  filter: blur(18px);
+  animation: pg-breach-crimson 720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.pg-breach__gold {
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--gold-bright) 18%,
+    #fff5d8 50%,
+    var(--gold-bright) 82%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 12px var(--gold-bright),
+    0 0 32px rgba(233, 196, 106, 0.7),
+    0 0 80px rgba(233, 196, 106, 0.35);
+  animation: pg-breach-gold 720ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.pg-breach__shock {
+  width: 100vw;
+  background: rgba(255, 248, 220, 0.0);
+  animation: pg-breach-shock 720ms ease-out forwards;
+}
+
+@keyframes pg-breach-crimson {
+  0%   { transform: translateX(-50%) scaleY(0)   scaleX(0.4); opacity: 0; }
+  30%  { transform: translateX(-50%) scaleY(1)   scaleX(1);   opacity: 1; }
+  100% { transform: translateX(-50%) scaleY(1.2) scaleX(2.2); opacity: 0; }
+}
+
+@keyframes pg-breach-gold {
+  0%   { transform: translateX(-50%) scaleY(0)   scaleX(1); opacity: 0; }
+  18%  { transform: translateX(-50%) scaleY(1)   scaleX(1); opacity: 1; }
+  85%  { transform: translateX(-50%) scaleY(1)   scaleX(40); opacity: 1; }
+  100% { transform: translateX(-50%) scaleY(1)   scaleX(80); opacity: 0; }
+}
+
+@keyframes pg-breach-shock {
+  0%   { background: rgba(255, 248, 220, 0); transform: translateX(-50%) scaleY(0); }
+  60%  { background: rgba(255, 248, 220, 0); transform: translateX(-50%) scaleY(1); }
+  78%  { background: rgba(255, 248, 220, 0.85); transform: translateX(-50%) scaleY(1); }
+  100% { background: rgba(255, 248, 220, 0);    transform: translateX(-50%) scaleY(1); }
+}
+
+/* ============================================================
+   PHASE 3 — Running the Sacred Path (2s)
+   Continuous scale zoom with gold dust drifting
+   ============================================================ */
+
+.pg-stage--running .pg-stage__bg {
+  animation: pg-run-zoom 2000ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  transform-origin: 50% 75%;     /* zoom into the path/character at lower half */
+}
+
+@keyframes pg-run-zoom {
+  0%   { transform: scale(1.000); }
+  100% { transform: scale(1.080); }
+}
+
+/* Gold dust particles — pure CSS */
+.pg-dust {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.pg-dust__mote {
+  position: absolute;
+  top: -8%;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--gold-bright);
+  box-shadow: 0 0 6px rgba(233, 196, 106, 0.85);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: pg-dust-fall linear infinite;
+}
+
+@keyframes pg-dust-fall {
+  0%   { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
+  10%  { opacity: 0.9; }
+  50%  { opacity: 0.7; }
+  90%  { opacity: 0.4; }
+  100% { transform: translate3d(var(--drift, 6px), 110vh, 0) scale(1); opacity: 0; }
+}
+
+/* ============================================================
+   PHASE 4 — The Divine Artifact (machine)
+   ============================================================ */
+
+.pg-machine-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Light bloom inside the globe — positioned approximately where
+   the glass globe sits with object-position: bottom on a tall image. */
+.pg-bloom {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: 55vmin;
+  height: 55vmin;
+  transform: translate(-50%, -50%) scale(0);
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 230, 160, 0.95) 0%,
+    rgba(233, 196, 106, 0.75) 25%,
+    rgba(180, 30, 30, 0.35) 55%,
+    transparent 80%
+  );
+  filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  mix-blend-mode: screen;
+}
+
+.pg-bloom.is-pulsing {
+  animation: pg-bloom 1100ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes pg-bloom {
+  0%   { transform: translate(-50%, -50%) scale(0);    opacity: 0; }
+  20%  { transform: translate(-50%, -50%) scale(0.6);  opacity: 0.9; }
+  55%  { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.8);  opacity: 0; }
+}
+
+/* The lever / handle button — broad bottom hit-box with elegant chrome */
+.pg-lever {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 44px);
+  transform: translateX(-50%);
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: min(76vw, 300px);
+  height: 56px;
+  padding: 0 28px;
+  background: rgba(8, 4, 3, 0.62);
+  border: 1px solid var(--gold-dim);
+  border-radius: 2px;
+  color: var(--gold-bright);
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: 15px;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: background 220ms ease-out, border-color 220ms ease-out, transform 180ms ease-out;
+  outline: none;
+}
+
+.pg-lever::before,
+.pg-lever::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 1px;
+  background: var(--gold);
+}
+
+.pg-lever::before { left: 14px; }
+.pg-lever::after  { right: 14px; }
+
+.pg-lever:hover {
+  background: rgba(16, 8, 6, 0.78);
+  border-color: var(--gold);
+}
+
+.pg-lever:active {
+  transform: translateX(-50%) scale(0.985);
+  background: rgba(40, 16, 12, 0.85);
+}
+
+.pg-lever:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pg-lever__corner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--gold);
+}
+.pg-lever__corner.tl { top: -1px; left: -1px;  border-right: none; border-bottom: none; }
+.pg-lever__corner.tr { top: -1px; right: -1px; border-left: none;  border-bottom: none; }
+.pg-lever__corner.bl { bottom: -1px; left: -1px;  border-right: none; border-top: none; }
+.pg-lever__corner.br { bottom: -1px; right: -1px; border-left: none;  border-top: none; }
+
+/* ============================================================
+   PHASE 5 — The Revelation
+   Membership Card overlay
+   ============================================================ */
+
+.pg-result {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(120% 80% at 50% 50%, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.85));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 480ms ease-out;
+}
+
+.pg-result.is-shown {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pg-card {
+  position: relative;
+  width: min(86vw, 360px);
+  aspect-ratio: 0.66;       /* tall passport feel */
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(180, 30, 30, 0.18), transparent 60%),
+    linear-gradient(180deg, #1a0f0c 0%, #0a0605 100%);
+  border: 1px solid var(--gold-dim);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 160, 0.12),
+    inset 0 0 0 4px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 5px rgba(201, 162, 74, 0.25),
+    0 40px 80px rgba(0, 0, 0, 0.7);
+  padding: 36px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: transform 640ms cubic-bezier(0.22, 1, 0.36, 1) 120ms,
+              opacity 640ms ease-out 120ms;
+}
+
+.pg-result.is-shown .pg-card {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.pg-card__kanji {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.6em;
+  color: var(--gold);
+  text-align: center;
+  opacity: 0.85;
+}
+
+.pg-card__brand {
+  margin-top: 6px;
+  font-family: var(--serif);
+  font-weight: 300;
+  font-size: 22px;
+  letter-spacing: 0.35em;
+  text-indent: 0.35em;
+  color: var(--gold-bright);
+  text-align: center;
+  background: linear-gradient(180deg, #f3d97e 0%, #c9a24a 60%, #876632 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.pg-card__divider {
+  margin: 22px auto 24px;
+  width: 56px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+
+.pg-card__rank-label {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  color: var(--gold-dim);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.pg-card__rank {
+  margin-top: 8px;
+  font-family: var(--serif);
+  font-size: 38px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  text-align: center;
+  color: var(--gold-bright);
+  background: linear-gradient(180deg, #fff0c4 0%, #e9c46a 45%, #876632 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.pg-card__seal {
+  margin: 18px auto 0;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #a01a1d 0%, #6b0f12 55%, #3d0608 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--serif);
+  font-size: 22px;
+  color: #f4e4c2;
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.18),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.45),
+    0 8px 20px rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.04em;
+}
+
+.pg-card__reward-label {
+  margin-top: auto;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  color: var(--gold-dim);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.pg-card__reward {
+  margin-top: 10px;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 300;
+  letter-spacing: 0.14em;
+  text-align: center;
+  color: var(--paper);
+  line-height: 1.5;
+  padding: 0 6px;
+}
+
+.pg-card__id {
+  margin-top: 18px;
+  font-family: var(--sans);
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  color: var(--gold-dim);
+  text-align: center;
+}
+
+/* Result action button */
+.pg-result__action {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 36px);
+  transform: translateX(-50%);
+  background: transparent;
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  padding: 14px 40px;
+  font-family: var(--serif);
+  font-size: 13px;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 200ms ease-out, border-color 200ms ease-out;
+  white-space: nowrap;
+}
+
+.pg-result__action:hover {
+  background: rgba(201, 162, 74, 0.08);
+  border-color: var(--gold);
+}
+
+/* ============================================================
+   prefers-reduced-motion — clean cross-fades, no zoom, no particles
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-stage,
+  .pg-result,
+  .pg-card,
+  .pg-stage__bg {
+    transition-duration: 200ms !important;
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .pg-lantern-glow,
+  .pg-dust,
+  .pg-bloom,
+  .pg-breach__crimson,
+  .pg-breach__gold,
+  .pg-breach__shock,
+  .pg-swipe-arrow,
+  .pg-swipe-text {
+    animation: none !important;
+  }
+
+  .pg-stage--running .pg-stage__bg {
+    transform: none;
+  }
+}
