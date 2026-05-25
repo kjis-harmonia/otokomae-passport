@@ -16,17 +16,18 @@ const TAB_LABELS: Record<NavTab, string> = {
   mypage: 'マイ',
 }
 
-const TABS: NavTab[] = ['home', 'gacha', 'tryon', 'styles', 'diagnosis', 'reserve', 'mypage']
+// 'gacha' is intentionally excluded — feature is sealed but code is preserved for restoration
+const TABS: NavTab[] = ['home', 'styles', 'diagnosis', 'tryon', 'reserve', 'mypage']
 
 function TabIcon({ id }: { id: NavTab }) {
   switch (id) {
-    case 'home':      return <Home size={18} strokeWidth={1.8} />
-    case 'gacha':     return <Gift size={18} strokeWidth={1.8} />
-    case 'tryon':     return <Shirt size={18} strokeWidth={1.8} />
-    case 'styles':    return <BookOpen size={18} strokeWidth={1.8} />
-    case 'diagnosis': return <ClipboardList size={18} strokeWidth={1.8} />
-    case 'reserve':   return <CalendarDays size={18} strokeWidth={1.8} />
-    case 'mypage':    return <UserCircle size={18} strokeWidth={1.8} />
+    case 'home':      return <Home size={20} strokeWidth={1.8} />
+    case 'gacha':     return <Gift size={20} strokeWidth={1.8} />
+    case 'tryon':     return <Shirt size={20} strokeWidth={1.8} />
+    case 'styles':    return <BookOpen size={20} strokeWidth={1.8} />
+    case 'diagnosis': return <ClipboardList size={20} strokeWidth={1.8} />
+    case 'reserve':   return <CalendarDays size={20} strokeWidth={1.8} />
+    case 'mypage':    return <UserCircle size={20} strokeWidth={1.8} />
   }
 }
 
@@ -54,7 +55,7 @@ export function BottomNavigation({ active, onChange }: Props) {
           key={tab}
           type="button"
           onClick={() => onChange(tab)}
-          className="relative flex flex-col items-center justify-center gap-1 flex-1 py-3 text-[10px] tracking-wider transition-colors active:opacity-70"
+          className="relative flex flex-col items-center justify-center gap-1 flex-1 py-3.5 text-[10px] tracking-wider transition-colors active:opacity-70"
           style={{
             color: active === tab ? '#E8C547' : 'rgba(245,240,232,0.34)',
             textShadow: active === tab ? '0 0 14px rgba(201,162,39,0.36)' : 'none',
