@@ -1,4 +1,4 @@
-import { LayoutDashboard, Eye, EyeOff, Star, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Eye, EyeOff, Star, ChevronRight, ExternalLink } from 'lucide-react'
 import type { StyleCard } from '../data/styleCard'
 
 interface Props {
@@ -125,6 +125,20 @@ export function CMSDashboard({ styles, onGoToList, onAddNew }: Props) {
             スタイル一覧を見る
           </span>
           <ChevronRight size={16} style={{ color: 'rgba(201,169,97,0.6)' }} />
+        </button>
+        <button
+          type="button"
+          onClick={() => window.open(window.location.pathname + '?tab=styles', '_blank')}
+          className="w-full rounded-xl px-4 py-4 flex items-center justify-between transition-opacity active:opacity-70"
+          style={{
+            background: 'linear-gradient(145deg, #0A0C10, #060810)',
+            border: '1px solid rgba(100,140,200,0.28)',
+          }}
+        >
+          <span className="text-sm font-medium" style={{ color: 'rgba(180,210,255,0.85)' }}>
+            アプリで確認（図鑑）
+          </span>
+          <ExternalLink size={15} style={{ color: 'rgba(100,160,220,0.7)' }} />
         </button>
       </div>
 

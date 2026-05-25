@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { LayoutDashboard, List } from 'lucide-react'
+import { LayoutDashboard, List, ExternalLink } from 'lucide-react'
 import { CMSDashboard } from './CMSDashboard'
 import { CMSStyleList } from './CMSStyleList'
 import { CMSStyleForm } from './CMSStyleForm'
@@ -71,15 +71,30 @@ export function CMSApp() {
             </p>
           </div>
         </div>
-        <div
-          className="rounded-full px-3 py-1 text-[10px] tracking-[0.16em] uppercase"
-          style={{
-            background: 'rgba(201,169,97,0.1)',
-            border: '1px solid rgba(201,169,97,0.22)',
-            color: 'rgba(201,169,97,0.7)',
-          }}
-        >
-          Admin
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.open(window.location.pathname + '?tab=styles', '_blank')}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium tracking-wide transition-opacity active:opacity-70"
+            style={{
+              background: 'rgba(201,169,97,0.1)',
+              border: '1px solid rgba(201,169,97,0.32)',
+              color: 'rgba(201,169,97,0.85)',
+            }}
+          >
+            <ExternalLink size={12} />
+            アプリで確認
+          </button>
+          <div
+            className="rounded-full px-3 py-1 text-[10px] tracking-[0.16em] uppercase"
+            style={{
+              background: 'rgba(201,169,97,0.06)',
+              border: '1px solid rgba(201,169,97,0.16)',
+              color: 'rgba(201,169,97,0.5)',
+            }}
+          >
+            Admin
+          </div>
         </div>
       </header>
 

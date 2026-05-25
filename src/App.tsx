@@ -22,7 +22,11 @@ type AppPhase = 'splash' | 'onboarding' | 'app'
 
 function App() {
   const [phase, setPhase] = useState<AppPhase>('splash')
-  const [activeTab, setActiveTab] = useState<NavTab>('home')
+  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    const valid: NavTab[] = ['home', 'styles', 'diagnosis', 'tryon', 'reserve', 'mypage']
+    return valid.includes(tab as NavTab) ? (tab as NavTab) : 'home'
+  })
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
   const [isPremiumGachaOpen, setIsPremiumGachaOpen] = useState(false)
 

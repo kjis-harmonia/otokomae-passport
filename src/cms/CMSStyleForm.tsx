@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, Check, AlertCircle, Image, Upload } from 'lucide-react'
+import { X, Check, AlertCircle, Image, Upload, ExternalLink } from 'lucide-react'
 import type { StyleCard, StyleCategory, StyleStats } from '../data/styleCard'
 import {
   STYLE_CATEGORIES, STYLE_CATEGORY_LABELS,
@@ -682,6 +682,19 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
             }}
           >
             キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={() => window.open(window.location.pathname + '?tab=styles', '_blank')}
+            className="w-full rounded-xl py-3 text-sm flex items-center justify-center gap-2 transition-opacity active:opacity-70"
+            style={{
+              color: 'rgba(180,210,255,0.8)',
+              border: '1px solid rgba(100,140,200,0.28)',
+              background: 'rgba(60,90,140,0.1)',
+            }}
+          >
+            <ExternalLink size={14} />
+            アプリで確認（図鑑タブ）
           </button>
         </div>
       </div>

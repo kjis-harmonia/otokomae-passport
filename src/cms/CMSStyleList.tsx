@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Eye, EyeOff, Star, StarOff,
-  Pencil, Trash2, ChevronUp, ChevronDown, Plus,
+  Pencil, Trash2, ChevronUp, ChevronDown, Plus, ExternalLink,
 } from 'lucide-react'
 import type { StyleCard } from '../data/styleCard'
 import { STYLE_CATEGORY_LABELS } from '../data/styleCard'
@@ -201,28 +201,46 @@ export function CMSStyleList({ styles, onChange, onEdit, onAddNew }: Props) {
   return (
     <div className="space-y-4 pb-8">
       {/* Header */}
-      <div className="px-5 pt-2 flex items-center justify-between">
-        <div>
-          <p className="text-[10px] tracking-[0.22em] uppercase" style={{ color: 'rgba(201,169,97,0.6)' }}>
-            Style Management
-          </p>
-          <h2 className="text-xl font-bold tracking-wide" style={{ color: '#F2E6C8' }}>
-            スタイル管理
-          </h2>
+      <div className="px-5 pt-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] tracking-[0.22em] uppercase" style={{ color: 'rgba(201,169,97,0.6)' }}>
+              Style Management
+            </p>
+            <h2 className="text-xl font-bold tracking-wide" style={{ color: '#F2E6C8' }}>
+              スタイル管理
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.open(window.location.pathname + '?tab=styles', '_blank')}
+              className="flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-medium transition-opacity active:opacity-70"
+              style={{
+                color: 'rgba(180,210,255,0.8)',
+                background: 'rgba(60,90,140,0.15)',
+                border: '1px solid rgba(100,140,200,0.28)',
+              }}
+              title="アプリの図鑑タブで確認"
+            >
+              <ExternalLink size={12} />
+              確認
+            </button>
+            <button
+              type="button"
+              onClick={onAddNew}
+              className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-opacity active:opacity-70"
+              style={{
+                color: '#F2E6C8',
+                background: 'linear-gradient(135deg, #1C0A0B, #5A0D12)',
+                border: '1px solid rgba(232,199,122,0.44)',
+              }}
+            >
+              <Plus size={14} />
+              追加
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={onAddNew}
-          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-opacity active:opacity-70"
-          style={{
-            color: '#F2E6C8',
-            background: 'linear-gradient(135deg, #1C0A0B, #5A0D12)',
-            border: '1px solid rgba(232,199,122,0.44)',
-          }}
-        >
-          <Plus size={14} />
-          追加
-        </button>
       </div>
 
       {/* Count */}
