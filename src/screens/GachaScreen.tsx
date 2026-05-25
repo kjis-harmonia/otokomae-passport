@@ -6,6 +6,7 @@ import type { MemberStatus } from '../data/brand'
 import { getStoredValue, setStoredValue, saveMemberStatus, loadCoupons, saveCoupons, GACHA_DATE_KEY, GACHA_RESULT_KEY } from '../utils/storage'
 import { getTodayDate, formatPoints } from '../utils/date'
 import { getNextRankInfo, getRankByPoints, getSafeRank, RANK_LABEL } from '../utils/rank'
+import { PremiumGachaExperience } from '../components/PremiumGachaExperience'
 
 type Scene = 'idle' | 'gateReady' | 'gateOpening' | 'flash' | 'entering' | 'approach' | 'reveal' | 'result'
 type Rarity = 'N' | 'R' | 'SR' | 'SSR'
@@ -123,6 +124,7 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [revealedPoints, setRevealedPoints] = useState<number | null>(null)
   const [isOverlayOpen, setIsOverlayOpen] = useState(false)
   const [dragDistance, setDragDistance] = useState(0)
+  const [isPremiumOpen, setIsPremiumOpen] = useState(false)
 
   function clearSceneTimers() {
     timersRef.current.forEach((timer) => window.clearTimeout(timer))
@@ -322,7 +324,37 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
         >
           {played ? '本日は終了しました' : '男前ガチャを開く'}
         </button>
+
+        {/* premium gacha divider */}
+        <div className="mt-5 flex items-center gap-3">
+          <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,169,97,0.28))' }} />
+          <span className="text-[9px] tracking-[0.22em]" style={{ color: 'rgba(201,169,97,0.42)' }}>PREMIUM</span>
+          <div className="h-px flex-1" style={{ background: 'linear-gradient(270deg, transparent, rgba(201,169,97,0.28))' }} />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsPremiumOpen(true)}
+          className="mt-3 w-full rounded-lg px-4 py-3 text-sm font-bold tracking-widest transition-opacity active:opacity-75"
+          style={{
+            color: '#E8C77A',
+            border: '1px solid rgba(232,199,122,0.52)',
+            background: 'linear-gradient(135deg, #0A0604 0%, #160A04 50%, #3A1A04 100%)',
+            boxShadow: '0 0 18px rgba(232,199,122,0.1), inset 0 1px 0 rgba(242,230,200,0.08)',
+          }}
+        >
+          プレミアムガチャを体験する
+        </button>
       </section>
+
+      <AnimatePresence>
+        {isPremiumOpen && (
+          <PremiumGachaExperience
+            key="premium-gacha"
+            onClose={() => setIsPremiumOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isOverlayOpen && (
