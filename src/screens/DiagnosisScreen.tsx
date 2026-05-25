@@ -46,8 +46,8 @@ const QUESTIONS: Question[] = [
       },
       {
         id: 'casual',
-        label: 'カジュアルライフ',
-        sublabel: '自由でリラックスしたスタイル',
+        label: '街の男前',
+        sublabel: '飾らない自由な男のスタイル',
         weights: { categories: ['casual', 'modern'] },
       },
       {
@@ -130,14 +130,14 @@ const QUESTIONS: Question[] = [
     choices: [
       {
         id: 'classic',
-        label: 'クラシック紳士',
-        sublabel: '時代を超えた品格と風格',
+        label: '昭和の漢',
+        sublabel: '時代を超えた威圧感と風格',
         weights: { categories: ['classic'] },
       },
       {
         id: 'modern',
-        label: 'モダンエグゼクティブ',
-        sublabel: '都会の洗練されたオーラ',
+        label: 'モテ系アウトロー',
+        sublabel: 'クールに計算された色気とオーラ',
         weights: { categories: ['modern'] },
       },
       {

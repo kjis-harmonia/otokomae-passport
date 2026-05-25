@@ -1,11 +1,11 @@
 export type StyleCategory = 'classic' | 'modern' | 'casual' | 'premium' | 'seasonal'
 
 export const STYLE_CATEGORY_LABELS: Record<StyleCategory, string> = {
-  classic: 'クラシック',
-  modern: 'モダン',
-  casual: 'カジュアル',
-  premium: 'プレミアム',
-  seasonal: 'シーズナル',
+  classic: '昭和の漢たち',
+  modern: 'モテ系アウトロー',
+  casual: '街の男前',
+  premium: '威圧感MAX',
+  seasonal: '季節限定',
 }
 
 export const STYLE_CATEGORIES: StyleCategory[] = [
