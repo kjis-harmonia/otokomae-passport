@@ -469,7 +469,8 @@ function DetailModal({
       <motion.div
         className="fixed inset-x-0 bottom-0 z-50"
         style={{
-          maxHeight: '90dvh',
+          /* svh = small viewport height。dvh より保守的で Dynamic Island 領域を含まない */
+          maxHeight: 'calc(100svh - env(safe-area-inset-top, 0px))',
           background: 'linear-gradient(180deg, #150B0A 0%, #0A0504 100%)',
           borderRadius: '20px 20px 0 0',
           border: '1px solid rgba(201,162,74,0.22)',
@@ -485,8 +486,12 @@ function DetailModal({
         onClick={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       >
-        {/* 固定ヘッダー: ハンドル + 閉じるボタン（スクロールしない） */}
-        <div className="relative flex justify-center pt-3 pb-1 flex-shrink-0">
+        {/* 固定ヘッダー: ハンドル + 閉じるボタン（スクロールしない）
+            paddingTop: safe-area-inset-top + 12px で Dynamic Island 下に退避 */}
+        <div
+          className="relative flex justify-center pb-1 flex-shrink-0"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+        >
           <div className="w-9 h-1 rounded-full" style={{ background: 'rgba(201,162,74,0.24)' }} />
           <button
             type="button"
