@@ -121,7 +121,27 @@ function StyleRow({ style, isFirst, isLast, onChange, onEdit, onDeleteRequest }:
         </div>
       </div>
 
-      {/* Action bar */}
+      {/* Edit button — full width, prominent */}
+      <button
+        type="button"
+        onClick={onEdit}
+        className="w-full flex items-center justify-center gap-2 transition-opacity active:opacity-60 border-t"
+        style={{
+          borderColor: 'rgba(201,169,97,0.12)',
+          minHeight: 48,
+          color: '#E8C77A',
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: '0.06em',
+          background: 'rgba(201,169,97,0.04)',
+          touchAction: 'manipulation',
+        }}
+      >
+        <Pencil size={14} />
+        このスタイルを編集する
+      </button>
+
+      {/* Quick actions */}
       <div
         className="flex items-center border-t"
         style={{ borderColor: 'rgba(201,169,97,0.1)' }}
@@ -158,18 +178,6 @@ function StyleRow({ style, isFirst, isLast, onChange, onEdit, onDeleteRequest }:
           <span className="text-[11px]" style={{ color: 'rgba(242,230,200,0.52)' }}>
             {style.isFeatured ? '解除' : 'おすすめ'}
           </span>
-        </button>
-
-        <div style={{ width: 1, height: 20, background: 'rgba(201,169,97,0.1)' }} />
-
-        {/* Edit */}
-        <button
-          type="button"
-          onClick={onEdit}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 transition-opacity active:opacity-60"
-        >
-          <Pencil size={14} style={{ color: 'rgba(201,169,97,0.7)' }} />
-          <span className="text-[11px]" style={{ color: 'rgba(242,230,200,0.52)' }}>編集</span>
         </button>
 
         <div style={{ width: 1, height: 20, background: 'rgba(201,169,97,0.1)' }} />

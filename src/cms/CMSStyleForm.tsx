@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { X, Check, AlertCircle, Image, Upload, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { ChevronLeft, Check, AlertCircle, Image, Camera, Link2, Trash2, ExternalLink } from 'lucide-react'
 import type { StyleCard, StyleCategory, StyleStats } from '../data/styleCard'
 import {
   STYLE_CATEGORIES, STYLE_CATEGORY_LABELS,
@@ -8,7 +8,7 @@ import {
 import { createStyle, updateStyle, loadStyles } from '../utils/styleStorage'
 
 interface Props {
-  editingId: string | null  // null = new
+  editingId: string | null
   onSave: () => void
   onCancel: () => void
 }
@@ -57,41 +57,55 @@ function fromStyleCard(s: StyleCard): FormState {
   }
 }
 
-/* ── Sub-components ────────────────────────────────────────────── */
+/* ── Shared input style — fontSize 16 prevents iOS Safari auto-zoom ── */
+const inputBase: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  boxSizing: 'border-box',
+  background: '#0D0806',
+  border: '1px solid rgba(201,169,97,0.22)',
+  borderRadius: 10,
+  padding: '12px 14px',
+  color: '#F2E6C8',
+  caretColor: '#C9A227',
+  fontSize: 16,
+  outline: 'none',
+  minHeight: 48,
+  fontFamily: 'inherit',
+}
+
+/* ── Sub-components ──────────────────────────────────────────────── */
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] tracking-[0.2em] uppercase mb-1.5" style={{ color: 'rgba(201,169,97,0.62)' }}>
+    <p style={{ fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(201,169,97,0.62)', marginBottom: 8 }}>
       {children}
     </p>
   )
 }
 
 function FieldInput({
-  label, value, onChange, placeholder, type = 'text', error,
+  label, value, onChange, placeholder, inputMode, error,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
-  type?: string
+  inputMode?: React.InputHTMLAttributes<HTMLInputElement>['inputMode']
   error?: string
 }) {
   return (
     <div>
       <Label>{label}</Label>
       <input
-        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg px-4 py-3 text-sm outline-none transition-all"
-        style={{
-          background: '#0D0806',
-          border: error ? '1px solid rgba(180,50,50,0.7)' : '1px solid rgba(201,169,97,0.22)',
-          color: '#F2E6C8',
-          caretColor: '#C9A227',
-        }}
+        inputMode={inputMode}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        style={{ ...inputBase, borderColor: error ? 'rgba(180,50,50,0.7)' : 'rgba(201,169,97,0.22)' }}
         onFocus={(e) => {
           e.target.style.borderColor = 'rgba(201,169,97,0.54)'
           e.target.style.boxShadow = '0 0 0 2px rgba(201,169,97,0.08)'
@@ -102,7 +116,7 @@ function FieldInput({
         }}
       />
       {error && (
-        <p className="mt-1 text-[11px] flex items-center gap-1" style={{ color: 'rgba(220,80,80,0.9)' }}>
+        <p style={{ marginTop: 4, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: 'rgba(220,80,80,0.9)' }}>
           <AlertCircle size={11} /> {error}
         </p>
       )}
@@ -111,7 +125,7 @@ function FieldInput({
 }
 
 function FieldTextarea({
-  label, value, onChange, placeholder, rows = 3,
+  label, value, onChange, placeholder, rows = 4,
 }: {
   label: string
   value: string
@@ -127,13 +141,7 @@ function FieldTextarea({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={rows}
-        className="w-full rounded-lg px-4 py-3 text-sm outline-none resize-none transition-all"
-        style={{
-          background: '#0D0806',
-          border: '1px solid rgba(201,169,97,0.22)',
-          color: '#F2E6C8',
-          caretColor: '#C9A227',
-        }}
+        style={{ ...inputBase, resize: 'vertical', minHeight: rows * 28 + 24 }}
         onFocus={(e) => {
           e.target.style.borderColor = 'rgba(201,169,97,0.54)'
           e.target.style.boxShadow = '0 0 0 2px rgba(201,169,97,0.08)'
@@ -158,32 +166,44 @@ function ToggleSwitch({
     <button
       type="button"
       onClick={() => onChange(!value)}
-      className="flex items-center justify-between w-full rounded-xl px-4 py-3.5 transition-opacity active:opacity-70"
       style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        boxSizing: 'border-box',
+        borderRadius: 14,
+        padding: '14px 16px',
+        minHeight: 52,
         background: '#0D0806',
         border: '1px solid rgba(201,169,97,0.18)',
+        cursor: 'pointer',
+        touchAction: 'manipulation',
       }}
     >
-      <span className="text-sm" style={{ color: '#F2E6C8' }}>{label}</span>
+      <span style={{ fontSize: 15, color: '#F2E6C8' }}>{label}</span>
       <div
-        className="relative rounded-full transition-all"
         style={{
-          width: 44,
-          height: 24,
-          background: value
-            ? 'linear-gradient(135deg, #3A7A4A, #2A6B3A)'
-            : 'rgba(255,255,255,0.08)',
+          width: 48,
+          height: 26,
+          borderRadius: 13,
+          flexShrink: 0,
+          position: 'relative',
+          background: value ? 'linear-gradient(135deg, #3A7A4A, #2A6B3A)' : 'rgba(255,255,255,0.08)',
           border: value ? '1px solid rgba(80,160,100,0.5)' : '1px solid rgba(255,255,255,0.12)',
+          transition: 'background 0.2s',
         }}
       >
         <div
-          className="absolute top-0.5 rounded-full transition-all"
           style={{
+            position: 'absolute',
+            top: 3,
+            left: value ? 25 : 3,
             width: 20,
             height: 20,
+            borderRadius: '50%',
             background: value ? '#C9F0D5' : 'rgba(255,255,255,0.3)',
-            left: value ? 22 : 2,
-            boxShadow: value ? '0 1px 4px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.2)',
+            transition: 'left 0.2s',
           }}
         />
       </div>
@@ -200,43 +220,32 @@ function StatSlider({
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-1.5">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <Label>{label}</Label>
-        <span
-          className="text-sm font-bold"
-          style={{ color: value >= 4 ? '#E8C77A' : 'rgba(201,169,97,0.6)' }}
-        >
+        <span style={{ fontSize: 14, fontWeight: 700, color: value >= 4 ? '#E8C77A' : 'rgba(201,169,97,0.6)' }}>
           {value}
         </span>
       </div>
-      <div className="flex items-center gap-2">
-        <input
-          type="range"
-          min={1}
-          max={5}
-          step={1}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
-          style={{
-            background: `linear-gradient(90deg, #C9A227 ${((value - 1) / 4) * 100}%, rgba(201,169,97,0.18) ${((value - 1) / 4) * 100}%)`,
-            accentColor: '#C9A227',
-          }}
-        />
-        <div className="flex gap-0.5">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <div
-              key={n}
-              className="rounded-full"
-              style={{
-                width: 6,
-                height: 6,
-                background: n <= value ? '#C9A227' : 'rgba(201,169,97,0.18)',
-              }}
-            />
-          ))}
-        </div>
-      </div>
+      <input
+        type="range"
+        min={1}
+        max={5}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{
+          width: '100%',
+          height: 6,
+          borderRadius: 3,
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          background: `linear-gradient(90deg, #C9A227 ${((value - 1) / 4) * 100}%, rgba(201,169,97,0.18) ${((value - 1) / 4) * 100}%)`,
+          accentColor: '#C9A227',
+          minHeight: 32,
+          cursor: 'pointer',
+          outline: 'none',
+        }}
+      />
     </div>
   )
 }
@@ -247,21 +256,26 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
   const isNew = editingId === null
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [saved, setSaved] = useState(false)
   const [imgError, setImgError] = useState(false)
   const [fileSizeWarning, setFileSizeWarning] = useState<'warn' | 'danger' | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showUrlInput, setShowUrlInput] = useState(false)
 
   useEffect(() => {
     if (!isNew) {
       const existing = loadStyles().find((s) => s.id === editingId)
-      if (existing) setForm(fromStyleCard(existing))
+      if (existing) {
+        setForm(fromStyleCard(existing))
+        setShowUrlInput(!!existing.imageUrl && !existing.imageUrl.startsWith('data:'))
+      }
     } else {
       setForm(EMPTY_FORM)
+      setShowUrlInput(false)
     }
     setErrors({})
-    setToast(null)
+    setSaved(false)
     setFileSizeWarning(null)
+    setImgError(false)
   }, [editingId, isNew])
 
   const set = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -285,6 +299,7 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
       if (typeof result === 'string') {
         set('imageUrl', result)
         setImgError(false)
+        setShowUrlInput(false)
       }
     }
     reader.readAsDataURL(file)
@@ -308,11 +323,6 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
     return Object.keys(next).length === 0
   }
 
-  function showToast(type: 'success' | 'error', message: string) {
-    setToast({ type, message })
-    setTimeout(() => setToast(null), 2400)
-  }
-
   function handleSubmit() {
     if (!validate()) return
 
@@ -321,186 +331,294 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
       .map((t) => t.trim())
       .filter(Boolean)
 
-    const draft = {
+    const baseDraft = {
       title: form.title.trim(),
       category: form.category,
       catchCopy: form.catchCopy.trim(),
       description: form.description.trim(),
       price: Number(form.price) || 0,
       durationMinutes: Number(form.durationMinutes) || 0,
-      imageUrl: form.imageUrl.trim(),
+      imageUrl: form.imageUrl.startsWith('data:') ? form.imageUrl : form.imageUrl.trim(),
       tags,
       stats: form.stats,
       isFeatured: form.isFeatured,
       isPublished: form.isPublished,
-      sortOrder: 999,
     }
 
     if (isNew) {
-      createStyle(draft)
-      showToast('success', '新しいスタイルを追加しました')
+      createStyle({ ...baseDraft, sortOrder: 999 })
     } else {
-      updateStyle(editingId!, draft)
-      showToast('success', '変更を保存しました')
+      updateStyle(editingId!, baseDraft)
     }
 
-    setTimeout(onSave, 600)
+    setSaved(true)
+    setTimeout(onSave, 900)
   }
 
+  const clearImage = useCallback(() => {
+    set('imageUrl', '')
+    setImgError(false)
+    setFileSizeWarning(null)
+    setShowUrlInput(false)
+  }, [set])
+
   return (
-    <div className="pb-12">
-      {/* Header */}
+    <div style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 40px)' }}>
+
+      {/* ── Sticky header with always-visible Save button ── */}
       <div
-        className="sticky top-0 z-10 flex items-center justify-between px-5 py-3"
         style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 12px',
           background: 'rgba(7,4,3,0.96)',
           borderBottom: '1px solid rgba(201,169,97,0.16)',
+          WebkitBackdropFilter: 'blur(8px)',
           backdropFilter: 'blur(8px)',
         }}
       >
-        <div>
-          <p className="text-[10px] tracking-[0.22em] uppercase" style={{ color: 'rgba(201,169,97,0.6)' }}>
-            {isNew ? 'New Style' : 'Edit Style'}
-          </p>
-          <h2 className="text-lg font-bold" style={{ color: '#F2E6C8' }}>
-            {isNew ? '新規スタイル追加' : 'スタイルを編集'}
-          </h2>
-        </div>
         <button
           type="button"
           onClick={onCancel}
-          className="p-2 rounded-lg transition-opacity active:opacity-60"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(201,169,97,0.18)' }}
-          aria-label="閉じる"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 3,
+            padding: '10px 12px',
+            borderRadius: 10,
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(201,169,97,0.18)',
+            color: 'rgba(242,230,200,0.6)',
+            fontSize: 13,
+            minHeight: 44,
+            minWidth: 68,
+            touchAction: 'manipulation',
+            cursor: 'pointer',
+          }}
         >
-          <X size={18} style={{ color: 'rgba(242,230,200,0.7)' }} />
+          <ChevronLeft size={16} />
+          戻る
+        </button>
+
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <p style={{ fontSize: 9, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(201,169,97,0.5)', marginBottom: 1 }}>
+            {isNew ? 'New Style' : 'Edit Style'}
+          </p>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#F2E6C8', lineHeight: 1 }}>
+            {isNew ? '新規追加' : '編集中'}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSubmit}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            padding: '10px 14px',
+            borderRadius: 10,
+            background: saved
+              ? 'rgba(30,80,45,0.9)'
+              : 'linear-gradient(135deg, #1C0A0B, #5A0D12)',
+            border: saved
+              ? '1px solid rgba(80,160,100,0.5)'
+              : '1px solid rgba(232,199,122,0.52)',
+            color: '#F2E6C8',
+            fontSize: 13,
+            fontWeight: 700,
+            minHeight: 44,
+            minWidth: 68,
+            touchAction: 'manipulation',
+            cursor: 'pointer',
+            letterSpacing: '0.04em',
+          }}
+        >
+          <Check size={14} />
+          {saved ? '保存済' : '保存'}
         </button>
       </div>
 
-      {/* Toast */}
-      {toast && (
+      {/* ── Save success banner ── */}
+      {saved && (
         <div
-          className="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium shadow-lg"
           style={{
-            background: toast.type === 'success' ? 'rgba(30,80,45,0.96)' : 'rgba(80,20,20,0.96)',
-            border: toast.type === 'success' ? '1px solid rgba(80,160,100,0.5)' : '1px solid rgba(180,50,50,0.5)',
-            color: '#F2E6C8',
-            minWidth: 220,
-            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: '12px 16px',
+            background: 'rgba(30,80,45,0.92)',
+            borderBottom: '1px solid rgba(80,160,100,0.28)',
+            color: '#C9F0D5',
+            fontSize: 14,
+            fontWeight: 600,
           }}
         >
-          {toast.type === 'success'
-            ? <Check size={15} style={{ color: 'rgba(80,200,120,0.9)', flexShrink: 0 }} />
-            : <AlertCircle size={15} style={{ color: 'rgba(220,80,80,0.9)', flexShrink: 0 }} />
-          }
-          {toast.message}
+          <Check size={16} />
+          保存しました — 一覧に戻ります
         </div>
       )}
 
-      <div className="space-y-5 px-4 pt-5">
-        {/* Image upload + URL */}
+      <div style={{ padding: '20px 16px 0', display: 'flex', flexDirection: 'column', gap: 22 }}>
+
+        {/* ── 画像 ── */}
         <div>
           <Label>画像</Label>
-          <div className="flex flex-col gap-2">
-            {/* Preview area — always 176px tall */}
-            <div
-              className="w-full rounded-xl overflow-hidden flex items-center justify-center"
-              style={{ height: 176, background: '#0D0806', border: '1px solid rgba(201,169,97,0.16)', position: 'relative' }}
-            >
-              {form.imageUrl && !imgError ? (
-                <>
-                  <img
-                    src={form.imageUrl}
-                    alt="プレビュー"
-                    className="w-full h-full"
-                    style={{ objectFit: 'cover', objectPosition: 'center top' }}
-                    onError={() => setImgError(true)}
-                    onLoad={() => setImgError(false)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => { set('imageUrl', ''); setImgError(false); setFileSizeWarning(null) }}
-                    className="absolute top-2 right-2 rounded-full p-1 transition-opacity active:opacity-60"
-                    style={{ background: 'rgba(0,0,0,0.62)', border: '1px solid rgba(255,255,255,0.18)' }}
-                    aria-label="画像をクリア"
-                  >
-                    <X size={13} style={{ color: '#F2E6C8' }} />
-                  </button>
-                </>
-              ) : form.imageUrl && imgError ? (
-                <div className="flex flex-col items-center gap-1.5">
-                  <Image size={22} style={{ color: 'rgba(180,50,50,0.5)' }} />
-                  <span className="text-[11px]" style={{ color: 'rgba(180,50,50,0.7)' }}>画像を読み込めませんでした</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-1.5">
-                  <Image size={22} style={{ color: 'rgba(201,169,97,0.25)' }} />
-                  <span className="text-[11px]" style={{ color: 'rgba(201,169,97,0.3)' }}>画像未設定</span>
-                </div>
-              )}
-            </div>
 
-            {/* Hidden file input */}
+          {/* Preview */}
+          <div
+            style={{
+              width: '100%',
+              height: 200,
+              borderRadius: 14,
+              overflow: 'hidden',
+              background: '#0D0806',
+              border: '1px solid rgba(201,169,97,0.16)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 12,
+              position: 'relative',
+            }}
+          >
+            {form.imageUrl && !imgError ? (
+              <img
+                src={form.imageUrl}
+                alt="プレビュー"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top' }}
+                onError={() => setImgError(true)}
+                onLoad={() => setImgError(false)}
+              />
+            ) : form.imageUrl && imgError ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <Image size={28} style={{ color: 'rgba(180,50,50,0.5)' }} />
+                <span style={{ fontSize: 12, color: 'rgba(180,50,50,0.7)' }}>読み込みエラー</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <Image size={32} style={{ color: 'rgba(201,169,97,0.2)' }} />
+                <span style={{ fontSize: 12, color: 'rgba(201,169,97,0.28)' }}>画像未設定</span>
+              </div>
+            )}
+          </div>
+
+          {/* 3 image action buttons — label approach for iOS Safari compatibility */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+            {/* Photo picker via <label> — most reliable on iOS Safari */}
+            <label
+              htmlFor="cms-img-input"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '12px 6px',
+                borderRadius: 12,
+                background: '#0D0806',
+                border: '1px solid rgba(201,169,97,0.34)',
+                color: 'rgba(201,169,97,0.88)',
+                fontSize: 11,
+                fontWeight: 600,
+                minHeight: 60,
+                cursor: 'pointer',
+                touchAction: 'manipulation',
+                textAlign: 'center',
+                userSelect: 'none',
+              }}
+            >
+              <Camera size={20} />
+              写真を選ぶ
+            </label>
             <input
-              ref={fileInputRef}
+              id="cms-img-input"
               type="file"
               accept="image/*"
-              className="hidden"
+              style={{
+                position: 'absolute',
+                width: 1,
+                height: 1,
+                padding: 0,
+                margin: -1,
+                overflow: 'hidden',
+                clip: 'rect(0,0,0,0)',
+                border: 0,
+              }}
               onChange={handleFileSelect}
             />
 
-            {/* File picker button */}
+            {/* URL input toggle */}
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-2 w-full rounded-lg py-2.5 text-sm transition-opacity active:opacity-70"
+              onClick={() => setShowUrlInput((v) => !v)}
               style={{
-                background: '#0D0806',
-                border: '1px solid rgba(201,169,97,0.32)',
-                color: 'rgba(201,169,97,0.85)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '12px 6px',
+                borderRadius: 12,
+                background: showUrlInput ? 'rgba(201,169,97,0.12)' : '#0D0806',
+                border: showUrlInput ? '1px solid rgba(201,169,97,0.5)' : '1px solid rgba(201,169,97,0.22)',
+                color: showUrlInput ? '#E8C547' : 'rgba(201,169,97,0.6)',
+                fontSize: 11,
+                fontWeight: 600,
+                minHeight: 60,
+                cursor: 'pointer',
+                touchAction: 'manipulation',
               }}
             >
-              <Upload size={15} />
-              ファイルから選択
+              <Link2 size={20} />
+              URLで指定
             </button>
 
-            {/* Size warning */}
-            {fileSizeWarning && (
-              <div
-                className="flex items-start gap-2 rounded-lg px-3 py-2.5 text-[11px]"
-                style={{
-                  background: fileSizeWarning === 'danger' ? 'rgba(80,20,20,0.7)' : 'rgba(80,60,10,0.7)',
-                  border: fileSizeWarning === 'danger' ? '1px solid rgba(180,50,50,0.4)' : '1px solid rgba(200,160,30,0.4)',
-                  color: fileSizeWarning === 'danger' ? 'rgba(240,100,100,0.9)' : 'rgba(230,190,60,0.9)',
-                }}
-              >
-                <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-                {fileSizeWarning === 'danger'
-                  ? '画像が2MBを超えています。LocalStorageの容量に注意してください。'
-                  : '画像が500KBを超えています。なるべく圧縮した画像を使用することを推奨します。'}
-              </div>
-            )}
-
-            {/* URL divider */}
-            <div className="flex items-center gap-2 mt-1">
-              <div className="flex-1 h-px" style={{ background: 'rgba(201,169,97,0.14)' }} />
-              <span className="text-[10px] tracking-widest" style={{ color: 'rgba(201,169,97,0.4)' }}>または URL を入力</span>
-              <div className="flex-1 h-px" style={{ background: 'rgba(201,169,97,0.14)' }} />
-            </div>
-
-            {/* URL input — hidden value when data: URL is active */}
-            <input
-              type="url"
-              value={form.imageUrl.startsWith('data:') ? '' : form.imageUrl}
-              onChange={(e) => { set('imageUrl', e.target.value); setImgError(false); setFileSizeWarning(null) }}
-              placeholder={form.imageUrl.startsWith('data:') ? 'ファイルが選択されています' : 'https://example.com/image.jpg'}
-              className="w-full rounded-lg px-4 py-3 text-sm outline-none"
+            {/* Delete */}
+            <button
+              type="button"
+              onClick={clearImage}
+              disabled={!form.imageUrl}
               style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '12px 6px',
+                borderRadius: 12,
                 background: '#0D0806',
-                border: '1px solid rgba(201,169,97,0.22)',
-                color: '#F2E6C8',
-                caretColor: '#C9A227',
+                border: '1px solid rgba(180,50,50,0.3)',
+                color: form.imageUrl ? 'rgba(220,80,80,0.85)' : 'rgba(180,50,50,0.3)',
+                fontSize: 11,
+                fontWeight: 600,
+                minHeight: 60,
+                cursor: form.imageUrl ? 'pointer' : 'not-allowed',
+                touchAction: 'manipulation',
+                opacity: form.imageUrl ? 1 : 0.4,
               }}
+            >
+              <Trash2 size={20} />
+              画像を削除
+            </button>
+          </div>
+
+          {/* URL input */}
+          {showUrlInput && (
+            <input
+              type="text"
+              inputMode="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              autoComplete="url"
+              value={form.imageUrl.startsWith('data:') ? '' : form.imageUrl}
+              onChange={(e) => { set('imageUrl', e.target.value); setImgError(false) }}
+              placeholder="https://example.com/image.jpg"
+              style={{ ...inputBase, marginBottom: 8 }}
               onFocus={(e) => {
                 e.target.style.borderColor = 'rgba(201,169,97,0.54)'
                 e.target.style.boxShadow = '0 0 0 2px rgba(201,169,97,0.08)'
@@ -510,10 +628,32 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
                 e.target.style.boxShadow = ''
               }}
             />
-          </div>
+          )}
+
+          {/* Size warning */}
+          {fileSizeWarning && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                borderRadius: 10,
+                padding: '10px 12px',
+                background: fileSizeWarning === 'danger' ? 'rgba(80,20,20,0.7)' : 'rgba(80,60,10,0.7)',
+                border: fileSizeWarning === 'danger' ? '1px solid rgba(180,50,50,0.4)' : '1px solid rgba(200,160,30,0.4)',
+                color: fileSizeWarning === 'danger' ? 'rgba(240,100,100,0.9)' : 'rgba(230,190,60,0.9)',
+                fontSize: 11,
+              }}
+            >
+              <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+              {fileSizeWarning === 'danger'
+                ? '2MB超え: LocalStorage容量に注意してください'
+                : '500KB超え: 画像を圧縮することをお勧めします'}
+            </div>
+          )}
         </div>
 
-        {/* Title */}
+        {/* ── タイトル ── */}
         <FieldInput
           label="タイトル *"
           value={form.title}
@@ -522,17 +662,21 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
           error={errors.title}
         />
 
-        {/* Category */}
+        {/* ── カテゴリ ── */}
         <div>
           <Label>カテゴリ</Label>
-          <div className="flex flex-wrap gap-2">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {STYLE_CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 type="button"
                 onClick={() => set('category', cat)}
-                className="rounded-lg px-3 py-2 text-xs font-medium transition-all active:opacity-70"
                 style={{
+                  borderRadius: 10,
+                  padding: '10px 14px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  minHeight: 44,
                   background: form.category === cat
                     ? 'linear-gradient(135deg, #1C0A0B, #5A0D12)'
                     : '#0D0806',
@@ -540,6 +684,8 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
                     ? '1px solid rgba(232,199,122,0.52)'
                     : '1px solid rgba(201,169,97,0.18)',
                   color: form.category === cat ? '#F2E6C8' : 'rgba(201,169,97,0.6)',
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
                 }}
               >
                 {STYLE_CATEGORY_LABELS[cat]}
@@ -548,7 +694,7 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
           </div>
         </div>
 
-        {/* CatchCopy */}
+        {/* ── キャッチコピー ── */}
         <FieldInput
           label="キャッチコピー"
           value={form.catchCopy}
@@ -556,7 +702,7 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
           placeholder="例: 清潔感と威圧感の完璧な融合"
         />
 
-        {/* Description */}
+        {/* ── 説明文 ── */}
         <FieldTextarea
           label="説明文"
           value={form.description}
@@ -565,14 +711,14 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
           rows={4}
         />
 
-        {/* Price & Duration */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* ── 価格・所要時間 ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <FieldInput
             label="価格（円）"
             value={form.price}
             onChange={(v) => set('price', v)}
             placeholder="5500"
-            type="number"
+            inputMode="numeric"
             error={errors.price}
           />
           <FieldInput
@@ -580,12 +726,12 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
             value={form.durationMinutes}
             onChange={(v) => set('durationMinutes', v)}
             placeholder="60"
-            type="number"
+            inputMode="numeric"
             error={errors.durationMinutes}
           />
         </div>
 
-        {/* Tags */}
+        {/* ── タグ ── */}
         <div>
           <Label>タグ（カンマ区切り）</Label>
           <input
@@ -593,13 +739,7 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
             value={form.tagsInput}
             onChange={(e) => set('tagsInput', e.target.value)}
             placeholder="例: ショート, ビジネス, 刈り上げ"
-            className="w-full rounded-lg px-4 py-3 text-sm outline-none"
-            style={{
-              background: '#0D0806',
-              border: '1px solid rgba(201,169,97,0.22)',
-              color: '#F2E6C8',
-              caretColor: '#C9A227',
-            }}
+            style={inputBase}
             onFocus={(e) => {
               e.target.style.borderColor = 'rgba(201,169,97,0.54)'
               e.target.style.boxShadow = '0 0 0 2px rgba(201,169,97,0.08)'
@@ -610,12 +750,19 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
             }}
           />
           {form.tagsInput && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {form.tagsInput.split(',').map((t) => t.trim()).filter(Boolean).map((tag, i) => (
                 <span
                   key={i}
-                  className="inline-block rounded-full px-2.5 py-1 text-[10px]"
-                  style={{ background: 'rgba(201,169,97,0.12)', color: 'rgba(201,169,97,0.8)', border: '1px solid rgba(201,169,97,0.2)' }}
+                  style={{
+                    display: 'inline-block',
+                    borderRadius: 999,
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    background: 'rgba(201,169,97,0.12)',
+                    color: 'rgba(201,169,97,0.8)',
+                    border: '1px solid rgba(201,169,97,0.2)',
+                  }}
                 >
                   {tag}
                 </span>
@@ -624,12 +771,19 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
           )}
         </div>
 
-        {/* Stats */}
+        {/* ── 能力値 ── */}
         <div
-          className="rounded-xl px-4 py-4 space-y-4"
-          style={{ background: '#0D0806', border: '1px solid rgba(201,169,97,0.16)' }}
+          style={{
+            borderRadius: 14,
+            padding: '16px',
+            background: '#0D0806',
+            border: '1px solid rgba(201,169,97,0.16)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 18,
+          }}
         >
-          <p className="text-[10px] tracking-[0.2em] uppercase" style={{ color: 'rgba(201,169,97,0.52)' }}>
+          <p style={{ fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(201,169,97,0.52)' }}>
             能力値
           </p>
           {STATS_KEYS.map((key) => (
@@ -642,55 +796,81 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
           ))}
         </div>
 
-        {/* Toggles */}
-        <div className="space-y-2.5">
-          <ToggleSwitch
-            label="公開する"
-            value={form.isPublished}
-            onChange={(v) => set('isPublished', v)}
-          />
-          <ToggleSwitch
-            label="おすすめに設定"
-            value={form.isFeatured}
-            onChange={(v) => set('isFeatured', v)}
-          />
+        {/* ── 公開設定 ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <ToggleSwitch label="公開する" value={form.isPublished} onChange={(v) => set('isPublished', v)} />
+          <ToggleSwitch label="おすすめに設定" value={form.isFeatured} onChange={(v) => set('isFeatured', v)} />
         </div>
 
-        {/* Submit */}
-        <div className="space-y-2.5 pt-2">
+        {/* ── ボタン群 ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
+          {/* Primary save */}
           <button
             type="button"
             onClick={handleSubmit}
-            className="w-full rounded-xl py-4 text-sm font-bold tracking-widest transition-opacity active:opacity-75"
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              width: '100%',
+              borderRadius: 14,
+              padding: '16px',
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              minHeight: 54,
               color: '#F2E6C8',
               background: 'linear-gradient(135deg, #050202 0%, #180708 48%, #5A0D12 100%)',
               border: '1px solid rgba(232,199,122,0.68)',
               boxShadow: 'inset 0 1px 0 rgba(242,230,200,0.1), 0 8px 20px rgba(0,0,0,0.32)',
+              touchAction: 'manipulation',
+              cursor: 'pointer',
             }}
           >
-            {isNew ? '追加する' : '変更を保存'}
+            <Check size={18} />
+            {isNew ? '追加する' : '変更を保存する'}
           </button>
+
+          {/* Cancel */}
           <button
             type="button"
             onClick={onCancel}
-            className="w-full rounded-xl py-3.5 text-sm transition-opacity active:opacity-70"
             style={{
+              width: '100%',
+              borderRadius: 14,
+              padding: '14px',
+              fontSize: 14,
+              minHeight: 48,
               color: 'rgba(242,230,200,0.5)',
               border: '1px solid rgba(201,169,97,0.18)',
               background: 'transparent',
+              touchAction: 'manipulation',
+              cursor: 'pointer',
             }}
           >
             キャンセル
           </button>
+
+          {/* App preview */}
           <button
             type="button"
             onClick={() => window.open(window.location.pathname + '?tab=styles', '_blank')}
-            className="w-full rounded-xl py-3 text-sm flex items-center justify-center gap-2 transition-opacity active:opacity-70"
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              width: '100%',
+              borderRadius: 14,
+              padding: '14px',
+              fontSize: 13,
+              minHeight: 48,
               color: 'rgba(180,210,255,0.8)',
               border: '1px solid rgba(100,140,200,0.28)',
               background: 'rgba(60,90,140,0.1)',
+              touchAction: 'manipulation',
+              cursor: 'pointer',
             }}
           >
             <ExternalLink size={14} />

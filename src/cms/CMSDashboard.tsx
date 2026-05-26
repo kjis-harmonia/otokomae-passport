@@ -1,4 +1,4 @@
-import { LayoutDashboard, Eye, EyeOff, Star, ChevronRight, ExternalLink } from 'lucide-react'
+import { LayoutDashboard, Eye, EyeOff, Star, ChevronRight, ExternalLink, Pencil } from 'lucide-react'
 import type { StyleCard } from '../data/styleCard'
 
 interface Props {
@@ -115,16 +115,21 @@ export function CMSDashboard({ styles, onGoToList, onAddNew }: Props) {
         <button
           type="button"
           onClick={onGoToList}
-          className="w-full rounded-xl px-4 py-4 flex items-center justify-between transition-opacity active:opacity-70"
+          className="w-full rounded-xl px-5 flex items-center justify-between transition-opacity active:opacity-70"
           style={{
-            background: 'linear-gradient(145deg, #110A08, #080504)',
-            border: '1px solid rgba(201,169,97,0.22)',
+            background: 'linear-gradient(135deg, #0A0504 0%, #1C0A0B 50%, #3A0A10 100%)',
+            border: '1px solid rgba(232,199,122,0.42)',
+            minHeight: 56,
           }}
         >
-          <span className="text-sm font-medium" style={{ color: '#F2E6C8' }}>
-            スタイル一覧を見る
-          </span>
-          <ChevronRight size={16} style={{ color: 'rgba(201,169,97,0.6)' }} />
+          <div className="flex items-center gap-3">
+            <Pencil size={18} style={{ color: 'rgba(232,199,122,0.8)', flexShrink: 0 }} />
+            <div className="text-left">
+              <p className="text-sm font-bold" style={{ color: '#F2E6C8' }}>スタイルを編集する</p>
+              <p className="text-[11px]" style={{ color: 'rgba(201,169,97,0.54)' }}>登録済みスタイルの編集・管理</p>
+            </div>
+          </div>
+          <ChevronRight size={18} style={{ color: 'rgba(201,169,97,0.6)' }} />
         </button>
         <button
           type="button"
