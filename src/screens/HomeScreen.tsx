@@ -176,7 +176,7 @@ function HeroSection({
               boxShadow: '0 4px 22px rgba(107,15,18,0.55), inset 0 1px 0 rgba(242,230,200,0.06)',
             }}
           >
-            この男になる
+            このスタイルにする
           </button>
           <button
             type="button"
@@ -619,7 +619,7 @@ function DetailModal({
               boxShadow: '0 4px 24px rgba(107,15,18,0.45), inset 0 1px 0 rgba(242,230,200,0.06)',
             }}
           >
-            この男になる
+            このスタイルにする
           </button>
         </div>
       </motion.div>

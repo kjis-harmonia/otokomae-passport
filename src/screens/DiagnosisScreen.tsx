@@ -336,7 +336,7 @@ function ResultCard({
             boxShadow: isTop ? '0 4px 16px rgba(107,15,18,0.38)' : 'none',
           }}
         >
-          この男になる
+          このスタイルにする
         </button>
       </div>
     </motion.div>
