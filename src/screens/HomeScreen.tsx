@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Lock } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
@@ -11,6 +11,7 @@ import type { Member, NavTab } from '../data/brand'
 interface Props {
   member: Member
   onTabChange: (tab: NavTab) => void
+  onModalChange?: (open: boolean) => void
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -646,13 +647,17 @@ function DetailModal({
 
 // ── Main screen ───────────────────────────────────────────────────────────
 
-export function HomeScreen({ member, onTabChange }: Props) {
+export function HomeScreen({ member, onTabChange, onModalChange }: Props) {
   const [styles] = useState(() =>
     loadStyles()
       .filter((s) => s.isPublished)
       .sort((a, b) => a.sortOrder - b.sortOrder),
   )
   const [selectedStyle, setSelectedStyle] = useState<StyleCard | null>(null)
+
+  useEffect(() => {
+    onModalChange?.(selectedStyle !== null)
+  }, [selectedStyle, onModalChange])
 
   const hero = styles.find((s) => s.isFeatured) ?? styles[0] ?? null
 

@@ -29,6 +29,11 @@ function App() {
   })
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
   const [isPremiumGachaOpen, setIsPremiumGachaOpen] = useState(false)
+  const [hasOpenModal, setHasOpenModal] = useState(false)
+
+  const handleModalChange = useCallback((open: boolean) => {
+    setHasOpenModal(open)
+  }, [])
 
   function handleSplashDone() {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
@@ -72,15 +77,15 @@ function App() {
         <PhoneStatusBar />
         {activeTab !== 'home' && <AppHeader />}
         <main className="app-main flex-1 overflow-y-auto">
-          {activeTab === 'home' && <HomeScreen member={liveMember} onTabChange={handleTabChange} />}
+          {activeTab === 'home' && <HomeScreen member={liveMember} onTabChange={handleTabChange} onModalChange={handleModalChange} />}
           {activeTab === 'gacha' && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
           {activeTab === 'tryon' && <TryOnScreen />}
           {activeTab === 'reserve' && <ReserveScreen />}
-          {activeTab === 'styles' && <StyleLibraryScreen onTabChange={handleTabChange} />}
+          {activeTab === 'styles' && <StyleLibraryScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
           {activeTab === 'diagnosis' && <DiagnosisScreen onTabChange={handleTabChange} />}
           {activeTab === 'mypage' && <MyPageScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
         </main>
-        <BottomNavigation active={activeTab} onChange={handleTabChange} />
+        {!hasOpenModal && <BottomNavigation active={activeTab} onChange={handleTabChange} />}
       </div>
 
       {/* Onboarding overlay — appears above app shell on first launch */}

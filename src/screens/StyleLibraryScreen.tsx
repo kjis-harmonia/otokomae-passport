@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
@@ -10,6 +10,7 @@ import type { NavTab } from '../data/brand'
 
 interface Props {
   onTabChange: (tab: NavTab) => void
+  onModalChange?: (open: boolean) => void
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -434,13 +435,17 @@ function EmptyState() {
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
-export function StyleLibraryScreen({ onTabChange }: Props) {
+export function StyleLibraryScreen({ onTabChange, onModalChange }: Props) {
   const [styles] = useState(() =>
     loadStyles()
       .filter((s) => s.isPublished)
       .sort((a, b) => a.sortOrder - b.sortOrder),
   )
   const [selectedStyle, setSelectedStyle] = useState<StyleCard | null>(null)
+
+  useEffect(() => {
+    onModalChange?.(selectedStyle !== null)
+  }, [selectedStyle, onModalChange])
 
   const hero = styles.find((s) => s.isFeatured) ?? styles[0] ?? null
   const laneCategories = STYLE_CATEGORIES.filter((cat) => styles.some((s) => s.category === cat))
