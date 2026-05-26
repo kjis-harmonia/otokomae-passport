@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronLeft, Check, AlertCircle, Image, Camera, Link2, Trash2, ExternalLink } from 'lucide-react'
+import { ChevronLeft, Check, AlertCircle, Image, Camera, Link2, Trash2, ExternalLink, Sparkles } from 'lucide-react'
 import type { StyleCard, StyleCategory, StyleStats } from '../data/styleCard'
 import {
   STYLE_CATEGORIES, STYLE_CATEGORY_LABELS,
   STATS_KEYS, STATS_LABELS, DEFAULT_STATS,
 } from '../data/styleCard'
 import { createStyle, updateStyle } from '../utils/styleStorage'
+import { generateGinjiroDraft } from '../utils/ginjiroStyleDraft'
 
 interface Props {
   initialStyle: StyleCard | null
@@ -259,16 +260,19 @@ export function CMSStyleForm({ initialStyle, onSave, onCancel }: Props) {
   )
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
   const [saved, setSaved] = useState(false)
+  const [autoFillStatus, setAutoFillStatus] = useState<'idle' | 'done'>('idle')
   const [imgError, setImgError] = useState(false)
   const [fileSizeWarning, setFileSizeWarning] = useState<'warn' | 'danger' | null>(null)
   const [showUrlInput, setShowUrlInput] = useState(() =>
     !!initialStyle?.imageUrl && !initialStyle.imageUrl.startsWith('data:')
   )
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoFillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (autoFillTimerRef.current) clearTimeout(autoFillTimerRef.current)
     }
   }, [])
 
@@ -361,6 +365,33 @@ export function CMSStyleForm({ initialStyle, onSave, onCancel }: Props) {
     setFileSizeWarning(null)
     setShowUrlInput(false)
   }, [set])
+
+  function handleAutoFill() {
+    const title = form.title.trim()
+    if (!title) return
+
+    const hasContent = form.catchCopy.trim() || form.description.trim() || form.tagsInput.trim()
+    if (hasContent) {
+      const ok = window.confirm(
+        'キャッチコピー・説明文・タグ・能力値を銀二郎AIで上書きします。\nよろしいですか？'
+      )
+      if (!ok) return
+    }
+
+    const draft = generateGinjiroDraft(title)
+    setForm((prev) => ({
+      ...prev,
+      category:    draft.category,
+      catchCopy:   draft.catchCopy,
+      description: draft.description,
+      tagsInput:   draft.tags.join(', '),
+      stats:       draft.stats,
+    }))
+
+    setAutoFillStatus('done')
+    if (autoFillTimerRef.current) clearTimeout(autoFillTimerRef.current)
+    autoFillTimerRef.current = setTimeout(() => setAutoFillStatus('idle'), 3500)
+  }
 
   return (
     <div style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 40px)' }}>
@@ -653,14 +684,85 @@ export function CMSStyleForm({ initialStyle, onSave, onCancel }: Props) {
           )}
         </div>
 
-        {/* ── タイトル ── */}
-        <FieldInput
-          label="タイトル *"
-          value={form.title}
-          onChange={(v) => set('title', v)}
-          placeholder="例: 男前ショート"
-          error={errors.title}
-        />
+        {/* ── タイトル + AI自動入力 ── */}
+        <div>
+          {/* label row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <p style={{ fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(201,169,97,0.62)' }}>
+              タイトル *
+            </p>
+            <button
+              type="button"
+              onClick={handleAutoFill}
+              disabled={!form.title.trim()}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                minHeight: 32,
+                cursor: form.title.trim() ? 'pointer' : 'not-allowed',
+                touchAction: 'manipulation',
+                transition: 'opacity 0.15s',
+                background: form.title.trim()
+                  ? 'linear-gradient(135deg, rgba(201,169,97,0.18), rgba(139,26,42,0.14))'
+                  : 'rgba(255,255,255,0.04)',
+                border: form.title.trim()
+                  ? '1px solid rgba(201,169,97,0.48)'
+                  : '1px solid rgba(201,169,97,0.12)',
+                color: form.title.trim() ? 'rgba(232,199,122,0.92)' : 'rgba(201,169,97,0.3)',
+                boxShadow: form.title.trim() ? '0 0 12px rgba(201,169,97,0.1)' : 'none',
+              }}
+            >
+              <Sparkles size={12} />
+              銀二郎AI自動入力
+            </button>
+          </div>
+
+          {/* title input */}
+          <input
+            value={form.title}
+            onChange={(e) => {
+              set('title', e.target.value)
+              if (autoFillStatus === 'done') setAutoFillStatus('idle')
+            }}
+            placeholder="例: バチバチパンチパーマ"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            style={{
+              ...inputBase,
+              borderColor: errors.title ? 'rgba(180,50,50,0.7)' : 'rgba(201,169,97,0.22)',
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = 'rgba(201,169,97,0.54)'
+              e.target.style.boxShadow = '0 0 0 2px rgba(201,169,97,0.08)'
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = errors.title ? 'rgba(180,50,50,0.7)' : 'rgba(201,169,97,0.22)'
+              e.target.style.boxShadow = ''
+            }}
+          />
+
+          {/* validation error */}
+          {errors.title && (
+            <p style={{ marginTop: 4, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, color: 'rgba(220,80,80,0.9)' }}>
+              <AlertCircle size={11} /> {errors.title}
+            </p>
+          )}
+
+          {/* auto-fill success */}
+          {autoFillStatus === 'done' && (
+            <p style={{ marginTop: 6, fontSize: 11, display: 'flex', alignItems: 'center', gap: 5, color: 'rgba(80,200,130,0.88)' }}>
+              <Check size={11} />
+              銀二郎AIで下書きを自動入力しました。手動で修正できます。
+            </p>
+          )}
+        </div>
 
         {/* ── カテゴリ ── */}
         <div>
