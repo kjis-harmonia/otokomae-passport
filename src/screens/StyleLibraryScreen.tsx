@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
 import { useScrollLock } from '../utils/useScrollLock'
+import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import type { StyleCard } from '../data/styleCard'
 import { STYLE_CATEGORY_LABELS, STYLE_CATEGORIES, STATS_KEYS, STATS_LABELS } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
@@ -22,19 +23,13 @@ function HeroCard({ style, onTap }: { style: StyleCard; onTap: () => void }) {
       style={{ height: '58dvh', minHeight: 300 }}
       onClick={onTap}
     >
-      {style.imageUrl ? (
-        <img
-          src={style.imageUrl}
-          alt={style.title}
-          className="absolute inset-0 w-full h-full"
-          style={{ objectFit: 'cover', objectPosition: 'center bottom' }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#1A0E0C' }}>
-          <span style={{ fontSize: 64, opacity: 0.12 }}>✂</span>
-        </div>
-      )}
+      <StyleCardImage
+        src={style.imageUrl}
+        alt={style.title}
+        className="absolute inset-0 w-full h-full"
+        imgStyle={{ objectFit: 'cover', objectPosition: 'center bottom' }}
+        size="lg"
+      />
 
       {/* Gradient overlay */}
       <div
@@ -121,19 +116,13 @@ function PosterCard({ style, onTap }: { style: StyleCard; onTap: () => void }) {
           border: '1px solid rgba(201,162,74,0.16)',
         }}
       >
-        {style.imageUrl ? (
-          <img
-            src={style.imageUrl}
-            alt={style.title}
-            className="w-full h-full"
-            style={{ objectFit: 'cover', objectPosition: 'center bottom' }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span style={{ fontSize: 36, opacity: 0.18 }}>✂</span>
-          </div>
-        )}
+        <StyleCardImage
+          src={style.imageUrl}
+          alt={style.title}
+          className="w-full h-full"
+          imgStyle={{ objectFit: 'cover', objectPosition: 'center bottom' }}
+          size="sm"
+        />
         <div
           className="absolute inset-x-0 bottom-0"
           style={{
@@ -304,20 +293,18 @@ function DetailModal({
           }}
         >
           {/* Image */}
-          {style.imageUrl && (
-            <div
-              className="mx-4 mt-2 rounded-xl overflow-hidden"
-              style={{ height: 200, border: '1px solid rgba(201,162,74,0.12)' }}
-            >
-              <img
-                src={style.imageUrl}
-                alt={style.title}
-                className="w-full h-full"
-                style={{ objectFit: 'cover', objectPosition: 'center bottom' }}
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-              />
-            </div>
-          )}
+          <div
+            className="mx-4 mt-2 rounded-xl overflow-hidden"
+            style={{ height: 200, border: '1px solid rgba(201,162,74,0.12)' }}
+          >
+            <StyleCardImage
+              src={style.imageUrl}
+              alt={style.title}
+              className="w-full h-full"
+              imgStyle={{ objectFit: 'cover', objectPosition: 'center bottom' }}
+              size="md"
+            />
+          </div>
 
           <div className="px-5 pt-4 space-y-4">
             {/* Title */}

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Lock } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
 import { useScrollLock } from '../utils/useScrollLock'
+import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import type { StyleCard } from '../data/styleCard'
 import { STYLE_CATEGORY_LABELS, STYLE_CATEGORIES, STATS_KEYS, STATS_LABELS } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
@@ -217,21 +218,13 @@ function PosterCard({ style, onTap }: { style: StyleCard; onTap: () => void }) {
           border: '1px solid rgba(201,162,74,0.15)',
         }}
       >
-        {style.imageUrl ? (
-          <img
-            src={style.imageUrl}
-            alt={style.title}
-            className="w-full h-full"
-            style={{ objectFit: 'cover', objectPosition: 'center bottom' }}
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none'
-            }}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span style={{ fontSize: 34, opacity: 0.14 }}>✂</span>
-          </div>
-        )}
+        <StyleCardImage
+          src={style.imageUrl}
+          alt={style.title}
+          className="w-full h-full"
+          imgStyle={{ objectFit: 'cover', objectPosition: 'center bottom' }}
+          size="sm"
+        />
         <div
           className="absolute inset-x-0 bottom-0"
           style={{ height: '55%', background: 'linear-gradient(180deg, transparent, rgba(5,3,2,0.88))' }}
@@ -515,22 +508,18 @@ function DetailModal({
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 140px)',
           }}
         >
-          {style.imageUrl && (
-            <div
-              className="mx-4 mt-3 rounded-xl overflow-hidden"
-              style={{ height: 200, border: '1px solid rgba(201,162,74,0.12)' }}
-            >
-              <img
-                src={style.imageUrl}
-                alt={style.title}
-                className="w-full h-full"
-                style={{ objectFit: 'cover', objectPosition: 'center bottom' }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            </div>
-          )}
+          <div
+            className="mx-4 mt-3 rounded-xl overflow-hidden"
+            style={{ height: 200, border: '1px solid rgba(201,162,74,0.12)' }}
+          >
+            <StyleCardImage
+              src={style.imageUrl}
+              alt={style.title}
+              className="w-full h-full"
+              imgStyle={{ objectFit: 'cover', objectPosition: 'center bottom' }}
+              size="md"
+            />
+          </div>
 
           <div className="px-5 pt-4 space-y-4">
             <div>
