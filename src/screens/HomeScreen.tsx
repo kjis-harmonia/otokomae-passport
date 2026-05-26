@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Lock } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
+import { useScrollLock } from '../utils/useScrollLock'
 import type { StyleCard } from '../data/styleCard'
 import { STYLE_CATEGORY_LABELS, STYLE_CATEGORIES, STATS_KEYS, STATS_LABELS } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
@@ -449,8 +450,12 @@ function DetailModal({
   onClose: () => void
   onReserve: () => void
 }) {
+  // iOS Safari scroll bleed 防止: app-main をフリーズ + document touchmove 封鎖
+  useScrollLock()
+
   return (
     <>
+      {/* Backdrop — touchmove は useScrollLock の document リスナーが封鎖 */}
       <motion.div
         className="fixed inset-0 z-50"
         style={{ background: 'rgba(0,0,0,0.72)' }}
@@ -459,8 +464,10 @@ function DetailModal({
         exit={{ opacity: 0 }}
         onClick={onClose}
       />
+
+      {/* Sheet — flex column; このdivはスクロールしない */}
       <motion.div
-        className="fixed inset-x-0 bottom-0 z-50 overflow-y-auto"
+        className="fixed inset-x-0 bottom-0 z-50"
         style={{
           maxHeight: '90dvh',
           background: 'linear-gradient(180deg, #150B0A 0%, #0A0504 100%)',
@@ -468,159 +475,175 @@ function DetailModal({
           border: '1px solid rgba(201,162,74,0.22)',
           borderBottom: 'none',
           boxShadow: '0 -24px 60px rgba(0,0,0,0.6)',
+          display: 'flex',
+          flexDirection: 'column',
         }}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 28, stiffness: 300 }}
         onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-center pt-3 pb-0.5">
+        {/* 固定ヘッダー: ハンドル + 閉じるボタン（スクロールしない） */}
+        <div className="relative flex justify-center pt-3 pb-1 flex-shrink-0">
           <div className="w-9 h-1 rounded-full" style={{ background: 'rgba(201,162,74,0.24)' }} />
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-3 right-4 p-1.5 rounded-full transition-opacity active:opacity-60"
-          style={{ background: 'rgba(201,162,74,0.1)', color: 'rgba(201,162,74,0.62)' }}
-          aria-label="閉じる"
-        >
-          <X size={15} />
-        </button>
-
-        {style.imageUrl && (
-          <div
-            className="mx-4 mt-3 rounded-xl overflow-hidden"
-            style={{ height: 200, border: '1px solid rgba(201,162,74,0.12)' }}
-          >
-            <img
-              src={style.imageUrl}
-              alt={style.title}
-              className="w-full h-full"
-              style={{ objectFit: 'cover', objectPosition: 'center bottom' }}
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none'
-              }}
-            />
-          </div>
-        )}
-
-        <div className="px-5 pt-4 pb-8 space-y-4">
-          <div>
-            <span
-              className="inline-block rounded px-2 py-0.5 text-[9px] font-bold tracking-[0.16em] uppercase mb-2"
-              style={{
-                background: 'rgba(107,15,18,0.65)',
-                color: '#F2E6C8',
-                border: '1px solid rgba(180,50,50,0.32)',
-              }}
-            >
-              {STYLE_CATEGORY_LABELS[style.category]}
-            </span>
-            <h3
-              className="text-xl font-bold leading-snug"
-              style={{ color: '#F2E6C8', fontFamily: SERIF }}
-            >
-              {style.title}
-            </h3>
-            {style.catchCopy && (
-              <p
-                className="text-[12px] mt-1.5 leading-relaxed"
-                style={{ color: 'rgba(201,162,74,0.7)' }}
-              >
-                {style.catchCopy}
-              </p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-5">
-            <div>
-              <p
-                className="text-[9px] tracking-[0.18em] uppercase mb-0.5"
-                style={{ color: 'rgba(201,162,74,0.44)' }}
-              >
-                Price
-              </p>
-              <p className="text-lg font-bold" style={{ color: '#F2E6C8' }}>
-                ¥{style.price.toLocaleString()}
-              </p>
-            </div>
-            {style.durationMinutes > 0 && (
-              <>
-                <div style={{ width: 1, height: 28, background: 'rgba(201,162,74,0.14)' }} />
-                <div>
-                  <p
-                    className="text-[9px] tracking-[0.18em] uppercase mb-0.5"
-                    style={{ color: 'rgba(201,162,74,0.44)' }}
-                  >
-                    Time
-                  </p>
-                  <p className="text-lg font-bold" style={{ color: '#F2E6C8' }}>
-                    {style.durationMinutes}
-                    <span className="text-sm ml-0.5" style={{ color: 'rgba(242,230,200,0.56)' }}>
-                      分
-                    </span>
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-
-          {style.description && (
-            <p className="text-sm leading-relaxed" style={{ color: 'rgba(242,230,200,0.58)' }}>
-              {style.description}
-            </p>
-          )}
-
-          {style.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {style.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full px-2.5 py-1 text-[10px] tracking-[0.1em]"
-                  style={{
-                    background: 'rgba(201,162,74,0.08)',
-                    color: 'rgba(201,162,74,0.62)',
-                    border: '1px solid rgba(201,162,74,0.17)',
-                  }}
-                >
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div
-            className="rounded-xl px-4 py-4 space-y-2.5"
-            style={{
-              background: 'rgba(201,162,74,0.03)',
-              border: '1px solid rgba(201,162,74,0.1)',
-            }}
-          >
-            <p
-              className="text-[9px] tracking-[0.22em] uppercase mb-3"
-              style={{ color: 'rgba(201,162,74,0.44)' }}
-            >
-              スタイル特性
-            </p>
-            {STATS_KEYS.map((key) => (
-              <StatBar key={key} label={STATS_LABELS[key]} value={style.stats[key]} />
-            ))}
-          </div>
-
           <button
             type="button"
-            onClick={onReserve}
-            className="w-full rounded-xl py-4 text-sm font-bold tracking-[0.24em] transition-opacity active:opacity-70"
-            style={{
-              background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-              border: '1px solid rgba(201,162,74,0.44)',
-              color: '#F2E6C8',
-              boxShadow: '0 4px 24px rgba(107,15,18,0.45), inset 0 1px 0 rgba(242,230,200,0.06)',
-            }}
+            onClick={onClose}
+            className="absolute top-2 right-4 p-1.5 rounded-full transition-opacity active:opacity-60"
+            style={{ background: 'rgba(201,162,74,0.1)', color: 'rgba(201,162,74,0.62)' }}
+            aria-label="閉じる"
           >
-            このスタイルにする
+            <X size={15} />
           </button>
+        </div>
+
+        {/* スクロール担当要素 — ここだけがスクロールする */}
+        <div
+          data-modal-scroll
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 140px)',
+          }}
+        >
+          {style.imageUrl && (
+            <div
+              className="mx-4 mt-3 rounded-xl overflow-hidden"
+              style={{ height: 200, border: '1px solid rgba(201,162,74,0.12)' }}
+            >
+              <img
+                src={style.imageUrl}
+                alt={style.title}
+                className="w-full h-full"
+                style={{ objectFit: 'cover', objectPosition: 'center bottom' }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }}
+              />
+            </div>
+          )}
+
+          <div className="px-5 pt-4 space-y-4">
+            <div>
+              <span
+                className="inline-block rounded px-2 py-0.5 text-[9px] font-bold tracking-[0.16em] uppercase mb-2"
+                style={{
+                  background: 'rgba(107,15,18,0.65)',
+                  color: '#F2E6C8',
+                  border: '1px solid rgba(180,50,50,0.32)',
+                }}
+              >
+                {STYLE_CATEGORY_LABELS[style.category]}
+              </span>
+              <h3
+                className="text-xl font-bold leading-snug"
+                style={{ color: '#F2E6C8', fontFamily: SERIF }}
+              >
+                {style.title}
+              </h3>
+              {style.catchCopy && (
+                <p
+                  className="text-[12px] mt-1.5 leading-relaxed"
+                  style={{ color: 'rgba(201,162,74,0.7)' }}
+                >
+                  {style.catchCopy}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-5">
+              <div>
+                <p
+                  className="text-[9px] tracking-[0.18em] uppercase mb-0.5"
+                  style={{ color: 'rgba(201,162,74,0.44)' }}
+                >
+                  Price
+                </p>
+                <p className="text-lg font-bold" style={{ color: '#F2E6C8' }}>
+                  ¥{style.price.toLocaleString()}
+                </p>
+              </div>
+              {style.durationMinutes > 0 && (
+                <>
+                  <div style={{ width: 1, height: 28, background: 'rgba(201,162,74,0.14)' }} />
+                  <div>
+                    <p
+                      className="text-[9px] tracking-[0.18em] uppercase mb-0.5"
+                      style={{ color: 'rgba(201,162,74,0.44)' }}
+                    >
+                      Time
+                    </p>
+                    <p className="text-lg font-bold" style={{ color: '#F2E6C8' }}>
+                      {style.durationMinutes}
+                      <span className="text-sm ml-0.5" style={{ color: 'rgba(242,230,200,0.56)' }}>
+                        分
+                      </span>
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {style.description && (
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(242,230,200,0.58)' }}>
+                {style.description}
+              </p>
+            )}
+
+            {style.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {style.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full px-2.5 py-1 text-[10px] tracking-[0.1em]"
+                    style={{
+                      background: 'rgba(201,162,74,0.08)',
+                      color: 'rgba(201,162,74,0.62)',
+                      border: '1px solid rgba(201,162,74,0.17)',
+                    }}
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div
+              className="rounded-xl px-4 py-4 space-y-2.5"
+              style={{
+                background: 'rgba(201,162,74,0.03)',
+                border: '1px solid rgba(201,162,74,0.1)',
+              }}
+            >
+              <p
+                className="text-[9px] tracking-[0.22em] uppercase mb-3"
+                style={{ color: 'rgba(201,162,74,0.44)' }}
+              >
+                スタイル特性
+              </p>
+              {STATS_KEYS.map((key) => (
+                <StatBar key={key} label={STATS_LABELS[key]} value={style.stats[key]} />
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={onReserve}
+              className="w-full rounded-xl py-4 text-sm font-bold tracking-[0.24em] transition-opacity active:opacity-70"
+              style={{
+                background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+                border: '1px solid rgba(201,162,74,0.44)',
+                color: '#F2E6C8',
+                boxShadow: '0 4px 24px rgba(107,15,18,0.45), inset 0 1px 0 rgba(242,230,200,0.06)',
+              }}
+            >
+              このスタイルにする
+            </button>
+          </div>
         </div>
       </motion.div>
     </>

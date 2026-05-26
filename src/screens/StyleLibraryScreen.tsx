@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
+import { useScrollLock } from '../utils/useScrollLock'
 import type { StyleCard } from '../data/styleCard'
 import { STYLE_CATEGORY_LABELS, STYLE_CATEGORIES, STATS_KEYS, STATS_LABELS } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
@@ -239,9 +240,12 @@ function DetailModal({
   onClose: () => void
   onReserve: () => void
 }) {
+  // iOS Safari scroll bleed 防止: app-main をフリーズ + document touchmove 封鎖
+  useScrollLock()
+
   return (
     <>
-      {/* Backdrop — blocks background scroll */}
+      {/* Backdrop — touchmove は useScrollLock の document リスナーが封鎖 */}
       <motion.div
         className="fixed inset-0 z-50"
         style={{ background: 'rgba(0,0,0,0.72)' }}
@@ -251,11 +255,10 @@ function DetailModal({
         onClick={onClose}
       />
 
-      {/* Sheet — flex column, no overflow here */}
+      {/* Sheet — flex column; このdivはスクロールしない */}
       <motion.div
         className="fixed inset-x-0 bottom-0 z-50"
         style={{
-          /* calc accounts for status-bar and home-indicator so the sheet never overflows */
           maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
           background: 'linear-gradient(180deg, #150B0A 0%, #0A0504 100%)',
           borderRadius: '20px 20px 0 0',
@@ -270,8 +273,9 @@ function DetailModal({
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 28, stiffness: 300 }}
         onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
       >
-        {/* Non-scrollable header: handle + close button */}
+        {/* 固定ヘッダー: ハンドル + 閉じるボタン（スクロールしない） */}
         <div className="relative flex justify-center pt-3 pb-1 flex-shrink-0">
           <div className="w-9 h-1 rounded-full" style={{ background: 'rgba(201,162,74,0.24)' }} />
           <button
@@ -285,15 +289,15 @@ function DetailModal({
           </button>
         </div>
 
-        {/* Scrollable content — this is the ONLY element that scrolls */}
+        {/* スクロール担当要素 — ここだけがスクロールする */}
         <div
+          data-modal-scroll
           style={{
             flex: 1,
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
             overscrollBehavior: 'contain',
-            /* paddingBottom clears BottomNavigation (~56px) + Safari home bar + breathing room */
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 120px)',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 140px)',
           }}
         >
           {/* Image */}
