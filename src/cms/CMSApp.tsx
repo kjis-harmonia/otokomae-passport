@@ -12,7 +12,7 @@ type CMSView = CMSTab | 'form'
 export function CMSApp() {
   const [tab, setTab] = useState<CMSTab>('dashboard')
   const [view, setView] = useState<CMSView>('dashboard')
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingStyle, setEditingStyle] = useState<StyleCard | null>(null)
   const [styles, setStyles] = useState<StyleCard[]>(loadStyles)
 
   const refresh = useCallback(() => {
@@ -20,7 +20,7 @@ export function CMSApp() {
   }, [])
 
   function openForm(id: string | null) {
-    setEditingId(id)
+    setEditingStyle(id ? styles.find((s) => s.id === id) ?? null : null)
     setView('form')
   }
 
@@ -117,7 +117,8 @@ export function CMSApp() {
         )}
         {view === 'form' && (
           <CMSStyleForm
-            editingId={editingId}
+            key={editingStyle?.id ?? 'new'}
+            initialStyle={editingStyle}
             onSave={handleFormSave}
             onCancel={handleFormCancel}
           />

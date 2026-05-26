@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronLeft, Check, AlertCircle, Image, Camera, Link2, Trash2, ExternalLink } from 'lucide-react'
 import type { StyleCard, StyleCategory, StyleStats } from '../data/styleCard'
 import {
   STYLE_CATEGORIES, STYLE_CATEGORY_LABELS,
   STATS_KEYS, STATS_LABELS, DEFAULT_STATS,
 } from '../data/styleCard'
-import { createStyle, updateStyle, loadStyles } from '../utils/styleStorage'
+import { createStyle, updateStyle } from '../utils/styleStorage'
 
 interface Props {
-  editingId: string | null
+  initialStyle: StyleCard | null
   onSave: () => void
   onCancel: () => void
 }
@@ -43,17 +43,17 @@ const EMPTY_FORM: FormState = {
 
 function fromStyleCard(s: StyleCard): FormState {
   return {
-    title: s.title,
-    category: s.category,
-    catchCopy: s.catchCopy,
-    description: s.description,
-    price: String(s.price),
-    durationMinutes: String(s.durationMinutes),
-    imageUrl: s.imageUrl,
-    tagsInput: s.tags.join(', '),
-    stats: { ...s.stats },
-    isFeatured: s.isFeatured,
-    isPublished: s.isPublished,
+    title: s.title ?? '',
+    category: s.category ?? 'classic',
+    catchCopy: s.catchCopy ?? '',
+    description: s.description ?? '',
+    price: String(s.price ?? 0),
+    durationMinutes: String(s.durationMinutes ?? 0),
+    imageUrl: s.imageUrl ?? '',
+    tagsInput: (s.tags ?? []).join(', '),
+    stats: { ...DEFAULT_STATS, ...s.stats },
+    isFeatured: s.isFeatured ?? false,
+    isPublished: s.isPublished ?? true,
   }
 }
 
@@ -252,36 +252,35 @@ function StatSlider({
 
 /* ── Main component ─────────────────────────────────────────────── */
 
-export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
-  const isNew = editingId === null
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+export function CMSStyleForm({ initialStyle, onSave, onCancel }: Props) {
+  const isNew = initialStyle === null
+  const [form, setForm] = useState<FormState>(() =>
+    initialStyle ? fromStyleCard(initialStyle) : { ...EMPTY_FORM }
+  )
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
   const [saved, setSaved] = useState(false)
   const [imgError, setImgError] = useState(false)
   const [fileSizeWarning, setFileSizeWarning] = useState<'warn' | 'danger' | null>(null)
-  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [showUrlInput, setShowUrlInput] = useState(() =>
+    !!initialStyle?.imageUrl && !initialStyle.imageUrl.startsWith('data:')
+  )
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!isNew) {
-      const existing = loadStyles().find((s) => s.id === editingId)
-      if (existing) {
-        setForm(fromStyleCard(existing))
-        setShowUrlInput(!!existing.imageUrl && !existing.imageUrl.startsWith('data:'))
-      }
-    } else {
-      setForm(EMPTY_FORM)
-      setShowUrlInput(false)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-    setErrors({})
-    setSaved(false)
-    setFileSizeWarning(null)
-    setImgError(false)
-  }, [editingId, isNew])
+  }, [])
 
   const set = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
-    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }))
-  }, [errors])
+    setErrors((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -345,14 +344,15 @@ export function CMSStyleForm({ editingId, onSave, onCancel }: Props) {
       isPublished: form.isPublished,
     }
 
-    if (isNew) {
+    if (initialStyle === null) {
       createStyle({ ...baseDraft, sortOrder: 999 })
     } else {
-      updateStyle(editingId!, baseDraft)
+      updateStyle(initialStyle.id, baseDraft)
     }
 
     setSaved(true)
-    setTimeout(onSave, 900)
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(onSave, 900)
   }
 
   const clearImage = useCallback(() => {
