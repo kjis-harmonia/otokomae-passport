@@ -1,3 +1,4 @@
+import type React from 'react'
 import { Home, Gift, Shirt, BookOpen, ClipboardList, CalendarDays, UserCircle } from 'lucide-react'
 import type { NavTab } from '../data/brand'
 
@@ -36,18 +37,19 @@ export function BottomNavigation({ active, onChange }: Props) {
     <nav
       className="relative flex shrink-0 overflow-hidden"
       style={{
-        background:
-          'linear-gradient(180deg, rgba(23,20,15,0.96), rgba(8,8,8,0.98))',
-        borderTop: '1px solid rgba(201,162,39,0.28)',
+        background: 'rgba(7,5,3,0.76)',
+        backdropFilter: 'blur(24px) saturate(1.6)',
+        WebkitBackdropFilter: 'blur(24px) saturate(1.6)',
+        borderTop: '1px solid rgba(201,162,39,0.22)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        boxShadow: '0 -10px 30px rgba(0,0,0,0.42), inset 0 1px 0 rgba(245,240,232,0.04)',
-      }}
+        boxShadow: '0 -12px 36px rgba(0,0,0,0.38), inset 0 1px 0 rgba(245,240,232,0.04)',
+      } as React.CSSProperties}
     >
       <div
         className="pointer-events-none absolute inset-x-0 top-0"
         style={{
           height: 1,
-          background: 'linear-gradient(90deg, transparent, rgba(232,197,71,0.58), transparent)',
+          background: 'linear-gradient(90deg, transparent, rgba(232,197,71,0.46), transparent)',
         }}
       />
       {TABS.map(tab => (

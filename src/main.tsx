@@ -4,35 +4,32 @@ import './index.css'
 import './styles/tokens.css'
 import App from './App.tsx'
 import { CMSApp } from './cms/CMSApp.tsx'
+import { AdminScreen } from './screens/AdminScreen.tsx'
 import { seedInitialStyles } from './utils/styleStorage'
 
 seedInitialStyles()
+
+// ── CMS detection ─────────────────────────────────────────────────────────────
 
 const CMS_KEY = 'ginjiro_admin_mode'
 
 function detectCMS(): boolean {
   const params = new URLSearchParams(window.location.search)
-  // Query param: ?cms=1 or ?admin=1
   if (params.get('cms') === '1' || params.get('admin') === '1') {
     localStorage.setItem(CMS_KEY, '1')
     sessionStorage.setItem(CMS_KEY, '1')
     return true
   }
-  // Hash fallback for PWA home screen: #admin or #cms
   const hash = window.location.hash
   if (hash === '#admin' || hash === '#cms') {
     localStorage.setItem(CMS_KEY, '1')
     sessionStorage.setItem(CMS_KEY, '1')
     return true
   }
-  // Persist within same session (survives refresh, internal navigation)
   if (sessionStorage.getItem(CMS_KEY) === '1') return true
-  // Persist across sessions (for PWA standalone, home screen shortcuts)
   if (localStorage.getItem(CMS_KEY) === '1') return true
   return false
 }
-
-const isCMS = detectCMS()
 
 function exitCMS() {
   localStorage.removeItem(CMS_KEY)
@@ -40,8 +37,49 @@ function exitCMS() {
   window.location.replace(window.location.pathname)
 }
 
+// ── Staff scanner detection ───────────────────────────────────────────────────
+
+const STAFF_KEY = 'ginjiro_staff_mode'
+
+function detectStaff(): boolean {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('staff') === '1') {
+    sessionStorage.setItem(STAFF_KEY, '1')
+    return true
+  }
+  const hash = window.location.hash
+  if (hash === '#staff') {
+    sessionStorage.setItem(STAFF_KEY, '1')
+    return true
+  }
+  // Session-only persistence (closes on tab close — intentional for staff security)
+  if (sessionStorage.getItem(STAFF_KEY) === '1') return true
+  return false
+}
+
+// ── Service Worker ────────────────────────────────────────────────────────────
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // SW 登録失敗は非致命的 — 通知機能がグレースフルデグラデーション
+    })
+  })
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+const isStaff = detectStaff()
+const isCMS   = !isStaff && detectCMS()
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isCMS ? <CMSApp onExit={exitCMS} /> : <App />}
+    {isStaff ? (
+      <AdminScreen />
+    ) : isCMS ? (
+      <CMSApp onExit={exitCMS} />
+    ) : (
+      <App />
+    )}
   </StrictMode>,
 )

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 84" width="300" height="84">
+  <defs>
+    <!-- 赤グロー: SourceAlpha → ぼかし → 深紅 flood → 合成 → 元テキスト前面 -->
+    <filter id="redGlow" x="-20%" y="-45%" width="140%" height="190%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4.5" result="blur"/>
+      <feFlood flood-color="#6B0F12" flood-opacity="0.55" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- 金グラデ: 上部=明るい象牙, 中=金, 下=深金 -->
+    <linearGradient id="goldText" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#FAF2E0"/>
+      <stop offset="38%"  stop-color="#C9A24A"/>
+      <stop offset="100%" stop-color="#7A540A"/>
+    </linearGradient>
+    <!-- 下線: 左右フェード -->
+    <linearGradient id="goldLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#C9A24A" stop-opacity="0"/>
+      <stop offset="18%"  stop-color="#C9A24A" stop-opacity="0.50"/>
+      <stop offset="82%"  stop-color="#C9A24A" stop-opacity="0.50"/>
+      <stop offset="100%" stop-color="#C9A24A" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 本日の男前 -->
+  <text
+    x="150"
+    y="59"
+    text-anchor="middle"
+    font-family='"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP","Songti SC",serif'
+    font-size="47"
+    font-weight="700"
+    fill="url(#goldText)"
+    filter="url(#redGlow)"
+    letter-spacing="5"
+  >本日の男前</text>
+
+  <!-- 細い金ライン -->
+  <rect x="36" y="73" width="228" height="0.8" fill="url(#goldLine)"/>
+</svg>

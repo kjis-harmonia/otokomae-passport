@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Share2 } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
+import { getReserveUrl } from '../data/reserveLinks'
 import type { StyleCard } from '../data/styleCard'
 import { STYLE_CATEGORY_LABELS } from '../data/styleCard'
 import type { StyleCategory, StyleStats } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
+import { StyleDetailModal } from '../components/StyleDetailModal'
 
 interface Props {
   onTabChange: (tab: NavTab) => void
+  onModalChange?: (open: boolean) => void
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -229,19 +232,23 @@ function ResultCard({
   result,
   rank,
   onReserve,
+  onCardTap,
 }: {
   result: MatchResult
   rank: number
   onReserve: () => void
+  onCardTap: () => void
 }) {
   const isTop = rank === 0
+  const reserveUrl = getReserveUrl(result.style.title)
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: rank * 0.16, duration: 0.46, ease: 'easeOut' }}
-      className="rounded-2xl overflow-hidden"
+      className="rounded-2xl overflow-hidden cursor-pointer active:opacity-90"
+      onClick={onCardTap}
       style={{
         background: 'linear-gradient(145deg, #110A08, #080504)',
         border: `1px solid ${isTop ? 'rgba(201,162,74,0.36)' : 'rgba(201,162,74,0.14)'}`,
@@ -325,7 +332,14 @@ function ResultCard({
         </p>
         <button
           type="button"
-          onClick={onReserve}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (reserveUrl) {
+              window.open(reserveUrl, '_blank', 'noopener,noreferrer')
+            } else {
+              onReserve()
+            }
+          }}
           className="w-full rounded-xl py-2.5 text-sm font-bold tracking-[0.18em] transition-opacity active:opacity-70"
           style={{
             background: isTop
@@ -336,7 +350,7 @@ function ResultCard({
             boxShadow: isTop ? '0 4px 16px rgba(107,15,18,0.38)' : 'none',
           }}
         >
-          このスタイルにする
+          詳しく見る
         </button>
       </div>
     </motion.div>
@@ -347,13 +361,18 @@ function ResultCard({
 
 type Phase = 'intro' | 'question' | 'loading' | 'result'
 
-export function DiagnosisScreen({ onTabChange }: Props) {
+export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
   const [styles] = useState(() => loadStyles().filter((s) => s.isPublished))
   const [phase, setPhase] = useState<Phase>('intro')
   const [currentQ, setCurrentQ] = useState(0)
   const [chosen, setChosen] = useState<Choice[]>([])
   const [results, setResults] = useState<MatchResult[]>([])
   const [slideDir, setSlideDir] = useState<1 | -1>(1)
+  const [selectedStyle, setSelectedStyle] = useState<StyleCard | null>(null)
+
+  useEffect(() => {
+    onModalChange?.(selectedStyle !== null)
+  }, [selectedStyle, onModalChange])
 
   // Switch from loading → result after short delay
   useEffect(() => {
@@ -394,6 +413,34 @@ export function DiagnosisScreen({ onTabChange }: Props) {
     setSlideDir(1)
     setPhase('intro')
   }
+
+  async function handleShare() {
+    const top = results[0]
+    if (!top) return
+    const text = `俺の男前スタイルは「${top.style.title}」だった！\n${top.style.catchCopy}\n#男前パスポート #銀二郎`
+    if (navigator.share) {
+      try { await navigator.share({ title: '男前診断結果', text }) } catch {}
+      return
+    }
+    const encoded = encodeURIComponent(text)
+    window.open(`https://twitter.com/intent/tweet?text=${encoded}`, '_blank', 'noopener,noreferrer')
+  }
+
+  function handleShareLine() {
+    const top = results[0]
+    if (!top) return
+    const text = `俺の男前スタイルは「${top.style.title}」だった！\n${top.style.catchCopy}\n#男前パスポート #銀二郎`
+    window.open(`https://line.me/R/msg/text/?${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  function handleShareX() {
+    const top = results[0]
+    if (!top) return
+    const text = `俺の男前スタイルは「${top.style.title}」だった！\n${top.style.catchCopy}\n#男前パスポート #銀二郎`
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer')
+  }
+
+  const topReserveUrl = results.length > 0 ? getReserveUrl(results[0].style.title) : ''
 
   const progressPct =
     phase === 'question'
@@ -607,7 +654,7 @@ export function DiagnosisScreen({ onTabChange }: Props) {
         {phase === 'result' && (
           <motion.div
             key="result"
-            className="flex-1 px-4 pt-5 pb-8 space-y-4"
+            className="flex-1 px-4 pt-5 pb-36 space-y-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.36 }}
@@ -620,12 +667,55 @@ export function DiagnosisScreen({ onTabChange }: Props) {
               >
                 Diagnosis Result
               </p>
-              <h2 className="text-2xl font-bold" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
-                診断結果
-              </h2>
-              <p className="text-[11px] mt-0.5" style={{ color: 'rgba(201,162,74,0.44)' }}>
-                あなたにおすすめのスタイルです
-              </p>
+              <div className="flex items-end justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
+                    診断結果
+                  </h2>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'rgba(201,162,74,0.44)' }}>
+                    あなたにおすすめのスタイルです
+                  </p>
+                </div>
+                {/* Share buttons */}
+                <div className="flex items-center gap-2 pb-0.5">
+                  <button
+                    type="button"
+                    onClick={handleShareX}
+                    className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold tracking-wide transition-opacity active:opacity-60"
+                    style={{
+                      background: 'rgba(0,0,0,0.72)',
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      color: '#F2E6C8',
+                    }}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>𝕏</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShareLine}
+                    className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold tracking-wide transition-opacity active:opacity-60"
+                    style={{
+                      background: 'rgba(0,195,0,0.12)',
+                      border: '1px solid rgba(0,195,0,0.32)',
+                      color: '#00c300',
+                    }}
+                  >
+                    LINE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 transition-opacity active:opacity-60"
+                    style={{
+                      background: 'rgba(201,162,74,0.08)',
+                      border: '1px solid rgba(201,162,74,0.24)',
+                      color: 'rgba(201,162,74,0.72)',
+                    }}
+                  >
+                    <Share2 size={14} />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Divider */}
@@ -652,6 +742,7 @@ export function DiagnosisScreen({ onTabChange }: Props) {
                   result={result}
                   rank={i}
                   onReserve={() => onTabChange('reserve')}
+                  onCardTap={() => setSelectedStyle(result.style)}
                 />
               ))
             )}
@@ -672,6 +763,80 @@ export function DiagnosisScreen({ onTabChange }: Props) {
           </motion.div>
         )}
 
+      </AnimatePresence>
+
+      {/* ── Style detail modal ── */}
+      <AnimatePresence>
+        {selectedStyle && (
+          <StyleDetailModal
+            key={selectedStyle.id}
+            style={selectedStyle}
+            onClose={() => setSelectedStyle(null)}
+            onReserve={() => {
+              setSelectedStyle(null)
+              onTabChange('reserve')
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Fixed reservation CTA — shown only on result phase ── */}
+      <AnimatePresence>
+        {phase === 'result' && results.length > 0 && (
+          <motion.div
+            key="fixed-cta"
+            className="fixed left-0 right-0 z-40 px-4"
+            style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.32, ease: 'easeOut' }}
+          >
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                background: 'linear-gradient(180deg, rgba(8,4,3,0.82) 0%, rgba(8,4,3,0.96) 100%)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(201,162,74,0.28)',
+                boxShadow: '0 -4px 32px rgba(0,0,0,0.48), 0 0 0 1px rgba(201,162,74,0.06)',
+              }}
+            >
+              <div className="px-4 py-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] tracking-[0.18em] uppercase" style={{ color: 'rgba(201,162,74,0.5)' }}>
+                    Best Match
+                  </p>
+                  <p
+                    className="text-sm font-bold truncate"
+                    style={{ color: '#F2E6C8', fontFamily: SERIF }}
+                  >
+                    {results[0].style.title}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (topReserveUrl) {
+                      window.open(topReserveUrl, '_blank', 'noopener,noreferrer')
+                    } else {
+                      onTabChange('reserve')
+                    }
+                  }}
+                  className="flex-shrink-0 rounded-xl px-5 py-2.5 text-sm font-bold tracking-[0.16em] transition-opacity active:opacity-70"
+                  style={{
+                    background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+                    border: '1px solid rgba(201,162,74,0.44)',
+                    color: '#F2E6C8',
+                    boxShadow: '0 4px 16px rgba(107,15,18,0.48)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  今すぐ予約
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   )

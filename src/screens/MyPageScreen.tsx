@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import type { MemberStatus, MemberRank } from '../data/brand'
 import { motion } from 'framer-motion'
 import { Crown, Gift, User, Scissors, Bell, FileText, ChevronRight, Tag } from 'lucide-react'
@@ -15,6 +15,10 @@ import {
 } from '../utils/storage'
 import { getTodayDate, formatPoints } from '../utils/date'
 import { getNextRankInfo, RANK_LABEL } from '../utils/rank'
+import { getUserId } from '../utils/userId'
+import type { TicketRow } from '../data/ticket'
+import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
+import { getUserTickets } from '../utils/ticketStore'
 
 const GACHA_LABELS: Record<string, string> = {
   discount: '100円OFF',
@@ -147,6 +151,16 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [rewardUsedMessage, setRewardUsedMessage] = useState<string | null>(null)
   const [couponUsedMessage, setCouponUsedMessage] = useState<string | null>(null)
   const [coupons, setCoupons] = useState(() => loadCoupons())
+  const [tickets, setTickets] = useState<TicketRow[]>([])
+  const [ticketsLoading, setTicketsLoading] = useState(true)
+
+  useEffect(() => {
+    const userId = getUserId()
+    getUserTickets(userId)
+      .then(data => setTickets(data))
+      .catch(() => setTickets([]))
+      .finally(() => setTicketsLoading(false))
+  }, [])
   const today = getTodayDate()
   const gachaDate = getStoredValue<string>(GACHA_DATE_KEY, '')
   const gachaResult = getStoredValue<string>(GACHA_RESULT_KEY, '')
@@ -491,6 +505,85 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
         {couponUsedMessage && (
           <p className="text-[11px] mt-2" style={{ color: 'rgba(201,162,39,0.8)' }}>
             {couponUsedMessage}
+          </p>
+        )}
+      </div>
+
+      {/* Staff-issued tickets */}
+      <div className="px-4">
+        <p
+          className="text-[10px] tracking-[0.2em] uppercase mb-3"
+          style={{ color: 'rgba(201,162,39,0.45)' }}
+        >
+          スタッフ発行チケット
+        </p>
+        {ticketsLoading ? (
+          <div
+            className="px-4 py-3.5 rounded-xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(24,24,22,0.98) 0%, rgba(12,12,11,0.98) 100%)',
+              border: '1px solid rgba(74,127,201,0.1)',
+            }}
+          >
+            <p className="text-sm" style={{ color: 'rgba(245,240,232,0.28)' }}>読込中…</p>
+          </div>
+        ) : tickets.filter(t => !t.used).length === 0 ? (
+          <div
+            className="px-4 py-3.5 rounded-xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(24,24,22,0.98) 0%, rgba(12,12,11,0.98) 100%)',
+              border: '1px solid rgba(74,127,201,0.1)',
+            }}
+          >
+            <p className="text-sm" style={{ color: 'rgba(245,240,232,0.34)' }}>
+              有効なチケットはありません
+            </p>
+            <p className="text-[10px] mt-1" style={{ color: 'rgba(245,240,232,0.2)' }}>
+              スタッフが来店時にチケットを発行します
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {tickets.filter(t => !t.used).map((ticket) => {
+              const tc = TICKET_TYPE_COLORS[ticket.type]
+              return (
+                <div
+                  key={ticket.id}
+                  className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
+                  style={{
+                    background: `linear-gradient(135deg, rgba(12,12,11,0.98) 0%, ${tc.bg} 100%)`,
+                    border: `1px solid ${tc.border}`,
+                    boxShadow: '0 8px 20px rgba(0,0,0,0.22)',
+                  }}
+                >
+                  <div
+                    className="flex-shrink-0 px-2 py-1 rounded-lg"
+                    style={{ background: tc.bg, border: `1px solid ${tc.border}` }}
+                  >
+                    <p className="text-[10px] font-bold tracking-wider" style={{ color: tc.text }}>
+                      {TICKET_TYPE_LABELS[ticket.type]}
+                    </p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold" style={{ color: '#F5F0E8' }}>{ticket.title}</p>
+                    {ticket.amount > 0 && (
+                      <p className="text-[13px] font-bold mt-0.5" style={{ color: '#C9A227' }}>
+                        ¥{ticket.amount.toLocaleString()}
+                      </p>
+                    )}
+                    <p className="text-[10px] mt-0.5" style={{ color: 'rgba(245,240,232,0.32)' }}>
+                      発行日 {new Date(ticket.created_at).toLocaleDateString('ja-JP')}
+                      {ticket.expires_at && ` ・ 期限 ${new Date(ticket.expires_at).toLocaleDateString('ja-JP')}`}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {tickets.filter(t => t.used).length > 0 && (
+          <p className="text-[10px] mt-2" style={{ color: 'rgba(245,240,232,0.22)' }}>
+            使用済み {tickets.filter(t => t.used).length}件
           </p>
         )}
       </div>

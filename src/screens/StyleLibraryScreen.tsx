@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { loadStyles } from '../utils/styleStorage'
-import { useScrollLock } from '../utils/useScrollLock'
 import { StyleCardImage } from '../components/StyleCardPlaceholder'
+import { StyleDetailModal } from '../components/StyleDetailModal'
+import { resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
 import type { StyleCard } from '../data/styleCard'
-import { STYLE_CATEGORY_LABELS, STYLE_CATEGORIES, STATS_KEYS, STATS_LABELS } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
 
 interface Props {
@@ -15,425 +14,258 @@ interface Props {
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+const UI_CATEGORIES = [
+  {
+    id: '昭和の漢',
+    sub: 'SHOWA MEN',
+    titles: ['昭和のアイパー', 'カールアイパー', 'バチバチパンチパーマ', 'リーゼントパンチ', 'ちょい悪オヤジ専用 昭和ヘアスタイル'],
+  },
+  {
+    id: '王道パーマ',
+    sub: 'CLASSIC PERM',
+    titles: ['俺は濡れパン', 'ジャマイカンアフロ', 'スペインパーマ', 'サラリーマン専用 ギリギリパーマ'],
+  },
+  {
+    id: '威圧感MAX',
+    sub: 'MAXIMUM PRESSURE',
+    titles: ['極道ボウズ', 'トラック野郎御用達', 'テイテイ刈り', 'バチバチパンチパーマ', 'シンサイパンチ'],
+  },
+  {
+    id: '季節限定',
+    sub: 'SEASONAL',
+    titles: ['夏ニグロ', '銀パラ', '覚醒の色'],
+  },
+] as const
 
-function HeroCard({ style, onTap }: { style: StyleCard; onTap: () => void }) {
+// ── Image helpers (unchanged) ─────────────────────────────────────────────────
+
+function getCardImgStyle(style: StyleCard): React.CSSProperties {
+  if (style.title === 'トラック野郎御用達') {
+    return { objectFit: 'contain', objectPosition: 'center center', transform: 'scale(0.94)' }
+  }
+  return { objectFit: 'cover', objectPosition: resolveStyleImagePosition(style) }
+}
+
+function getCardOverlay(style: StyleCard): string {
+  const base = style.title === 'トラック野郎御用達' ? 'rgba(0,0,0' : 'rgba(5,3,2'
   return (
-    <div
-      className="relative w-full cursor-pointer overflow-hidden"
-      style={{ height: '58dvh', minHeight: 300 }}
+    `linear-gradient(to top,` +
+    `${base},0.98) 0%,${base},0.85) 20%,${base},0.48) 42%,${base},0.08) 64%,transparent 80%)`
+  )
+}
+
+// ── Hero billboard ────────────────────────────────────────────────────────────
+
+function LibraryHero({ style, onTap }: { style: StyleCard; onTap: () => void }) {
+  return (
+    <motion.button
+      type="button"
       onClick={onTap}
+      whileTap={{ scale: 0.995 }}
+      className="relative block w-full overflow-hidden focus:outline-none"
+      style={{ height: '48dvh', background: '#070303' }}
     >
       <StyleCardImage
-        src={style.imageUrl}
+        src={resolveStyleImageUrl(style)}
         alt={style.title}
         className="absolute inset-0 w-full h-full"
-        imgStyle={{ objectFit: 'cover', objectPosition: 'center bottom' }}
+        imgStyle={{ objectFit: 'cover', objectPosition: resolveStyleImagePosition(style) }}
         size="lg"
       />
 
-      {/* Gradient overlay */}
+      {/* Cinematic gradients */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          background:
-            'linear-gradient(180deg, rgba(5,3,2,0.14) 0%, transparent 28%, rgba(5,3,2,0.55) 58%, rgba(5,3,2,0.97) 100%)',
+          background: [
+            'linear-gradient(to top,  rgba(5,3,2,0.97) 0%, rgba(5,3,2,0.72) 28%, rgba(5,3,2,0.08) 58%, transparent 76%)',
+            'linear-gradient(to right, rgba(5,3,2,0.32) 0%, transparent 44%)',
+          ].join(', '),
         }}
       />
 
-      {/* Featured badge */}
-      {style.isFeatured && (
-        <div className="absolute top-4 left-4">
-          <span
-            className="rounded px-2 py-0.5 text-[9px] font-bold tracking-[0.2em] uppercase"
-            style={{
-              background: 'rgba(201,162,74,0.14)',
-              border: '1px solid rgba(201,162,74,0.36)',
-              color: '#C9A24A',
-            }}
-          >
-            おすすめ
-          </span>
-        </div>
-      )}
-
-      {/* Content */}
+      {/* Bottom content */}
       <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
-        <span
-          className="inline-block rounded px-2 py-0.5 text-[9px] font-bold tracking-[0.16em] uppercase mb-2"
+        <p
           style={{
-            background: 'rgba(107,15,18,0.72)',
-            color: '#F2E6C8',
-            border: '1px solid rgba(180,50,50,0.38)',
+            fontSize: 8, letterSpacing: '0.28em',
+            color: 'rgba(201,162,74,0.72)', marginBottom: 5,
           }}
         >
-          {STYLE_CATEGORY_LABELS[style.category]}
-        </span>
+          FEATURED
+        </p>
         <h2
-          className="text-2xl font-bold leading-tight mb-1"
-          style={{ color: '#F2E6C8', fontFamily: SERIF, textShadow: '0 2px 16px rgba(0,0,0,0.9)' }}
+          style={{
+            fontFamily: SERIF, fontSize: 28, fontWeight: 700,
+            color: '#F2E6C8', lineHeight: 1.12, marginBottom: 6,
+            textShadow: '0 2px 20px rgba(0,0,0,0.8)',
+          }}
         >
           {style.title}
         </h2>
         {style.catchCopy && (
           <p
-            className="text-[12px] mb-3 line-clamp-2"
-            style={{ color: 'rgba(242,230,200,0.66)', textShadow: '0 1px 8px rgba(0,0,0,0.8)' }}
+            style={{
+              fontSize: 11, color: 'rgba(242,230,200,0.56)',
+              lineHeight: 1.6, marginBottom: 14,
+              textShadow: '0 1px 8px rgba(0,0,0,0.9)',
+            }}
           >
             {style.catchCopy}
           </p>
         )}
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onTap() }}
-          className="rounded-xl px-5 py-2.5 text-sm font-bold tracking-widest transition-opacity active:opacity-70"
+        <span
           style={{
+            display: 'inline-flex', alignItems: 'center',
+            padding: '9px 18px', borderRadius: 12,
             background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
             border: '1px solid rgba(201,162,74,0.44)',
-            color: '#F2E6C8',
-            boxShadow: '0 4px 20px rgba(107,15,18,0.55)',
+            boxShadow: '0 3px 14px rgba(107,15,18,0.45)',
+            fontFamily: SERIF, fontSize: 12, fontWeight: 700,
+            letterSpacing: '0.18em', color: '#F2E6C8',
           }}
         >
-          このスタイルにする
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function PosterCard({ style, onTap }: { style: StyleCard; onTap: () => void }) {
-  return (
-    <div
-      className="flex-shrink-0 cursor-pointer"
-      style={{ width: 130, scrollSnapAlign: 'start' } as React.CSSProperties}
-      onClick={onTap}
-    >
-      <div
-        className="rounded-xl overflow-hidden relative"
-        style={{
-          width: 130,
-          height: 186,
-          background: '#1A0E0C',
-          border: '1px solid rgba(201,162,74,0.16)',
-        }}
-      >
-        <StyleCardImage
-          src={style.imageUrl}
-          alt={style.title}
-          className="w-full h-full"
-          imgStyle={{ objectFit: 'cover', objectPosition: 'center bottom' }}
-          size="sm"
-        />
-        <div
-          className="absolute inset-x-0 bottom-0"
-          style={{
-            height: '55%',
-            background: 'linear-gradient(180deg, transparent, rgba(5,3,2,0.88))',
-          }}
-        />
-        {style.isFeatured && (
-          <div
-            className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full"
-            style={{ background: '#C9A24A', boxShadow: '0 0 6px rgba(201,162,74,0.5)' }}
-          />
-        )}
-      </div>
-      <p
-        className="mt-2 text-[12px] font-medium leading-tight"
-        style={{
-          color: 'rgba(242,230,200,0.8)',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        } as React.CSSProperties}
-      >
-        {style.title}
-      </p>
-      <p className="text-[10px] mt-0.5" style={{ color: 'rgba(201,162,74,0.48)' }}>
-        ¥{style.price.toLocaleString()}
-      </p>
-    </div>
-  )
-}
-
-function CategoryLane({
-  category,
-  styles,
-  onTap,
-}: {
-  category: string
-  styles: StyleCard[]
-  onTap: (s: StyleCard) => void
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="px-5 flex items-center justify-between">
-        <p className="text-sm font-bold tracking-wider" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
-          {category}
-        </p>
-        <span className="text-[10px] tracking-[0.14em] uppercase" style={{ color: 'rgba(201,162,74,0.42)' }}>
-          {styles.length} styles
+          詳しく見る
         </span>
       </div>
-      <div
-        className="flex gap-3 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-        style={{
-          scrollSnapType: 'x mandatory',
-          paddingLeft: 20,
-          paddingRight: 20,
-          paddingBottom: 4,
-          scrollbarWidth: 'none',
-        } as React.CSSProperties}
-      >
-        {styles.map((s) => (
-          <PosterCard key={s.id} style={s} onTap={() => onTap(s)} />
-        ))}
-      </div>
-    </div>
+    </motion.button>
   )
 }
 
-function StatBar({ label, value }: { label: string; value: number }) {
+// ── Style thumbnail card ──────────────────────────────────────────────────────
+
+function StyleThumb({
+  style, onTap, index,
+}: {
+  style: StyleCard
+  onTap: () => void
+  index: number
+}) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="flex-shrink-0 text-[11px]" style={{ width: '5.5rem', color: 'rgba(201,162,74,0.65)' }}>
-        {label}
-      </span>
-      <div
-        className="flex-1 rounded-full overflow-hidden"
-        style={{ height: 5, background: 'rgba(201,162,74,0.1)' }}
-      >
-        <div
-          className="h-full rounded-full"
+    <motion.button
+      type="button"
+      onClick={onTap}
+      whileTap={{ scale: 0.92 }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.045, duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] }}
+      style={{
+        flexShrink: 0,
+        width: 'clamp(116px, 37vw, 155px)',
+        aspectRatio: '2/3',
+        borderRadius: 10,
+        overflow: 'hidden',
+        position: 'relative',
+        background: '#0A0504',
+        border: '1px solid rgba(201,162,74,0.13)',
+        boxShadow: '0 4px 18px rgba(0,0,0,0.5)',
+        cursor: 'pointer',
+      }}
+    >
+      <StyleCardImage
+        src={resolveStyleImageUrl(style)}
+        alt={style.title}
+        className="absolute inset-0 w-full h-full"
+        imgStyle={getCardImgStyle(style)}
+        size="md"
+      />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: getCardOverlay(style) }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 9px 10px' }}>
+        <p
           style={{
-            width: `${(value / 5) * 100}%`,
-            background: 'linear-gradient(90deg, #6B0F12, #C9A24A)',
-            boxShadow: '0 0 6px rgba(201,162,74,0.26)',
-            transition: 'width 0.7s ease',
+            fontFamily: SERIF, fontSize: 12, fontWeight: 700,
+            color: '#F2E6C8', lineHeight: 1.22,
+            textShadow: '0 1px 8px rgba(0,0,0,0.95)',
+          }}
+        >
+          {style.title}
+        </p>
+        <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.84)', marginTop: 3 }}>
+          ¥{style.price.toLocaleString()}
+        </p>
+      </div>
+    </motion.button>
+  )
+}
+
+// ── Category row ──────────────────────────────────────────────────────────────
+
+function StyleRow({
+  id, sub, styles, onStyleSelect,
+}: {
+  id: string
+  sub: string
+  styles: StyleCard[]
+  onStyleSelect: (s: StyleCard) => void
+}) {
+  if (styles.length === 0) return null
+
+  return (
+    <motion.div
+      style={{ marginBottom: 36 }}
+      initial={{ opacity: 0 }}
+      whileInView={{ opacity: 1 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.4 }}
+    >
+      {/* Row header */}
+      <div
+        style={{
+          display: 'flex', alignItems: 'baseline', gap: 8,
+          padding: '0 16px 12px',
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: SERIF, fontSize: 18, fontWeight: 700,
+            color: '#F2E6C8', letterSpacing: '0.04em',
+          }}
+        >
+          {id}
+        </h2>
+        <span
+          style={{
+            fontSize: 7.5, letterSpacing: '0.24em',
+            color: 'rgba(201,162,74,0.58)', fontWeight: 700,
+          }}
+        >
+          {sub}
+        </span>
+        <div
+          style={{
+            height: '0.5px', flex: 1,
+            background: 'linear-gradient(90deg, rgba(201,162,74,0.18), transparent)',
           }}
         />
       </div>
-      <span className="flex-shrink-0 w-3 text-right text-[11px]" style={{ color: 'rgba(201,162,74,0.52)' }}>
-        {value}
-      </span>
-    </div>
-  )
-}
 
-function DetailModal({
-  style,
-  onClose,
-  onReserve,
-}: {
-  style: StyleCard
-  onClose: () => void
-  onReserve: () => void
-}) {
-  // iOS Safari scroll bleed 防止: app-main をフリーズ + document touchmove 封鎖
-  useScrollLock()
-
-  return (
-    <>
-      {/* Backdrop — touchmove は useScrollLock の document リスナーが封鎖 */}
-      <motion.div
-        className="fixed inset-0 z-50"
-        style={{ background: 'rgba(0,0,0,0.72)' }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-      />
-
-      {/* Sheet — flex column; このdivはスクロールしない */}
-      <motion.div
-        className="fixed inset-x-0 bottom-0 z-50"
+      {/* Horizontal scroll strip */}
+      <div
+        className="[&::-webkit-scrollbar]:hidden"
         style={{
-          maxHeight: 'calc(100svh - env(safe-area-inset-top, 0px))',
-          background: 'linear-gradient(180deg, #150B0A 0%, #0A0504 100%)',
-          borderRadius: '20px 20px 0 0',
-          border: '1px solid rgba(201,162,74,0.22)',
-          borderBottom: 'none',
-          boxShadow: '0 -24px 60px rgba(0,0,0,0.6)',
           display: 'flex',
-          flexDirection: 'column',
-        }}
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        onClick={(e) => e.stopPropagation()}
-        onTouchMove={(e) => e.stopPropagation()}
+          gap: 10,
+          overflowX: 'scroll',
+          paddingLeft: 16,
+          paddingRight: 32,
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
+        } as React.CSSProperties}
       >
-        {/* 固定ヘッダー: ハンドル + 閉じるボタン（スクロールしない） */}
-        <div
-          className="relative flex justify-center pb-1 flex-shrink-0"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
-        >
-          <div className="w-9 h-1 rounded-full" style={{ background: 'rgba(201,162,74,0.24)' }} />
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-2 right-4 p-1.5 rounded-full transition-opacity active:opacity-60"
-            style={{ background: 'rgba(201,162,74,0.1)', color: 'rgba(201,162,74,0.62)' }}
-            aria-label="閉じる"
-          >
-            <X size={15} />
-          </button>
-        </div>
-
-        {/* スクロール担当要素 — ここだけがスクロールする */}
-        <div
-          data-modal-scroll
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 140px)',
-          }}
-        >
-          {/* Image */}
-          <div
-            className="mx-4 mt-2 rounded-xl overflow-hidden"
-            style={{ height: 200, border: '1px solid rgba(201,162,74,0.12)' }}
-          >
-            <StyleCardImage
-              src={style.imageUrl}
-              alt={style.title}
-              className="w-full h-full"
-              imgStyle={{ objectFit: 'cover', objectPosition: 'center bottom' }}
-              size="md"
-            />
-          </div>
-
-          <div className="px-5 pt-4 space-y-4">
-            {/* Title */}
-            <div>
-              <span
-                className="inline-block rounded px-2 py-0.5 text-[9px] font-bold tracking-[0.16em] uppercase mb-2"
-                style={{
-                  background: 'rgba(107,15,18,0.65)',
-                  color: '#F2E6C8',
-                  border: '1px solid rgba(180,50,50,0.32)',
-                }}
-              >
-                {STYLE_CATEGORY_LABELS[style.category]}
-              </span>
-              <h3 className="text-xl font-bold leading-snug" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
-                {style.title}
-              </h3>
-              {style.catchCopy && (
-                <p className="text-[12px] mt-1.5 leading-relaxed" style={{ color: 'rgba(201,162,74,0.7)' }}>
-                  {style.catchCopy}
-                </p>
-              )}
-            </div>
-
-            {/* Price + duration */}
-            <div className="flex items-center gap-5">
-              <div>
-                <p className="text-[9px] tracking-[0.18em] uppercase mb-0.5" style={{ color: 'rgba(201,162,74,0.44)' }}>
-                  Price
-                </p>
-                <p className="text-lg font-bold" style={{ color: '#F2E6C8' }}>
-                  ¥{style.price.toLocaleString()}
-                </p>
-              </div>
-              {style.durationMinutes > 0 && (
-                <>
-                  <div style={{ width: 1, height: 28, background: 'rgba(201,162,74,0.14)' }} />
-                  <div>
-                    <p className="text-[9px] tracking-[0.18em] uppercase mb-0.5" style={{ color: 'rgba(201,162,74,0.44)' }}>
-                      Time
-                    </p>
-                    <p className="text-lg font-bold" style={{ color: '#F2E6C8' }}>
-                      {style.durationMinutes}
-                      <span className="text-sm ml-0.5" style={{ color: 'rgba(242,230,200,0.56)' }}>分</span>
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Description */}
-            {style.description && (
-              <p className="text-sm leading-relaxed" style={{ color: 'rgba(242,230,200,0.58)' }}>
-                {style.description}
-              </p>
-            )}
-
-            {/* Tags */}
-            {style.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {style.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full px-2.5 py-1 text-[10px] tracking-[0.1em]"
-                    style={{
-                      background: 'rgba(201,162,74,0.08)',
-                      color: 'rgba(201,162,74,0.62)',
-                      border: '1px solid rgba(201,162,74,0.17)',
-                    }}
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Stats */}
-            <div
-              className="rounded-xl px-4 py-4 space-y-2.5"
-              style={{ background: 'rgba(201,162,74,0.03)', border: '1px solid rgba(201,162,74,0.1)' }}
-            >
-              <p
-                className="text-[9px] tracking-[0.22em] uppercase mb-3"
-                style={{ color: 'rgba(201,162,74,0.44)' }}
-              >
-                スタイル特性
-              </p>
-              {STATS_KEYS.map((key) => (
-                <StatBar key={key} label={STATS_LABELS[key]} value={style.stats[key]} />
-              ))}
-            </div>
-
-            {/* CTA */}
-            <button
-              type="button"
-              onClick={onReserve}
-              className="w-full rounded-xl py-4 text-sm font-bold tracking-[0.24em] transition-opacity active:opacity-70"
-              style={{
-                background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-                border: '1px solid rgba(201,162,74,0.44)',
-                color: '#F2E6C8',
-                boxShadow: '0 4px 24px rgba(107,15,18,0.45), inset 0 1px 0 rgba(242,230,200,0.06)',
-              }}
-            >
-              このスタイルにする
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </>
+        {styles.map((style, i) => (
+          <StyleThumb
+            key={style.id}
+            style={style}
+            index={i}
+            onTap={() => onStyleSelect(style)}
+          />
+        ))}
+      </div>
+    </motion.div>
   )
 }
 
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center px-8 py-24 text-center">
-      <div style={{ fontSize: 48, opacity: 0.16 }}>✂</div>
-      <p className="mt-4 text-sm font-bold" style={{ color: 'rgba(242,230,200,0.44)', fontFamily: SERIF }}>
-        スタイルは準備中です
-      </p>
-      <p className="mt-2 text-[11px]" style={{ color: 'rgba(201,162,74,0.36)' }}>
-        もうしばらくお待ちください
-      </p>
-    </div>
-  )
-}
-
-// ─── Main screen ─────────────────────────────────────────────────────────────
+// ── Main screen ───────────────────────────────────────────────────────────────
 
 export function StyleLibraryScreen({ onTabChange, onModalChange }: Props) {
   const [styles] = useState(() =>
@@ -447,52 +279,68 @@ export function StyleLibraryScreen({ onTabChange, onModalChange }: Props) {
     onModalChange?.(selectedStyle !== null)
   }, [selectedStyle, onModalChange])
 
-  const hero = styles.find((s) => s.isFeatured) ?? styles[0] ?? null
-  const laneCategories = STYLE_CATEGORIES.filter((cat) => styles.some((s) => s.category === cat))
+  // Random pick from featured for variety on each visit
+  const [heroStyle] = useState<StyleCard | null>(() => {
+    const featured = styles.filter((s) => s.isFeatured)
+    const pool = featured.length > 0 ? featured : styles
+    return pool[Math.floor(Math.random() * pool.length)] ?? null
+  })
+
+  const rows = UI_CATEGORIES.map(({ id, sub, titles }) => ({
+    id,
+    sub,
+    styles: titles
+      .map((t) => styles.find((s) => s.title === t))
+      .filter((s): s is StyleCard => s !== undefined),
+  }))
 
   return (
-    <div className="pb-10">
-      {/* Header */}
-      <div className="px-5 pt-4 pb-3">
+    <div style={{ paddingBottom: 40 }}>
+      {/* Page header */}
+      <div style={{ padding: '18px 16px 12px' }}>
         <p
-          className="text-[10px] tracking-[0.24em] uppercase"
-          style={{ color: 'rgba(201,162,74,0.54)' }}
+          style={{
+            fontSize: 8, letterSpacing: '0.30em',
+            color: 'rgba(201,162,74,0.50)', marginBottom: 3,
+          }}
         >
-          Style Library
+          STYLE LIBRARY
         </p>
-        <h1 className="text-2xl font-bold" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
+        <h1
+          style={{
+            fontFamily: SERIF, fontSize: 26, fontWeight: 700,
+            color: '#F2E6C8', letterSpacing: '0.04em',
+          }}
+        >
           男前スタイル図鑑
         </h1>
-        {styles.length > 0 && (
-          <p className="text-[11px] mt-0.5" style={{ color: 'rgba(201,162,74,0.42)' }}>
-            {styles.length} スタイル収録
-          </p>
-        )}
       </div>
 
-      {styles.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <div className="space-y-6">
-          {/* Hero card */}
-          {hero && <HeroCard style={hero} onTap={() => setSelectedStyle(hero)} />}
-
-          {/* Category lanes */}
-          {laneCategories.map((cat) => (
-            <CategoryLane
-              key={cat}
-              category={STYLE_CATEGORY_LABELS[cat]}
-              styles={styles.filter((s) => s.category === cat)}
-              onTap={setSelectedStyle}
-            />
-          ))}
-        </div>
+      {/* Hero */}
+      {heroStyle && (
+        <LibraryHero
+          style={heroStyle}
+          onTap={() => setSelectedStyle(heroStyle)}
+        />
       )}
 
-      {/* Detail modal */}
+      {/* Category rows */}
+      <div style={{ paddingTop: 32 }}>
+        {rows.map(({ id, sub, styles: rowStyles }) => (
+          <StyleRow
+            key={id}
+            id={id}
+            sub={sub}
+            styles={rowStyles}
+            onStyleSelect={setSelectedStyle}
+          />
+        ))}
+      </div>
+
+      {/* Style detail modal */}
       <AnimatePresence>
         {selectedStyle && (
-          <DetailModal
+          <StyleDetailModal
             key={selectedStyle.id}
             style={selectedStyle}
             onClose={() => setSelectedStyle(null)}
