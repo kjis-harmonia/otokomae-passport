@@ -160,7 +160,20 @@ interface Props {
 export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [rewardUsedMessage, setRewardUsedMessage] = useState<string | null>(null)
   const [couponUsedMessage, setCouponUsedMessage] = useState<string | null>(null)
-  const [coupons, setCoupons] = useState(() => loadCoupons())
+  const [coupons, setCoupons] = useState(() => {
+    const stored = loadCoupons()
+    const PRESET_IDS = ['preset-discount-300', 'preset-cut-1000']
+    const missing = PRESET_IDS.filter(pid => !stored.some(c => c.id === pid))
+    if (missing.length === 0) return stored
+    const today = getTodayDate()
+    const presets = [
+      { id: 'preset-discount-300', title: '割引券',  description: '次回ご来店時にご利用いただけます', amount: 300,  createdAt: today, used: false },
+      { id: 'preset-cut-1000',     title: 'カット券', description: '次回カット時にご利用いただけます',  amount: 1000, createdAt: today, used: false },
+    ].filter(p => missing.includes(p.id))
+    const next = [...presets, ...stored]
+    saveCoupons(next)
+    return next
+  })
   const [tickets, setTickets] = useState<TicketRow[]>([])
   const [ticketsLoading, setTicketsLoading] = useState(true)
 
@@ -172,22 +185,6 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [copied, setCopied]                 = useState(false)
 
   const userId = getUserId()
-
-  // プリセットクーポンを初回のみ追加
-  useEffect(() => {
-    const PRESET_IDS = ['preset-discount-300', 'preset-cut-1000']
-    const stored = loadCoupons()
-    const missingPresets = PRESET_IDS.filter(pid => !stored.some(c => c.id === pid))
-    if (missingPresets.length === 0) return
-    const today = getTodayDate()
-    const presets = [
-      { id: 'preset-discount-300',  title: '割引券',  description: '次回ご来店時にご利用いただけます', amount: 300,  createdAt: today, used: false },
-      { id: 'preset-cut-1000',      title: 'カット券', description: '次回カット時にご利用いただけます',  amount: 1000, createdAt: today, used: false },
-    ].filter(p => missingPresets.includes(p.id))
-    const next = [...presets, ...stored]
-    saveCoupons(next)
-    setCoupons(next)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchTickets = useCallback(async () => {
     setTicketsLoading(true)
