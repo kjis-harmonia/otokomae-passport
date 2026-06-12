@@ -7,10 +7,12 @@ import { HERO_SLIDE_IMAGES, resolveStyleImageUrl, resolveStyleImagePosition } fr
 import type { StyleCard } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
 import { MAINTENANCE_CUT_URL } from '../data/reserveLinks'
+import { QRCodeSVG } from 'qrcode.react'
 import { getDaysRemaining, formatVisitDate, getLastVisit } from '../utils/visitHistory'
 import {
   getMaintenanceVisit,
   saveMaintenanceVisit,
+  saveMaintenanceVisitFromScan,
   getNextRecommendedDate,
   getDaysUntilRecommended,
   shouldShowNotificationBanner,
@@ -25,6 +27,8 @@ import {
 } from '../utils/pushNotification'
 import { getUserId } from '../utils/userId'
 import { getUserTickets } from '../utils/ticketStore'
+import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
+import type { TicketRow } from '../data/ticket'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -344,35 +348,66 @@ function DailyStyleEmpty() {
 
 // ── MaintenanceCutSection ─────────────────────────────────────────────────────
 
-/**
- * 【14日以内限定】メンテナンスカットセクション
- *
- * スタッフ端末で来店登録されると localStorage に visitHistory が書き込まれる。
- * このコンポーネントは mount 時に getLastVisit() を読み込み、
- * 登録済みの場合は前回来店日・残り日数を自動表示する。
- */
+const RANK_EN_MAP: Record<string, string> = {
+  ブロンズ: 'BRONZE', シルバー: 'SILVER', ゴールド: 'GOLD', プラチナ: 'PLATINUM',
+}
+
 function MaintenanceCutSection() {
-  const [lastVisit] = useState(() => getLastVisit())
+  const userId = getUserId()
+  const [tickets, setTickets] = useState<TicketRow[]>([])
+  const [ticketsLoaded, setTicketsLoaded] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [showQr, setShowQr] = useState(false)
+
+  // 14日以内資格チェック（未使用クーポンが無い場合の参考表示用）
+  const lastVisit = getLastVisit()
   const daysRemaining = lastVisit ? getDaysRemaining(lastVisit.visitedAt) : null
   const isEligible = daysRemaining !== null && daysRemaining >= 0
+
+  async function fetchTickets() {
+    try {
+      setTickets(await getUserTickets(userId))
+    } catch {
+      setTickets([])
+    } finally {
+      setTicketsLoaded(true)
+    }
+  }
+
+  useEffect(() => { fetchTickets() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 未使用のメンテナンスカット券
+  const unusedCutTicket: TicketRow | undefined = tickets.find(t => t.type === 'cut-ticket' && !t.used)
+
+  // スタッフ端末スキャン用 QR（パスポート形式 — AdminScreen の既存フローで処理可）
+  const memberStatus = loadMemberStatus()
+  const memberName = getStoredValue<string>(ONBOARDING_NAME_KEY, memberStatus.memberName)
+  const qrValue = JSON.stringify({
+    type: 'otokomae-passport',
+    userId,
+    name: memberName,
+    rank: RANK_EN_MAP[memberStatus.rank] ?? 'BRONZE',
+    points: memberStatus.points,
+  })
+
+  function handleUseConfirm() {
+    setShowConfirm(false)
+    setShowQr(true)
+  }
+
+  function handleQrClose() {
+    setShowQr(false)
+    fetchTickets() // スタッフが使用確定済みなら再取得でカードが消える
+  }
 
   return (
     <div className="px-4">
       {/* Section header */}
       <div className="mb-4 flex items-center gap-3 px-1">
-        <p
-          className="text-[17px] font-bold leading-none flex-shrink-0"
-          style={{ color: '#F2E6C8', fontFamily: SERIF }}
-        >
+        <p className="text-[17px] font-bold leading-none flex-shrink-0" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
           期間限定クーポン
         </p>
-        <div
-          style={{
-            height: 1,
-            flex: 1,
-            background: 'linear-gradient(90deg, rgba(201,162,74,0.3), transparent)',
-          }}
-        />
+        <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.3), transparent)' }} />
       </div>
 
       {/* Card */}
@@ -381,185 +416,260 @@ function MaintenanceCutSection() {
           borderRadius: 24,
           border: '1px solid rgba(201,162,74,0.28)',
           background: 'linear-gradient(160deg, #120608 0%, #0A0404 60%, #080506 100%)',
-          boxShadow:
-            '0 16px 48px rgba(0,0,0,0.65), 0 0 0 0.5px rgba(201,162,74,0.06), inset 0 1px 0 rgba(242,230,200,0.03)',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.65), 0 0 0 0.5px rgba(201,162,74,0.06), inset 0 1px 0 rgba(242,230,200,0.03)',
           overflow: 'hidden',
         }}
       >
-        {/* Top accent bar */}
-        <div
-          style={{
-            height: 2,
-            background: 'linear-gradient(90deg, transparent 0%, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent 100%)',
-          }}
-        />
+        <div style={{ height: 2, background: 'linear-gradient(90deg, transparent 0%, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent 100%)' }} />
 
         <div className="px-5 pt-4 pb-5">
-          {/* Badge row */}
+          {/* Badge */}
           <div className="flex items-center gap-2 mb-3">
             <span
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '3px 10px',
-                borderRadius: 99,
-                background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 100%)',
-                border: '1px solid rgba(201,162,74,0.36)',
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: '0.14em',
-                color: '#F2E6C8',
-                fontFamily: SERIF,
+                display: 'inline-flex', alignItems: 'center',
+                padding: '3px 10px', borderRadius: 99,
+                background: unusedCutTicket
+                  ? 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 100%)'
+                  : 'linear-gradient(135deg, #3d0608 0%, #6B0F12 100%)',
+                border: `1px solid ${unusedCutTicket ? 'rgba(100,200,100,0.36)' : 'rgba(201,162,74,0.36)'}`,
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.14em',
+                color: unusedCutTicket ? '#90E8A0' : '#F2E6C8', fontFamily: SERIF,
               }}
             >
-              14日以内限定
+              {unusedCutTicket ? 'クーポン有効' : '14DAY CYCLE'}
             </span>
           </div>
 
           {/* Title */}
-          <h3
-            style={{
-              fontSize: 26,
-              fontWeight: 700,
-              color: '#F2E6C8',
-              fontFamily: SERIF,
-              letterSpacing: '0.06em',
-              lineHeight: 1.2,
-              marginBottom: 8,
-            }}
-          >
+          <h3 style={{ fontSize: 26, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.06em', lineHeight: 1.2, marginBottom: 8 }}>
             メンテナンスカット
           </h3>
+          <div style={{ height: '0.5px', background: 'linear-gradient(90deg, rgba(201,162,74,0.22), transparent)', marginBottom: 12 }} />
 
-          {/* Divider */}
-          <div
-            style={{
-              height: '0.5px',
-              background: 'linear-gradient(90deg, rgba(201,162,74,0.22), transparent)',
-              marginBottom: 12,
-            }}
-          />
-
-          {/* Description */}
-          <p
-            style={{
-              fontSize: 12,
-              lineHeight: 1.75,
-              color: 'rgba(242,230,200,0.58)',
-              marginBottom: 16,
-            }}
-          >
+          <p style={{ fontSize: 12, lineHeight: 1.75, color: 'rgba(242,230,200,0.58)', marginBottom: 16 }}>
             前回来店から14日以内のお客様限定。{'\n'}
             フェード・刈り上げ・ラインを整えて男前をキープ。
           </p>
 
-          {/* Phase2: visit status — renders only when lastVisit data is present */}
-          {lastVisit && (
+          {/* 未使用クーポンがある場合 → クーポン情報表示 */}
+          {unusedCutTicket && (
             <div
               style={{
-                borderRadius: 12,
-                background: 'rgba(201,162,74,0.06)',
+                borderRadius: 12, background: 'rgba(100,200,100,0.05)',
+                border: '1px solid rgba(100,200,100,0.22)',
+                padding: '10px 14px', marginBottom: 16,
+              }}
+            >
+              <p style={{ fontSize: 9, letterSpacing: '0.16em', color: 'rgba(144,232,160,0.6)', marginBottom: 3 }}>
+                メンテナンスカット券
+              </p>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>
+                {unusedCutTicket.title}
+              </p>
+              {unusedCutTicket.expires_at && (
+                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.38)', marginTop: 3 }}>
+                  有効期限 {unusedCutTicket.expires_at.slice(0, 10).replace(/-/g, '/')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* クーポンが無い場合 → 来店日・残り日数 */}
+          {!unusedCutTicket && ticketsLoaded && lastVisit && (
+            <div
+              style={{
+                borderRadius: 12, background: 'rgba(201,162,74,0.06)',
                 border: `1px solid ${isEligible ? 'rgba(201,162,74,0.22)' : 'rgba(139,26,26,0.32)'}`,
-                padding: '10px 14px',
-                marginBottom: 16,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 8,
+                padding: '10px 14px', marginBottom: 16,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
               }}
             >
               <div>
-                <p style={{ fontSize: 9, letterSpacing: '0.16em', color: 'rgba(242,230,200,0.36)', marginBottom: 2 }}>
-                  前回来店
-                </p>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>
-                  {formatVisitDate(lastVisit.visitedAt)}
-                </p>
+                <p style={{ fontSize: 9, letterSpacing: '0.16em', color: 'rgba(242,230,200,0.36)', marginBottom: 2 }}>前回来店</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>{formatVisitDate(lastVisit.visitedAt)}</p>
               </div>
-              <div
-                style={{
-                  width: '0.5px',
-                  height: 32,
-                  background: 'rgba(201,162,74,0.18)',
-                }}
-              />
+              <div style={{ width: '0.5px', height: 32, background: 'rgba(201,162,74,0.18)' }} />
               <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: 9, letterSpacing: '0.16em', color: 'rgba(242,230,200,0.36)', marginBottom: 2 }}>
-                  利用期限まで
-                </p>
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    fontFamily: SERIF,
-                    color: isEligible
-                      ? (daysRemaining !== null && daysRemaining <= 3 ? '#E06060' : '#C9A24A')
-                      : 'rgba(242,230,200,0.32)',
-                  }}
-                >
-                  {isEligible && daysRemaining !== null
-                    ? `あと${daysRemaining}日`
-                    : '期限切れ'}
+                <p style={{ fontSize: 9, letterSpacing: '0.16em', color: 'rgba(242,230,200,0.36)', marginBottom: 2 }}>利用期限まで</p>
+                <p style={{ fontSize: 13, fontWeight: 700, fontFamily: SERIF, color: isEligible ? (daysRemaining !== null && daysRemaining <= 3 ? '#E06060' : '#C9A24A') : 'rgba(242,230,200,0.32)' }}>
+                  {isEligible && daysRemaining !== null ? `あと${daysRemaining}日` : '期限切れ'}
                 </p>
               </div>
             </div>
           )}
 
-          {/* Price row */}
+          {/* 価格 */}
           <div style={{ marginBottom: 14 }}>
-            <p
-              style={{
-                fontSize: 9,
-                letterSpacing: '0.16em',
-                color: 'rgba(201,162,74,0.54)',
-                marginBottom: 1,
-              }}
-            >
-              優待価格
-            </p>
-            <p
-              style={{
-                fontSize: 22,
-                fontWeight: 700,
-                color: '#C9A24A',
-                fontFamily: SERIF,
-                letterSpacing: '0.02em',
-                lineHeight: 1,
-              }}
-            >
-              ¥3,000
-            </p>
+            <p style={{ fontSize: 9, letterSpacing: '0.16em', color: 'rgba(201,162,74,0.54)', marginBottom: 1 }}>優待価格</p>
+            <p style={{ fontSize: 22, fontWeight: 700, color: '#C9A24A', fontFamily: SERIF, letterSpacing: '0.02em', lineHeight: 1 }}>¥3,000</p>
           </div>
 
-          <a
-            href={MAINTENANCE_CUT_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'block',
-              textAlign: 'center',
-              padding: '14px 0',
-              borderRadius: 14,
-              background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-              border: '1px solid rgba(201,162,74,0.44)',
-              boxShadow: '0 4px 20px rgba(107,15,18,0.45)',
-              textDecoration: 'none',
-            }}
-          >
-            <span
+          {/* ボタン：クーポン有り → 使用フロー / 無し → HotPepper予約 */}
+          {!ticketsLoaded ? (
+            <div style={{ height: 48, borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }} />
+          ) : unusedCutTicket ? (
+            <button
+              type="button"
+              onClick={() => setShowConfirm(true)}
               style={{
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: '0.14em',
-                color: '#F2E6C8',
-                fontFamily: SERIF,
+                display: 'block', width: '100%', textAlign: 'center',
+                padding: '14px 0', borderRadius: 14,
+                background: 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
+                border: '1px solid rgba(100,200,100,0.44)',
+                boxShadow: '0 4px 20px rgba(20,90,42,0.45)',
+                cursor: 'pointer',
               }}
             >
-              メンテナンスカットクーポンを使用する
-            </span>
-          </a>
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', color: '#D0F4D8', fontFamily: SERIF }}>
+                メンテナンスカットクーポンを使用する
+              </span>
+            </button>
+          ) : (
+            <a
+              href={MAINTENANCE_CUT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block', textAlign: 'center',
+                padding: '14px 0', borderRadius: 14,
+                background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+                border: '1px solid rgba(201,162,74,0.44)',
+                boxShadow: '0 4px 20px rgba(107,15,18,0.45)',
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', color: '#F2E6C8', fontFamily: SERIF }}>
+                メンテナンスカットを予約する
+              </span>
+            </a>
+          )}
         </div>
       </div>
+
+      {/* ── 確認モーダル ── */}
+      {showConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.78)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            padding: '0 16px 32px',
+          }}
+          onClick={() => setShowConfirm(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+            transition={{ duration: 0.24 }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 420,
+              borderRadius: 24,
+              background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)',
+              border: '1px solid rgba(201,162,74,0.28)',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
+              padding: '28px 24px 24px',
+            }}
+          >
+            <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 12, textAlign: 'center' }}>
+              COUPON USE
+            </p>
+            <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', lineHeight: 1.5, marginBottom: 10 }}>
+              クーポンを使用しますか？
+            </p>
+            <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.48)', textAlign: 'center', lineHeight: 1.7, marginBottom: 24 }}>
+              使用後にQRコードが表示されます。{'\n'}
+              スタッフにご提示ください。
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                style={{
+                  flex: 1, padding: '13px 0', borderRadius: 14,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer',
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleUseConfirm}
+                style={{
+                  flex: 2, padding: '13px 0', borderRadius: 14,
+                  background: 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
+                  border: '1px solid rgba(100,200,100,0.44)',
+                  boxShadow: '0 4px 20px rgba(20,90,42,0.45)',
+                  fontSize: 13, fontWeight: 700, color: '#D0F4D8', fontFamily: SERIF, letterSpacing: '0.16em', cursor: 'pointer',
+                }}
+              >
+                はい、使用する
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── QR 表示モーダル ── */}
+      {showQr && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.88)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
+            transition={{ duration: 0.24 }}
+            style={{
+              width: '100%', maxWidth: 360,
+              borderRadius: 24,
+              background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)',
+              border: '1px solid rgba(201,162,74,0.28)',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.9)',
+              padding: '28px 24px',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 8 }}>
+              COUPON QR
+            </p>
+            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', marginBottom: 20 }}>
+              スタッフにご提示ください
+            </p>
+            <div
+              style={{
+                display: 'inline-block', padding: 16,
+                background: '#FFFFFF', borderRadius: 16,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                marginBottom: 20,
+              }}
+            >
+              <QRCodeSVG value={qrValue} size={200} level="M" />
+            </div>
+            <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.40)', lineHeight: 1.7, marginBottom: 20 }}>
+              スタッフがスキャン後に使用確定されます。{'\n'}
+              確定後「閉じる」を押してください。
+            </p>
+            <button
+              type="button"
+              onClick={handleQrClose}
+              style={{
+                width: '100%', padding: '13px 0', borderRadius: 14,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.14)',
+                fontSize: 13, color: 'rgba(242,230,200,0.72)', fontFamily: SERIF, letterSpacing: '0.16em', cursor: 'pointer',
+              }}
+            >
+              閉じる
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }
@@ -681,7 +791,7 @@ function MaintenanceScheduleSection() {
     if (visit) triggerMaintenanceNotification(visit.lastVisitDate)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // スタッフがカット券を使用済みにした日付を lastVisitDate へ自動反映
+  // 店舗端末でQRスキャン確定した usedAt を lastVisitDate へ自動反映（正式な14日起点）
   useEffect(() => {
     const userId = getUserId()
     getUserTickets(userId)
@@ -691,9 +801,10 @@ function MaintenanceScheduleSection() {
           .sort((a, b) => (b.used_at ?? '').localeCompare(a.used_at ?? ''))[0]
         if (!latest?.used_at) return
         const usedDate = latest.used_at.slice(0, 10)
-        const current = getMaintenanceVisit()?.lastVisitDate
-        if (!current || usedDate > current) {
-          saveMaintenanceVisit(usedDate)
+        const current = getMaintenanceVisit()
+        // QRスキャン確定日が手入力の日付より新しい場合のみ上書き
+        if (!current || usedDate > current.lastVisitDate) {
+          saveMaintenanceVisitFromScan(usedDate, latest.used_at)
           setVisit(getMaintenanceVisit())
         }
       })
@@ -736,6 +847,8 @@ function MaintenanceScheduleSection() {
   const elapsed       = daysLeft !== null
     ? Math.min(1, Math.max(0, (MAINTENANCE_CYCLE_DAYS - daysLeft) / MAINTENANCE_CYCLE_DAYS))
     : 0
+  // QRスキャン確定済みの場合、ユーザーによる日付変更を禁止
+  const isQrConfirmed = (visit?.source ?? 'manual') === 'qr'
   const notifSupported = isNotificationSupported()
 
   // ── Date editor ──
@@ -892,13 +1005,15 @@ function MaintenanceScheduleSection() {
             メンテナンスアラート
           </p>
           <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(180,40,40,0.38), transparent)' }} />
-          <button
-            type="button"
-            onClick={openEditor}
-            style={{ fontSize: 10, color: 'rgba(201,162,74,0.54)', letterSpacing: '0.14em', flexShrink: 0 }}
-          >
-            変更
-          </button>
+          {!isQrConfirmed && (
+            <button
+              type="button"
+              onClick={openEditor}
+              style={{ fontSize: 10, color: 'rgba(201,162,74,0.54)', letterSpacing: '0.14em', flexShrink: 0 }}
+            >
+              変更
+            </button>
+          )}
         </div>
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }}
@@ -999,13 +1114,15 @@ function MaintenanceScheduleSection() {
           メンテナンス予報
         </p>
         <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.3), transparent)' }} />
-        <button
-          type="button"
-          onClick={openEditor}
-          style={{ fontSize: 10, color: 'rgba(201,162,74,0.54)', letterSpacing: '0.14em', flexShrink: 0 }}
-        >
-          変更
-        </button>
+        {!isQrConfirmed && (
+          <button
+            type="button"
+            onClick={openEditor}
+            style={{ fontSize: 10, color: 'rgba(201,162,74,0.54)', letterSpacing: '0.14em', flexShrink: 0 }}
+          >
+            変更
+          </button>
+        )}
       </div>
 
       <div

@@ -27,7 +27,14 @@ export interface MaintenanceVisit {
   lastVisitDate: string
   /** 登録日時 ISO 8601 */
   savedAt: string
-  // Phase2 (Supabase): userId: string
+  /**
+   * 'manual' = ユーザーが手入力した仮登録（初回のみ許可）
+   * 'qr'     = 店舗端末QRスキャン・使用確定済み（正式な起点）
+   * undefined = 旧データ（'manual' 扱い）
+   */
+  source?: 'manual' | 'qr'
+  /** QRスキャン確定日時 ISO 8601 (source === 'qr' のとき設定) */
+  scanCompletedAt?: string
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -37,12 +44,26 @@ export function getMaintenanceVisit(): MaintenanceVisit | null {
   return getStoredValue<MaintenanceVisit | null>(MAINTENANCE_VISIT_KEY, null)
 }
 
-/** 前回来店日を保存する。 */
+/** 前回来店日を手入力で保存する（初回仮登録のみ）。 */
 export function saveMaintenanceVisit(lastVisitDate: string): void {
   // Phase2: await supabase.from('maintenance_visits').upsert({ user_id: uid, last_visit_date: lastVisitDate })
   setStoredValue<MaintenanceVisit>(MAINTENANCE_VISIT_KEY, {
     lastVisitDate,
     savedAt: new Date().toISOString(),
+    source: 'manual',
+  })
+}
+
+/**
+ * 店舗端末QRスキャン・使用確定後に呼ぶ。
+ * これが正式な14日カウント起点。ユーザーによる変更不可。
+ */
+export function saveMaintenanceVisitFromScan(lastVisitDate: string, scanCompletedAt: string): void {
+  setStoredValue<MaintenanceVisit>(MAINTENANCE_VISIT_KEY, {
+    lastVisitDate,
+    savedAt: new Date().toISOString(),
+    source: 'qr',
+    scanCompletedAt,
   })
 }
 
