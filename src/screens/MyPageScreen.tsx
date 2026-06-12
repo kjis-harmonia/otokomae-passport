@@ -158,21 +158,23 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [rewardUsedMessage, setRewardUsedMessage] = useState<string | null>(null)
   const [couponUsedMessage, setCouponUsedMessage] = useState<string | null>(null)
   const [coupons, setCoupons] = useState(() => {
-    const stored = loadCoupons()
-    const PRESET_IDS = ['preset-discount-300', 'preset-cut-1000']
-    const missing = PRESET_IDS.filter(pid => !stored.some(c => c.id === pid))
-    if (missing.length === 0) return stored
-    const today = getTodayDate()
-    const presets = [
-      { id: 'preset-discount-300', title: '夏ガチャ割引券', description: '次回ご来店時にご利用いただけます', amount: 300,  createdAt: today, used: false },
-      { id: 'preset-cut-1000',     title: 'カットく券',     description: '次回カット時にご利用いただけます',  amount: 1000, createdAt: today, used: false },
-    ].filter(p => missing.includes(p.id))
+    // 旧ID・旧タイトルを正規化（既存ユーザーのマイグレーション込み）
     const TITLE_MAP: Record<string, string> = {
       'preset-discount-300': '夏ガチャ割引券',
-      'preset-cut-1000': 'カットく券',
+      'preset-cut-1000':     '漢トク券',
+      'preset-otoku-1000':   '漢トク券',
     }
-    const migrated = stored.map(c => TITLE_MAP[c.id] ? { ...c, title: TITLE_MAP[c.id] } : c)
-    const next = [...presets, ...migrated]
+    const normalized = loadCoupons().map(c =>
+      c.id === 'preset-cut-1000'
+        ? { ...c, id: 'preset-otoku-1000', title: '漢トク券' }
+        : TITLE_MAP[c.id] ? { ...c, title: TITLE_MAP[c.id] } : c
+    )
+    const PRESET_DEFAULTS = [
+      { id: 'preset-discount-300', title: '夏ガチャ割引券', description: '次回ご来店時にご利用いただけます', amount: 300,  createdAt: getTodayDate(), used: false },
+      { id: 'preset-otoku-1000',   title: '漢トク券',       description: '次回ご来店時にご利用いただけます', amount: 1000, createdAt: getTodayDate(), used: false },
+    ]
+    const missing = PRESET_DEFAULTS.filter(p => !normalized.some(c => c.id === p.id))
+    const next = [...missing, ...normalized]
     saveCoupons(next)
     return next
   })

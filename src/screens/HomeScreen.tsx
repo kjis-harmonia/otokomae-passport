@@ -363,7 +363,7 @@ function walletCardStyle(item: WalletItem): { bg: string; accent: string; bar: s
       label:  'rgba(106,171,240,0.65)',
     }
   }
-  if (item.kind === 'coupon' && item.data.id === 'preset-cut-1000') {
+  if (item.kind === 'coupon' && item.data.id === 'preset-otoku-1000') {
     return {
       bg:     'linear-gradient(145deg, #040e06 0%, #030a05 60%, #050e07 100%)',
       accent: '#80D060',
@@ -524,7 +524,7 @@ function TicketWalletSection() {
           const cs      = walletCardStyle(item)
           const typeLabel = item.kind === 'ticket'
             ? TICKET_TYPE_LABELS[item.data.type]
-            : '割引クーポン'
+            : 'Specialクーポン'
 
           return (
             <motion.div
