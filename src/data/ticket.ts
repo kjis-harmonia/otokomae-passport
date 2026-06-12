@@ -24,6 +24,12 @@ export interface TicketRow {
   created_at: string
   used_at:    string | null
   expires_at: string | null
+  // Transfer fields
+  pending_transfer?:  boolean       // 譲渡手続き中
+  transfer_token?:    string | null // ワンタイムトークン（使用後 null）
+  transferred_from?:  string | null // 元のオーナーuserID
+  transferred_to?:    string | null // 譲渡先 userID
+  transferred_at?:    string | null // 譲渡確定日時 ISO 8601
 }
 
 export interface IssueTicketInput {

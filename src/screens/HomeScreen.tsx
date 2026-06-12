@@ -26,7 +26,7 @@ import {
   triggerMaintenanceNotification,
 } from '../utils/pushNotification'
 import { getUserId } from '../utils/userId'
-import { getUserTickets } from '../utils/ticketStore'
+import { getUserTickets, getActiveTicket, setActiveTicket, clearActiveTicket } from '../utils/ticketStore'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import type { TicketRow } from '../data/ticket'
 
@@ -391,11 +391,25 @@ function MaintenanceCutSection() {
   })
 
   function handleUseConfirm() {
+    // 1会計1枚制限：他チケットがアクティブなら弾く
+    const active = getActiveTicket()
+    if (active && active !== unusedCutTicket?.id) {
+      alert('他のチケットが使用中です。先にそちらを閉じてください。')
+      setShowConfirm(false)
+      return
+    }
+    if (unusedCutTicket?.pending_transfer) {
+      alert('このチケットは譲渡手続き中です。')
+      setShowConfirm(false)
+      return
+    }
+    if (unusedCutTicket) setActiveTicket(unusedCutTicket.id)
     setShowConfirm(false)
     setShowQr(true)
   }
 
   function handleQrClose() {
+    clearActiveTicket()
     setShowQr(false)
     fetchTickets() // スタッフが使用確定済みなら再取得でカードが消える
   }

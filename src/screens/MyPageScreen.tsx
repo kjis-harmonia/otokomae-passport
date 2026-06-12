@@ -1,7 +1,8 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import type { MemberStatus, MemberRank } from '../data/brand'
 import { motion } from 'framer-motion'
-import { Crown, Gift, User, Scissors, Bell, FileText, ChevronRight, Tag } from 'lucide-react'
+import { Crown, Gift, User, Scissors, Bell, FileText, ChevronRight, Tag, Share2, X } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import {
   getStoredValue,
   loadCoupons,
@@ -18,7 +19,16 @@ import { getNextRankInfo, RANK_LABEL } from '../utils/rank'
 import { getUserId } from '../utils/userId'
 import type { TicketRow } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
-import { getUserTickets } from '../utils/ticketStore'
+import {
+  getUserTickets,
+  initiateTransfer,
+  cancelTransfer,
+  getActiveTicket,
+  setActiveTicket,
+  clearActiveTicket,
+} from '../utils/ticketStore'
+
+const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
 const GACHA_LABELS: Record<string, string> = {
   discount: '100円OFF',
@@ -154,13 +164,78 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [tickets, setTickets] = useState<TicketRow[]>([])
   const [ticketsLoading, setTicketsLoading] = useState(true)
 
-  useEffect(() => {
-    const userId = getUserId()
-    getUserTickets(userId)
-      .then(data => setTickets(data))
-      .catch(() => setTickets([]))
-      .finally(() => setTicketsLoading(false))
-  }, [])
+  // Ticket detail / transfer state
+  const [selectedTicket, setSelectedTicket] = useState<TicketRow | null>(null)
+  const [transferToken, setTransferToken]   = useState<string | null>(null)
+  const [showTransferQr, setShowTransferQr] = useState(false)
+  const [transferring, setTransferring]     = useState(false)
+  const [copied, setCopied]                 = useState(false)
+
+  const userId = getUserId()
+
+  const fetchTickets = useCallback(async () => {
+    setTicketsLoading(true)
+    try {
+      const data = await getUserTickets(userId)
+      setTickets(data)
+    } catch {
+      setTickets([])
+    } finally {
+      setTicketsLoading(false)
+    }
+  }, [userId])
+
+  useEffect(() => { fetchTickets() }, [fetchTickets])
+
+  // ── Transfer handlers ────────────────────────────────────────────────────────
+
+  async function handleInitiateTransfer(ticket: TicketRow) {
+    if (ticket.used || ticket.pending_transfer) return
+    // 期限切れチェック
+    if (ticket.expires_at && new Date(ticket.expires_at) < new Date()) {
+      alert('期限切れのチケットは譲渡できません。')
+      return
+    }
+    setTransferring(true)
+    try {
+      const token = await initiateTransfer(ticket.id, userId)
+      setTransferToken(token)
+      setShowTransferQr(true)
+      // 選択中チケットを譲渡中状態に更新
+      setSelectedTicket(prev => prev ? { ...prev, pending_transfer: true, transfer_token: token } : prev)
+      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: true, transfer_token: token } : t))
+    } catch {
+      alert('譲渡の開始に失敗しました。')
+    } finally {
+      setTransferring(false)
+    }
+  }
+
+  async function handleCancelTransfer(ticket: TicketRow) {
+    try {
+      await cancelTransfer(ticket.id, userId)
+      setShowTransferQr(false)
+      setTransferToken(null)
+      setSelectedTicket(prev => prev ? { ...prev, pending_transfer: false, transfer_token: null } : prev)
+      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: false, transfer_token: null } : t))
+    } catch {
+      alert('キャンセルに失敗しました。')
+    }
+  }
+
+  async function handleShareTransferUrl(url: string) {
+    try {
+      if (navigator.share) {
+        await navigator.share({ url, title: '銀二郎チケット譲渡' })
+      } else {
+        await navigator.clipboard.writeText(url)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+    } catch {
+      // ユーザーがシェアをキャンセルした場合など
+    }
+  }
   const today = getTodayDate()
   const gachaDate = getStoredValue<string>(GACHA_DATE_KEY, '')
   const gachaResult = getStoredValue<string>(GACHA_RESULT_KEY, '')
@@ -511,72 +586,56 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
 
       {/* Staff-issued tickets */}
       <div className="px-4">
-        <p
-          className="text-[10px] tracking-[0.2em] uppercase mb-3"
-          style={{ color: 'rgba(201,162,39,0.45)' }}
-        >
+        <p className="text-[10px] tracking-[0.2em] uppercase mb-3" style={{ color: 'rgba(201,162,39,0.45)' }}>
           スタッフ発行チケット
         </p>
         {ticketsLoading ? (
-          <div
-            className="px-4 py-3.5 rounded-xl"
-            style={{
-              background: 'linear-gradient(135deg, rgba(24,24,22,0.98) 0%, rgba(12,12,11,0.98) 100%)',
-              border: '1px solid rgba(74,127,201,0.1)',
-            }}
-          >
+          <div className="px-4 py-3.5 rounded-xl" style={{ background: 'rgba(24,24,22,0.98)', border: '1px solid rgba(74,127,201,0.1)' }}>
             <p className="text-sm" style={{ color: 'rgba(245,240,232,0.28)' }}>読込中…</p>
           </div>
         ) : tickets.filter(t => !t.used).length === 0 ? (
-          <div
-            className="px-4 py-3.5 rounded-xl"
-            style={{
-              background: 'linear-gradient(135deg, rgba(24,24,22,0.98) 0%, rgba(12,12,11,0.98) 100%)',
-              border: '1px solid rgba(74,127,201,0.1)',
-            }}
-          >
-            <p className="text-sm" style={{ color: 'rgba(245,240,232,0.34)' }}>
-              有効なチケットはありません
-            </p>
-            <p className="text-[10px] mt-1" style={{ color: 'rgba(245,240,232,0.2)' }}>
-              スタッフが来店時にチケットを発行します
-            </p>
+          <div className="px-4 py-3.5 rounded-xl" style={{ background: 'rgba(24,24,22,0.98)', border: '1px solid rgba(74,127,201,0.1)' }}>
+            <p className="text-sm" style={{ color: 'rgba(245,240,232,0.34)' }}>有効なチケットはありません</p>
+            <p className="text-[10px] mt-1" style={{ color: 'rgba(245,240,232,0.2)' }}>スタッフが来店時にチケットを発行します</p>
           </div>
         ) : (
           <div className="space-y-2">
             {tickets.filter(t => !t.used).map((ticket) => {
               const tc = TICKET_TYPE_COLORS[ticket.type]
+              const isPending = !!ticket.pending_transfer
               return (
-                <div
+                <button
                   key={ticket.id}
-                  className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
+                  type="button"
+                  onClick={() => setSelectedTicket(ticket)}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left"
                   style={{
                     background: `linear-gradient(135deg, rgba(12,12,11,0.98) 0%, ${tc.bg} 100%)`,
-                    border: `1px solid ${tc.border}`,
+                    border: `1px solid ${isPending ? 'rgba(255,180,0,0.4)' : tc.border}`,
                     boxShadow: '0 8px 20px rgba(0,0,0,0.22)',
+                    cursor: 'pointer',
                   }}
                 >
-                  <div
-                    className="flex-shrink-0 px-2 py-1 rounded-lg"
-                    style={{ background: tc.bg, border: `1px solid ${tc.border}` }}
-                  >
-                    <p className="text-[10px] font-bold tracking-wider" style={{ color: tc.text }}>
-                      {TICKET_TYPE_LABELS[ticket.type]}
-                    </p>
+                  <div className="flex-shrink-0 px-2 py-1 rounded-lg" style={{ background: tc.bg, border: `1px solid ${tc.border}` }}>
+                    <p className="text-[10px] font-bold tracking-wider" style={{ color: tc.text }}>{TICKET_TYPE_LABELS[ticket.type]}</p>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold" style={{ color: '#F5F0E8' }}>{ticket.title}</p>
-                    {ticket.amount > 0 && (
-                      <p className="text-[13px] font-bold mt-0.5" style={{ color: '#C9A227' }}>
-                        ¥{ticket.amount.toLocaleString()}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold" style={{ color: '#F5F0E8' }}>{ticket.title}</p>
+                      {isPending && (
+                        <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,180,0,0.15)', border: '1px solid rgba(255,180,0,0.4)', color: '#FFB400', fontWeight: 700 }}>
+                          譲渡中
+                        </span>
+                      )}
+                    </div>
+                    {ticket.amount > 0 && <p className="text-[13px] font-bold mt-0.5" style={{ color: '#C9A227' }}>¥{ticket.amount.toLocaleString()}</p>}
                     <p className="text-[10px] mt-0.5" style={{ color: 'rgba(245,240,232,0.32)' }}>
                       発行日 {new Date(ticket.created_at).toLocaleDateString('ja-JP')}
                       {ticket.expires_at && ` ・ 期限 ${new Date(ticket.expires_at).toLocaleDateString('ja-JP')}`}
                     </p>
                   </div>
-                </div>
+                  <ChevronRight size={15} strokeWidth={1.8} style={{ color: 'rgba(255,255,255,0.18)', flexShrink: 0 }} />
+                </button>
               )
             })}
           </div>
@@ -587,6 +646,140 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
           </p>
         )}
       </div>
+
+      {/* ── Ticket detail modal ── */}
+      {selectedTicket && (() => {
+        const t = selectedTicket
+        const tc = TICKET_TYPE_COLORS[t.type]
+        const isPending = !!t.pending_transfer
+        const isExpired = !!t.expires_at && new Date(t.expires_at) < new Date()
+        const canTransfer = !t.used && !isExpired
+        const transferUrl = transferToken
+          ? `${window.location.origin}${window.location.pathname}?transfer=${transferToken}`
+          : t.transfer_token
+            ? `${window.location.origin}${window.location.pathname}?transfer=${t.transfer_token}`
+            : null
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 0 0' }}
+            onClick={() => { setSelectedTicket(null); setShowTransferQr(false); setTransferToken(null) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 60 }}
+              transition={{ duration: 0.26 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: 480,
+                borderRadius: '24px 24px 0 0',
+                background: 'linear-gradient(180deg, #160a07 0%, #0a0504 100%)',
+                border: '1px solid rgba(201,162,74,0.22)',
+                borderBottom: 'none',
+                padding: '20px 20px 36px',
+                maxHeight: '90dvh', overflowY: 'auto',
+              }}
+            >
+              {/* Handle bar */}
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.12)', margin: '0 auto 20px' }} />
+
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div>
+                  <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tc.bg, border: `1px solid ${tc.border}`, color: tc.text, marginBottom: 6 }}>
+                    {TICKET_TYPE_LABELS[t.type]}
+                  </span>
+                  <p style={{ fontSize: 20, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, lineHeight: 1.3 }}>{t.title}</p>
+                  {t.amount > 0 && <p style={{ fontSize: 18, fontWeight: 700, color: '#C9A24A', fontFamily: SERIF, marginTop: 4 }}>¥{t.amount.toLocaleString()}</p>}
+                </div>
+                <button type="button" onClick={() => { setSelectedTicket(null); setShowTransferQr(false); setTransferToken(null) }}
+                  style={{ padding: 8, borderRadius: 99, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.5)', cursor: 'pointer' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Info */}
+              <div style={{ borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', padding: '12px 14px', marginBottom: 16 }}>
+                {[
+                  { label: '発行日', value: new Date(t.created_at).toLocaleDateString('ja-JP') },
+                  t.expires_at ? { label: '有効期限', value: new Date(t.expires_at).toLocaleDateString('ja-JP') } : null,
+                  t.memo ? { label: 'メモ', value: t.memo } : null,
+                  isPending ? { label: '状態', value: '譲渡手続き中' } : null,
+                ].filter(Boolean).map((row, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < 2 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                    <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.38)' }}>{row!.label}</p>
+                    <p style={{ fontSize: 11, color: isExpired && row!.label === '有効期限' ? '#E06060' : isPending && row!.label === '状態' ? '#FFB400' : '#F2E6C8', fontWeight: 600 }}>{row!.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* 1会計1枚の注意 */}
+              <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.32)', lineHeight: 1.6, marginBottom: 16, letterSpacing: '0.04em' }}>
+                ※ チケットの使用は1会計につき1枚のみです。{'\n'}QR表示中は他のチケットは同時使用できません。
+              </p>
+
+              {/* Transfer QR display (inside detail modal) */}
+              {showTransferQr && transferUrl && (
+                <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,180,0,0.28)', padding: '16px', marginBottom: 16 }}>
+                  <p style={{ fontSize: 10, letterSpacing: '0.2em', color: 'rgba(255,180,0,0.7)', marginBottom: 12, textAlign: 'center' }}>TRANSFER QR</p>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                    <div style={{ padding: 12, background: '#FFFFFF', borderRadius: 12 }}>
+                      <QRCodeSVG value={transferUrl} size={180} level="M" />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.42)', textAlign: 'center', lineHeight: 1.6, marginBottom: 12 }}>
+                    相手にQRを読み取るか、リンクを共有してください。{'\n'}
+                    受け取り後、このチケットはあなたの一覧から消えます。
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleShareTransferUrl(transferUrl)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '11px 0', borderRadius: 12, background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.35)', color: '#FFB400', fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer', marginBottom: 8 }}
+                  >
+                    <Share2 size={14} />
+                    {copied ? 'コピーしました' : 'リンクを共有する'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCancelTransfer(t)}
+                    style={{ width: '100%', padding: '11px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, fontSize: 12, letterSpacing: '0.14em', cursor: 'pointer' }}
+                  >
+                    譲渡をキャンセル
+                  </button>
+                </div>
+              )}
+
+              {/* Pending transfer — show QR again / cancel */}
+              {isPending && !showTransferQr && transferUrl && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                  <button type="button" onClick={() => setShowTransferQr(true)}
+                    style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.4)', color: '#FFB400', fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                    譲渡QRを再表示する
+                  </button>
+                  <button type="button" onClick={() => handleCancelTransfer(t)}
+                    style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, fontSize: 12, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                    譲渡をキャンセル
+                  </button>
+                </div>
+              )}
+
+              {/* Transfer button (only when not pending, not expired, not used) */}
+              {canTransfer && !isPending && !showTransferQr && (
+                <button
+                  type="button"
+                  onClick={() => handleInitiateTransfer(t)}
+                  disabled={transferring}
+                  style={{ width: '100%', padding: '14px 0', borderRadius: 14, background: transferring ? 'rgba(255,255,255,0.04)' : 'rgba(255,180,0,0.08)', border: `1px solid ${transferring ? 'rgba(255,255,255,0.08)' : 'rgba(255,180,0,0.36)'}`, color: transferring ? 'rgba(242,230,200,0.28)' : '#FFB400', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.16em', cursor: transferring ? 'default' : 'pointer' }}
+                >
+                  {transferring ? '処理中…' : '譲渡する'}
+                </button>
+              )}
+
+              {isExpired && (
+                <p style={{ fontSize: 11, color: '#E06060', textAlign: 'center', marginTop: 8 }}>このチケットは期限切れのため譲渡できません</p>
+              )}
+            </motion.div>
+          </div>
+        )
+      })()}
 
       {/* History section */}
       <div className="px-4">
