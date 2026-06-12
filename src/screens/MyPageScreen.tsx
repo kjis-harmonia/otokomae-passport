@@ -23,9 +23,6 @@ import {
   getUserTickets,
   initiateTransfer,
   cancelTransfer,
-  getActiveTicket,
-  setActiveTicket,
-  clearActiveTicket,
 } from '../utils/ticketStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'

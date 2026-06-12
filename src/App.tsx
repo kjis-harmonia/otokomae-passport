@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { QRCodeSVG } from 'qrcode.react'
 import { AppHeader } from './components/AppHeader'
 import { BottomNavigation } from './components/BottomNavigation'
 import { HomeScreen } from './screens/HomeScreen'
