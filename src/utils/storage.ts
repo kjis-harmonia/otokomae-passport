@@ -60,8 +60,23 @@ export const ONBOARDING_NAME_KEY = 'ginjiro:member_name'
 
 export const COUPONS_KEY = 'otokomae_coupons'
 
+const COUPON_TITLE_MAP: Record<string, string> = {
+  'preset-discount-300': '夏ガチャ割引券',
+  'preset-cut-1000':     '漢トク券',
+  'preset-otoku-1000':   '漢トク券',
+}
+
 export function loadCoupons(): Coupon[] {
-  return getStoredValue<Coupon[]>(COUPONS_KEY, [])
+  const raw = getStoredValue<Coupon[]>(COUPONS_KEY, [])
+  const migrated = raw.map(c =>
+    c.id === 'preset-cut-1000'
+      ? { ...c, id: 'preset-otoku-1000', title: '漢トク券' }
+      : COUPON_TITLE_MAP[c.id] ? { ...c, title: COUPON_TITLE_MAP[c.id] } : c
+  )
+  if (JSON.stringify(migrated) !== JSON.stringify(raw)) {
+    setStoredValue(COUPONS_KEY, migrated)
+  }
+  return migrated
 }
 
 export function saveCoupons(coupons: Coupon[]): void {
