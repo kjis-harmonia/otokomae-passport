@@ -164,10 +164,15 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
     if (missing.length === 0) return stored
     const today = getTodayDate()
     const presets = [
-      { id: 'preset-discount-300', title: '割引券',  description: '次回ご来店時にご利用いただけます', amount: 300,  createdAt: today, used: false },
-      { id: 'preset-cut-1000',     title: 'カット券', description: '次回カット時にご利用いただけます',  amount: 1000, createdAt: today, used: false },
+      { id: 'preset-discount-300', title: '夏ガチャ割引券', description: '次回ご来店時にご利用いただけます', amount: 300,  createdAt: today, used: false },
+      { id: 'preset-cut-1000',     title: 'カットく券',     description: '次回カット時にご利用いただけます',  amount: 1000, createdAt: today, used: false },
     ].filter(p => missing.includes(p.id))
-    const next = [...presets, ...stored]
+    const TITLE_MAP: Record<string, string> = {
+      'preset-discount-300': '夏ガチャ割引券',
+      'preset-cut-1000': 'カットく券',
+    }
+    const migrated = stored.map(c => TITLE_MAP[c.id] ? { ...c, title: TITLE_MAP[c.id] } : c)
+    const next = [...presets, ...migrated]
     saveCoupons(next)
     return next
   })

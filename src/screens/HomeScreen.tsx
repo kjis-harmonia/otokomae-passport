@@ -524,7 +524,7 @@ function TicketWalletSection() {
           const cs      = walletCardStyle(item)
           const typeLabel = item.kind === 'ticket'
             ? TICKET_TYPE_LABELS[item.data.type]
-            : item.data.id === 'preset-discount-300' ? '割引クーポン' : 'カットクーポン'
+            : '割引クーポン'
 
           return (
             <motion.div
