@@ -173,6 +173,22 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
 
   const userId = getUserId()
 
+  // プリセットクーポンを初回のみ追加
+  useEffect(() => {
+    const PRESET_IDS = ['preset-discount-300', 'preset-cut-1000']
+    const stored = loadCoupons()
+    const missingPresets = PRESET_IDS.filter(pid => !stored.some(c => c.id === pid))
+    if (missingPresets.length === 0) return
+    const today = getTodayDate()
+    const presets = [
+      { id: 'preset-discount-300',  title: '割引券',  description: '次回ご来店時にご利用いただけます', amount: 300,  createdAt: today, used: false },
+      { id: 'preset-cut-1000',      title: 'カット券', description: '次回カット時にご利用いただけます',  amount: 1000, createdAt: today, used: false },
+    ].filter(p => missingPresets.includes(p.id))
+    const next = [...presets, ...stored]
+    saveCoupons(next)
+    setCoupons(next)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchTickets = useCallback(async () => {
     setTicketsLoading(true)
     try {
@@ -555,7 +571,12 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                   <Tag size={16} strokeWidth={1.8} style={{ color: '#B02035' }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold" style={{ color: '#F5F0E8' }}>{coupon.title}</p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-sm font-bold" style={{ color: '#F5F0E8' }}>{coupon.title}</p>
+                    {coupon.amount != null && (
+                      <p className="text-sm font-bold" style={{ color: '#C9A24A', fontFamily: SERIF }}>¥{coupon.amount.toLocaleString()}</p>
+                    )}
+                  </div>
                   <p className="text-[11px] mt-0.5" style={{ color: '#8A8A7A' }}>{coupon.description}</p>
                   <p className="text-[10px] mt-0.5" style={{ color: 'rgba(201,162,39,0.45)' }}>
                     取得日 {coupon.createdAt}

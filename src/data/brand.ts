@@ -40,6 +40,7 @@ export interface Coupon {
   id: string
   title: string
   description: string
+  amount?: number
   createdAt: string
   used: boolean
 }
