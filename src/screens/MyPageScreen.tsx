@@ -193,7 +193,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
     if (ticket.used || ticket.pending_transfer) return
     // 期限切れチェック
     if (ticket.expires_at && new Date(ticket.expires_at) < new Date()) {
-      alert('期限切れのチケットは譲渡できません。')
+      alert('期限が切れているため渡せません。')
       return
     }
     setTransferring(true)
@@ -205,7 +205,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
       setSelectedTicket(prev => prev ? { ...prev, pending_transfer: true, transfer_token: token } : prev)
       setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: true, transfer_token: token } : t))
     } catch {
-      alert('譲渡の開始に失敗しました。')
+      alert('渡す処理が失敗しました。')
     } finally {
       setTransferring(false)
     }
@@ -226,7 +226,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   async function handleShareTransferUrl(url: string) {
     try {
       if (navigator.share) {
-        await navigator.share({ url, title: '銀二郎チケット譲渡' })
+        await navigator.share({ url, title: '銀二郎チケット' })
       } else {
         await navigator.clipboard.writeText(url)
         setCopied(true)
@@ -624,7 +624,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                       <p className="text-sm font-bold" style={{ color: '#F5F0E8' }}>{ticket.title}</p>
                       {isPending && (
                         <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,180,0,0.15)', border: '1px solid rgba(255,180,0,0.4)', color: '#FFB400', fontWeight: 700 }}>
-                          譲渡中
+                          渡し中
                         </span>
                       )}
                     </div>
@@ -702,7 +702,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                   { label: '発行日', value: new Date(t.created_at).toLocaleDateString('ja-JP') },
                   t.expires_at ? { label: '有効期限', value: new Date(t.expires_at).toLocaleDateString('ja-JP') } : null,
                   t.memo ? { label: 'メモ', value: t.memo } : null,
-                  isPending ? { label: '状態', value: '譲渡手続き中' } : null,
+                  isPending ? { label: '状態', value: '渡し手続き中' } : null,
                 ].filter(Boolean).map((row, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < 2 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                     <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.38)' }}>{row!.label}</p>
@@ -711,52 +711,51 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                 ))}
               </div>
 
-              {/* 1会計1枚の注意 */}
-              <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.32)', lineHeight: 1.6, marginBottom: 16, letterSpacing: '0.04em' }}>
-                ※ チケットの使用は1会計につき1枚のみです。{'\n'}QR表示中は他のチケットは同時使用できません。
+              {/* 使用ルール */}
+              <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.28)', lineHeight: 1.6, marginBottom: 16 }}>
+                ※ 1回のお会計で使えるチケットは1枚です。
               </p>
 
               {/* Transfer QR display (inside detail modal) */}
               {showTransferQr && transferUrl && (
-                <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,180,0,0.28)', padding: '16px', marginBottom: 16 }}>
-                  <p style={{ fontSize: 10, letterSpacing: '0.2em', color: 'rgba(255,180,0,0.7)', marginBottom: 12, textAlign: 'center' }}>TRANSFER QR</p>
+                <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,180,0,0.22)', padding: '16px', marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
                     <div style={{ padding: 12, background: '#FFFFFF', borderRadius: 12 }}>
                       <QRCodeSVG value={transferUrl} size={180} level="M" />
                     </div>
                   </div>
-                  <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.42)', textAlign: 'center', lineHeight: 1.6, marginBottom: 12 }}>
-                    相手にQRを読み取るか、リンクを共有してください。{'\n'}
-                    受け取り後、このチケットはあなたの一覧から消えます。
+                  <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.42)', textAlign: 'center', lineHeight: 1.7, marginBottom: 12 }}>
+                    QRを読み取ってもらうか、リンクを送ってください。{'\n'}
+                    受け取ったらあなたの一覧から消えます。
                   </p>
                   <button
                     type="button"
                     onClick={() => handleShareTransferUrl(transferUrl)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '11px 0', borderRadius: 12, background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.35)', color: '#FFB400', fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer', marginBottom: 8 }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '11px 0', borderRadius: 12, background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.3)', color: '#FFB400', fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer', marginBottom: 8 }}
                   >
                     <Share2 size={14} />
-                    {copied ? 'コピーしました' : 'リンクを共有する'}
+                    {copied ? 'コピーしました' : 'リンクを送る'}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleCancelTransfer(t)}
-                    style={{ width: '100%', padding: '11px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, fontSize: 12, letterSpacing: '0.14em', cursor: 'pointer' }}
+                    style={{ width: '100%', padding: '11px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.46)', fontFamily: SERIF, fontSize: 12, letterSpacing: '0.14em', cursor: 'pointer' }}
                   >
-                    譲渡をキャンセル
+                    取りやめる
                   </button>
                 </div>
               )}
 
-              {/* Pending transfer — show QR again / cancel */}
+              {/* Pending — show QR again / cancel */}
               {isPending && !showTransferQr && transferUrl && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                   <button type="button" onClick={() => setShowTransferQr(true)}
-                    style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.4)', color: '#FFB400', fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer' }}>
-                    譲渡QRを再表示する
+                    style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.3)', color: '#FFB400', fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                    QRを再表示する
                   </button>
                   <button type="button" onClick={() => handleCancelTransfer(t)}
-                    style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, fontSize: 12, letterSpacing: '0.14em', cursor: 'pointer' }}>
-                    譲渡をキャンセル
+                    style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.46)', fontFamily: SERIF, fontSize: 12, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                    取りやめる
                   </button>
                 </div>
               )}
@@ -769,12 +768,12 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                   disabled={transferring}
                   style={{ width: '100%', padding: '14px 0', borderRadius: 14, background: transferring ? 'rgba(255,255,255,0.04)' : 'rgba(255,180,0,0.08)', border: `1px solid ${transferring ? 'rgba(255,255,255,0.08)' : 'rgba(255,180,0,0.36)'}`, color: transferring ? 'rgba(242,230,200,0.28)' : '#FFB400', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.16em', cursor: transferring ? 'default' : 'pointer' }}
                 >
-                  {transferring ? '処理中…' : '譲渡する'}
+                  {transferring ? '処理中…' : '家族・友達に渡す'}
                 </button>
               )}
 
               {isExpired && (
-                <p style={{ fontSize: 11, color: '#E06060', textAlign: 'center', marginTop: 8 }}>このチケットは期限切れのため譲渡できません</p>
+                <p style={{ fontSize: 11, color: '#E06060', textAlign: 'center', marginTop: 8 }}>期限が切れているため渡せません</p>
               )}
             </motion.div>
           </div>

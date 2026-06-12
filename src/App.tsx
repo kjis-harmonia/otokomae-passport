@@ -170,8 +170,6 @@ function App() {
             transition={{ duration: 0.26 }}
             style={{ width: '100%', maxWidth: 380, borderRadius: 24, background: 'linear-gradient(160deg, #160a07 0%, #0a0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.9)', padding: '28px 24px 24px' }}
           >
-            <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(255,180,0,0.6)', marginBottom: 10, textAlign: 'center' }}>TICKET TRANSFER</p>
-
             {/* preview / accepting */}
             {(transferPhase === 'preview' || transferPhase === 'accepting') && (
               <>
@@ -185,7 +183,6 @@ function App() {
                     <div style={{ borderRadius: 12, background: tc.bg, border: `1px solid ${tc.border}`, padding: '12px 16px', marginBottom: 16 }}>
                       <p style={{ fontSize: 9, fontWeight: 700, color: tc.text, letterSpacing: '0.14em', marginBottom: 4 }}>{TICKET_TYPE_LABELS[transferTicket.type]}</p>
                       <p style={{ fontSize: 16, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>{transferTicket.title}</p>
-                      {transferTicket.amount > 0 && <p style={{ fontSize: 14, fontWeight: 700, color: '#C9A24A', fontFamily: SERIF, marginTop: 2 }}>¥{transferTicket.amount.toLocaleString()}</p>}
                       {transferTicket.expires_at && <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.4)', marginTop: 4 }}>期限 {new Date(transferTicket.expires_at).toLocaleDateString('ja-JP')}</p>}
                     </div>
                   )
@@ -224,7 +221,6 @@ function App() {
                   <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', marginBottom: 12 }}>受け取りました</p>
                   <div style={{ borderRadius: 12, background: tc.bg, border: `1px solid ${tc.border}`, padding: '12px 16px', marginBottom: 20, textAlign: 'center' }}>
                     <p style={{ fontSize: 15, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>{acceptedTicket.title}</p>
-                    {acceptedTicket.amount > 0 && <p style={{ fontSize: 13, color: '#C9A24A', fontFamily: SERIF, marginTop: 2 }}>¥{acceptedTicket.amount.toLocaleString()}</p>}
                   </div>
                   <button type="button" onClick={handleDismissTransfer}
                     style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(201,162,74,0.12)', border: '1px solid rgba(201,162,74,0.36)', color: '#C9A24A', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.16em', cursor: 'pointer' }}>
