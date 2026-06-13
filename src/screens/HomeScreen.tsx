@@ -6,7 +6,8 @@ import { isInStoreModeActive, activateInStoreMode, clearInStoreMode } from '../u
 import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import { StyleDetailModal } from '../components/StyleDetailModal'
-import { HERO_SLIDE_IMAGES, resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
+import { PassportCard } from '../components/PassportCard'
+import { resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
 import type { StyleCard } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
 import { MAINTENANCE_CUT_URL } from '../data/reserveLinks'
@@ -111,291 +112,6 @@ interface Props {
   member: Member
   onTabChange: (tab: NavTab) => void
   onModalChange?: (open: boolean) => void
-}
-
-// ── HeroSlider ────────────────────────────────────────────────────────────────
-
-function HeroSlider() {
-  const [current, setCurrent] = useState(0)
-  const touchStartX = useRef<number | null>(null)
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrent((i) => (i + 1) % HERO_SLIDE_IMAGES.length)
-    }, 7000)
-    return () => clearInterval(timer)
-  }, [])
-
-  function handleTouchStart(e: React.TouchEvent) {
-    touchStartX.current = e.touches[0]?.clientX ?? null
-  }
-
-  function handleTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current === null) return
-    const endX = e.changedTouches[0]?.clientX
-    if (endX === undefined) return
-    const diff = endX - touchStartX.current
-    touchStartX.current = null
-    if (Math.abs(diff) < 40) return
-    if (diff < 0) {
-      setCurrent((i) => (i + 1) % HERO_SLIDE_IMAGES.length)
-    } else {
-      setCurrent((i) => (i - 1 + HERO_SLIDE_IMAGES.length) % HERO_SLIDE_IMAGES.length)
-    }
-  }
-
-  return (
-    <div
-      className="relative w-full overflow-hidden select-none"
-      style={{ aspectRatio: '1440 / 2200', maxHeight: '88dvh' }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      {/* Dark base */}
-      <div className="absolute inset-0" style={{ background: '#050302' }} />
-
-      {/* Slides: crossfade */}
-      <AnimatePresence mode="sync">
-        {HERO_SLIDE_IMAGES.map((img, i) =>
-          i === current ? (
-            <motion.div
-              key={`slide-${i}`}
-              className="absolute inset-0"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.6, ease: [0.25, 0, 0.25, 1] }}
-            >
-              <motion.img
-                src={img.src}
-                alt={img.alt}
-                className="absolute inset-0 w-full h-full"
-                style={{ objectFit: 'cover', objectPosition: img.position }}
-                initial={{ scale: 1 }}
-                animate={{ scale: 1.04 }}
-                transition={{ duration: 9, ease: [0.22, 0, 0.36, 1] }}
-                onError={(e) => {
-                  ;(e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            </motion.div>
-          ) : null,
-        )}
-      </AnimatePresence>
-
-      {/* Gradient overlays: 上下 + 左サイド */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          zIndex: 2,
-          background: [
-            /* 左サイド: 筆文字可読性のため */
-            'linear-gradient(90deg, rgba(5,3,2,0.40) 0%, rgba(5,3,2,0.0) 42%)',
-            /* 上下: ロゴ締め + 下部フェード */
-            'linear-gradient(180deg, rgba(5,3,2,0.82) 0%, rgba(5,3,2,0.0) 22%, rgba(5,3,2,0.0) 48%, rgba(5,3,2,0.60) 68%, rgba(5,3,2,0.97) 100%)',
-          ].join(', '),
-        }}
-      />
-
-      {/* Bottom: dot indicators */}
-      <div
-        className="absolute bottom-5 left-0 right-0 flex justify-center gap-1.5"
-        style={{ zIndex: 3 }}
-      >
-        {HERO_SLIDE_IMAGES.map((_, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => setCurrent(i)}
-            aria-label={`スライド ${i + 1}`}
-            style={{
-              width: i === current ? 18 : 6,
-              height: 6,
-              borderRadius: 3,
-              background: i === current ? '#C9A24A' : 'rgba(242,230,200,0.26)',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              flexShrink: 0,
-              transition: 'width 0.35s ease, background 0.35s ease',
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── DailyStyleCard ────────────────────────────────────────────────────────────
-
-function DailySectionLabel() {
-  const [imgError, setImgError] = useState(false)
-
-  return (
-    <div className="mb-2 px-1">
-      <div
-        style={{
-          height: '0.5px',
-          background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.20), transparent)',
-          marginBottom: 10,
-        }}
-      />
-      <div className="flex justify-center">
-        {!imgError ? (
-          <img
-            src="/images/sections/today-otokomae-title.svg"
-            alt="本日の男前"
-            onError={() => setImgError(true)}
-            style={{ width: 'clamp(160px, 44vw, 210px)', height: 'auto', objectFit: 'contain' }}
-          />
-        ) : (
-          <p
-            style={{
-              fontSize: 8,
-              letterSpacing: '0.34em',
-              textTransform: 'uppercase' as const,
-              color: 'rgba(201,162,74,0.38)',
-            }}
-          >
-            TODAY'S OTOKOMAE
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function DailyStyleCard({ style, onTap }: { style: StyleCard; onTap: () => void }) {
-  return (
-    <div className="px-5">
-      <DailySectionLabel />
-
-      <button
-        type="button"
-        onClick={onTap}
-        className="block relative w-full overflow-hidden transition-opacity active:opacity-85"
-        style={{
-          aspectRatio: '1440 / 2200',
-          borderRadius: 20,
-          border: '1px solid rgba(201,162,74,0.28)',
-          boxShadow:
-            '0 20px 56px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(201,162,74,0.08), inset 0 1px 0 rgba(242,230,200,0.04)',
-        }}
-      >
-        {/* Image */}
-        <StyleCardImage
-          src={resolveStyleImageUrl(style)}
-          alt={style.title}
-          className="absolute inset-0 w-full h-full"
-          imgStyle={{ objectFit: 'cover', objectPosition: resolveStyleImagePosition(style) }}
-          size="lg"
-        />
-
-        {/* Watermark */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 pointer-events-none">
-          <p
-            style={{
-              fontFamily: SERIF,
-              fontSize: 30,
-              fontWeight: 700,
-              color: 'rgba(242,230,200,0.06)',
-              letterSpacing: '0.14em',
-              lineHeight: 1,
-            }}
-          >
-            銀二郎
-          </p>
-          <p
-            style={{
-              fontSize: 7,
-              fontWeight: 600,
-              letterSpacing: '0.32em',
-              color: 'rgba(201,162,74,0.05)',
-              textTransform: 'uppercase',
-            }}
-          >
-            GINJIRO STYLE
-          </p>
-        </div>
-
-        {/* Gradient overlay — heavy bottom for text, minimal top */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              'linear-gradient(180deg, rgba(5,3,2,0.06) 0%, rgba(5,3,2,0.0) 20%, rgba(5,3,2,0.0) 52%, rgba(5,3,2,0.80) 70%, rgba(5,3,2,0.98) 100%)',
-          }}
-        />
-
-        {/* Bottom content */}
-        <div className="absolute bottom-0 left-0 right-0 px-5 pb-6">
-          <h2
-            style={{
-              fontSize: 26,
-              fontWeight: 700,
-              color: '#F2E6C8',
-              fontFamily: SERIF,
-              lineHeight: 1.2,
-              textShadow: '0 2px 24px rgba(0,0,0,0.98)',
-              letterSpacing: '0.04em',
-              marginBottom: style.catchCopy ? 6 : 14,
-            }}
-          >
-            {style.title}
-          </h2>
-          {style.catchCopy && (
-            <p
-              style={{
-                fontSize: 11,
-                color: 'rgba(201,162,74,0.72)',
-                fontStyle: 'italic',
-                lineHeight: 1.4,
-                marginBottom: 14,
-              }}
-            >
-              {style.catchCopy}
-            </p>
-          )}
-          <div
-            className="w-full rounded-xl py-3 text-center"
-            style={{
-              background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-              border: '1px solid rgba(201,162,74,0.44)',
-              boxShadow: '0 4px 20px rgba(107,15,18,0.45)',
-            }}
-          >
-            <span
-              className="text-[12px] font-bold tracking-[0.24em]"
-              style={{ color: '#F2E6C8', fontFamily: SERIF }}
-            >
-              詳しく見る
-            </span>
-          </div>
-        </div>
-      </button>
-    </div>
-  )
-}
-
-function DailyStyleEmpty() {
-  return (
-    <div className="px-5">
-      <DailySectionLabel />
-      <div
-        className="w-full flex items-center justify-center"
-        style={{
-          aspectRatio: '1440 / 2200',
-          borderRadius: 20,
-          background: 'linear-gradient(145deg, #100806, #0A0504)',
-          border: '1px solid rgba(201,162,74,0.1)',
-        }}
-      >
-        <p className="text-sm" style={{ color: 'rgba(201,162,74,0.30)', fontFamily: SERIF }}>
-          スタイルを準備中...
-        </p>
-      </div>
-    </div>
-  )
 }
 
 // ── TicketWalletSection ───────────────────────────────────────────────────────
@@ -1622,55 +1338,54 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
     onModalChange?.(selectedStyle !== null)
   }, [selectedStyle, onModalChange])
 
-  const [dailyStyle] = useState<StyleCard | null>(() =>
-    styles.length > 0 ? (styles[Math.floor(Math.random() * styles.length)] ?? null) : null,
-  )
-
   return (
     <div>
-      <HeroSlider />
+      {/* Safe-area top padding */}
+      <div style={{ height: 'max(16px, env(safe-area-inset-top, 16px))' }} />
 
-      <div className="space-y-14 pt-7 pb-16">
+      <div className="space-y-12 pt-4 pb-16">
+
+        {/* ① 男前証 */}
         <motion.div
-          initial={{ opacity: 0, y: 22 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.06, duration: 0.44, ease: EASE_OUT }}
+          transition={{ delay: 0.04, duration: 0.42, ease: EASE_OUT }}
         >
-          {dailyStyle ? (
-            <DailyStyleCard style={dailyStyle} onTap={() => setSelectedStyle(dailyStyle)} />
-          ) : (
-            <DailyStyleEmpty />
-          )}
+          <PassportCard />
         </motion.div>
 
+        {/* ② メンテナンスカット */}
         <motion.div
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.44, ease: EASE_OUT }}
-        >
-          <StylesRow styles={styles} onStyleSelect={setSelectedStyle} />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 22 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.23, duration: 0.44, ease: EASE_OUT }}
+          transition={{ delay: 0.12, duration: 0.44, ease: EASE_OUT }}
         >
           <MaintenanceCutSection onTabChange={onTabChange} />
         </motion.div>
 
+        {/* ③ 保有チケット */}
         <motion.div
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.28, duration: 0.44, ease: EASE_OUT }}
+          transition={{ delay: 0.20, duration: 0.44, ease: EASE_OUT }}
         >
           <TicketWalletSection />
         </motion.div>
 
+        {/* ④ 銀二郎スタイル */}
         <motion.div
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35, duration: 0.44, ease: EASE_OUT }}
+          transition={{ delay: 0.27, duration: 0.44, ease: EASE_OUT }}
+        >
+          <StylesRow styles={styles} onStyleSelect={setSelectedStyle} />
+        </motion.div>
+
+        {/* ⑤ メンテナンス予報 */}
+        <motion.div
+          initial={{ opacity: 0, y: 22 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.34, duration: 0.44, ease: EASE_OUT }}
         >
           <MaintenanceScheduleSection />
         </motion.div>

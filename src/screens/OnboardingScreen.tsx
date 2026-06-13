@@ -45,12 +45,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   return (
     <>
     {showQr && (
-      <MemberQrModal
-        userId={getUserId()}
-        name={trimmedName}
-        issuedAt={getMemberIssuedAt()}
-        onClose={() => setShowQr(false)}
-      />
+      <MemberQrModal onClose={() => setShowQr(false)} />
     )}
     <motion.div
       initial={{ opacity: 0 }}

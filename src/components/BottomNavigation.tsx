@@ -18,10 +18,11 @@ const TAB_LABELS: Record<NavTab, string> = {
 }
 
 // Excluded from nav — sealed until complete, code preserved for restoration:
-// 'gacha'  — gacha feature
-// 'tryon'  — try-on feature (coming soon)
+// 'gacha'   — gacha feature
+// 'tryon'   — try-on feature (coming soon)
 // 'reserve' — reservation feature (coming soon)
-const TABS: NavTab[] = ['home', 'styles', 'diagnosis', 'mypage']
+// 'mypage'  — temporarily hidden; features migrating to HomeScreen
+const TABS: NavTab[] = ['home', 'styles', 'diagnosis']
 
 function TabIcon({ id }: { id: NavTab }) {
   switch (id) {

@@ -5,7 +5,7 @@ import { X, Share2, CalendarDays } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { MemberQrModal } from '../components/MemberQrModal'
 import { PassportCard } from '../components/PassportCard'
-import { getMemberIssuedAt, getUserId } from '../utils/userId'
+import { getUserId } from '../utils/userId'
 import { saveMemberStatus } from '../utils/storage'
 import { supabase } from '../lib/supabase'
 import type { TicketRow, TicketType } from '../data/ticket'
@@ -117,9 +117,8 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [stampRewardMsg, setStampRewardMsg]     = useState<string | null>(null)
   const stampRewardIssuedRef                    = useRef(false)
 
-  // DEV: passport field calibration
+  // DEV: passport field calibration (kept for future use)
   const [showCalibrate, setShowCalibrate]       = useState(false)
-  const [calibCoords, setCalibCoords]           = useState<{ x: number; y: number } | null>(null)
 
   const userId = getUserId()
 
@@ -258,7 +257,6 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const isMaintenanceLoading = lastVisitDate === undefined
 
   const fmtCountdown    = `${Math.floor(qrSecondsLeft / 60)}:${String(qrSecondsLeft % 60).padStart(2, '0')}`
-  const issuedAt        = getMemberIssuedAt()
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -269,7 +267,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
       {/* ── 男前証 QR modal ── */}
       <AnimatePresence>
         {showMemberQr && (
-          <MemberQrModal userId={userId} name={memberStatus.memberName} issuedAt={getMemberIssuedAt()} onClose={() => setShowMemberQr(false)} />
+          <MemberQrModal onClose={() => setShowMemberQr(false)} />
         )}
       </AnimatePresence>
 
@@ -504,24 +502,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
         <div style={{ padding: '16px 16px 4px' }}>
           <p style={{ fontSize: 8, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.36)', textTransform: 'uppercase', marginBottom: 8 }}>① 男前証</p>
 
-          <PassportCard
-            userId={userId}
-            name={memberStatus.memberName}
-            issuedAt={issuedAt}
-            lastVisitDate={lastVisitDate}
-            onClick={() => setShowMemberQr(true)}
-            showCalibrate={showCalibrate}
-            calibCoords={calibCoords}
-            onPointerMove={e => {
-              if (!showCalibrate) return
-              const rect = e.currentTarget.getBoundingClientRect()
-              setCalibCoords({
-                x: Math.round((e.clientX - rect.left) / rect.width * 1000) / 10,
-                y: Math.round((e.clientY - rect.top) / rect.height * 1000) / 10,
-              })
-            }}
-            onPointerLeave={() => showCalibrate && setCalibCoords(null)}
-          />
+          <PassportCard />
 
           {/* 保有チケット枚数（テスト環境: 固定99） */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 16, padding: '10px 4px 6px', borderTop: '1px solid rgba(201,162,74,0.1)', marginTop: 10 }}>
@@ -540,7 +521,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
           {/* DEV: キャリブレーション切替ボタン */}
           <button
             type="button"
-            onClick={() => { setShowCalibrate(p => !p); setCalibCoords(null) }}
+            onClick={() => { setShowCalibrate(p => !p) }}
             style={{
               display: 'block', width: '100%', marginTop: 6, padding: '5px 0',
               fontSize: 9, letterSpacing: '0.06em', fontFamily: 'monospace',

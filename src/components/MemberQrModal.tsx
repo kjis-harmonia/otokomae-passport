@@ -1,30 +1,12 @@
-import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
-import { supabase } from '../lib/supabase'
 import { PassportCard } from './PassportCard'
 
 interface Props {
-  userId: string
-  name: string
-  issuedAt: string
   onClose: () => void
 }
 
-export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
-  const [lastVisitDate, setLastVisitDate] = useState<string | null>(null)
-
-  useEffect(() => {
-    supabase
-      .from('maintenance_visits')
-      .select('last_visit_date')
-      .eq('user_id', userId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.last_visit_date) setLastVisitDate(data.last_visit_date as string)
-      })
-  }, [userId])
-
+export function MemberQrModal({ onClose }: Props) {
   return (
     <motion.div
       className="fixed inset-0"
@@ -34,7 +16,6 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.22 }}
     >
-      {/* Close button */}
       <button
         type="button"
         onClick={onClose}
@@ -55,7 +36,6 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
         <X size={18} strokeWidth={2} />
       </button>
 
-      {/* Scrollable content */}
       <div
         style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -63,8 +43,6 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
           minHeight: '100%',
           paddingTop: 'max(56px, calc(env(safe-area-inset-top, 0px) + 48px))',
           paddingBottom: 'max(36px, env(safe-area-inset-bottom, 36px))',
-          paddingLeft: 20,
-          paddingRight: 20,
           overflowY: 'auto',
           boxSizing: 'border-box',
         }}
@@ -73,22 +51,10 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.36, ease: 'easeOut' }}
-          style={{ width: '100%', maxWidth: 380 }}
+          style={{ width: '100%', maxWidth: 400 }}
         >
-          <PassportCard
-            userId={userId}
-            name={name}
-            issuedAt={issuedAt}
-            lastVisitDate={lastVisitDate}
-          />
+          <PassportCard />
         </motion.div>
-
-        <p style={{
-          fontSize: 10, color: 'rgba(201,162,74,0.3)', marginTop: 18,
-          letterSpacing: '0.12em', textAlign: 'center', lineHeight: 1.7,
-        }}>
-          会計時にスタッフへ提示してください
-        </p>
       </div>
     </motion.div>
   )
