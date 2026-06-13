@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '../lib/supabase'
-import passportTemplate from '../assets/passport/otokomae-passport-template.png'
-
-const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+import { PassportCard } from './PassportCard'
 
 interface Props {
   userId: string
@@ -27,23 +24,6 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
         if (data?.last_visit_date) setLastVisitDate(data.last_visit_date as string)
       })
   }, [userId])
-
-  const qrPayload = JSON.stringify({
-    type:     'ginjiro-member',
-    userId,
-    name,
-    issuedAt,
-  })
-
-  const issuedDateFmt = issuedAt
-    ? new Date(issuedAt).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    : '—'
-
-  const lastVisitFmt = lastVisitDate
-    ? new Date(lastVisitDate + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    : '—'
-
-  const shortId = userId.length > 22 ? userId.slice(0, 22) + '…' : userId
 
   return (
     <motion.div
@@ -93,110 +73,14 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.36, ease: 'easeOut' }}
-          style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: 380,
-            borderRadius: 12,
-            overflow: 'hidden',
-            boxShadow: '0 24px 64px rgba(0,0,0,0.8), 0 0 0 1px rgba(201,162,74,0.15)',
-          }}
+          style={{ width: '100%', maxWidth: 380 }}
         >
-          {/* Template image — full card background */}
-          <img
-            src={passportTemplate}
-            alt="男前証"
-            draggable={false}
-            style={{ width: '100%', display: 'block', userSelect: 'none' }}
+          <PassportCard
+            userId={userId}
+            name={name}
+            issuedAt={issuedAt}
+            lastVisitDate={lastVisitDate}
           />
-
-          {/* ── Dynamic overlays (same coordinates as inline card) ── */}
-
-          {/* QR — center(30.5%, 53%), 27% wide */}
-          <div style={{
-            position: 'absolute',
-            top: '45.5%',
-            left: '17%',
-            width: '27%',
-            background: '#FFFFFF',
-            padding: '5px',
-            borderRadius: 3,
-            boxSizing: 'border-box',
-          }}>
-            <QRCodeSVG
-              value={qrPayload}
-              size={200}
-              level="M"
-              marginSize={0}
-              style={{ width: '100%', height: 'auto', display: 'block' }}
-            />
-          </div>
-
-          {/* 会員名 + 様 — center(70%, 55%) */}
-          <div style={{
-            position: 'absolute',
-            top: '55%',
-            left: '41%',
-            right: '3%',
-            transform: 'translateY(-50%)',
-            textAlign: 'center',
-          }}>
-            <p style={{ fontFamily: SERIF, fontSize: '4.5vw', fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
-              {name}<span style={{ fontSize: '3vw', fontWeight: 400, color: 'rgba(242,230,200,0.5)', marginLeft: '0.25em' }}>様</span>
-            </p>
-          </div>
-
-          {/* 会員ID — center(70%, 61%) */}
-          <div style={{
-            position: 'absolute',
-            top: '61%',
-            left: '41%',
-            right: '3%',
-            transform: 'translateY(-50%)',
-            textAlign: 'center',
-          }}>
-            <p style={{ fontFamily: 'monospace', fontSize: '1.6vw', color: 'rgba(242,230,200,0.5)', letterSpacing: '0.03em', wordBreak: 'break-all', lineHeight: 1.4 }}>
-              {shortId}
-            </p>
-          </div>
-
-          {/* 入会日 — center(26.9%, 72.3%) */}
-          <div style={{
-            position: 'absolute',
-            top: '72.3%',
-            left: '3%',
-            right: '50%',
-            transform: 'translateY(-50%)',
-            textAlign: 'center',
-          }}>
-            <p style={{ fontSize: '2.4vw', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
-              {issuedDateFmt}
-            </p>
-          </div>
-
-          {/* 最終来店日 — center(72.8%, 72.3%) */}
-          <div style={{
-            position: 'absolute',
-            top: '72.3%',
-            left: '50%',
-            right: '3%',
-            transform: 'translateY(-50%)',
-            textAlign: 'center',
-          }}>
-            <p style={{ fontSize: '2.4vw', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
-              {lastVisitFmt}
-            </p>
-          </div>
-
-          {/* 下段非表示 (来店回数 · 施術メニュー · 次回推奨日 を隠蔽) */}
-          <div style={{
-            position: 'absolute',
-            top: '74%',
-            left: 0, right: 0, bottom: 0,
-            background: 'linear-gradient(to bottom, transparent 0%, #0A0907 14%)',
-            pointerEvents: 'none',
-            zIndex: 2,
-          }} />
         </motion.div>
 
         <p style={{

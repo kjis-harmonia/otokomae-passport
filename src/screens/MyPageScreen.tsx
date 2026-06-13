@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { X, Share2, CalendarDays } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { MemberQrModal } from '../components/MemberQrModal'
-import passportTemplate from '../assets/passport/otokomae-passport-template.png'
+import { PassportCard } from '../components/PassportCard'
 import { getMemberIssuedAt, getUserId } from '../utils/userId'
 import { saveMemberStatus } from '../utils/storage'
 import { supabase } from '../lib/supabase'
@@ -259,14 +259,6 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
 
   const fmtCountdown    = `${Math.floor(qrSecondsLeft / 60)}:${String(qrSecondsLeft % 60).padStart(2, '0')}`
   const issuedAt        = getMemberIssuedAt()
-  const issuedDateFmt   = issuedAt
-    ? new Date(issuedAt).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    : '—'
-  const lastVisitFmt    = lastVisitDate
-    ? new Date(lastVisitDate + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    : '—'
-  const qrMemberPayload = JSON.stringify({ type: 'ginjiro-member', userId, name: memberStatus.memberName, issuedAt })
-  const shortUserId     = userId.length > 22 ? userId.slice(0, 22) + '…' : userId
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -512,12 +504,14 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
         <div style={{ padding: '16px 16px 4px' }}>
           <p style={{ fontSize: 8, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.36)', textTransform: 'uppercase', marginBottom: 8 }}>① 男前証</p>
 
-          {/* Template card — tap to expand (calibrate mode: shows coordinates) */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => { if (!showCalibrate) setShowMemberQr(true) }}
-            onKeyDown={e => e.key === 'Enter' && !showCalibrate && setShowMemberQr(true)}
+          <PassportCard
+            userId={userId}
+            name={memberStatus.memberName}
+            issuedAt={issuedAt}
+            lastVisitDate={lastVisitDate}
+            onClick={() => setShowMemberQr(true)}
+            showCalibrate={showCalibrate}
+            calibCoords={calibCoords}
             onPointerMove={e => {
               if (!showCalibrate) return
               const rect = e.currentTarget.getBoundingClientRect()
@@ -527,157 +521,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               })
             }}
             onPointerLeave={() => showCalibrate && setCalibCoords(null)}
-            style={{
-              position: 'relative',
-              width: '100%',
-              borderRadius: 12,
-              overflow: 'hidden',
-              cursor: showCalibrate ? 'crosshair' : 'pointer',
-              boxShadow: showCalibrate
-                ? '0 0 0 2px rgba(0,255,255,0.6)'
-                : '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,162,74,0.2)',
-              WebkitTapHighlightColor: 'transparent',
-            }}
-          >
-            <img
-              src={passportTemplate}
-              alt="男前証"
-              draggable={false}
-              style={{ width: '100%', display: 'block', userSelect: 'none' }}
-            />
-
-            {/* QR — center(30.5%, 53%), 27% wide (-15% from 32%) */}
-            <div style={{
-              position: 'absolute',
-              top: '45.5%',
-              left: '17%',
-              width: '27%',
-              background: '#FFFFFF',
-              padding: '5px',
-              borderRadius: 3,
-              boxSizing: 'border-box',
-            }}>
-              <QRCodeSVG
-                value={qrMemberPayload}
-                size={200}
-                level="M"
-                marginSize={0}
-                style={{ width: '100%', height: 'auto', display: 'block' }}
-              />
-            </div>
-
-            {/* 会員名 + 様 — center(70%, 55%), vw scale */}
-            <div style={{
-              position: 'absolute',
-              top: '55%',
-              left: '41%',
-              right: '3%',
-              transform: 'translateY(-50%)',
-              textAlign: 'center',
-            }}>
-              <p style={{ fontFamily: SERIF, fontSize: '4.5vw', fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
-                {memberStatus.memberName}<span style={{ fontSize: '3vw', fontWeight: 400, color: 'rgba(242,230,200,0.5)', marginLeft: '0.25em' }}>様</span>
-              </p>
-            </div>
-
-            {/* 会員ID — center(70%, 61%), -15% font */}
-            <div style={{
-              position: 'absolute',
-              top: '61%',
-              left: '41%',
-              right: '3%',
-              transform: 'translateY(-50%)',
-              textAlign: 'center',
-            }}>
-              <p style={{ fontFamily: 'monospace', fontSize: '1.6vw', color: 'rgba(242,230,200,0.5)', letterSpacing: '0.03em', wordBreak: 'break-all', lineHeight: 1.4 }}>
-                {shortUserId}
-              </p>
-            </div>
-
-            {/* 入会日 — center(26.9%, 72.3%) */}
-            <div style={{
-              position: 'absolute',
-              top: '72.3%',
-              left: '3%',
-              right: '50%',
-              transform: 'translateY(-50%)',
-              textAlign: 'center',
-            }}>
-              <p style={{ fontSize: '2.4vw', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
-                {issuedDateFmt}
-              </p>
-            </div>
-
-            {/* 最終来店日 — center(72.8%, 72.3%) */}
-            <div style={{
-              position: 'absolute',
-              top: '72.3%',
-              left: '50%',
-              right: '3%',
-              transform: 'translateY(-50%)',
-              textAlign: 'center',
-            }}>
-              <p style={{ fontSize: '2.4vw', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
-                {lastVisitFmt}
-              </p>
-            </div>
-
-            {/* 下段非表示 (来店回数 · 施術メニュー · 次回推奨日 を隠蔽) */}
-            <div style={{
-              position: 'absolute',
-              top: '74%',
-              left: 0, right: 0, bottom: 0,
-              background: 'linear-gradient(to bottom, transparent 0%, #0A0907 14%)',
-              pointerEvents: 'none',
-              zIndex: 2,
-            }} />
-
-            {/* ── DEV: キャリブレーショングリッド ────────────────────────── */}
-            {showCalibrate && (
-              <>
-                {/* 横線 5% 刻み */}
-                {Array.from({ length: 19 }, (_, i) => (i + 1) * 5).map(pct => (
-                  <div key={`h${pct}`} style={{
-                    position: 'absolute', top: `${pct}%`, left: 0, right: 0,
-                    height: 1, pointerEvents: 'none', zIndex: 8,
-                    background: pct % 10 === 0 ? 'rgba(0,255,255,0.65)' : 'rgba(0,255,255,0.25)',
-                  }}>
-                    <span style={{ position: 'absolute', right: 2, top: -8, fontSize: 7, color: 'cyan', background: 'rgba(0,0,0,0.75)', padding: '0 2px', lineHeight: 1.4 }}>{pct}%</span>
-                  </div>
-                ))}
-                {/* 縦線 10% 刻み */}
-                {Array.from({ length: 9 }, (_, i) => (i + 1) * 10).map(pct => (
-                  <div key={`v${pct}`} style={{
-                    position: 'absolute', left: `${pct}%`, top: 0, bottom: 0,
-                    width: 1, pointerEvents: 'none', zIndex: 8,
-                    background: 'rgba(255,255,0,0.35)',
-                  }}>
-                    <span style={{ position: 'absolute', top: 2, left: 2, fontSize: 7, color: 'yellow', background: 'rgba(0,0,0,0.75)', padding: '0 2px', lineHeight: 1.4, whiteSpace: 'nowrap' }}>{pct}%</span>
-                  </div>
-                ))}
-                {/* ライブ座標クロスヘア */}
-                {calibCoords && (
-                  <>
-                    <div style={{ position: 'absolute', top: `${calibCoords.y}%`, left: 0, right: 0, height: 1, background: 'rgba(255,0,80,0.9)', pointerEvents: 'none', zIndex: 9 }} />
-                    <div style={{ position: 'absolute', left: `${calibCoords.x}%`, top: 0, bottom: 0, width: 1, background: 'rgba(255,0,80,0.9)', pointerEvents: 'none', zIndex: 9 }} />
-                    <div style={{
-                      position: 'absolute',
-                      top: `${calibCoords.y}%`,
-                      left: `${Math.min(calibCoords.x, 60)}%`,
-                      transform: `translate(${calibCoords.x > 60 ? '-108%' : '8px'}, -110%)`,
-                      background: 'rgba(0,0,0,0.92)', color: '#0F0', fontSize: 11,
-                      fontFamily: 'monospace', fontWeight: 700,
-                      padding: '3px 7px', borderRadius: 4,
-                      pointerEvents: 'none', zIndex: 10, whiteSpace: 'nowrap',
-                      border: '1px solid rgba(0,255,0,0.3)',
-                    }}>
-                      x:{calibCoords.x}% / y:{calibCoords.y}%
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
+          />
 
           {/* 保有チケット枚数（テスト環境: 固定99） */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 16, padding: '10px 4px 6px', borderTop: '1px solid rgba(201,162,74,0.1)', marginTop: 10 }}>
