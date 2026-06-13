@@ -112,17 +112,15 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
 
           {/* ── Dynamic overlays ───────────────────────────────────────────── */}
 
-          {/* QR code
-              Template QR枠: 画像左列 (x≈3.5-39.5%, y≈47.8-65.5%)
-              白背景+8pxパディングで枠内に収める */}
+          {/* QR code — centered in placeholder box (x≈3-40%, y≈47.8-66%) */}
           <div
             style={{
               position: 'absolute',
-              top: '48.5%',
-              left: '3.5%',
-              width: '36%',
+              top: '48%',
+              left: '5.5%',
+              width: '32%',
               background: '#FFFFFF',
-              padding: '8px',
+              padding: '6px',
               borderRadius: 4,
               boxSizing: 'border-box',
             }}
@@ -230,7 +228,7 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
           fontSize: 10, color: 'rgba(201,162,74,0.3)', marginTop: 18,
           letterSpacing: '0.12em', textAlign: 'center', lineHeight: 1.7,
         }}>
-          店舗でこのQRをご提示ください
+          会計時にスタッフへ提示してください
         </p>
       </div>
     </motion.div>

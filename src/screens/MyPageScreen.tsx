@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { MemberStatus } from '../data/brand'
 import { AnimatePresence, motion } from 'framer-motion'
-import { QrCode, X, Share2, CalendarDays } from 'lucide-react'
+import { X, Share2, CalendarDays } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { MemberQrModal } from '../components/MemberQrModal'
+import passportTemplate from '../assets/passport/otokomae-passport-template.png'
 import { getMemberIssuedAt, getUserId } from '../utils/userId'
 import { saveMemberStatus } from '../utils/storage'
 import { supabase } from '../lib/supabase'
@@ -252,7 +253,16 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const maintenanceInfo      = lastVisitDate === undefined ? null : computeMaintenance(lastVisitDate)
   const isMaintenanceLoading = lastVisitDate === undefined
 
-  const fmtCountdown = `${Math.floor(qrSecondsLeft / 60)}:${String(qrSecondsLeft % 60).padStart(2, '0')}`
+  const fmtCountdown    = `${Math.floor(qrSecondsLeft / 60)}:${String(qrSecondsLeft % 60).padStart(2, '0')}`
+  const issuedAt        = getMemberIssuedAt()
+  const issuedDateFmt   = issuedAt
+    ? new Date(issuedAt).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    : '—'
+  const lastVisitFmt    = lastVisitDate
+    ? new Date(lastVisitDate + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    : '—'
+  const qrMemberPayload = JSON.stringify({ type: 'ginjiro-member', userId, name: memberStatus.memberName, issuedAt })
+  const shortUserId     = userId.length > 22 ? userId.slice(0, 22) + '…' : userId
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -492,54 +502,98 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
           Main content
       ════════════════════════════════════ */}
       <div>
-        {/* ── Header ── */}
-        <div style={{ padding: '40px 24px 20px', textAlign: 'center' }}>
-          <div style={{ height: '0.5px', background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.55) 20%, rgba(201,162,74,0.55) 80%, transparent)', marginBottom: 18 }} />
-          <p style={{ fontSize: 9, letterSpacing: '0.38em', color: 'rgba(201,162,74,0.38)', marginBottom: 7, textTransform: 'uppercase' }}>Ginjiro Official</p>
-          <h1 style={{ fontFamily: SERIF, fontSize: 36, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.1em', margin: '0 0 4px', lineHeight: 1, textShadow: '0 0 30px rgba(201,162,74,0.15)' }}>銀二郎</h1>
-          <p style={{ fontSize: 8, letterSpacing: '0.3em', color: 'rgba(201,162,74,0.26)', textTransform: 'uppercase' }}>Otoko-Mae Passport</p>
-          <div style={{ height: '0.5px', background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.55) 20%, rgba(201,162,74,0.55) 80%, transparent)', marginTop: 18 }} />
-        </div>
-
         {/* ══════════════════════
-            Block ① 男前証
+            Block ① 男前証（inline passport template）
         ══════════════════════ */}
-        <div style={{ padding: '0 16px 10px' }}>
-          <p style={{ fontSize: 8, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.36)', textTransform: 'uppercase' }}>① 男前証</p>
-        </div>
+        <div style={{ padding: '16px 16px 4px' }}>
+          <p style={{ fontSize: 8, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.36)', textTransform: 'uppercase', marginBottom: 8 }}>① 男前証</p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 22 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.46, ease: 'easeOut' }}
-          style={{ margin: '0 16px', borderRadius: 22, overflow: 'hidden', position: 'relative', background: 'radial-gradient(circle at 84% 14%, rgba(139,26,42,0.28), transparent 42%), linear-gradient(155deg, #1C0F0B 0%, #0B0505 52%, #150A10 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 28px 60px rgba(0,0,0,0.82), inset 0 1px 0 rgba(242,230,200,0.09)' }}
-        >
-          <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.55) 12%, #E8C547 50%, rgba(201,162,74,0.55) 88%, transparent)' }} />
-          {([{ top: 10, left: 10 }, { top: 10, right: 10 }, { bottom: 10, left: 10 }, { bottom: 10, right: 10 }] as const).map((pos, i) => {
-            const borders = [
-              { borderTop: '1px solid rgba(201,162,74,0.32)', borderLeft: '1px solid rgba(201,162,74,0.32)' },
-              { borderTop: '1px solid rgba(201,162,74,0.32)', borderRight: '1px solid rgba(201,162,74,0.32)' },
-              { borderBottom: '1px solid rgba(201,162,74,0.32)', borderLeft: '1px solid rgba(201,162,74,0.32)' },
-              { borderBottom: '1px solid rgba(201,162,74,0.32)', borderRight: '1px solid rgba(201,162,74,0.32)' },
-            ][i]
-            return <div key={i} style={{ position: 'absolute', width: 14, height: 14, ...pos, ...borders }} />
-          })}
-          <div style={{ padding: '22px 22px 20px' }}>
-            <p style={{ fontSize: 8, letterSpacing: '0.3em', color: 'rgba(201,162,74,0.36)', textTransform: 'uppercase', marginBottom: 14 }}>Ginjiro Official Member</p>
-            <p style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.06em', lineHeight: 1, marginBottom: 4 }}>
-              {memberStatus.memberName}
-              <span style={{ fontFamily: SERIF, fontSize: 14, marginLeft: 7, color: 'rgba(242,230,200,0.4)' }}>様</span>
-            </p>
-            <div style={{ height: '0.5px', background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.28), transparent)', margin: '14px 0' }} />
-            <p style={{ fontSize: 8, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.3)', marginBottom: 5, textTransform: 'uppercase' }}>Member ID</p>
-            <p style={{ fontFamily: 'monospace', fontSize: 10, color: 'rgba(242,230,200,0.3)', letterSpacing: '0.06em', wordBreak: 'break-all', marginBottom: 18 }}>{userId}</p>
-            <button type="button" onClick={() => setShowMemberQr(true)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '15px 0', borderRadius: 14, background: 'linear-gradient(135deg, rgba(201,162,74,0.13) 0%, rgba(139,26,42,0.1) 100%)', border: '1px solid rgba(201,162,74,0.36)', cursor: 'pointer' }}>
-              <QrCode size={16} strokeWidth={1.6} style={{ color: 'rgba(201,162,74,0.7)' }} />
-              <span style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, color: '#C9A24A', letterSpacing: '0.22em' }}>男前証を表示</span>
-            </button>
+          {/* Template card — tap to expand full-screen */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setShowMemberQr(true)}
+            onKeyDown={e => e.key === 'Enter' && setShowMemberQr(true)}
+            style={{
+              position: 'relative',
+              width: '100%',
+              borderRadius: 12,
+              overflow: 'hidden',
+              cursor: 'pointer',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,162,74,0.2)',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            <img
+              src={passportTemplate}
+              alt="男前証"
+              draggable={false}
+              style={{ width: '100%', display: 'block', userSelect: 'none' }}
+            />
+
+            {/* QR code — centered in placeholder, ~17% smaller than modal (32% vs 36%) */}
+            <div style={{
+              position: 'absolute',
+              top: '48%',
+              left: '5.5%',
+              width: '32%',
+              background: '#FFFFFF',
+              padding: '6px',
+              borderRadius: 4,
+              boxSizing: 'border-box',
+            }}>
+              <QRCodeSVG
+                value={qrMemberPayload}
+                size={200}
+                level="M"
+                marginSize={0}
+                style={{ width: '100%', height: 'auto', display: 'block' }}
+              />
+            </div>
+
+            {/* 会員名 */}
+            <div style={{ position: 'absolute', top: '53.5%', left: '42%', right: '11%', textAlign: 'right' }}>
+              <p style={{ fontFamily: SERIF, fontSize: 'clamp(11px, 3.2vw, 14px)', fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1 }}>
+                {memberStatus.memberName}
+              </p>
+            </div>
+
+            {/* 会員ID */}
+            <div style={{ position: 'absolute', top: '62%', left: '42%', right: '4%' }}>
+              <p style={{ fontFamily: 'monospace', fontSize: 'clamp(7px, 1.9vw, 9px)', color: 'rgba(242,230,200,0.7)', letterSpacing: '0.03em', wordBreak: 'break-all', lineHeight: 1.3 }}>
+                {shortUserId}
+              </p>
+            </div>
+
+            {/* 入会日 */}
+            <div style={{ position: 'absolute', top: '71%', left: '4%', right: '54%', textAlign: 'center' }}>
+              <p style={{ fontSize: 'clamp(9px, 2.6vw, 11px)', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
+                {issuedDateFmt}
+              </p>
+            </div>
+
+            {/* 最終来店日 */}
+            <div style={{ position: 'absolute', top: '71%', left: '50%', right: '4%', textAlign: 'center' }}>
+              <p style={{ fontSize: 'clamp(9px, 2.6vw, 11px)', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
+                {lastVisitFmt}
+              </p>
+            </div>
           </div>
-        </motion.div>
+
+          {/* 保有チケット枚数（テスト環境: 固定99） */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, padding: '10px 4px 6px', borderTop: '1px solid rgba(201,162,74,0.1)', marginTop: 10 }}>
+            {['漢トク券', '割引券', '招待券'].map(label => (
+              <span key={label} style={{ fontFamily: SERIF, fontSize: 11, color: 'rgba(201,162,74,0.7)', letterSpacing: '0.05em' }}>
+                {label} ×99
+              </span>
+            ))}
+          </div>
+
+          {/* フッターテキスト（修正⑧） */}
+          <p style={{ textAlign: 'center', fontSize: 9, color: 'rgba(201,162,74,0.28)', letterSpacing: '0.12em', marginTop: 4, marginBottom: 4 }}>
+            会計時にスタッフへ提示してください
+          </p>
+        </div>
 
         {/* ══════════════════════
             Block ② メンテナンス
