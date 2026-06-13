@@ -1,32 +1,11 @@
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { useScrollLock } from '../utils/useScrollLock'
-import { StyleCardImage } from './StyleCardPlaceholder'
-import { resolveStyleImageUrl, resolveStyleImagePosition, resolveDetailTopOpacity } from '../data/styleImages'
+import { resolveStyleImageUrl, resolveDetailTopOpacity } from '../data/styleImages'
 import { getReserveUrl } from '../data/reserveLinks'
 import type { StyleCard } from '../data/styleCard'
-import { STATS_KEYS, STATS_LABELS } from '../data/styleCard'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
-
-function StarRating({ value }: { value: number }) {
-  return (
-    <div className="flex gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <span
-          key={i}
-          style={{
-            fontSize: 13,
-            color: i <= value ? '#C9A24A' : 'rgba(201,162,74,0.16)',
-            lineHeight: 1,
-          }}
-        >
-          ★
-        </span>
-      ))}
-    </div>
-  )
-}
 
 export function StyleDetailModal({
   style,
@@ -72,21 +51,27 @@ export function StyleDetailModal({
         onClick={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       >
-        {/* Hero image */}
-        <div className="relative flex-shrink-0 w-full" style={{ height: '50vh' }}>
-          <StyleCardImage
+        {/* Hero image — full display, no cropping */}
+        <div className="relative flex-shrink-0 w-full" style={{ background: '#050302' }}>
+          <img
             src={resolveStyleImageUrl(style)}
             alt={style.title}
-            className="absolute inset-0 w-full h-full"
-            imgStyle={{ objectFit: 'cover', objectPosition: resolveStyleImagePosition(style) }}
-            size="lg"
+            style={{
+              width: '100%',
+              height: 'auto',
+              maxHeight: '72dvh',
+              minHeight: '40dvh',
+              display: 'block',
+              objectFit: 'contain',
+            }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
           {/* Gradient: top-dim + strong bottom */}
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
               background:
-                `linear-gradient(180deg, rgba(5,3,2,${topOpacity}) 0%, rgba(5,3,2,0.0) 30%, rgba(5,3,2,0.0) 42%, rgba(5,3,2,0.86) 72%, rgba(5,3,2,1.0) 100%)`,
+                `linear-gradient(180deg, rgba(5,3,2,${topOpacity}) 0%, rgba(5,3,2,0.0) 30%, rgba(5,3,2,0.0) 52%, rgba(5,3,2,0.82) 76%, rgba(5,3,2,1.0) 100%)`,
             }}
           />
           {/* Close button */}
@@ -148,45 +133,6 @@ export function StyleDetailModal({
           }}
         >
           <div className="px-5 pt-6 space-y-5">
-            {/* 能力値 */}
-            <div
-              style={{
-                borderRadius: 16,
-                background: 'linear-gradient(145deg, rgba(22,9,7,0.92), rgba(10,5,4,0.96))',
-                border: '1px solid rgba(201,162,74,0.14)',
-                padding: '18px 20px',
-              }}
-            >
-              <p
-                style={{
-                  fontSize: 9,
-                  letterSpacing: '0.26em',
-                  textTransform: 'uppercase',
-                  color: 'rgba(201,162,74,0.44)',
-                  marginBottom: 14,
-                }}
-              >
-                能力値
-              </p>
-              <div className="space-y-3.5">
-                {STATS_KEYS.map((key) => (
-                  <div key={key} className="flex items-center justify-between">
-                    <span
-                      style={{
-                        fontSize: 14,
-                        color: 'rgba(242,230,200,0.74)',
-                        fontFamily: SERIF,
-                        letterSpacing: '0.06em',
-                      }}
-                    >
-                      {STATS_LABELS[key]}
-                    </span>
-                    <StarRating value={style.stats[key]} />
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* こんな人におすすめ */}
             {style.tags.length > 0 && (
               <div

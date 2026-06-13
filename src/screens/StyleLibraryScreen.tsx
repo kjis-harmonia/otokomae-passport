@@ -39,11 +39,8 @@ const UI_CATEGORIES = [
 
 // ── Image helpers (unchanged) ─────────────────────────────────────────────────
 
-function getCardImgStyle(style: StyleCard): React.CSSProperties {
-  if (style.title === 'トラック野郎御用達') {
-    return { objectFit: 'contain', objectPosition: 'center center', transform: 'scale(0.94)' }
-  }
-  return { objectFit: 'cover', objectPosition: resolveStyleImagePosition(style) }
+function getCardImgStyle(_style: StyleCard): React.CSSProperties {
+  return { objectFit: 'contain', objectPosition: 'center center' }
 }
 
 function getCardOverlay(style: StyleCard): string {
