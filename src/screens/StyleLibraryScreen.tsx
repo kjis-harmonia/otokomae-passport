@@ -611,19 +611,22 @@ function StyleReelView({
                     </button>
                   )}
                 </div>
-                {/* Left-swipe-to-reserve hint */}
+                {/* 一覧に戻る */}
                 <button
                   type="button"
-                  onClick={() => setShowReserveSheet(true)}
+                  onClick={onClose}
                   style={{
-                    background: 'none', border: 'none', padding: '4px 0',
+                    background: 'rgba(5,3,2,0.6)', border: '1px solid rgba(201,162,74,0.28)',
+                    borderRadius: 99, padding: '7px 14px',
                     cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 5,
-                    color: 'rgba(201,162,74,0.35)',
+                    color: 'rgba(242,230,200,0.7)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
                   }}
                 >
-                  <span style={{ fontSize: 12, lineHeight: 1 }}>←</span>
-                  <span style={{ fontSize: 11, letterSpacing: '0.12em' }}>予約</span>
+                  <span style={{ fontSize: 14, lineHeight: 1 }}>←</span>
+                  <span style={{ fontSize: 12, letterSpacing: '0.08em', fontWeight: 600 }}>一覧に戻る</span>
                 </button>
               </div>
             </div>
