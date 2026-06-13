@@ -3,7 +3,7 @@ export type TicketType = 'coupon' | 'discount' | 'cut-ticket'
 export const TICKET_TYPE_LABELS: Record<TicketType, string> = {
   coupon:       'クーポン',
   discount:     '割引券',
-  'cut-ticket': 'カット券',
+  'cut-ticket': '漢トク券',
 }
 
 export const TICKET_TYPE_COLORS: Record<TicketType, { bg: string; border: string; text: string }> = {

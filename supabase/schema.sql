@@ -29,3 +29,20 @@ create policy "allow_all" on public.tickets
   for all
   using (true)
   with check (true);
+
+-- ── maintenance_visits: スタッフ端末QRスキャンでのみ更新される来店日 ──────────
+-- 顧客側からは書き込めない（RLSで管理）。
+-- last_visit_date が 14 日以内ならメンテナンスカット対象。
+
+create table if not exists public.maintenance_visits (
+  user_id         text        primary key,
+  last_visit_date date        not null,
+  updated_at      timestamptz default now() not null
+);
+
+alter table public.maintenance_visits enable row level security;
+
+create policy "allow_all" on public.maintenance_visits
+  for all
+  using (true)
+  with check (true);
