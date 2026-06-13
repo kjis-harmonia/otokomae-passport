@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage, StyleCardPlaceholder } from '../components/StyleCardPlaceholder'
 import { resolveStyleImageUrl } from '../data/styleImages'
@@ -86,7 +86,7 @@ function LibraryHero({ style, onTap }: { style: StyleCard; onTap: () => void }) 
       <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
         <p
           style={{
-            fontSize: 8, letterSpacing: '0.28em',
+            fontSize: 9, letterSpacing: '0.28em',
             color: 'rgba(201,162,74,0.72)', marginBottom: 5,
           }}
         >
@@ -94,7 +94,7 @@ function LibraryHero({ style, onTap }: { style: StyleCard; onTap: () => void }) 
         </p>
         <h2
           style={{
-            fontFamily: SERIF, fontSize: 28, fontWeight: 700,
+            fontFamily: SERIF, fontSize: 32, fontWeight: 700,
             color: '#F2E6C8', lineHeight: 1.12, marginBottom: 6,
             textShadow: '0 2px 20px rgba(0,0,0,0.8)',
           }}
@@ -104,7 +104,7 @@ function LibraryHero({ style, onTap }: { style: StyleCard; onTap: () => void }) 
         {style.catchCopy && (
           <p
             style={{
-              fontSize: 11, color: 'rgba(242,230,200,0.56)',
+              fontSize: 13, color: 'rgba(242,230,200,0.56)',
               lineHeight: 1.6, marginBottom: 14,
               textShadow: '0 1px 8px rgba(0,0,0,0.9)',
             }}
@@ -119,7 +119,7 @@ function LibraryHero({ style, onTap }: { style: StyleCard; onTap: () => void }) 
             background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
             border: '1px solid rgba(201,162,74,0.44)',
             boxShadow: '0 3px 14px rgba(107,15,18,0.45)',
-            fontFamily: SERIF, fontSize: 12, fontWeight: 700,
+            fontFamily: SERIF, fontSize: 14, fontWeight: 700,
             letterSpacing: '0.18em', color: '#F2E6C8',
           }}
         >
@@ -171,14 +171,14 @@ function StyleThumb({
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 9px 10px' }}>
         <p
           style={{
-            fontFamily: SERIF, fontSize: 12, fontWeight: 700,
+            fontFamily: SERIF, fontSize: 14, fontWeight: 700,
             color: '#F2E6C8', lineHeight: 1.22,
             textShadow: '0 1px 8px rgba(0,0,0,0.95)',
           }}
         >
           {style.title}
         </p>
-        <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.84)', marginTop: 3 }}>
+        <p style={{ fontSize: 12, color: 'rgba(201,162,74,0.84)', marginTop: 3 }}>
           ¥{style.price.toLocaleString()}
         </p>
       </div>
@@ -215,7 +215,7 @@ function StyleRow({
       >
         <h2
           style={{
-            fontFamily: SERIF, fontSize: 18, fontWeight: 700,
+            fontFamily: SERIF, fontSize: 21, fontWeight: 700,
             color: '#F2E6C8', letterSpacing: '0.04em',
           }}
         >
@@ -223,7 +223,7 @@ function StyleRow({
         </h2>
         <span
           style={{
-            fontSize: 7.5, letterSpacing: '0.24em',
+            fontSize: 9, letterSpacing: '0.24em',
             color: 'rgba(201,162,74,0.58)', fontWeight: 700,
           }}
         >
@@ -522,33 +522,33 @@ function StyleReelView({
               className="absolute bottom-0 left-0 right-0"
               style={{
                 padding: '0 20px',
-                paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))',
+                paddingBottom: 'max(28px, env(safe-area-inset-bottom, 28px))',
               }}
             >
-              <p style={{ fontSize: 9, letterSpacing: '0.26em', color: 'rgba(201,162,74,0.6)', marginBottom: 8 }}>
+              <p style={{ fontSize: 11, letterSpacing: '0.26em', color: 'rgba(201,162,74,0.6)', marginBottom: 8 }}>
                 GINJIRO STYLE
               </p>
               <h2
                 style={{
-                  fontFamily: SERIF, fontSize: 28, fontWeight: 700,
-                  color: '#F2E6C8', lineHeight: 1.15, marginBottom: 6,
+                  fontFamily: SERIF, fontSize: 32, fontWeight: 700,
+                  color: '#F2E6C8', lineHeight: 1.15, marginBottom: 8,
                   letterSpacing: '0.04em', textShadow: '0 2px 20px rgba(0,0,0,0.8)',
                 }}
               >
                 {style.title}
               </h2>
               {style.catchCopy && (
-                <p style={{ fontSize: 12, color: 'rgba(201,162,74,0.7)', fontStyle: 'italic', lineHeight: 1.5, marginBottom: 12 }}>
+                <p style={{ fontSize: 14, color: 'rgba(201,162,74,0.7)', fontStyle: 'italic', lineHeight: 1.5, marginBottom: 14 }}>
                   {style.catchCopy}
                 </p>
               )}
               {style.tags.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
                   {style.tags.slice(0, 3).map(tag => (
                     <span
                       key={tag}
                       style={{
-                        fontSize: 10, padding: '3px 10px', borderRadius: 99,
+                        fontSize: 12, padding: '4px 12px', borderRadius: 99,
                         background: 'rgba(201,162,74,0.09)',
                         border: '1px solid rgba(201,162,74,0.24)',
                         color: 'rgba(242,230,200,0.6)',
@@ -563,8 +563,8 @@ function StyleReelView({
               {/* Price + reserve */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flexShrink: 0 }}>
-                  <p style={{ fontSize: 8, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.46)', marginBottom: 1 }}>PRICE</p>
-                  <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#C9A24A' }}>
+                  <p style={{ fontSize: 10, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.46)', marginBottom: 2 }}>PRICE</p>
+                  <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#C9A24A' }}>
                     ¥{style.price.toLocaleString()}
                   </p>
                 </div>
@@ -574,11 +574,11 @@ function StyleReelView({
                     if (reserveUrl) window.open(reserveUrl, '_blank', 'noopener,noreferrer')
                   }}
                   style={{
-                    flex: 1, padding: '13px 0', borderRadius: 14,
+                    flex: 1, padding: '15px 0', borderRadius: 14,
                     background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
                     border: '1px solid rgba(201,162,74,0.44)',
                     boxShadow: '0 4px 20px rgba(107,15,18,0.5)',
-                    fontFamily: SERIF, fontSize: 13, fontWeight: 700,
+                    fontFamily: SERIF, fontSize: 16, fontWeight: 700,
                     letterSpacing: '0.2em', color: '#F2E6C8', cursor: 'pointer',
                   }}
                 >
@@ -589,25 +589,25 @@ function StyleReelView({
               <div
                 style={{
                   display: 'flex', justifyContent: 'space-between',
-                  alignItems: 'center', marginTop: 14,
+                  alignItems: 'center', marginTop: 16,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
                   {idx > 0 && (
                     <button type="button" onClick={() => navigate(1)}
-                      style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.3)', fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                      <span style={{ fontSize: 12, lineHeight: 1 }}>↑</span>
+                      style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.35)', fontSize: 11, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <span style={{ fontSize: 14, lineHeight: 1 }}>↑</span>
                       <span>前へ</span>
                     </button>
                   )}
-                  <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.3)', letterSpacing: '0.12em' }}>
+                  <p style={{ fontSize: 12, color: 'rgba(201,162,74,0.35)', letterSpacing: '0.12em' }}>
                     {idx + 1} / {styles.length}
                   </p>
                   {idx < styles.length - 1 && (
                     <button type="button" onClick={() => navigate(-1)}
-                      style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.3)', fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.35)', fontSize: 11, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                       <span>次へ</span>
-                      <span style={{ fontSize: 12, lineHeight: 1 }}>↓</span>
+                      <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span>
                     </button>
                   )}
                 </div>
@@ -618,12 +618,12 @@ function StyleReelView({
                   style={{
                     background: 'none', border: 'none', padding: '4px 0',
                     cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 4,
-                    color: 'rgba(201,162,74,0.32)',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    color: 'rgba(201,162,74,0.35)',
                   }}
                 >
-                  <span style={{ fontSize: 10, lineHeight: 1 }}>←</span>
-                  <span style={{ fontSize: 9, letterSpacing: '0.12em' }}>予約</span>
+                  <span style={{ fontSize: 12, lineHeight: 1 }}>←</span>
+                  <span style={{ fontSize: 11, letterSpacing: '0.12em' }}>予約</span>
                 </button>
               </div>
             </div>
@@ -642,27 +642,29 @@ function StyleReelView({
         )}
       </AnimatePresence>
 
-      {/* Close button — fixed above all animated cards */}
+      {/* Back button — fixed above all animated cards */}
       <button
         type="button"
         onClick={onClose}
-        aria-label="閉じる"
+        aria-label="戻る"
         style={{
           position: 'absolute',
           top: 'max(14px, env(safe-area-inset-top, 14px))',
-          left: 16,
+          left: 14,
           zIndex: 200,
-          width: 42, height: 42, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', gap: 4,
+          padding: '9px 16px 9px 10px',
+          borderRadius: 99,
           background: 'rgba(5,3,2,0.72)',
           border: '1px solid rgba(201,162,74,0.32)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#F2E6C8', cursor: 'pointer',
           boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
         }}
       >
-        <X size={18} strokeWidth={2} />
+        <ChevronLeft size={18} strokeWidth={2.5} />
+        <span style={{ fontSize: 14, letterSpacing: '0.06em', fontWeight: 600, lineHeight: 1 }}>戻る</span>
       </button>
     </motion.div>
   )
