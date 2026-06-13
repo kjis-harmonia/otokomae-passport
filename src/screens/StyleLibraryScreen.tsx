@@ -475,29 +475,28 @@ function StyleReelView({
         </AnimatePresence>
       </div>
 
-      {/* Top bar — stays fixed during transitions */}
-      <div
-        className="absolute top-0 left-0 right-0 flex justify-between items-center pointer-events-none"
-        style={{ zIndex: 10, padding: '14px 16px', paddingTop: 'max(14px, env(safe-area-inset-top, 14px))' }}
+      {/* Close button — fixed above all animated cards */}
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="閉じる"
+        style={{
+          position: 'absolute',
+          top: 'max(14px, env(safe-area-inset-top, 14px))',
+          left: 16,
+          zIndex: 200,
+          width: 42, height: 42, borderRadius: '50%',
+          background: 'rgba(5,3,2,0.72)',
+          border: '1px solid rgba(201,162,74,0.32)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#F2E6C8', cursor: 'pointer',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+        }}
       >
-        <button
-          type="button"
-          onClick={onClose}
-          className="pointer-events-auto"
-          style={{
-            width: 38, height: 38, borderRadius: '50%',
-            background: 'rgba(5,3,2,0.58)',
-            border: '1px solid rgba(201,162,74,0.2)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'rgba(242,230,200,0.82)', cursor: 'pointer',
-          }}
-          aria-label="閉じる"
-        >
-          <X size={16} />
-        </button>
-      </div>
+        <X size={18} strokeWidth={2} />
+      </button>
     </motion.div>
   )
 }
