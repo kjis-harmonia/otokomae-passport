@@ -546,15 +546,15 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               style={{ width: '100%', display: 'block', userSelect: 'none' }}
             />
 
-            {/* QR code */}
+            {/* QR — center(30.5%, 53%), 27% wide (-15% from 32%) */}
             <div style={{
               position: 'absolute',
-              top: '48%',
-              left: '5.5%',
-              width: '32%',
+              top: '45.5%',
+              left: '17%',
+              width: '27%',
               background: '#FFFFFF',
-              padding: '6px',
-              borderRadius: 4,
+              padding: '5px',
+              borderRadius: 3,
               boxSizing: 'border-box',
             }}>
               <QRCodeSVG
@@ -566,33 +566,71 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               />
             </div>
 
-            {/* 会員名 */}
-            <div style={{ position: 'absolute', top: '53.5%', left: '42%', right: '11%', textAlign: 'right' }}>
-              <p style={{ fontFamily: SERIF, fontSize: 'clamp(11px, 3.2vw, 14px)', fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1 }}>
-                {memberStatus.memberName}
+            {/* 会員名 + 様 — center(70%, 55%), vw scale */}
+            <div style={{
+              position: 'absolute',
+              top: '55%',
+              left: '41%',
+              right: '3%',
+              transform: 'translateY(-50%)',
+              textAlign: 'center',
+            }}>
+              <p style={{ fontFamily: SERIF, fontSize: '4.5vw', fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
+                {memberStatus.memberName}<span style={{ fontSize: '3vw', fontWeight: 400, color: 'rgba(242,230,200,0.5)', marginLeft: '0.25em' }}>様</span>
               </p>
             </div>
 
-            {/* 会員ID */}
-            <div style={{ position: 'absolute', top: '62%', left: '42%', right: '4%' }}>
-              <p style={{ fontFamily: 'monospace', fontSize: 'clamp(7px, 1.9vw, 9px)', color: 'rgba(242,230,200,0.7)', letterSpacing: '0.03em', wordBreak: 'break-all', lineHeight: 1.3 }}>
+            {/* 会員ID — center(70%, 61%), -15% font */}
+            <div style={{
+              position: 'absolute',
+              top: '61%',
+              left: '41%',
+              right: '3%',
+              transform: 'translateY(-50%)',
+              textAlign: 'center',
+            }}>
+              <p style={{ fontFamily: 'monospace', fontSize: '1.6vw', color: 'rgba(242,230,200,0.5)', letterSpacing: '0.03em', wordBreak: 'break-all', lineHeight: 1.4 }}>
                 {shortUserId}
               </p>
             </div>
 
-            {/* 入会日 */}
-            <div style={{ position: 'absolute', top: '71%', left: '4%', right: '54%', textAlign: 'center' }}>
-              <p style={{ fontSize: 'clamp(9px, 2.6vw, 11px)', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
+            {/* 入会日 — center(26.9%, 72.3%) */}
+            <div style={{
+              position: 'absolute',
+              top: '72.3%',
+              left: '3%',
+              right: '50%',
+              transform: 'translateY(-50%)',
+              textAlign: 'center',
+            }}>
+              <p style={{ fontSize: '2.4vw', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
                 {issuedDateFmt}
               </p>
             </div>
 
-            {/* 最終来店日 */}
-            <div style={{ position: 'absolute', top: '71%', left: '50%', right: '4%', textAlign: 'center' }}>
-              <p style={{ fontSize: 'clamp(9px, 2.6vw, 11px)', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
+            {/* 最終来店日 — center(72.8%, 72.3%) */}
+            <div style={{
+              position: 'absolute',
+              top: '72.3%',
+              left: '50%',
+              right: '3%',
+              transform: 'translateY(-50%)',
+              textAlign: 'center',
+            }}>
+              <p style={{ fontSize: '2.4vw', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
                 {lastVisitFmt}
               </p>
             </div>
+
+            {/* 下段非表示 (来店回数 · 施術メニュー · 次回推奨日 を隠蔽) */}
+            <div style={{
+              position: 'absolute',
+              top: '74%',
+              left: 0, right: 0, bottom: 0,
+              background: 'linear-gradient(to bottom, transparent 0%, #0A0907 14%)',
+              pointerEvents: 'none',
+              zIndex: 2,
+            }} />
 
             {/* ── DEV: キャリブレーショングリッド ────────────────────────── */}
             {showCalibrate && (

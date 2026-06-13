@@ -110,21 +110,19 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
             style={{ width: '100%', display: 'block', userSelect: 'none' }}
           />
 
-          {/* ── Dynamic overlays ───────────────────────────────────────────── */}
+          {/* ── Dynamic overlays (same coordinates as inline card) ── */}
 
-          {/* QR code — centered in placeholder box (x≈3-40%, y≈47.8-66%) */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '48%',
-              left: '5.5%',
-              width: '32%',
-              background: '#FFFFFF',
-              padding: '6px',
-              borderRadius: 4,
-              boxSizing: 'border-box',
-            }}
-          >
+          {/* QR — center(30.5%, 53%), 27% wide */}
+          <div style={{
+            position: 'absolute',
+            top: '45.5%',
+            left: '17%',
+            width: '27%',
+            background: '#FFFFFF',
+            padding: '5px',
+            borderRadius: 3,
+            boxSizing: 'border-box',
+          }}>
             <QRCodeSVG
               value={qrPayload}
               size={200}
@@ -134,94 +132,71 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
             />
           </div>
 
-          {/* 会員名
-              下線 y≈55.6% → フォント高(~1.9%) 引いて top=53.5%
-              右端の「様」はテンプレ固定なので right=11% で回避 */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '53.5%',
-              left: '42%',
-              right: '11%',
-              textAlign: 'right',
-            }}
-          >
-            <p style={{
-              fontFamily: SERIF,
-              fontSize: 'clamp(11px, 3.2vw, 14px)',
-              fontWeight: 700,
-              color: '#F2E6C8',
-              letterSpacing: '0.05em',
-              lineHeight: 1,
-            }}>
-              {name}
+          {/* 会員名 + 様 — center(70%, 55%) */}
+          <div style={{
+            position: 'absolute',
+            top: '55%',
+            left: '41%',
+            right: '3%',
+            transform: 'translateY(-50%)',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontFamily: SERIF, fontSize: '4.5vw', fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
+              {name}<span style={{ fontSize: '3vw', fontWeight: 400, color: 'rgba(242,230,200,0.5)', marginLeft: '0.25em' }}>様</span>
             </p>
           </div>
 
-          {/* 会員ID
-              下線 y≈63.4% → フォント高(~1.1%) 引いて top=62.2% */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '62%',
-              left: '42%',
-              right: '4%',
-            }}
-          >
-            <p style={{
-              fontFamily: 'monospace',
-              fontSize: 'clamp(7px, 1.9vw, 9px)',
-              color: 'rgba(242,230,200,0.7)',
-              letterSpacing: '0.03em',
-              wordBreak: 'break-all',
-              lineHeight: 1.3,
-            }}>
+          {/* 会員ID — center(70%, 61%) */}
+          <div style={{
+            position: 'absolute',
+            top: '61%',
+            left: '41%',
+            right: '3%',
+            transform: 'translateY(-50%)',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontFamily: 'monospace', fontSize: '1.6vw', color: 'rgba(242,230,200,0.5)', letterSpacing: '0.03em', wordBreak: 'break-all', lineHeight: 1.4 }}>
               {shortId}
             </p>
           </div>
 
-          {/* 入会日
-              下線 y≈72.7% → フォント高(~1.6%) 引いて top=71%
-              左半分: x=4-46% */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '71%',
-              left: '4%',
-              right: '54%',
-              textAlign: 'center',
-            }}
-          >
-            <p style={{
-              fontSize: 'clamp(9px, 2.6vw, 11px)',
-              color: '#F2E6C8',
-              fontFamily: SERIF,
-              letterSpacing: '0.04em',
-            }}>
+          {/* 入会日 — center(26.9%, 72.3%) */}
+          <div style={{
+            position: 'absolute',
+            top: '72.3%',
+            left: '3%',
+            right: '50%',
+            transform: 'translateY(-50%)',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '2.4vw', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
               {issuedDateFmt}
             </p>
           </div>
 
-          {/* 最終来店日
-              右半分: x=50-96% */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '71%',
-              left: '50%',
-              right: '4%',
-              textAlign: 'center',
-            }}
-          >
-            <p style={{
-              fontSize: 'clamp(9px, 2.6vw, 11px)',
-              color: '#F2E6C8',
-              fontFamily: SERIF,
-              letterSpacing: '0.04em',
-            }}>
+          {/* 最終来店日 — center(72.8%, 72.3%) */}
+          <div style={{
+            position: 'absolute',
+            top: '72.3%',
+            left: '50%',
+            right: '3%',
+            transform: 'translateY(-50%)',
+            textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '2.4vw', color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.04em' }}>
               {lastVisitFmt}
             </p>
           </div>
+
+          {/* 下段非表示 (来店回数 · 施術メニュー · 次回推奨日 を隠蔽) */}
+          <div style={{
+            position: 'absolute',
+            top: '74%',
+            left: 0, right: 0, bottom: 0,
+            background: 'linear-gradient(to bottom, transparent 0%, #0A0907 14%)',
+            pointerEvents: 'none',
+            zIndex: 2,
+          }} />
         </motion.div>
 
         <p style={{
