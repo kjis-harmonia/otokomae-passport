@@ -38,7 +38,7 @@ const UI_CATEGORIES = [
   },
 ] as const
 
-// ── Image helpers (unchanged) ─────────────────────────────────────────────────
+// ── Image helpers ─────────────────────────────────────────────────────────────
 
 function getCardImgStyle(_style: StyleCard): React.CSSProperties {
   return { objectFit: 'contain', objectPosition: 'center center' }
@@ -263,6 +263,126 @@ function StyleRow({
   )
 }
 
+// ── ReserveSheet (横スワイプで呼び出す予約シート) ─────────────────────────────
+
+function ReserveSheet({
+  style,
+  onClose,
+}: {
+  style: StyleCard
+  onClose: () => void
+}) {
+  const reserveUrl = getReserveUrl(style.title)
+  const imgUrl = resolveStyleImageUrl(style)
+
+  return (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.6)', zIndex: 140 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      {/* Sheet */}
+      <motion.div
+        className="absolute left-0 right-0 bottom-0"
+        style={{
+          zIndex: 150,
+          background: 'linear-gradient(180deg, #100604 0%, #0A0504 100%)',
+          borderRadius: '20px 20px 0 0',
+          border: '1px solid rgba(201,162,74,0.22)',
+          borderBottom: 'none',
+          boxShadow: '0 -24px 60px rgba(0,0,0,0.7)',
+          padding: '28px 20px',
+          paddingBottom: 'max(32px, env(safe-area-inset-bottom, 32px))',
+        }}
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Style info row */}
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24 }}>
+          <div
+            style={{
+              width: 68, height: 90, borderRadius: 10,
+              overflow: 'hidden', flexShrink: 0,
+              background: '#050302',
+              border: '1px solid rgba(201,162,74,0.14)',
+            }}
+          >
+            <img
+              src={imgUrl}
+              alt={style.title}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 8, letterSpacing: '0.26em', color: 'rgba(201,162,74,0.46)', marginBottom: 7 }}>
+              STYLE RESERVATION
+            </p>
+            <h3
+              style={{
+                fontFamily: SERIF, fontSize: 22, fontWeight: 700,
+                color: '#F2E6C8', lineHeight: 1.2, marginBottom: 5,
+                letterSpacing: '0.04em',
+              }}
+            >
+              {style.title}
+            </h3>
+            <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#C9A24A' }}>
+              ¥{style.price.toLocaleString()}
+            </p>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{ height: '0.5px', background: 'rgba(201,162,74,0.12)', marginBottom: 24 }} />
+
+        {/* Reserve button */}
+        <motion.button
+          type="button"
+          onClick={() => {
+            if (reserveUrl) window.open(reserveUrl, '_blank', 'noopener,noreferrer')
+            onClose()
+          }}
+          style={{
+            width: '100%', padding: '15px 0', borderRadius: 14,
+            background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+            border: '1px solid rgba(201,162,74,0.44)',
+            boxShadow: '0 4px 28px rgba(107,15,18,0.52)',
+            fontFamily: SERIF, fontSize: 15, fontWeight: 700,
+            letterSpacing: '0.22em', color: '#F2E6C8', cursor: 'pointer',
+          }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ duration: 0.13 }}
+        >
+          このスタイルで予約する
+        </motion.button>
+
+        {/* Cancel */}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width: '100%', marginTop: 12, padding: '10px 0',
+            background: 'none', border: 'none',
+            fontSize: 13, color: 'rgba(242,230,200,0.28)',
+            letterSpacing: '0.1em', cursor: 'pointer',
+          }}
+        >
+          キャンセル
+        </button>
+      </motion.div>
+    </>
+  )
+}
+
 // ── StyleReelView (TikTok / Reels 縦スワイプ全画面) ──────────────────────────
 
 const REEL_VARIANTS = {
@@ -270,8 +390,6 @@ const REEL_VARIANTS = {
   center: { y: 0, opacity: 1 },
   exit:  (d: number) => ({ y: d >= 0 ? '100%' : '-100%', opacity: 0.5 }),
 }
-// d >= 0 → swipe down (prev): enter from top, exit to bottom
-// d <  0 → swipe up  (next): enter from bottom, exit to top
 
 function StyleReelView({
   styles,
@@ -282,14 +400,19 @@ function StyleReelView({
   startIndex: number
   onClose: () => void
 }) {
-  const [idx, setIdx]       = useState(startIndex)
-  const [dir, setDir]       = useState(0)
-  const touchStartY         = useRef<number | null>(null)
-  const touchStartTime      = useRef<number | null>(null)
+  const [idx, setIdx]             = useState(startIndex)
+  const [dir, setDir]             = useState(0)
+  const [showReserveSheet, setShowReserveSheet] = useState(false)
+  const touchStartY               = useRef<number | null>(null)
+  const touchStartX               = useRef<number | null>(null)
+  const touchStartTime            = useRef<number | null>(null)
 
   const style    = styles[idx]
   const imgUrl   = style ? resolveStyleImageUrl(style) : null
   const reserveUrl = style ? getReserveUrl(style.title) : null
+
+  // Close reserve sheet when navigating to a new style
+  useEffect(() => { setShowReserveSheet(false) }, [idx])
 
   function navigate(newDir: -1 | 1) {
     const next = idx + newDir
@@ -300,19 +423,31 @@ function StyleReelView({
 
   function onTouchStart(e: React.TouchEvent) {
     touchStartY.current    = e.touches[0].clientY
+    touchStartX.current    = e.touches[0].clientX
     touchStartTime.current = Date.now()
   }
 
   function onTouchEnd(e: React.TouchEvent) {
-    if (touchStartY.current === null) return
-    const dy = e.changedTouches[0].clientY - touchStartY.current
-    const dt = Date.now() - (touchStartTime.current ?? Date.now())
-    const vel = Math.abs(dy) / Math.max(dt, 1) // px/ms
+    if (touchStartY.current === null || touchStartX.current === null) return
+    const dy  = e.changedTouches[0].clientY - touchStartY.current
+    const dx  = e.changedTouches[0].clientX - touchStartX.current
+    const dt  = Date.now() - (touchStartTime.current ?? Date.now())
+    const velY = Math.abs(dy) / Math.max(dt, 1)
+    const velX = Math.abs(dx) / Math.max(dt, 1)
 
-    if (dy < -50 || (dy < 0 && vel > 0.45))      navigate(-1) // swipe up → next
-    else if (dy > 50 || (dy > 0 && vel > 0.45))  navigate(1)  // swipe down → prev
+    // Determine dominant direction
+    const isHorizontal = Math.abs(dx) > Math.abs(dy) * 1.2
+
+    if (isHorizontal) {
+      // Left swipe → open reserve sheet
+      if (dx < -60 || (dx < 0 && velX > 0.4)) setShowReserveSheet(true)
+    } else {
+      if (dy < -50 || (dy < 0 && velY > 0.45))     navigate(-1) // swipe up → next
+      else if (dy > 50 || (dy > 0 && velY > 0.45)) navigate(1)  // swipe down → prev
+    }
 
     touchStartY.current    = null
+    touchStartX.current    = null
     touchStartTime.current = null
   }
 
@@ -330,7 +465,7 @@ function StyleReelView({
       {/* Swipe area */}
       <div
         className="w-full h-full"
-        style={{ touchAction: 'pan-x pinch-zoom', position: 'relative' }}
+        style={{ touchAction: 'none', position: 'relative' }}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
@@ -450,30 +585,62 @@ function StyleReelView({
                   予約する
                 </button>
               </div>
-              {/* Swipe hint */}
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 14 }}>
-                {idx > 0 && (
-                  <button type="button" onClick={() => navigate(1)}
-                    style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.3)', fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                    <span style={{ fontSize: 12, lineHeight: 1 }}>↑</span>
-                    <span>前へ</span>
-                  </button>
-                )}
-                <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.3)', letterSpacing: '0.12em' }}>
-                  {idx + 1} / {styles.length}
-                </p>
-                {idx < styles.length - 1 && (
-                  <button type="button" onClick={() => navigate(-1)}
-                    style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.3)', fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                    <span>次へ</span>
-                    <span style={{ fontSize: 12, lineHeight: 1 }}>↓</span>
-                  </button>
-                )}
+              {/* Nav counter + swipe hint */}
+              <div
+                style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'center', marginTop: 14,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  {idx > 0 && (
+                    <button type="button" onClick={() => navigate(1)}
+                      style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.3)', fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <span style={{ fontSize: 12, lineHeight: 1 }}>↑</span>
+                      <span>前へ</span>
+                    </button>
+                  )}
+                  <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.3)', letterSpacing: '0.12em' }}>
+                    {idx + 1} / {styles.length}
+                  </p>
+                  {idx < styles.length - 1 && (
+                    <button type="button" onClick={() => navigate(-1)}
+                      style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.3)', fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <span>次へ</span>
+                      <span style={{ fontSize: 12, lineHeight: 1 }}>↓</span>
+                    </button>
+                  )}
+                </div>
+                {/* Left-swipe-to-reserve hint */}
+                <button
+                  type="button"
+                  onClick={() => setShowReserveSheet(true)}
+                  style={{
+                    background: 'none', border: 'none', padding: '4px 0',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    color: 'rgba(201,162,74,0.32)',
+                  }}
+                >
+                  <span style={{ fontSize: 10, lineHeight: 1 }}>←</span>
+                  <span style={{ fontSize: 9, letterSpacing: '0.12em' }}>予約</span>
+                </button>
               </div>
             </div>
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Reserve sheet — rendered above animated cards */}
+      <AnimatePresence>
+        {showReserveSheet && (
+          <ReserveSheet
+            key="reserve-sheet"
+            style={style}
+            onClose={() => setShowReserveSheet(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Close button — fixed above all animated cards */}
       <button
