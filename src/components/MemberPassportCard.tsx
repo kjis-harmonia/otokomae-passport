@@ -13,9 +13,10 @@ function RankIcon({ rank }: { rank: MemberRank }) {
 
 interface Props {
   member: Member
+  onQrTap?: () => void
 }
 
-export function MemberPassportCard({ member }: Props) {
+export function MemberPassportCard({ member, onQrTap }: Props) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
@@ -92,17 +93,33 @@ export function MemberPassportCard({ member }: Props) {
             </span>
           </div>
         </div>
-        <div
-          className="rounded-xl p-2.5"
-          style={{
-            background:
-              'linear-gradient(145deg, rgba(12,12,10,0.86), rgba(201,162,39,0.09))',
-            border: '1px solid rgba(201,162,39,0.3)',
-            boxShadow: 'inset 0 0 18px rgba(201,162,39,0.1), 0 8px 18px rgba(0,0,0,0.28)',
-          }}
-        >
-          <QrCode size={44} strokeWidth={1.3} style={{ color: 'rgba(201,162,39,0.55)' }} />
-        </div>
+        {onQrTap ? (
+          <button
+            type="button"
+            onClick={onQrTap}
+            aria-label="男前証QRを表示"
+            className="rounded-xl p-2.5 transition-opacity active:opacity-60"
+            style={{
+              background: 'linear-gradient(145deg, rgba(12,12,10,0.86), rgba(201,162,39,0.09))',
+              border: '1px solid rgba(201,162,39,0.3)',
+              boxShadow: 'inset 0 0 18px rgba(201,162,39,0.1), 0 8px 18px rgba(0,0,0,0.28)',
+              cursor: 'pointer',
+            }}
+          >
+            <QrCode size={44} strokeWidth={1.3} style={{ color: 'rgba(201,162,39,0.72)' }} />
+          </button>
+        ) : (
+          <div
+            className="rounded-xl p-2.5"
+            style={{
+              background: 'linear-gradient(145deg, rgba(12,12,10,0.86), rgba(201,162,39,0.09))',
+              border: '1px solid rgba(201,162,39,0.3)',
+              boxShadow: 'inset 0 0 18px rgba(201,162,39,0.1), 0 8px 18px rgba(0,0,0,0.28)',
+            }}
+          >
+            <QrCode size={44} strokeWidth={1.3} style={{ color: 'rgba(201,162,39,0.55)' }} />
+          </div>
+        )}
       </div>
 
       {/* Name */}

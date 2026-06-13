@@ -4,6 +4,8 @@ import { MOCK_MEMBER } from '../data/brand'
 import type { Member, MemberStatus } from '../data/brand'
 import { setStoredValue, ONBOARDING_DONE_KEY, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { MemberPassportCard } from '../components/MemberPassportCard'
+import { MemberQrModal } from '../components/MemberQrModal'
+import { getUserId, getMemberIssuedAt } from '../utils/userId'
 
 type Step = 0 | 1 | 2
 
@@ -21,6 +23,7 @@ const slideVariants = {
 export function OnboardingScreen({ memberStatus, onDone }: Props) {
   const [step, setStep] = useState<Step>(0)
   const [name, setName] = useState('')
+  const [showQr, setShowQr] = useState(false)
 
   const trimmedName = name.trim() || 'ゲスト'
 
@@ -40,6 +43,15 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   }
 
   return (
+    <>
+    {showQr && (
+      <MemberQrModal
+        userId={getUserId()}
+        name={trimmedName}
+        issuedAt={getMemberIssuedAt()}
+        onClose={() => setShowQr(false)}
+      />
+    )}
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -213,7 +225,12 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                 />
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={() => {
+                    // userId と issuedAt をここで確定する
+                    getUserId()
+                    getMemberIssuedAt()
+                    setStep(2)
+                  }}
                   className="w-full py-3.5 rounded-xl text-sm font-semibold tracking-widest transition-opacity active:opacity-70"
                   style={{
                     background: 'linear-gradient(135deg, #8B1A2A 0%, #B02035 100%)',
@@ -254,7 +271,10 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                 </h2>
               </div>
 
-              <MemberPassportCard member={previewMember} />
+              <MemberPassportCard
+                member={previewMember}
+                onQrTap={() => setShowQr(true)}
+              />
 
               <div className="px-8">
                 <button
@@ -277,5 +297,6 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
         </AnimatePresence>
       </div>
     </motion.div>
+    </>
   )
 }

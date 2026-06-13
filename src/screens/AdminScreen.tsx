@@ -130,8 +130,15 @@ const RANK_COLOR: Record<string, string> = {
 function parseQR(text: string): PassportQRData | null {
   try {
     const d = JSON.parse(text)
-    if (d.type !== 'otokomae-passport' || !d.userId || !d.name || !d.rank) return null
-    return d as PassportQRData
+    // 新形式: 男前証QR（type: ginjiro-member）
+    if (d.type === 'ginjiro-member' && d.userId && d.name) {
+      return { type: d.type, userId: d.userId, name: d.name, rank: 'BRONZE', points: 0 }
+    }
+    // 旧形式: otokomae-passport
+    if (d.type === 'otokomae-passport' && d.userId && d.name && d.rank) {
+      return d as PassportQRData
+    }
+    return null
   } catch {
     return null
   }

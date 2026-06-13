@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import type { MemberStatus, MemberRank } from '../data/brand'
-import { motion } from 'framer-motion'
-import { Crown, Gift, User, Scissors, Bell, FileText, ChevronRight, Tag, Share2, X } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Crown, Gift, User, Scissors, Bell, FileText, ChevronRight, Tag, Share2, X, QrCode } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
+import { MemberQrModal } from '../components/MemberQrModal'
+import { getMemberIssuedAt } from '../utils/userId'
 import {
   getStoredValue,
   loadCoupons,
@@ -157,6 +159,7 @@ interface Props {
 export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [rewardUsedMessage, setRewardUsedMessage] = useState<string | null>(null)
   const [couponUsedMessage, setCouponUsedMessage] = useState<string | null>(null)
+  const [showMemberQr, setShowMemberQr] = useState(false)
   const [coupons, setCoupons] = useState(() => {
     // 旧ID・旧タイトルを正規化（既存ユーザーのマイグレーション込み）
     const TITLE_MAP: Record<string, string> = {
@@ -307,6 +310,17 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   }
 
   return (
+    <>
+    <AnimatePresence>
+      {showMemberQr && (
+        <MemberQrModal
+          userId={userId}
+          name={memberStatus.memberName}
+          issuedAt={getMemberIssuedAt()}
+          onClose={() => setShowMemberQr(false)}
+        />
+      )}
+    </AnimatePresence>
     <div className="py-5 space-y-6">
       {/* Section header */}
       <div className="px-5">
@@ -473,6 +487,28 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
             style={{ color: 'rgba(245,240,232,0.28)' }}
           >
             開発用：スタンプを10個にする
+          </button>
+        </div>
+
+        {/* 男前証を表示 button */}
+        <div style={{ padding: '0 20px 20px' }}>
+          <button
+            type="button"
+            onClick={() => setShowMemberQr(true)}
+            className="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl transition-opacity active:opacity-70"
+            style={{
+              background: 'linear-gradient(135deg, rgba(201,162,39,0.12) 0%, rgba(139,26,42,0.1) 100%)',
+              border: '1px solid rgba(201,162,39,0.3)',
+              boxShadow: 'inset 0 1px 0 rgba(245,240,232,0.04)',
+            }}
+          >
+            <QrCode size={15} strokeWidth={1.8} style={{ color: 'rgba(201,162,39,0.72)' }} />
+            <span
+              className="text-sm font-semibold tracking-[0.16em]"
+              style={{ color: '#C9A227' }}
+            >
+              男前証を表示
+            </span>
           </button>
         </div>
       </motion.div>
@@ -884,5 +920,6 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
 
       <div className="h-2" />
     </div>
+    </>
   )
 }
