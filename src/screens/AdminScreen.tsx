@@ -146,10 +146,10 @@ function parseQR(text: string): PassportQRData | null {
 
 // ── Ticket tabs (preset per type) ─────────────────────────────────────────────
 
-const TICKET_TABS: { type: TicketType; label: string; defaultTitle: string; defaultAmount: string }[] = [
-  { type: 'coupon',     label: 'クーポン', defaultTitle: '',            defaultAmount: '' },
-  { type: 'discount',   label: '割引券',   defaultTitle: '夏ガチャ割引券', defaultAmount: '300' },
-  { type: 'cut-ticket', label: '漢トク券', defaultTitle: '漢トク券',     defaultAmount: '1000' },
+const TICKET_TABS: { type: TicketType; label: string; autoTitle: string; amounts: number[] }[] = [
+  { type: 'coupon',     label: 'クーポン', autoTitle: 'メンテナンスクーポン', amounts: [] },
+  { type: 'discount',   label: '割引券',   autoTitle: '割引券',              amounts: [300, 500, 1000] },
+  { type: 'cut-ticket', label: '漢トク券', autoTitle: '漢トク券',            amounts: [1000, 3000, 5000] },
 ]
 
 // ── Phase ─────────────────────────────────────────────────────────────────────
@@ -263,8 +263,7 @@ export function AdminScreen() {
 
   // Ticket form
   const [ticketTab, setTicketTab]         = useState<TicketType>('coupon')
-  const [ticketTitle, setTicketTitle]     = useState('')
-  const [ticketAmount, setTicketAmount]   = useState('')
+  const [ticketAmount, setTicketAmount]   = useState<number>(0)
   const [issueLoading, setIssueLoading]   = useState(false)
   const [issueError, setIssueError]       = useState<string | null>(null)
   const [issuedCount, setIssuedCount]     = useState(0)
@@ -283,7 +282,7 @@ export function AdminScreen() {
   const isEligible   = !isFirstVisit && prevLastVisitDate !== undefined && elapsed! <= 14
 
   const rankColor  = scannedData ? (RANK_COLOR[scannedData.rank] ?? '#C9A24A') : '#C9A24A'
-  const canIssue   = ticketTitle.trim() !== '' && staffId.trim() !== '' && !issueLoading
+  const canIssue   = staffId.trim() !== '' && !issueLoading && (ticketTab === 'coupon' || ticketAmount > 0)
   const activeTickets = userTickets.filter(t => !t.used)
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -334,14 +333,14 @@ export function AdminScreen() {
   function handleTabChange(type: TicketType) {
     const tab = TICKET_TABS.find(t => t.type === type)!
     setTicketTab(type)
-    setTicketTitle(tab.defaultTitle)
-    setTicketAmount(tab.defaultAmount)
+    setTicketAmount(tab.amounts[0] ?? 0)
     setIssueError(null)
     setLastIssuedMsg(null)
   }
 
   const handleIssueTicket = async () => {
-    if (!scannedData || !ticketTitle.trim() || !staffId.trim()) return
+    if (!scannedData || !staffId.trim()) return
+    const currentTab = TICKET_TABS.find(t => t.type === ticketTab)!
     setIssueLoading(true)
     setIssueError(null)
     setLastIssuedMsg(null)
@@ -349,15 +348,14 @@ export function AdminScreen() {
       const issued = await issueTicket({
         user_id:   scannedData.userId,
         type:      ticketTab,
-        title:     ticketTitle.trim(),
-        amount:    Math.max(0, parseInt(ticketAmount, 10) || 0),
+        title:     currentTab.autoTitle,
+        amount:    ticketAmount,
         issued_by: staffId,
       })
       setUserTickets(prev => [issued, ...prev])
       setIssuedCount(c => c + 1)
-      setLastIssuedMsg(`「${ticketTitle.trim()}」を発行しました`)
-      // 金額のみリセット（タイトルは連続発行しやすいよう残す）
-      setTicketAmount(TICKET_TABS.find(t => t.type === ticketTab)?.defaultAmount ?? '')
+      const amtLabel = ticketAmount > 0 ? ` ¥${ticketAmount.toLocaleString()}` : ''
+      setLastIssuedMsg(`「${currentTab.autoTitle}」${amtLabel} を発行しました`)
     } catch {
       setIssueError('発行に失敗しました。ネットワークを確認してください。')
     } finally {
@@ -386,8 +384,7 @@ export function AdminScreen() {
     setShowManual(false)
     setManualInput('')
     setTicketTab('coupon')
-    setTicketTitle('')
-    setTicketAmount('')
+    setTicketAmount(0)
     setIssueError(null)
     setIssuedCount(0)
     setLastIssuedMsg(null)
@@ -778,40 +775,51 @@ export function AdminScreen() {
                 })}
               </div>
 
-              {/* Title */}
-              <input
-                type="text"
-                placeholder={ticketTab === 'coupon' ? 'タイトルを入力（例：ご来店クーポン）' : ''}
-                value={ticketTitle}
-                onChange={e => setTicketTitle(e.target.value)}
-                style={{
-                  width: '100%', padding: '10px 12px', borderRadius: 10,
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#F2E6C8', fontSize: 13, fontFamily: SERIF, outline: 'none',
-                  boxSizing: 'border-box', marginBottom: 8,
-                }}
-              />
+              {/* Auto-title display */}
+              {(() => {
+                const currentTab = TICKET_TABS.find(t => t.type === ticketTab)!
+                const tc = TICKET_TYPE_COLORS[ticketTab]
+                return (
+                  <>
+                    <div style={{
+                      padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+                      background: tc.bg, border: `1px solid ${tc.border}`,
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 9, letterSpacing: '0.2em', color: 'rgba(242,230,200,0.35)', marginBottom: 3 }}>
+                          発行チケット
+                        </p>
+                        <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: tc.text, letterSpacing: '0.06em' }}>
+                          {currentTab.autoTitle}
+                        </p>
+                      </div>
+                    </div>
 
-              {/* Amount */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <span style={{ fontSize: 15, color: 'rgba(201,162,74,0.55)', fontFamily: SERIF, flexShrink: 0 }}>¥</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  placeholder="金額（任意）"
-                  value={ticketAmount}
-                  onChange={e => setTicketAmount(e.target.value.replace(/[^0-9]/g, ''))}
-                  style={{
-                    flex: 1, padding: '10px 12px', borderRadius: 10,
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#F2E6C8', fontSize: 18, fontWeight: 700,
-                    fontFamily: SERIF, outline: 'none', boxSizing: 'border-box',
-                  }}
-                />
-              </div>
+                    {/* Preset amount buttons (割引券 / 漢トク券) */}
+                    {currentTab.amounts.length > 0 && (
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                        {currentTab.amounts.map(amt => (
+                          <button
+                            key={amt}
+                            onClick={() => setTicketAmount(amt)}
+                            style={{
+                              flex: 1, padding: '13px 4px', borderRadius: 10,
+                              background: ticketAmount === amt ? tc.bg : 'transparent',
+                              border: `1px solid ${ticketAmount === amt ? tc.border : 'rgba(255,255,255,0.1)'}`,
+                              color: ticketAmount === amt ? tc.text : 'rgba(242,230,200,0.35)',
+                              fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.02em',
+                              cursor: 'pointer', transition: 'all 0.15s',
+                            }}
+                          >
+                            ¥{amt.toLocaleString()}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
 
               {issueError && (
                 <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8 }}>{issueError}</p>
@@ -840,8 +848,6 @@ export function AdminScreen() {
                   ? '発行中…'
                   : !staffId.trim()
                   ? '担当者IDを設定してください'
-                  : ticketTitle.trim() === ''
-                  ? 'タイトルを入力してください'
                   : '発行する'}
               </button>
             </div>
