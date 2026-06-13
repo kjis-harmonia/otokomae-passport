@@ -17,8 +17,11 @@ const TAB_LABELS: Record<NavTab, string> = {
   mypage: 'マイ',
 }
 
-// 'gacha' is intentionally excluded — feature is sealed but code is preserved for restoration
-const TABS: NavTab[] = ['home', 'styles', 'diagnosis', 'tryon', 'reserve', 'mypage']
+// Excluded from nav — sealed until complete, code preserved for restoration:
+// 'gacha'  — gacha feature
+// 'tryon'  — try-on feature (coming soon)
+// 'reserve' — reservation feature (coming soon)
+const TABS: NavTab[] = ['home', 'styles', 'diagnosis', 'mypage']
 
 function TabIcon({ id }: { id: NavTab }) {
   switch (id) {
