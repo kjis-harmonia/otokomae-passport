@@ -22,7 +22,7 @@ import { isInStoreModeActive } from '../utils/inStoreMode'
 const SERIF            = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const RESERVATION_URL  = 'https://beauty.hotpepper.jp/'
 const MAINT_LOCAL_KEY  = 'ginjiro_maintenance_visits'
-const QR_VALID_SECS    = 300 // 5 minutes
+const QR_VALID_SECS    = 1200 // 20 minutes
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -332,33 +332,50 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                   </div>
                 ) : (
                   /* ─── QR step ─── */
-                  <div style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(155deg, #160B07 0%, #0A0504 100%)', border: `1px solid ${tc.border}`, boxShadow: `0 24px 56px rgba(0,0,0,0.7), 0 0 24px ${tc.border}44` }}>
-                    <div style={{ height: 2, background: `linear-gradient(90deg, ${tc.border}, transparent)` }} />
+                  <div style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(155deg, #160B07 0%, #0A0504 100%)', border: `1px solid ${qrSecondsLeft === 0 ? 'rgba(224,96,80,0.4)' : tc.border}`, boxShadow: `0 24px 56px rgba(0,0,0,0.7), 0 0 24px ${tc.border}44` }}>
+                    <div style={{ height: 2, background: `linear-gradient(90deg, ${qrSecondsLeft === 0 ? 'rgba(224,96,80,0.7)' : tc.border}, transparent)` }} />
                     <div style={{ padding: '20px 20px 18px' }}>
-                      <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tc.bg, border: `1px solid ${tc.border}`, color: tc.text, letterSpacing: '0.1em', marginBottom: 10 }}>
-                        {TICKET_TYPE_LABELS[t.type]}
-                      </span>
-                      <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#F2E6C8', marginBottom: t.amount > 0 ? 4 : 12 }}>{t.title}</p>
-                      {t.amount > 0 && (
-                        <p style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: '#C9A24A', marginBottom: 10, lineHeight: 1 }}>¥{t.amount.toLocaleString()}</p>
-                      )}
-                      {/* QR */}
-                      {qrPayload && (
-                        <div style={{ background: '#FFF', borderRadius: 12, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                          <QRCodeSVG value={qrPayload} size={160} level="M" />
-                        </div>
-                      )}
-                      {/* Countdown */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
-                        <span style={{ fontSize: 10, color: qrSecondsLeft < 60 ? '#E06060' : 'rgba(242,230,200,0.38)', letterSpacing: '0.06em' }}>有効時間</span>
-                        <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: qrSecondsLeft < 60 ? '#E06060' : '#C9A24A' }}>
-                          {fmtCountdown}
-                        </span>
-                      </div>
-                      <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.32)', textAlign: 'center', lineHeight: 1.7 }}>
-                        会計時にスタッフへ提示してください<br />
-                        このQRコードは5分間有効です
+                      <p style={{ fontSize: 9, letterSpacing: '0.28em', color: qrSecondsLeft === 0 ? 'rgba(224,96,80,0.55)' : 'rgba(201,162,74,0.45)', textAlign: 'center', marginBottom: 10 }}>
+                        チケット使用QR
                       </p>
+                      {qrSecondsLeft === 0 ? (
+                        /* 期限切れ表示 */
+                        <div style={{ textAlign: 'center', padding: '12px 0 8px' }}>
+                          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#E06060', marginBottom: 8, lineHeight: 1.45 }}>
+                            QRの有効期限が切れました
+                          </p>
+                          <p style={{ fontSize: 12, color: 'rgba(224,96,80,0.6)', lineHeight: 1.7 }}>
+                            再度「使用する」を押してください
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tc.bg, border: `1px solid ${tc.border}`, color: tc.text, letterSpacing: '0.1em', marginBottom: 10 }}>
+                            {TICKET_TYPE_LABELS[t.type]}
+                          </span>
+                          <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#F2E6C8', marginBottom: t.amount > 0 ? 4 : 12 }}>{t.title}</p>
+                          {t.amount > 0 && (
+                            <p style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: '#C9A24A', marginBottom: 10, lineHeight: 1 }}>¥{t.amount.toLocaleString()}</p>
+                          )}
+                          {/* QR */}
+                          {qrPayload && (
+                            <div style={{ background: '#FFF', borderRadius: 12, padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                              <QRCodeSVG value={qrPayload} size={160} level="M" />
+                            </div>
+                          )}
+                          {/* Countdown */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
+                            <span style={{ fontSize: 10, color: qrSecondsLeft < 300 ? '#E06060' : 'rgba(242,230,200,0.38)', letterSpacing: '0.06em' }}>有効時間</span>
+                            <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, color: qrSecondsLeft < 300 ? '#E06060' : '#C9A24A' }}>
+                              {fmtCountdown}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.32)', textAlign: 'center', lineHeight: 1.7 }}>
+                            会計時にスタッフへ提示してください<br />
+                            このQRコードは20分間有効です
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}

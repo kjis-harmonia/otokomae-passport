@@ -1084,7 +1084,7 @@ export function AdminScreen() {
             {ticketQrExpired ? (
               <div style={{ borderRadius: 18, background: 'linear-gradient(135deg, rgba(70,15,15,0.6), rgba(50,8,8,0.8))', border: '1px solid rgba(200,80,60,0.3)', padding: '28px 22px', textAlign: 'center', marginBottom: 16 }}>
                 <p style={{ fontSize: 9, letterSpacing: '0.3em', color: 'rgba(200,100,80,0.7)', marginBottom: 12 }}>QR EXPIRED</p>
-                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#E06040', marginBottom: 10 }}>QRコードの有効期限切れ</p>
+                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#E06040', marginBottom: 10 }}>QRコードの有効期限が切れています</p>
                 <p style={{ fontSize: 12, color: 'rgba(220,120,100,0.6)', lineHeight: 1.6 }}>お客様に再度「使用する」を押していただいてください。</p>
               </div>
             ) : ticketForUse === null ? (
