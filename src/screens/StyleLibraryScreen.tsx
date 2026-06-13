@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { X } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
-import { StyleCardImage } from '../components/StyleCardPlaceholder'
-import { StyleDetailModal } from '../components/StyleDetailModal'
-import { resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
+import { StyleCardImage, StyleCardPlaceholder } from '../components/StyleCardPlaceholder'
+import { resolveStyleImageUrl } from '../data/styleImages'
+import { getReserveUrl } from '../data/reserveLinks'
 import type { StyleCard } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
 
@@ -66,7 +67,7 @@ function LibraryHero({ style, onTap }: { style: StyleCard; onTap: () => void }) 
         src={resolveStyleImageUrl(style)}
         alt={style.title}
         className="absolute inset-0 w-full h-full"
-        imgStyle={{ objectFit: 'cover', objectPosition: resolveStyleImagePosition(style) }}
+        imgStyle={{ objectFit: 'contain', objectPosition: 'center' }}
         size="lg"
       />
 
@@ -262,26 +263,269 @@ function StyleRow({
   )
 }
 
+// ── StyleReelView (TikTok / Reels 縦スワイプ全画面) ──────────────────────────
+
+const REEL_VARIANTS = {
+  enter: (d: number) => ({ y: d >= 0 ? '-100%' : '100%', opacity: 0.5 }),
+  center: { y: 0, opacity: 1 },
+  exit:  (d: number) => ({ y: d >= 0 ? '100%' : '-100%', opacity: 0.5 }),
+}
+// d >= 0 → swipe down (prev): enter from top, exit to bottom
+// d <  0 → swipe up  (next): enter from bottom, exit to top
+
+function StyleReelView({
+  styles,
+  startIndex,
+  onClose,
+}: {
+  styles: StyleCard[]
+  startIndex: number
+  onClose: () => void
+}) {
+  const [idx, setIdx]       = useState(startIndex)
+  const [dir, setDir]       = useState(0)
+  const touchStartY         = useRef<number | null>(null)
+  const touchStartTime      = useRef<number | null>(null)
+
+  const style    = styles[idx]
+  const imgUrl   = style ? resolveStyleImageUrl(style) : null
+  const reserveUrl = style ? getReserveUrl(style.title) : null
+
+  function navigate(newDir: -1 | 1) {
+    const next = idx + newDir
+    if (next < 0 || next >= styles.length) return
+    setDir(newDir)
+    setIdx(next)
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartY.current    = e.touches[0].clientY
+    touchStartTime.current = Date.now()
+  }
+
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartY.current === null) return
+    const dy = e.changedTouches[0].clientY - touchStartY.current
+    const dt = Date.now() - (touchStartTime.current ?? Date.now())
+    const vel = Math.abs(dy) / Math.max(dt, 1) // px/ms
+
+    if (dy < -50 || (dy < 0 && vel > 0.45))      navigate(-1) // swipe up → next
+    else if (dy > 50 || (dy > 0 && vel > 0.45))  navigate(1)  // swipe down → prev
+
+    touchStartY.current    = null
+    touchStartTime.current = null
+  }
+
+  if (!style) return null
+
+  return (
+    <motion.div
+      className="fixed inset-0"
+      style={{ zIndex: 100, background: '#050302', overflow: 'hidden' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+    >
+      {/* Swipe area */}
+      <div
+        className="w-full h-full"
+        style={{ touchAction: 'pan-x pinch-zoom', position: 'relative' }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        <AnimatePresence initial={false} custom={dir}>
+          <motion.div
+            key={idx}
+            className="absolute inset-0"
+            custom={dir}
+            variants={REEL_VARIANTS}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ type: 'spring', stiffness: 340, damping: 34, mass: 0.9 }}
+          >
+            {/* Blurred background (fills dark bars) */}
+            {imgUrl && (
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundImage: `url(${imgUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  filter: 'blur(26px) brightness(0.17)',
+                  transform: 'scale(1.12)',
+                }}
+                aria-hidden
+              />
+            )}
+
+            {/* Main image — full display, no cropping */}
+            {imgUrl ? (
+              <img
+                src={imgUrl}
+                alt={style.title}
+                className="absolute inset-0 w-full h-full"
+                style={{ objectFit: 'contain', objectPosition: 'center' }}
+                draggable={false}
+              />
+            ) : (
+              <StyleCardPlaceholder className="absolute inset-0" size="lg" />
+            )}
+
+            {/* Bottom gradient */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  'linear-gradient(to top, rgba(5,3,2,0.97) 0%, rgba(5,3,2,0.76) 22%, rgba(5,3,2,0.18) 50%, transparent 68%)',
+              }}
+            />
+
+            {/* Bottom content */}
+            <div
+              className="absolute bottom-0 left-0 right-0"
+              style={{
+                padding: '0 20px',
+                paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))',
+              }}
+            >
+              <p style={{ fontSize: 9, letterSpacing: '0.26em', color: 'rgba(201,162,74,0.6)', marginBottom: 8 }}>
+                GINJIRO STYLE
+              </p>
+              <h2
+                style={{
+                  fontFamily: SERIF, fontSize: 28, fontWeight: 700,
+                  color: '#F2E6C8', lineHeight: 1.15, marginBottom: 6,
+                  letterSpacing: '0.04em', textShadow: '0 2px 20px rgba(0,0,0,0.8)',
+                }}
+              >
+                {style.title}
+              </h2>
+              {style.catchCopy && (
+                <p style={{ fontSize: 12, color: 'rgba(201,162,74,0.7)', fontStyle: 'italic', lineHeight: 1.5, marginBottom: 12 }}>
+                  {style.catchCopy}
+                </p>
+              )}
+              {style.tags.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                  {style.tags.slice(0, 3).map(tag => (
+                    <span
+                      key={tag}
+                      style={{
+                        fontSize: 10, padding: '3px 10px', borderRadius: 99,
+                        background: 'rgba(201,162,74,0.09)',
+                        border: '1px solid rgba(201,162,74,0.24)',
+                        color: 'rgba(242,230,200,0.6)',
+                        letterSpacing: '0.06em',
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* Price + reserve */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flexShrink: 0 }}>
+                  <p style={{ fontSize: 8, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.46)', marginBottom: 1 }}>PRICE</p>
+                  <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#C9A24A' }}>
+                    ¥{style.price.toLocaleString()}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (reserveUrl) window.open(reserveUrl, '_blank', 'noopener,noreferrer')
+                  }}
+                  style={{
+                    flex: 1, padding: '13px 0', borderRadius: 14,
+                    background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+                    border: '1px solid rgba(201,162,74,0.44)',
+                    boxShadow: '0 4px 20px rgba(107,15,18,0.5)',
+                    fontFamily: SERIF, fontSize: 13, fontWeight: 700,
+                    letterSpacing: '0.2em', color: '#F2E6C8', cursor: 'pointer',
+                  }}
+                >
+                  予約する
+                </button>
+              </div>
+              {/* Swipe hint */}
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 14 }}>
+                {idx > 0 && (
+                  <button type="button" onClick={() => navigate(1)}
+                    style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.3)', fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <span style={{ fontSize: 12, lineHeight: 1 }}>↑</span>
+                    <span>前へ</span>
+                  </button>
+                )}
+                <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.3)', letterSpacing: '0.12em' }}>
+                  {idx + 1} / {styles.length}
+                </p>
+                {idx < styles.length - 1 && (
+                  <button type="button" onClick={() => navigate(-1)}
+                    style={{ background: 'none', border: 'none', padding: '4px 8px', color: 'rgba(242,230,200,0.3)', fontSize: 9, letterSpacing: '0.1em', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <span>次へ</span>
+                    <span style={{ fontSize: 12, lineHeight: 1 }}>↓</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Top bar — stays fixed during transitions */}
+      <div
+        className="absolute top-0 left-0 right-0 flex justify-between items-center pointer-events-none"
+        style={{ zIndex: 10, padding: '14px 16px', paddingTop: 'max(14px, env(safe-area-inset-top, 14px))' }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="pointer-events-auto"
+          style={{
+            width: 38, height: 38, borderRadius: '50%',
+            background: 'rgba(5,3,2,0.58)',
+            border: '1px solid rgba(201,162,74,0.2)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'rgba(242,230,200,0.82)', cursor: 'pointer',
+          }}
+          aria-label="閉じる"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
-export function StyleLibraryScreen({ onTabChange, onModalChange }: Props) {
+export function StyleLibraryScreen({ onTabChange: _onTabChange, onModalChange }: Props) {
   const [styles] = useState(() =>
     loadStyles()
       .filter((s) => s.isPublished)
       .sort((a, b) => a.sortOrder - b.sortOrder),
   )
-  const [selectedStyle, setSelectedStyle] = useState<StyleCard | null>(null)
+  const [reelIndex, setReelIndex] = useState<number | null>(null)
 
   useEffect(() => {
-    onModalChange?.(selectedStyle !== null)
-  }, [selectedStyle, onModalChange])
+    onModalChange?.(reelIndex !== null)
+  }, [reelIndex, onModalChange])
 
-  // Random pick from featured for variety on each visit
   const [heroStyle] = useState<StyleCard | null>(() => {
     const featured = styles.filter((s) => s.isFeatured)
     const pool = featured.length > 0 ? featured : styles
     return pool[Math.floor(Math.random() * pool.length)] ?? null
   })
+
+  function openReel(style: StyleCard) {
+    const i = styles.findIndex((s) => s.id === style.id)
+    setReelIndex(i >= 0 ? i : 0)
+  }
 
   const rows = UI_CATEGORIES.map(({ id, sub, titles }) => ({
     id,
@@ -295,56 +539,34 @@ export function StyleLibraryScreen({ onTabChange, onModalChange }: Props) {
     <div style={{ paddingBottom: 40 }}>
       {/* Page header */}
       <div style={{ padding: '18px 16px 12px' }}>
-        <p
-          style={{
-            fontSize: 8, letterSpacing: '0.30em',
-            color: 'rgba(201,162,74,0.50)', marginBottom: 3,
-          }}
-        >
+        <p style={{ fontSize: 8, letterSpacing: '0.30em', color: 'rgba(201,162,74,0.50)', marginBottom: 3 }}>
           STYLE LIBRARY
         </p>
-        <h1
-          style={{
-            fontFamily: SERIF, fontSize: 26, fontWeight: 700,
-            color: '#F2E6C8', letterSpacing: '0.04em',
-          }}
-        >
+        <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em' }}>
           男前スタイル図鑑
         </h1>
       </div>
 
       {/* Hero */}
       {heroStyle && (
-        <LibraryHero
-          style={heroStyle}
-          onTap={() => setSelectedStyle(heroStyle)}
-        />
+        <LibraryHero style={heroStyle} onTap={() => openReel(heroStyle)} />
       )}
 
       {/* Category rows */}
       <div style={{ paddingTop: 32 }}>
         {rows.map(({ id, sub, styles: rowStyles }) => (
-          <StyleRow
-            key={id}
-            id={id}
-            sub={sub}
-            styles={rowStyles}
-            onStyleSelect={setSelectedStyle}
-          />
+          <StyleRow key={id} id={id} sub={sub} styles={rowStyles} onStyleSelect={openReel} />
         ))}
       </div>
 
-      {/* Style detail modal */}
+      {/* Full-screen reel */}
       <AnimatePresence>
-        {selectedStyle && (
-          <StyleDetailModal
-            key={selectedStyle.id}
-            style={selectedStyle}
-            onClose={() => setSelectedStyle(null)}
-            onReserve={() => {
-              setSelectedStyle(null)
-              onTabChange('reserve')
-            }}
+        {reelIndex !== null && (
+          <StyleReelView
+            key="reel"
+            styles={styles}
+            startIndex={reelIndex}
+            onClose={() => setReelIndex(null)}
           />
         )}
       </AnimatePresence>
