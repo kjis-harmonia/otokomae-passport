@@ -112,15 +112,17 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
 
           {/* ── Dynamic overlays ───────────────────────────────────────────── */}
 
-          {/* QR code — positioned over the QR placeholder area in the template */}
+          {/* QR code
+              Template QR枠: 画像左列 (x≈3.5-39.5%, y≈47.8-65.5%)
+              白背景+8pxパディングで枠内に収める */}
           <div
             style={{
               position: 'absolute',
-              top: '47.8%',
-              left: '4%',
-              width: '36.5%',
+              top: '48.5%',
+              left: '3.5%',
+              width: '36%',
               background: '#FFFFFF',
-              padding: '5%',
+              padding: '8px',
               borderRadius: 4,
               boxSizing: 'border-box',
             }}
@@ -134,61 +136,66 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
             />
           </div>
 
-          {/* 会員名 */}
+          {/* 会員名
+              下線 y≈55.6% → フォント高(~1.9%) 引いて top=53.5%
+              右端の「様」はテンプレ固定なので right=11% で回避 */}
           <div
             style={{
               position: 'absolute',
-              top: '51.2%',
-              left: '43%',
-              right: '4%',
+              top: '53.5%',
+              left: '42%',
+              right: '11%',
               textAlign: 'right',
             }}
           >
             <p style={{
               fontFamily: SERIF,
-              fontSize: 'clamp(11px, 3.4vw, 15px)',
+              fontSize: 'clamp(11px, 3.2vw, 14px)',
               fontWeight: 700,
               color: '#F2E6C8',
               letterSpacing: '0.05em',
-              lineHeight: 1.2,
+              lineHeight: 1,
             }}>
               {name}
             </p>
           </div>
 
-          {/* 会員ID */}
+          {/* 会員ID
+              下線 y≈63.4% → フォント高(~1.1%) 引いて top=62.2% */}
           <div
             style={{
               position: 'absolute',
-              top: '60.5%',
-              left: '43%',
+              top: '62%',
+              left: '42%',
               right: '4%',
             }}
           >
             <p style={{
               fontFamily: 'monospace',
-              fontSize: 'clamp(7px, 2vw, 9px)',
-              color: 'rgba(242,230,200,0.65)',
-              letterSpacing: '0.04em',
+              fontSize: 'clamp(7px, 1.9vw, 9px)',
+              color: 'rgba(242,230,200,0.7)',
+              letterSpacing: '0.03em',
               wordBreak: 'break-all',
-              lineHeight: 1.4,
+              lineHeight: 1.3,
             }}>
               {shortId}
             </p>
           </div>
 
-          {/* 入会日 */}
+          {/* 入会日
+              下線 y≈72.7% → フォント高(~1.6%) 引いて top=71%
+              左半分: x=4-46% */}
           <div
             style={{
               position: 'absolute',
-              top: '69.8%',
-              left: '5%',
-              width: '42%',
+              top: '71%',
+              left: '4%',
+              right: '54%',
               textAlign: 'center',
             }}
           >
             <p style={{
-              fontSize: 'clamp(9px, 2.8vw, 12px)',
+              fontSize: 'clamp(9px, 2.6vw, 11px)',
               color: '#F2E6C8',
               fontFamily: SERIF,
               letterSpacing: '0.04em',
@@ -197,18 +204,19 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
             </p>
           </div>
 
-          {/* 最終来店日 */}
+          {/* 最終来店日
+              右半分: x=50-96% */}
           <div
             style={{
               position: 'absolute',
-              top: '69.8%',
-              left: '53%',
+              top: '71%',
+              left: '50%',
               right: '4%',
               textAlign: 'center',
             }}
           >
             <p style={{
-              fontSize: 'clamp(9px, 2.8vw, 12px)',
+              fontSize: 'clamp(9px, 2.6vw, 11px)',
               color: '#F2E6C8',
               fontFamily: SERIF,
               letterSpacing: '0.04em',
