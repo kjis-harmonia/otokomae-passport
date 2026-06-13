@@ -1,6 +1,9 @@
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
+import { supabase } from '../lib/supabase'
+import passportTemplate from '../assets/passport/otokomae-passport-template.png'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -12,6 +15,19 @@ interface Props {
 }
 
 export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
+  const [lastVisitDate, setLastVisitDate] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase
+      .from('maintenance_visits')
+      .select('last_visit_date')
+      .eq('user_id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.last_visit_date) setLastVisitDate(data.last_visit_date as string)
+      })
+  }, [userId])
+
   const qrPayload = JSON.stringify({
     type:     'ginjiro-member',
     userId,
@@ -19,9 +35,15 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
     issuedAt,
   })
 
-  const issuedDate = issuedAt
+  const issuedDateFmt = issuedAt
     ? new Date(issuedAt).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })
-    : ''
+    : '—'
+
+  const lastVisitFmt = lastVisitDate
+    ? new Date(lastVisitDate + 'T00:00:00').toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    : '—'
+
+  const shortId = userId.length > 22 ? userId.slice(0, 22) + '…' : userId
 
   return (
     <motion.div
@@ -43,11 +65,11 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
           right: 18,
           zIndex: 201,
           width: 40, height: 40, borderRadius: '50%',
-          background: 'rgba(5,3,2,0.8)',
-          border: '1px solid rgba(201,162,74,0.28)',
+          background: 'rgba(5,3,2,0.85)',
+          border: '1px solid rgba(201,162,74,0.32)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#F2E6C8', cursor: 'pointer',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.6)',
         }}
       >
         <X size={18} strokeWidth={2} />
@@ -59,151 +81,145 @@ export function MemberQrModal({ userId, name, issuedAt, onClose }: Props) {
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           justifyContent: 'center',
           minHeight: '100%',
-          padding: '80px 28px 48px',
-          paddingTop: 'max(80px, calc(env(safe-area-inset-top, 0px) + 64px))',
-          paddingBottom: 'max(48px, env(safe-area-inset-bottom, 48px))',
+          paddingTop: 'max(56px, calc(env(safe-area-inset-top, 0px) + 48px))',
+          paddingBottom: 'max(36px, env(safe-area-inset-bottom, 36px))',
+          paddingLeft: 20,
+          paddingRight: 20,
           overflowY: 'auto',
           boxSizing: 'border-box',
         }}
       >
-        {/* Title block */}
-        <div style={{ textAlign: 'center', marginBottom: 28, width: '100%' }}>
-          <div style={{
-            height: 1,
-            background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.55), transparent)',
-            marginBottom: 18,
-          }} />
-          <p style={{
-            fontSize: 9, letterSpacing: '0.32em', color: 'rgba(201,162,74,0.48)',
-            marginBottom: 8, textTransform: 'uppercase',
-          }}>
-            GINJIRO OFFICIAL MEMBERSHIP
-          </p>
-          <p style={{
-            fontFamily: SERIF, fontSize: 32, fontWeight: 700,
-            color: '#F2E6C8', letterSpacing: '0.14em', marginBottom: 5,
-            textShadow: '0 0 24px rgba(201,162,74,0.18)',
-          }}>
-            男前証
-          </p>
-          <p style={{
-            fontSize: 12, color: 'rgba(201,162,74,0.58)', letterSpacing: '0.18em',
-          }}>
-            銀二郎公式会員証
-          </p>
-          <div style={{
-            height: 1,
-            background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.55), transparent)',
-            marginTop: 18,
-          }} />
-        </div>
-
-        {/* Card */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.38, ease: 'easeOut' }}
+          transition={{ delay: 0.08, duration: 0.36, ease: 'easeOut' }}
           style={{
-            background: 'linear-gradient(160deg, #150C07 0%, #0A0504 100%)',
-            border: '1px solid rgba(201,162,74,0.32)',
-            borderRadius: 20,
-            padding: '28px 24px 24px',
+            position: 'relative',
             width: '100%',
-            maxWidth: 340,
-            boxShadow:
-              '0 24px 64px rgba(0,0,0,0.72), 0 0 0 1px rgba(201,162,74,0.07), inset 0 1px 0 rgba(242,230,200,0.06)',
+            maxWidth: 380,
+            borderRadius: 12,
+            overflow: 'hidden',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.8), 0 0 0 1px rgba(201,162,74,0.15)',
           }}
         >
-          {/* Corner marks */}
-          {(['top-3 left-3', 'top-3 right-3', 'bottom-3 left-3', 'bottom-3 right-3'] as const).map(pos => (
-            <div
-              key={pos}
-              style={{
-                position: 'absolute',
-                ...Object.fromEntries(pos.split(' ').map(p => {
-                  const [side, offset] = p.split('-')
-                  return [side, `${parseInt(offset) * 4}px`]
-                })),
-                width: 12, height: 12,
-                borderColor: 'rgba(201,162,74,0.3)',
-                borderStyle: 'solid',
-                borderTopWidth:    pos.includes('top')    ? 1 : 0,
-                borderBottomWidth: pos.includes('bottom') ? 1 : 0,
-                borderLeftWidth:   pos.includes('left')   ? 1 : 0,
-                borderRightWidth:  pos.includes('right')  ? 1 : 0,
-              }}
-            />
-          ))}
+          {/* Template image — full card background */}
+          <img
+            src={passportTemplate}
+            alt="男前証"
+            draggable={false}
+            style={{ width: '100%', display: 'block', userSelect: 'none' }}
+          />
 
-          {/* QR code — white background for scanner readability */}
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: 12,
-            padding: 14,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 22,
-          }}>
+          {/* ── Dynamic overlays ───────────────────────────────────────────── */}
+
+          {/* QR code — positioned over the QR placeholder area in the template */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '47.8%',
+              left: '4%',
+              width: '36.5%',
+              background: '#FFFFFF',
+              padding: '5%',
+              borderRadius: 4,
+              boxSizing: 'border-box',
+            }}
+          >
             <QRCodeSVG
               value={qrPayload}
-              size={192}
+              size={200}
               level="M"
               marginSize={0}
+              style={{ width: '100%', height: 'auto', display: 'block' }}
             />
           </div>
 
-          {/* Divider */}
-          <div style={{
-            height: '0.5px',
-            background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.28), transparent)',
-            marginBottom: 18,
-          }} />
+          {/* 会員名 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '51.2%',
+              left: '43%',
+              right: '4%',
+              textAlign: 'right',
+            }}
+          >
+            <p style={{
+              fontFamily: SERIF,
+              fontSize: 'clamp(11px, 3.4vw, 15px)',
+              fontWeight: 700,
+              color: '#F2E6C8',
+              letterSpacing: '0.05em',
+              lineHeight: 1.2,
+            }}>
+              {name}
+            </p>
+          </div>
 
-          {/* Name */}
-          <p style={{
-            fontSize: 8, letterSpacing: '0.26em', color: 'rgba(201,162,74,0.42)',
-            marginBottom: 7, textTransform: 'uppercase',
-          }}>
-            Member Name
-          </p>
-          <p style={{
-            fontFamily: SERIF, fontSize: 24, fontWeight: 700,
-            color: '#F2E6C8', letterSpacing: '0.04em', marginBottom: 18,
-          }}>
-            {name}
-          </p>
+          {/* 会員ID */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '60.5%',
+              left: '43%',
+              right: '4%',
+            }}
+          >
+            <p style={{
+              fontFamily: 'monospace',
+              fontSize: 'clamp(7px, 2vw, 9px)',
+              color: 'rgba(242,230,200,0.65)',
+              letterSpacing: '0.04em',
+              wordBreak: 'break-all',
+              lineHeight: 1.4,
+            }}>
+              {shortId}
+            </p>
+          </div>
 
-          {/* ID + issued date row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <div>
-              <p style={{
-                fontSize: 8, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.38)',
-                marginBottom: 5, textTransform: 'uppercase',
-              }}>
-                Member ID
-              </p>
-              <p style={{
-                fontFamily: 'monospace', fontSize: 10,
-                color: 'rgba(242,230,200,0.38)', letterSpacing: '0.06em',
-                wordBreak: 'break-all',
-              }}>
-                {userId}
-              </p>
-            </div>
-            {issuedDate && (
-              <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                <p style={{ fontSize: 8, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.3)', marginBottom: 3 }}>
-                  発行日
-                </p>
-                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.3)' }}>{issuedDate}</p>
-              </div>
-            )}
+          {/* 入会日 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '69.8%',
+              left: '5%',
+              width: '42%',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{
+              fontSize: 'clamp(9px, 2.8vw, 12px)',
+              color: '#F2E6C8',
+              fontFamily: SERIF,
+              letterSpacing: '0.04em',
+            }}>
+              {issuedDateFmt}
+            </p>
+          </div>
+
+          {/* 最終来店日 */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '69.8%',
+              left: '53%',
+              right: '4%',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{
+              fontSize: 'clamp(9px, 2.8vw, 12px)',
+              color: '#F2E6C8',
+              fontFamily: SERIF,
+              letterSpacing: '0.04em',
+            }}>
+              {lastVisitFmt}
+            </p>
           </div>
         </motion.div>
 
         <p style={{
-          fontSize: 10, color: 'rgba(201,162,74,0.3)', marginTop: 22,
+          fontSize: 10, color: 'rgba(201,162,74,0.3)', marginTop: 18,
           letterSpacing: '0.12em', textAlign: 'center', lineHeight: 1.7,
         }}>
           店舗でこのQRをご提示ください
