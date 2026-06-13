@@ -117,6 +117,10 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [stampRewardMsg, setStampRewardMsg]     = useState<string | null>(null)
   const stampRewardIssuedRef                    = useRef(false)
 
+  // DEV: passport field calibration
+  const [showCalibrate, setShowCalibrate]       = useState(false)
+  const [calibCoords, setCalibCoords]           = useState<{ x: number; y: number } | null>(null)
+
   const userId = getUserId()
 
   // ── Data fetching ───────────────────────────────────────────────────────────
@@ -508,19 +512,30 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
         <div style={{ padding: '16px 16px 4px' }}>
           <p style={{ fontSize: 8, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.36)', textTransform: 'uppercase', marginBottom: 8 }}>① 男前証</p>
 
-          {/* Template card — tap to expand full-screen */}
+          {/* Template card — tap to expand (calibrate mode: shows coordinates) */}
           <div
             role="button"
             tabIndex={0}
-            onClick={() => setShowMemberQr(true)}
-            onKeyDown={e => e.key === 'Enter' && setShowMemberQr(true)}
+            onClick={() => { if (!showCalibrate) setShowMemberQr(true) }}
+            onKeyDown={e => e.key === 'Enter' && !showCalibrate && setShowMemberQr(true)}
+            onPointerMove={e => {
+              if (!showCalibrate) return
+              const rect = e.currentTarget.getBoundingClientRect()
+              setCalibCoords({
+                x: Math.round((e.clientX - rect.left) / rect.width * 1000) / 10,
+                y: Math.round((e.clientY - rect.top) / rect.height * 1000) / 10,
+              })
+            }}
+            onPointerLeave={() => showCalibrate && setCalibCoords(null)}
             style={{
               position: 'relative',
               width: '100%',
               borderRadius: 12,
               overflow: 'hidden',
-              cursor: 'pointer',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,162,74,0.2)',
+              cursor: showCalibrate ? 'crosshair' : 'pointer',
+              boxShadow: showCalibrate
+                ? '0 0 0 2px rgba(0,255,255,0.6)'
+                : '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,162,74,0.2)',
               WebkitTapHighlightColor: 'transparent',
             }}
           >
@@ -531,7 +546,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               style={{ width: '100%', display: 'block', userSelect: 'none' }}
             />
 
-            {/* QR code — centered in placeholder, ~17% smaller than modal (32% vs 36%) */}
+            {/* QR code */}
             <div style={{
               position: 'absolute',
               top: '48%',
@@ -578,6 +593,52 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
                 {lastVisitFmt}
               </p>
             </div>
+
+            {/* ── DEV: キャリブレーショングリッド ────────────────────────── */}
+            {showCalibrate && (
+              <>
+                {/* 横線 5% 刻み */}
+                {Array.from({ length: 19 }, (_, i) => (i + 1) * 5).map(pct => (
+                  <div key={`h${pct}`} style={{
+                    position: 'absolute', top: `${pct}%`, left: 0, right: 0,
+                    height: 1, pointerEvents: 'none', zIndex: 8,
+                    background: pct % 10 === 0 ? 'rgba(0,255,255,0.65)' : 'rgba(0,255,255,0.25)',
+                  }}>
+                    <span style={{ position: 'absolute', right: 2, top: -8, fontSize: 7, color: 'cyan', background: 'rgba(0,0,0,0.75)', padding: '0 2px', lineHeight: 1.4 }}>{pct}%</span>
+                  </div>
+                ))}
+                {/* 縦線 10% 刻み */}
+                {Array.from({ length: 9 }, (_, i) => (i + 1) * 10).map(pct => (
+                  <div key={`v${pct}`} style={{
+                    position: 'absolute', left: `${pct}%`, top: 0, bottom: 0,
+                    width: 1, pointerEvents: 'none', zIndex: 8,
+                    background: 'rgba(255,255,0,0.35)',
+                  }}>
+                    <span style={{ position: 'absolute', top: 2, left: 2, fontSize: 7, color: 'yellow', background: 'rgba(0,0,0,0.75)', padding: '0 2px', lineHeight: 1.4, whiteSpace: 'nowrap' }}>{pct}%</span>
+                  </div>
+                ))}
+                {/* ライブ座標クロスヘア */}
+                {calibCoords && (
+                  <>
+                    <div style={{ position: 'absolute', top: `${calibCoords.y}%`, left: 0, right: 0, height: 1, background: 'rgba(255,0,80,0.9)', pointerEvents: 'none', zIndex: 9 }} />
+                    <div style={{ position: 'absolute', left: `${calibCoords.x}%`, top: 0, bottom: 0, width: 1, background: 'rgba(255,0,80,0.9)', pointerEvents: 'none', zIndex: 9 }} />
+                    <div style={{
+                      position: 'absolute',
+                      top: `${calibCoords.y}%`,
+                      left: `${Math.min(calibCoords.x, 60)}%`,
+                      transform: `translate(${calibCoords.x > 60 ? '-108%' : '8px'}, -110%)`,
+                      background: 'rgba(0,0,0,0.92)', color: '#0F0', fontSize: 11,
+                      fontFamily: 'monospace', fontWeight: 700,
+                      padding: '3px 7px', borderRadius: 4,
+                      pointerEvents: 'none', zIndex: 10, whiteSpace: 'nowrap',
+                      border: '1px solid rgba(0,255,0,0.3)',
+                    }}>
+                      x:{calibCoords.x}% / y:{calibCoords.y}%
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
 
           {/* 保有チケット枚数（テスト環境: 固定99） */}
@@ -589,10 +650,26 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
             ))}
           </div>
 
-          {/* フッターテキスト（修正⑧） */}
+          {/* フッターテキスト */}
           <p style={{ textAlign: 'center', fontSize: 9, color: 'rgba(201,162,74,0.28)', letterSpacing: '0.12em', marginTop: 4, marginBottom: 4 }}>
             会計時にスタッフへ提示してください
           </p>
+
+          {/* DEV: キャリブレーション切替ボタン */}
+          <button
+            type="button"
+            onClick={() => { setShowCalibrate(p => !p); setCalibCoords(null) }}
+            style={{
+              display: 'block', width: '100%', marginTop: 6, padding: '5px 0',
+              fontSize: 9, letterSpacing: '0.06em', fontFamily: 'monospace',
+              color: showCalibrate ? '#0FF' : 'rgba(242,230,200,0.14)',
+              background: showCalibrate ? 'rgba(0,255,255,0.06)' : 'none',
+              border: showCalibrate ? '1px solid rgba(0,255,255,0.25)' : '1px solid transparent',
+              borderRadius: 6, cursor: 'pointer',
+            }}
+          >
+            {showCalibrate ? '📐 キャリブレーション中 — ホバーで座標確認' : '開発用：位置調整モード'}
+          </button>
         </div>
 
         {/* ══════════════════════
