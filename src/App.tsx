@@ -186,40 +186,66 @@ function App() {
 
           {/* BGM toggle — fixed top-right, visible on home tab only */}
           {activeTab === 'home' && (
-            <button
-              type="button"
-              onClick={bgm.toggle}
-              aria-label={bgm.isOn ? 'BGMをOFFにする' : 'BGMをONにする'}
-              style={{
-                position: 'fixed',
-                top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-                right: 16,
-                zIndex: 120,
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                background: bgm.isOn
-                  ? 'rgba(12,6,2,0.88)'
-                  : 'rgba(8,4,2,0.72)',
-                border: `1.5px solid ${bgm.isOn ? 'rgba(201,162,74,0.80)' : 'rgba(255,255,255,0.14)'}`,
-                boxShadow: bgm.isOn
-                  ? '0 0 14px rgba(201,162,74,0.32), 0 2px 10px rgba(0,0,0,0.6)'
-                  : '0 2px 8px rgba(0,0,0,0.45)',
-                color: bgm.isOn ? '#C9A24A' : 'rgba(255,255,255,0.28)',
-                fontSize: 15,
-                lineHeight: 1,
-                cursor: 'pointer',
-                backdropFilter: 'blur(14px)',
-                WebkitBackdropFilter: 'blur(14px)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                WebkitTapHighlightColor: 'transparent',
-                transition: 'border-color 0.2s, box-shadow 0.2s, color 0.2s',
-              }}
-            >
-              ♪
-            </button>
+            <>
+              <style>{`
+                @keyframes bgmRecordSpin {
+                  from { transform: rotate(0deg); }
+                  to   { transform: rotate(360deg); }
+                }
+              `}</style>
+              <button
+                type="button"
+                onClick={bgm.toggle}
+                aria-label={bgm.isOn ? 'BGMをOFFにする' : 'BGMをONにする'}
+                style={{
+                  position: 'fixed',
+                  top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+                  right: 16,
+                  zIndex: 120,
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
+                  background: bgm.isOn ? 'rgba(12,6,2,0.88)' : 'rgba(8,4,2,0.72)',
+                  border: `1.5px solid ${bgm.isOn ? 'rgba(201,162,74,0.82)' : 'rgba(201,162,74,0.18)'}`,
+                  boxShadow: bgm.isOn
+                    ? '0 0 16px rgba(201,162,74,0.40), 0 0 6px rgba(201,162,74,0.22), 0 2px 10px rgba(0,0,0,0.6)'
+                    : '0 2px 8px rgba(0,0,0,0.45)',
+                  color: bgm.isOn ? '#C9A24A' : 'rgba(201,162,74,0.30)',
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(14px)',
+                  WebkitBackdropFilter: 'blur(14px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  WebkitTapHighlightColor: 'transparent',
+                  opacity: bgm.isOn ? 1 : 0.58,
+                  transition: 'border-color 0.25s, box-shadow 0.25s, color 0.25s, opacity 0.25s',
+                }}
+              >
+                {/* レコード盤アイコン */}
+                <svg
+                  width="19"
+                  height="19"
+                  viewBox="0 0 19 19"
+                  fill="none"
+                  aria-hidden="true"
+                  style={{
+                    animation: bgm.isOn ? 'bgmRecordSpin 5s linear infinite' : 'none',
+                  }}
+                >
+                  {/* 外周 */}
+                  <circle cx="9.5" cy="9.5" r="8.5" stroke="currentColor" strokeWidth="1" fill="rgba(0,0,0,0.20)" />
+                  {/* 外側グルーヴ */}
+                  <circle cx="9.5" cy="9.5" r="6.8" stroke="currentColor" strokeWidth="0.45" fill="none" opacity="0.45" />
+                  {/* 内側グルーヴ */}
+                  <circle cx="9.5" cy="9.5" r="5.5" stroke="currentColor" strokeWidth="0.35" fill="none" opacity="0.30" />
+                  {/* レーベル面 */}
+                  <circle cx="9.5" cy="9.5" r="3.8" stroke="currentColor" strokeWidth="0.8" fill="rgba(0,0,0,0.35)" />
+                  {/* センタースピンドル */}
+                  <circle cx="9.5" cy="9.5" r="1.3" fill="currentColor" />
+                </svg>
+              </button>
+            </>
           )}
 
           {isPremiumGachaOpen && (
