@@ -119,12 +119,17 @@ export async function getUserTickets(userId: string): Promise<TicketRow[]> {
 }
 
 export async function markTicketUsed(ticketId: string, staffId: string): Promise<void> {
+  if (ticketId.startsWith('local-')) {
+    markLocalTicketUsed(ticketId)
+    void staffId
+    return
+  }
   const { error } = await supabase
     .from('tickets')
     .update({ used: true, used_at: new Date().toISOString() })
     .eq('id', ticketId)
   if (error) throw error
-  void staffId // Phase2: write audit log with staffId
+  void staffId
 }
 
 // ── Transfer ──────────────────────────────────────────────────────────────────

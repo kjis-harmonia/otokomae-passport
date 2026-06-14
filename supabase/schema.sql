@@ -16,7 +16,7 @@ create table if not exists public.tickets (
   used_at     timestamptz,
   expires_at  timestamptz,
 
-  constraint tickets_type_check check (type in ('coupon', 'discount', 'cut-ticket'))
+  constraint tickets_type_check check (type in ('coupon', 'discount', 'otoku', 'cut-ticket'))
 );
 
 create index if not exists tickets_user_id_idx      on public.tickets (user_id);
@@ -57,6 +57,18 @@ create policy "allow_all" on public.ticket_issue_logs
 -- Supabase Realtime: enable postgres_changes for this table
 -- Run this separately in the SQL editor if postgres_changes are needed:
 -- alter publication supabase_realtime add table public.ticket_issue_logs;
+
+-- ── MIGRATION: fix tickets type constraint to include 'otoku' and 'discount' ──
+-- If the tickets table was already created, run these two lines in the Supabase
+-- SQL Editor to update the constraint without recreating the table:
+--
+--   ALTER TABLE public.tickets DROP CONSTRAINT IF EXISTS tickets_type_check;
+--   ALTER TABLE public.tickets ADD CONSTRAINT tickets_type_check
+--     CHECK (type IN ('coupon', 'discount', 'otoku', 'cut-ticket'));
+--
+-- Without this, issuing 漢トク券 (otoku) or 割引券 (discount) from the staff
+-- terminal will silently fail the Supabase insert and fall back to the staff
+-- terminal's localStorage only, making the tickets invisible to the customer.
 
 -- ── maintenance_visits: スタッフ端末QRスキャンでのみ更新される来店日 ──────────
 -- 顧客側からは書き込めない（RLSで管理）。

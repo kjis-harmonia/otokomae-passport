@@ -957,6 +957,7 @@ export function AdminScreen() {
                         <div key={ticket.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10, background: tktTc.bg, border: `1px solid ${tktTc.border}` }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(80,210,120,0.15)', border: '1px solid rgba(80,210,120,0.40)', color: '#50d278' }}>未使用</span>
                               <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: tktTc.bg, border: `1px solid ${tktTc.border}`, color: tktTc.text }}>
                                 {TICKET_TYPE_LABELS[ticket.type]}
                               </span>
@@ -972,7 +973,7 @@ export function AdminScreen() {
                             disabled={markingUsed === ticket.id}
                             style={{ flexShrink: 0, padding: '5px 9px', borderRadius: 7, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.11)', color: 'rgba(242,230,200,0.5)', fontSize: 10, fontFamily: SERIF, fontWeight: 700, cursor: markingUsed === ticket.id ? 'default' : 'pointer' }}
                           >
-                            {markingUsed === ticket.id ? '…' : '使用済みに'}
+                            {markingUsed === ticket.id ? '…' : '使用確定'}
                           </button>
                         </div>
                       )
