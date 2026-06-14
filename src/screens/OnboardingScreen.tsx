@@ -26,7 +26,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   function handleStart() {
     // BGM: play on user gesture to satisfy browser autoplay policy
     try {
-      const audio = new Audio('/audio/ginjiro-theme.mp3')
+      const audio = new Audio('/assets/audio/ginjiro-theme.mp4')
       audio.volume = 0.28
       audio.loop = false
       void audio.play()
