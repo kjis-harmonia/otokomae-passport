@@ -7,7 +7,7 @@ import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import { StyleDetailModal } from '../components/StyleDetailModal'
 import { PassportCard } from '../components/PassportCard'
-import { resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
+import { HERO_SLIDE_IMAGES, resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
 import type { StyleCard } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
 import { MAINTENANCE_CUT_URL } from '../data/reserveLinks'
@@ -1324,6 +1324,105 @@ function MaintenanceScheduleSection() {
   )
 }
 
+// ── HeroSlider ────────────────────────────────────────────────────────────────
+
+function HeroSlider() {
+  const [current, setCurrent] = useState(0)
+  const touchStartX = useRef<number | null>(null)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrent((i) => (i + 1) % HERO_SLIDE_IMAGES.length)
+    }, 7000)
+    return () => clearInterval(timer)
+  }, [])
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0]?.clientX ?? null
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return
+    const endX = e.changedTouches[0]?.clientX
+    if (endX === undefined) return
+    const diff = endX - touchStartX.current
+    touchStartX.current = null
+    if (Math.abs(diff) < 40) return
+    if (diff < 0) {
+      setCurrent((i) => (i + 1) % HERO_SLIDE_IMAGES.length)
+    } else {
+      setCurrent((i) => (i - 1 + HERO_SLIDE_IMAGES.length) % HERO_SLIDE_IMAGES.length)
+    }
+  }
+
+  return (
+    <div
+      className="relative w-full overflow-hidden select-none"
+      style={{ aspectRatio: '1440 / 2200', maxHeight: '88dvh' }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div className="absolute inset-0" style={{ background: '#050302' }} />
+      <AnimatePresence mode="sync">
+        {HERO_SLIDE_IMAGES.map((img, i) =>
+          i === current ? (
+            <motion.div
+              key={`slide-${i}`}
+              className="absolute inset-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 1.6, ease: [0.25, 0, 0.25, 1] }}
+            >
+              <motion.img
+                src={img.src}
+                alt={img.alt}
+                className="absolute inset-0 w-full h-full"
+                style={{ objectFit: 'cover', objectPosition: img.position }}
+                initial={{ scale: 1 }}
+                animate={{ scale: 1.04 }}
+                transition={{ duration: 9, ease: [0.22, 0, 0.36, 1] }}
+                onError={(e) => { ;(e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            </motion.div>
+          ) : null,
+        )}
+      </AnimatePresence>
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          zIndex: 2,
+          background: [
+            'linear-gradient(90deg, rgba(5,3,2,0.40) 0%, rgba(5,3,2,0.0) 42%)',
+            'linear-gradient(180deg, rgba(5,3,2,0.82) 0%, rgba(5,3,2,0.0) 22%, rgba(5,3,2,0.0) 48%, rgba(5,3,2,0.60) 68%, rgba(5,3,2,0.97) 100%)',
+          ].join(', '),
+        }}
+      />
+      <div className="absolute bottom-5 left-0 right-0 flex justify-center gap-1.5" style={{ zIndex: 3 }}>
+        {HERO_SLIDE_IMAGES.map((_, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => setCurrent(i)}
+            aria-label={`スライド ${i + 1}`}
+            style={{
+              width: i === current ? 18 : 6,
+              height: 6,
+              borderRadius: 3,
+              background: i === current ? '#C9A24A' : 'rgba(242,230,200,0.26)',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'width 0.35s ease, background 0.35s ease',
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── HomeScreen ────────────────────────────────────────────────────────────────
 
 export function HomeScreen({ onTabChange, onModalChange }: Props) {
@@ -1340,10 +1439,9 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
 
   return (
     <div>
-      {/* Safe-area top padding */}
-      <div style={{ height: 'max(16px, env(safe-area-inset-top, 16px))' }} />
+      <HeroSlider />
 
-      <div className="space-y-12 pt-4 pb-16">
+      <div className="space-y-12 pt-7 pb-16">
 
         {/* ① 男前証 */}
         <motion.div
