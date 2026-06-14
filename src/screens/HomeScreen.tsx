@@ -32,8 +32,8 @@ import {
 import { getUserId } from '../utils/userId'
 import { getUserTickets, getActiveTicket, setActiveTicket, clearActiveTicket, initiateTransfer, cancelTransfer } from '../utils/ticketStore'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY, loadCoupons, saveCoupons } from '../utils/storage'
-import type { TicketRow } from '../data/ticket'
-import { TICKET_TYPE_LABELS } from '../data/ticket'
+import type { TicketRow, TicketType } from '../data/ticket'
+import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
 import type { Coupon } from '../data/brand'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -120,6 +120,38 @@ type WalletItem =
   | { kind: 'ticket'; data: TicketRow }
   | { kind: 'coupon'; data: Coupon & { amount: number } }
 
+// 券種＋金額でグループ化
+interface HomeTicketGroup {
+  key: string
+  type: TicketType
+  title: string
+  amount: number
+  activeItems: WalletItem[]   // 使用可能（期限内・非転送中）
+  pendingItems: WalletItem[]  // 転送進行中
+  expiredItems: WalletItem[]  // 期限切れ
+}
+
+function groupWalletTickets(ticketItems: WalletItem[]): HomeTicketGroup[] {
+  const map = new Map<string, HomeTicketGroup>()
+  for (const item of ticketItems) {
+    if (item.kind !== 'ticket') continue
+    const t   = item.data
+    const key = `${t.type}::${t.amount}`
+    if (!map.has(key)) {
+      map.set(key, {
+        key, type: t.type, title: t.title, amount: t.amount,
+        activeItems: [], pendingItems: [], expiredItems: [],
+      })
+    }
+    const g = map.get(key)!
+    const isExpired = !!t.expires_at && new Date(t.expires_at) < new Date()
+    if (isExpired)              g.expiredItems.push(item)
+    else if (t.pending_transfer) g.pendingItems.push(item)
+    else                        g.activeItems.push(item)
+  }
+  return Array.from(map.values())
+}
+
 function walletCardStyle(item: WalletItem): { bg: string; accent: string; bar: string; label: string } {
   if (item.kind === 'ticket' && item.data.type === 'cut-ticket') {
     return {
@@ -177,6 +209,11 @@ function TicketWalletSection() {
   }
 
   useEffect(() => { refreshItems() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 券種グループと個別クーポンに分離
+  const ticketItems  = items.filter(item => item.kind === 'ticket')
+  const couponItems  = items.filter(item => item.kind === 'coupon')
+  const ticketGroups = groupWalletTickets(ticketItems)
 
   const qrValue = qrItem
     ? qrItem.kind === 'ticket'
@@ -267,6 +304,11 @@ function TicketWalletSection() {
           保有チケット
         </p>
         <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.28), transparent)' }} />
+        {items.length > 0 && (
+          <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 99, background: 'rgba(201,162,74,0.10)', border: '1px solid rgba(201,162,74,0.24)', color: 'rgba(201,162,74,0.68)', flexShrink: 0 }}>
+            {ticketGroups.length + couponItems.length}種 · {items.length}枚
+          </span>
+        )}
         <p style={{ fontSize: 8, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.44)', flexShrink: 0 }}>WALLET</p>
       </div>
 
@@ -280,27 +322,164 @@ function TicketWalletSection() {
         } as React.CSSProperties}
         className="[&::-webkit-scrollbar]:hidden"
       >
-        {items.map((item, i) => {
-          const id      = item.data.id
-          const title   = item.data.title
-          const amount  = item.data.amount ?? 0
-          const expiry  = item.kind === 'ticket' ? item.data.expires_at : null
-          const isPend  = item.kind === 'ticket' && !!item.data.pending_transfer
-          const isExp   = expiry ? new Date(expiry) < new Date() : false
-          const cs      = walletCardStyle(item)
-          const typeLabel = item.kind === 'ticket'
-            ? TICKET_TYPE_LABELS[item.data.type]
-            : 'Specialクーポン'
+        {/* ── 券種＋金額グループ（数量管理方式） ── */}
+        {ticketGroups.map((group, i) => {
+          const tc           = TICKET_TYPE_COLORS[group.type]
+          const usableCount  = group.activeItems.length
+          const pendingCount = group.pendingItems.length
+          const expiredCount = group.expiredItems.length
+          const displayCount = usableCount + pendingCount
+          const canUse       = usableCount > 0
+          const canGift      = usableCount > 0
+          const repItem      = group.activeItems[0] ?? group.pendingItems[0] ?? group.expiredItems[0]
+          const repTicket    = repItem?.kind === 'ticket' ? repItem.data : undefined
 
           return (
             <motion.div
-              key={id}
+              key={group.key}
               initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.07, duration: 0.38 }}
               style={{
                 flexShrink: 0,
-                width: 'clamp(250px, 76vw, 290px)',
+                width: 'clamp(256px, 76vw, 284px)',
+                borderRadius: 20,
+                background: tc.cardBg,
+                border: `1px solid ${canUse ? tc.border : 'rgba(255,255,255,0.07)'}`,
+                boxShadow: [
+                  '0 16px 48px rgba(0,0,0,0.65)',
+                  'inset 0 1px 0 rgba(255,255,255,0.03)',
+                  canUse ? `0 0 24px ${tc.border}20` : '',
+                ].filter(Boolean).join(', '),
+                overflow: 'hidden',
+                opacity: canUse ? 1 : 0.65,
+              }}
+            >
+              {/* 天面アクセントライン */}
+              <div style={{ height: 2, background: `linear-gradient(90deg, ${tc.border} 0%, transparent 70%)` }} />
+
+              <div style={{ padding: '16px 18px 14px' }}>
+                {/* 券種ラベル + 枚数バッジ */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: '0.10em',
+                    padding: '2px 8px', borderRadius: 99,
+                    background: tc.bg, border: `1px solid ${tc.border}`, color: tc.text,
+                  }}>
+                    {TICKET_TYPE_LABELS[group.type]}
+                  </span>
+                  {displayCount > 0 && (
+                    <span style={{
+                      fontSize: 12, fontWeight: 700,
+                      color: tc.text, fontFamily: 'monospace', letterSpacing: '0.04em',
+                    }}>
+                      ×{displayCount}枚
+                    </span>
+                  )}
+                </div>
+
+                {/* タイトル */}
+                <p style={{
+                  fontFamily: SERIF, fontSize: 22, fontWeight: 700,
+                  color: '#F2E6C8', letterSpacing: '0.04em', lineHeight: 1.15,
+                  marginBottom: group.amount > 0 ? 4 : 12,
+                }}>
+                  {group.title}
+                </p>
+
+                {/* 金額 */}
+                {group.amount > 0 && (
+                  <p style={{
+                    fontFamily: SERIF, fontSize: 28, fontWeight: 700,
+                    color: '#C9A24A', letterSpacing: '0.01em', lineHeight: 1, marginBottom: 8,
+                  }}>
+                    ¥{group.amount.toLocaleString()}
+                  </p>
+                )}
+
+                {/* 内訳バッジ（渡し中 / 期限切れ） */}
+                {(pendingCount > 0 || expiredCount > 0) && (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                    {pendingCount > 0 && (
+                      <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,180,0,0.10)', border: '1px solid rgba(255,180,0,0.34)', color: '#FFB400' }}>
+                        渡し中 {pendingCount}枚
+                      </span>
+                    )}
+                    {expiredCount > 0 && (
+                      <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(224,96,80,0.10)', border: '1px solid rgba(224,96,80,0.30)', color: '#E06050' }}>
+                        期限切れ {expiredCount}枚
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* 有効期限 */}
+                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.34)', marginBottom: 14, letterSpacing: '0.06em' }}>
+                  {repTicket?.expires_at
+                    ? `有効期限 ${repTicket.expires_at.slice(0, 10).replace(/-/g, '/')}`
+                    : '有効期限なし'}
+                </p>
+
+                <div style={{ height: '0.5px', background: `linear-gradient(90deg, ${tc.border}22, transparent)`, marginBottom: 12 }} />
+
+                {/* Primary: 使用する */}
+                <button
+                  type="button"
+                  onClick={() => { if (canUse && group.activeItems[0]) setConfirmItem(group.activeItems[0]) }}
+                  disabled={!canUse}
+                  style={{
+                    width: '100%', padding: '12px 0', borderRadius: 10,
+                    background: canUse ? tc.btnBg : 'rgba(255,255,255,0.02)',
+                    border: `1.5px solid ${canUse ? tc.border : 'rgba(255,255,255,0.07)'}`,
+                    boxShadow: canUse ? `0 4px 18px ${tc.border}38` : 'none',
+                    fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+                    color: canUse ? tc.text : 'rgba(242,230,200,0.2)',
+                    fontFamily: SERIF, cursor: canUse ? 'pointer' : 'default',
+                  }}
+                >
+                  使用する
+                </button>
+
+                {/* Secondary: 譲る */}
+                <button
+                  type="button"
+                  onClick={() => { if (canGift && group.activeItems[0]) void handleTransfer(group.activeItems[0]) }}
+                  disabled={!canGift || xferring}
+                  style={{
+                    display: 'block', width: '100%',
+                    padding: '8px 0 2px',
+                    background: 'none', border: 'none',
+                    fontSize: 11,
+                    color: canGift ? 'rgba(242,230,200,0.36)' : 'rgba(242,230,200,0.14)',
+                    fontFamily: SERIF, letterSpacing: '0.12em',
+                    cursor: canGift ? 'pointer' : 'default',
+                    textDecoration: canGift ? 'underline' : 'none',
+                    textUnderlineOffset: '3px',
+                    textAlign: 'center',
+                  }}
+                >
+                  譲る
+                </button>
+              </div>
+            </motion.div>
+          )
+        })}
+
+        {/* ── 個別クーポン（旧来型、グループ化しない） ── */}
+        {couponItems.map((item, i) => {
+          const cs     = walletCardStyle(item)
+          const title  = item.data.title
+          const amount = item.data.amount ?? 0
+
+          return (
+            <motion.div
+              key={item.data.id}
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: (ticketGroups.length + i) * 0.07, duration: 0.38 }}
+              style={{
+                flexShrink: 0,
+                width: 'clamp(256px, 76vw, 284px)',
                 borderRadius: 20,
                 background: cs.bg,
                 border: `1px solid ${cs.accent}38`,
@@ -308,80 +487,41 @@ function TicketWalletSection() {
                 overflow: 'hidden',
               }}
             >
-              {/* Top accent bar */}
               <div style={{ height: 2, background: cs.bar }} />
-
-              <div style={{ padding: '16px 18px 18px' }}>
-                {/* Label + status */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ padding: '16px 18px 14px' }}>
+                <div style={{ marginBottom: 12 }}>
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.18em', color: cs.label, textTransform: 'uppercase' }}>
-                    {typeLabel}
+                    Specialクーポン
                   </span>
-                  {isPend ? (
-                    <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: '#FFB400', background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.28)', borderRadius: 99, padding: '2px 8px' }}>渡し中</span>
-                  ) : (
-                    <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(100,210,110,0.9)', background: 'rgba(100,210,110,0.08)', border: '1px solid rgba(100,210,110,0.26)', borderRadius: 99, padding: '2px 8px' }}>未使用</span>
-                  )}
                 </div>
-
-                {/* Title */}
-                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em', lineHeight: 1.15, marginBottom: 4 }}>
+                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em', lineHeight: 1.15, marginBottom: amount > 0 ? 4 : 14 }}>
                   {title}
                 </p>
-
-                {/* Amount */}
                 {amount > 0 && (
                   <p style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: cs.accent, letterSpacing: '0.01em', lineHeight: 1, marginBottom: 8 }}>
                     ¥{amount.toLocaleString()}
                   </p>
                 )}
-
-                {/* Expiry */}
-                <p style={{ fontSize: 10, color: isExp ? '#E06060' : 'rgba(242,230,200,0.34)', marginBottom: 14, letterSpacing: '0.06em' }}>
-                  {expiry ? `有効期限 ${expiry.slice(0, 10).replace(/-/g, '/')}` : '有効期限なし'}
-                </p>
-
-                {/* Divider */}
+                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.34)', marginBottom: 14, letterSpacing: '0.06em' }}>有効期限なし</p>
                 <div style={{ height: '0.5px', background: `linear-gradient(90deg, ${cs.accent}22, transparent)`, marginBottom: 12 }} />
-
-                {/* Buttons */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => !isExp && setConfirmItem(item)}
-                    style={{
-                      flex: 1, padding: '10px 0', borderRadius: 10,
-                      background: isExp ? 'rgba(255,255,255,0.02)' : `${cs.accent}1a`,
-                      border: `1px solid ${isExp ? 'rgba(255,255,255,0.07)' : cs.accent + '44'}`,
-                      fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-                      color: isExp ? 'rgba(242,230,200,0.2)' : '#F2E6C8',
-                      fontFamily: SERIF, cursor: isExp ? 'default' : 'pointer',
-                    }}
-                  >
-                    使用する
-                  </button>
-                  {item.kind === 'ticket' && !isPend && !isExp && (
-                    <button
-                      type="button"
-                      onClick={() => handleTransfer(item)}
-                      disabled={xferring}
-                      style={{
-                        flex: 1, padding: '10px 0', borderRadius: 10,
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.11)',
-                        fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-                        color: 'rgba(242,230,200,0.5)',
-                        fontFamily: SERIF, cursor: xferring ? 'default' : 'pointer',
-                      }}
-                    >
-                      譲る
-                    </button>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmItem(item)}
+                  style={{
+                    width: '100%', padding: '12px 0', borderRadius: 10,
+                    background: `${cs.accent}1a`, border: `1.5px solid ${cs.accent}44`,
+                    boxShadow: `0 4px 18px ${cs.accent}30`,
+                    fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+                    color: '#F2E6C8', fontFamily: SERIF, cursor: 'pointer',
+                  }}
+                >
+                  使用する
+                </button>
               </div>
             </motion.div>
           )
         })}
+
         <div style={{ width: 8, flexShrink: 0 }} />
       </div>
 
