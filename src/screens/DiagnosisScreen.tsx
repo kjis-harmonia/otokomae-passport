@@ -250,8 +250,9 @@ export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
         : 0
 
   return (
-    <div className="flex flex-col" style={{ minHeight: '100%', color: '#F2E6C8' }}>
+    <div className="ginjiro-luxury-bg ginjiro-luxury-bg--diagnosis flex flex-col" style={{ minHeight: '100%', color: '#F2E6C8' }}>
       <style>{DIAG_CSS}</style>
+      <div className="relative z-10 flex flex-col flex-1">
 
       {/* Progress bar */}
       {phase !== 'intro' && (
@@ -813,6 +814,7 @@ export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
           />
         )}
       </AnimatePresence>
+      </div>
     </div>
   )
 }

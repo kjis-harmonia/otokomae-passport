@@ -1417,74 +1417,76 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
   }, [selectedStyle, onModalChange])
 
   return (
-    <div>
-      <HeroSlider />
+    <div className="ginjiro-luxury-bg ginjiro-luxury-bg--home">
+      <div className="relative z-10">
+        <HeroSlider />
 
-      <div className="space-y-12 pt-7 pb-16">
+        <div className="space-y-12 pt-7 pb-16">
 
-        {/* ① 男前証 */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.04, duration: 0.42, ease: EASE_OUT }}
-        >
-          <PassportCard />
-        </motion.div>
+          {/* ① 男前証 */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.04, duration: 0.42, ease: EASE_OUT }}
+          >
+            <PassportCard />
+          </motion.div>
 
-        {/* ② 銀二郎スタイル */}
-        <motion.div
-          initial={{ opacity: 0, y: 22 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.44, ease: EASE_OUT }}
-        >
-          <StylesRow
-            styles={styles}
-            onStyleSelect={setSelectedStyle}
-            onSeeAll={() => onTabChange('styles')}
-          />
-        </motion.div>
+          {/* ② 銀二郎スタイル */}
+          <motion.div
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12, duration: 0.44, ease: EASE_OUT }}
+          >
+            <StylesRow
+              styles={styles}
+              onStyleSelect={setSelectedStyle}
+              onSeeAll={() => onTabChange('styles')}
+            />
+          </motion.div>
 
-        {/* ③ 保有チケット */}
-        <motion.div
-          initial={{ opacity: 0, y: 22 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.20, duration: 0.44, ease: EASE_OUT }}
-        >
-          <TicketWalletSection />
-        </motion.div>
+          {/* ③ 保有チケット */}
+          <motion.div
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.20, duration: 0.44, ease: EASE_OUT }}
+          >
+            <TicketWalletSection />
+          </motion.div>
 
-        {/* ④ 期間限定クーポン */}
-        <motion.div
-          initial={{ opacity: 0, y: 22 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.27, duration: 0.44, ease: EASE_OUT }}
-        >
-          <MaintenanceCutSection />
-        </motion.div>
+          {/* ④ 期間限定クーポン */}
+          <motion.div
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.27, duration: 0.44, ease: EASE_OUT }}
+          >
+            <MaintenanceCutSection />
+          </motion.div>
 
-        {/* ⑤ メンテナンス予報 */}
-        <motion.div
-          initial={{ opacity: 0, y: 22 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.34, duration: 0.44, ease: EASE_OUT }}
-        >
-          <MaintenanceScheduleSection />
-        </motion.div>
+          {/* ⑤ メンテナンス予報 */}
+          <motion.div
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.34, duration: 0.44, ease: EASE_OUT }}
+          >
+            <MaintenanceScheduleSection />
+          </motion.div>
+        </div>
+
+        <AnimatePresence>
+          {selectedStyle && (
+            <StyleDetailModal
+              key={selectedStyle.id}
+              style={selectedStyle}
+              onClose={() => setSelectedStyle(null)}
+              onReserve={() => {
+                setSelectedStyle(null)
+                onTabChange('reserve')
+              }}
+            />
+          )}
+        </AnimatePresence>
       </div>
-
-      <AnimatePresence>
-        {selectedStyle && (
-          <StyleDetailModal
-            key={selectedStyle.id}
-            style={selectedStyle}
-            onClose={() => setSelectedStyle(null)}
-            onReserve={() => {
-              setSelectedStyle(null)
-              onTabChange('reserve')
-            }}
-          />
-        )}
-      </AnimatePresence>
     </div>
   )
 }

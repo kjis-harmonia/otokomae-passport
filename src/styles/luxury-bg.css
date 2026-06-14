@@ -1,0 +1,113 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Ginjiro Luxury Background System
+   Usage:
+     <div class="ginjiro-luxury-bg ginjiro-luxury-bg--[home|styles|diagnosis]">
+       <div class="relative z-10">…content…</div>
+     </div>
+   The ::before/::after layers are position:fixed (non-scrolling).
+   Content must be wrapped in "relative z-10" to sit above them.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+
+.ginjiro-luxury-bg {
+  position: relative;
+  background:
+    radial-gradient(circle at 82% 8%,  rgba(128, 12, 20, 0.16) 0%, transparent 37%),
+    radial-gradient(circle at 18% 2%,  rgba(230, 202, 101, 0.07) 0%, transparent 30%),
+    linear-gradient(180deg, #050000 0%, #0b0203 48%, #030000 100%);
+}
+
+/* Hairline texture + diagonal gold streak (fixed, non-scrolling) */
+.ginjiro-luxury-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    repeating-linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.022) 0px,
+      rgba(255, 255, 255, 0.022) 1px,
+      transparent 1px,
+      transparent 7px
+    ),
+    repeating-linear-gradient(
+      38deg,
+      transparent 0%,
+      transparent 47.8%,
+      rgba(230, 202, 101, 0.028) 47.8%,
+      rgba(230, 202, 101, 0.028) 48.2%,
+      transparent 48.2%,
+      transparent 100%
+    ),
+    radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.036) 0%, transparent 28%);
+  opacity: 0.50;
+}
+
+/* Conic gradient — slow breathe rotation */
+.ginjiro-luxury-bg::after {
+  content: '';
+  position: fixed;
+  inset: -45%;
+  pointer-events: none;
+  z-index: 0;
+  background: conic-gradient(
+    from 180deg,
+    transparent                  0deg,
+    rgba(230, 202, 101, 0.068)  48deg,
+    rgba(128, 12,  20,  0.110)  92deg,
+    transparent                155deg,
+    transparent                360deg
+  );
+  opacity: 0.22;
+  animation: ginjiro-bg-breathe 24s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes ginjiro-bg-breathe {
+  0%   { transform: rotate(0deg)   scale(1);    opacity: 0.17; }
+  50%  { transform: rotate(180deg) scale(1.04); opacity: 0.25; }
+  100% { transform: rotate(360deg) scale(1);    opacity: 0.17; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ginjiro-luxury-bg::after { animation: none; }
+}
+
+/* ── Home: most luxurious — crimson depth + gold warmth ─────────────────── */
+
+.ginjiro-luxury-bg--home {
+  background:
+    radial-gradient(circle at 84% 6%,  rgba(128, 12, 20, 0.22) 0%, transparent 38%),
+    radial-gradient(circle at 16% 2%,  rgba(230, 202, 101, 0.10) 0%, transparent 32%),
+    radial-gradient(circle at 50% 72%, rgba(100,  5, 12, 0.09) 0%, transparent 40%),
+    linear-gradient(180deg, #060001 0%, #0c0203 45%, #040001 75%, #060102 100%);
+}
+
+/* ── StyleLibrary: showcase — weaker crimson, stronger hairline ──────────── */
+
+.ginjiro-luxury-bg--styles {
+  background:
+    radial-gradient(circle at 82% 10%, rgba(100,  8, 16, 0.11) 0%, transparent 32%),
+    radial-gradient(circle at 20%  4%, rgba(230, 202, 101, 0.06) 0%, transparent 28%),
+    linear-gradient(180deg, #040002 0%, #080204 50%, #030001 100%);
+}
+
+.ginjiro-luxury-bg--styles::before {
+  opacity: 0.64;
+}
+
+/* ── Diagnosis: center-focused glow, conic accent stronger ───────────────── */
+
+.ginjiro-luxury-bg--diagnosis {
+  background:
+    radial-gradient(circle at 50% 16%, rgba(128, 12, 20, 0.18) 0%, transparent 42%),
+    radial-gradient(circle at 20%  4%, rgba(230, 202, 101, 0.07) 0%, transparent 30%),
+    linear-gradient(180deg, #050001 0%, #0a0203 50%, #040000 100%);
+}
+
+.ginjiro-luxury-bg--diagnosis::after {
+  opacity: 0.28;
+}

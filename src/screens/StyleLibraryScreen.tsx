@@ -707,40 +707,42 @@ export function StyleLibraryScreen({ onTabChange: _onTabChange, onModalChange }:
   }))
 
   return (
-    <div style={{ paddingBottom: 40 }}>
-      {/* Page header */}
-      <div style={{ padding: '18px 16px 12px' }}>
-        <p style={{ fontSize: 8, letterSpacing: '0.30em', color: 'rgba(201,162,74,0.50)', marginBottom: 3 }}>
-          STYLE LIBRARY
-        </p>
-        <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em' }}>
-          男前スタイル図鑑
-        </h1>
-      </div>
+    <div className="ginjiro-luxury-bg ginjiro-luxury-bg--styles">
+      <div className="relative z-10" style={{ paddingBottom: 40 }}>
+        {/* Page header */}
+        <div style={{ padding: '18px 16px 12px' }}>
+          <p style={{ fontSize: 8, letterSpacing: '0.30em', color: 'rgba(201,162,74,0.50)', marginBottom: 3 }}>
+            STYLE LIBRARY
+          </p>
+          <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em' }}>
+            男前スタイル図鑑
+          </h1>
+        </div>
 
-      {/* Hero */}
-      {heroStyle && (
-        <LibraryHero style={heroStyle} onTap={() => openReel(heroStyle)} />
-      )}
-
-      {/* Category rows */}
-      <div style={{ paddingTop: 32 }}>
-        {rows.map(({ id, sub, styles: rowStyles }) => (
-          <StyleRow key={id} id={id} sub={sub} styles={rowStyles} onStyleSelect={openReel} />
-        ))}
-      </div>
-
-      {/* Full-screen reel */}
-      <AnimatePresence>
-        {reelIndex !== null && (
-          <StyleReelView
-            key="reel"
-            styles={styles}
-            startIndex={reelIndex}
-            onClose={() => setReelIndex(null)}
-          />
+        {/* Hero */}
+        {heroStyle && (
+          <LibraryHero style={heroStyle} onTap={() => openReel(heroStyle)} />
         )}
-      </AnimatePresence>
+
+        {/* Category rows */}
+        <div style={{ paddingTop: 32 }}>
+          {rows.map(({ id, sub, styles: rowStyles }) => (
+            <StyleRow key={id} id={id} sub={sub} styles={rowStyles} onStyleSelect={openReel} />
+          ))}
+        </div>
+
+        {/* Full-screen reel */}
+        <AnimatePresence>
+          {reelIndex !== null && (
+            <StyleReelView
+              key="reel"
+              styles={styles}
+              startIndex={reelIndex}
+              onClose={() => setReelIndex(null)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
