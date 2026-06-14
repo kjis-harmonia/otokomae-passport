@@ -63,13 +63,12 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4 }}
-      className="fixed inset-0 max-w-[430px] mx-auto flex flex-col"
+      className="flex flex-col h-dvh max-w-[430px] mx-auto relative overflow-hidden"
       style={{
         background:
           step === 0
-            ? 'transparent'
+            ? '#000'
             : 'radial-gradient(circle at 50% 0%, rgba(139,26,42,0.14), transparent 38%), linear-gradient(160deg, #080706 0%, #0a0909 48%, #0e0708 100%)',
-        zIndex: 9998,
       }}
     >
       {/* Progress dots — hidden on step 0 (splash handles its own dots) */}
