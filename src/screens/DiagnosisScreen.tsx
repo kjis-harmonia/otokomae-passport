@@ -187,7 +187,7 @@ export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
 
   useEffect(() => {
     if (phase !== 'loading') return
-    const t = setTimeout(() => setPhase('result'), 1100)
+    const t = setTimeout(() => setPhase('result'), 820)
     return () => clearTimeout(t)
   }, [phase])
 
@@ -446,32 +446,79 @@ export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
         {phase === 'loading' && (
           <motion.div
             key="loading"
-            className="flex-1 flex flex-col items-center justify-center gap-5"
+            className="flex-1 flex flex-col items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: 0.38 }}
           >
-            <div style={{ fontSize: 34, opacity: 0.36 }}>✂</div>
+            {/* Rotating gold ring */}
+            <div style={{ position: 'relative', width: 82, height: 82, marginBottom: 34 }}>
+              {/* Crimson ambient glow behind ring */}
+              <div style={{
+                position: 'absolute',
+                top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 130, height: 130,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(107,15,18,0.42) 0%, transparent 68%)',
+                pointerEvents: 'none',
+              }} />
+
+              {/* Rotating conic-gradient ring */}
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 5.5, repeat: Infinity, ease: 'linear' }}
+                style={{
+                  position: 'absolute', inset: 0,
+                  borderRadius: '50%',
+                  background: [
+                    'conic-gradient(',
+                    '  from 0deg,',
+                    '  rgba(201,162,74,0.06) 0%,',
+                    '  rgba(201,162,74,0.55) 35%,',
+                    '  rgba(255,248,210,0.88) 50%,',
+                    '  rgba(201,162,74,0.55) 65%,',
+                    '  rgba(201,162,74,0.06) 100%',
+                    ')',
+                  ].join(''),
+                }}
+              />
+
+              {/* Inner mask — creates the ring shape */}
+              <div style={{
+                position: 'absolute',
+                top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 64, height: 64,
+                borderRadius: '50%',
+                background: '#0A0504',
+                boxShadow: 'inset 0 0 18px rgba(107,15,18,0.38)',
+              }} />
+            </div>
+
+            {/* Main text */}
             <p style={{
               fontFamily: SERIF,
-              fontSize: 14,
-              letterSpacing: '0.18em',
-              color: 'rgba(201,162,74,0.58)',
+              fontSize: 20,
+              fontWeight: 700,
+              color: '#C9A24A',
+              letterSpacing: '0.26em',
+              marginBottom: 12,
             }}>
-              あなたに似合う漢を探しています
+              髪型、選定中。
             </p>
-            <div className="flex gap-2 mt-1">
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ background: '#C9A24A' }}
-                  animate={{ opacity: [0.25, 1, 0.25] }}
-                  transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.22 }}
-                />
-              ))}
-            </div>
+
+            {/* Sub text */}
+            <p style={{
+              fontSize: 12,
+              color: 'rgba(242,230,200,0.36)',
+              letterSpacing: '0.10em',
+              lineHeight: 1.75,
+              textAlign: 'center',
+            }}>
+              あなたに似合うスタイルを<br />絞り込んでいます。
+            </p>
           </motion.div>
         )}
 
