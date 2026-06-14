@@ -21,6 +21,7 @@ import type { TicketRow } from './data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from './data/ticket'
 import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
 import { getUserId } from './utils/userId'
+import { useBgm } from './hooks/useBgm'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -130,6 +131,8 @@ function App() {
     setIsPremiumGachaOpen(false)
   }, [])
 
+  const bgm = useBgm()
+
   const liveMember = {
     ...MOCK_MEMBER,
     name: memberStatus.memberName,
@@ -176,6 +179,44 @@ function App() {
             </main>
             {!hasOpenModal && <BottomNavigation active={activeTab} onChange={handleTabChange} />}
           </div>
+
+          {/* BGM toggle — fixed top-right, visible on home tab only */}
+          {activeTab === 'home' && (
+            <button
+              type="button"
+              onClick={bgm.toggle}
+              aria-label={bgm.isOn ? 'BGMをOFFにする' : 'BGMをONにする'}
+              style={{
+                position: 'fixed',
+                top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+                right: 16,
+                zIndex: 120,
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                background: bgm.isOn
+                  ? 'rgba(12,6,2,0.88)'
+                  : 'rgba(8,4,2,0.72)',
+                border: `1.5px solid ${bgm.isOn ? 'rgba(201,162,74,0.80)' : 'rgba(255,255,255,0.14)'}`,
+                boxShadow: bgm.isOn
+                  ? '0 0 14px rgba(201,162,74,0.32), 0 2px 10px rgba(0,0,0,0.6)'
+                  : '0 2px 8px rgba(0,0,0,0.45)',
+                color: bgm.isOn ? '#C9A24A' : 'rgba(255,255,255,0.28)',
+                fontSize: 15,
+                lineHeight: 1,
+                cursor: 'pointer',
+                backdropFilter: 'blur(14px)',
+                WebkitBackdropFilter: 'blur(14px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                WebkitTapHighlightColor: 'transparent',
+                transition: 'border-color 0.2s, box-shadow 0.2s, color 0.2s',
+              }}
+            >
+              ♪
+            </button>
+          )}
 
           {isPremiumGachaOpen && (
             <PremiumGachaExperience
