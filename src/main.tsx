@@ -9,14 +9,6 @@ import { seedInitialStyles } from './utils/styleStorage'
 
 seedInitialStyles()
 
-// ── PWA manifest: /staff ページでは staff 用 manifest に差し替える ─────────────
-// React マウント前に同期実行することでブラウザが正しい manifest を読む
-;(function swapManifestIfStaff() {
-  if (!window.location.pathname.startsWith('/staff')) return
-  const link = document.getElementById('pwa-manifest') as HTMLLinkElement | null
-  if (link) link.href = '/manifest-staff.webmanifest'
-})()
-
 // ── CMS detection ─────────────────────────────────────────────────────────────
 
 const CMS_KEY = 'ginjiro_admin_mode'
