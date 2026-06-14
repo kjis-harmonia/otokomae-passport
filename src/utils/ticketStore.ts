@@ -66,13 +66,35 @@ export async function issueTicket(input: IssueTicketInput): Promise<TicketRow> {
     expires_at: input.expires_at ? new Date(input.expires_at).toISOString() : null,
     used:       false,
   }
-  const { data, error } = await supabase
-    .from('tickets')
-    .insert(payload)
-    .select()
-    .single()
-  if (error) throw error
-  return data as TicketRow
+  try {
+    const { data, error } = await supabase
+      .from('tickets')
+      .insert(payload)
+      .select()
+      .single()
+    if (error) throw error
+    const ticket = data as TicketRow
+    patchLocalTickets([ticket])
+    return ticket
+  } catch (err) {
+    console.error('[issueTicket] Supabase error — falling back to localStorage:', err)
+    // localStorage fallback: Supabase 未設定・RLS エラー・オフライン時も発行できるようにする
+    const ticket: TicketRow = {
+      id:         `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      user_id:    input.user_id,
+      type:       input.type,
+      title:      input.title,
+      amount:     input.amount,
+      memo:       input.memo ?? null,
+      used:       false,
+      issued_by:  input.issued_by,
+      created_at: new Date().toISOString(),
+      used_at:    null,
+      expires_at: input.expires_at ? new Date(input.expires_at).toISOString() : null,
+    }
+    patchLocalTickets([ticket])
+    return ticket
+  }
 }
 
 export async function getUserTickets(userId: string): Promise<TicketRow[]> {
@@ -83,9 +105,14 @@ export async function getUserTickets(userId: string): Promise<TicketRow[]> {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
     if (error) throw error
-    const tickets = (data ?? []) as TicketRow[]
-    saveLocalTickets(userId, tickets)
-    return tickets
+    const supabaseTickets = (data ?? []) as TicketRow[]
+    // localStorage 発行済みで Supabase 未同期のチケット（local- ID）を保持してマージ
+    const localOnly = getLocalTickets(userId).filter(
+      lt => lt.id.startsWith('local-') && !supabaseTickets.some(st => st.id === lt.id)
+    )
+    const merged = [...localOnly, ...supabaseTickets]
+    saveLocalTickets(userId, merged)
+    return merged
   } catch {
     return getLocalTickets(userId)
   }

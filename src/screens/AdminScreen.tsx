@@ -126,20 +126,6 @@ interface TicketUseQRData {
 
 type AnyQRData = PassportQRData | TicketUseQRData
 
-const RANK_LABEL: Record<string, string> = {
-  BRONZE:   'ブロンズ',
-  SILVER:   'シルバー',
-  GOLD:     'ゴールド',
-  PLATINUM: 'プラチナ',
-}
-
-const RANK_COLOR: Record<string, string> = {
-  BRONZE:   '#A67C52',
-  SILVER:   '#B0BAC4',
-  GOLD:     '#C9A24A',
-  PLATINUM: '#DDE4EC',
-}
-
 // 店内設置用チェックインQR（静的、お客様がスキャン）
 const STORE_CHECKIN_QR_VALUE = JSON.stringify({ type: 'ginjiro-store-checkin' })
 
@@ -164,9 +150,9 @@ function parseQR(text: string): AnyQRData | null {
 // ── Ticket tabs (preset per type) ─────────────────────────────────────────────
 
 const TICKET_TABS: { type: TicketType; label: string; autoTitle: string; amounts: number[] }[] = [
-  { type: 'coupon',     label: 'クーポン', autoTitle: 'メンテナンスクーポン', amounts: [] },
-  { type: 'discount',   label: '割引券',   autoTitle: '割引券',              amounts: [300, 500, 1000] },
-  { type: 'cut-ticket', label: '漢トク券', autoTitle: '漢トク券',            amounts: [1000, 3000, 5000] },
+  { type: 'coupon',   label: 'クーポン', autoTitle: 'メンテナンスクーポン', amounts: [] },
+  { type: 'discount', label: '割引券',   autoTitle: '割引券',              amounts: [300, 500, 1000] },
+  { type: 'otoku',    label: '漢トク券', autoTitle: '漢トク券',            amounts: [1000, 2000, 3000, 5000] },
 ]
 
 // ── Phase ─────────────────────────────────────────────────────────────────────
@@ -324,6 +310,7 @@ export function AdminScreen() {
   const [issueError, setIssueError]       = useState<string | null>(null)
   const [issuedCount, setIssuedCount]     = useState(0)
   const [lastIssuedMsg, setLastIssuedMsg] = useState<string | null>(null)
+  const [otokuQty, setOtokuQty]           = useState(1)
 
   // User's existing tickets
   const [userTickets, setUserTickets]       = useState<TicketRow[]>([])
@@ -350,7 +337,6 @@ export function AdminScreen() {
   const elapsed      = prevLastVisitDate ? daysSince(prevLastVisitDate) : null
   const isEligible   = !isFirstVisit && prevLastVisitDate !== undefined && elapsed! <= 14
 
-  const rankColor  = scannedData ? (RANK_COLOR[scannedData.rank] ?? '#C9A24A') : '#C9A24A'
   const canIssue   = staffId.trim() !== '' && !issueLoading && (ticketTab === 'coupon' || ticketAmount > 0)
   const activeTickets = userTickets.filter(t => !t.used)
 
@@ -435,6 +421,7 @@ export function AdminScreen() {
     const tab = TICKET_TABS.find(t => t.type === type)!
     setTicketTab(type)
     setTicketAmount(tab.amounts[0] ?? 0)
+    setOtokuQty(1)
     setIssueError(null)
     setLastIssuedMsg(null)
   }
@@ -442,23 +429,30 @@ export function AdminScreen() {
   const handleIssueTicket = async () => {
     if (!scannedData || !staffId.trim()) return
     const currentTab = TICKET_TABS.find(t => t.type === ticketTab)!
+    const qty = ticketTab === 'otoku' ? otokuQty : 1
     setIssueLoading(true)
     setIssueError(null)
     setLastIssuedMsg(null)
     try {
-      const issued = await issueTicket({
-        user_id:   scannedData.userId,
-        type:      ticketTab,
-        title:     currentTab.autoTitle,
-        amount:    ticketAmount,
-        issued_by: staffId,
-      })
-      setUserTickets(prev => [issued, ...prev])
-      setIssuedCount(c => c + 1)
+      const issued: TicketRow[] = []
+      for (let i = 0; i < qty; i++) {
+        const ticket = await issueTicket({
+          user_id:   scannedData.userId,
+          type:      ticketTab,
+          title:     currentTab.autoTitle,
+          amount:    ticketAmount,
+          issued_by: staffId,
+        })
+        issued.push(ticket)
+      }
+      setUserTickets(prev => [...issued, ...prev])
+      setIssuedCount(c => c + qty)
       const amtLabel = ticketAmount > 0 ? ` ¥${ticketAmount.toLocaleString()}` : ''
-      setLastIssuedMsg(`「${currentTab.autoTitle}」${amtLabel} を発行しました`)
-    } catch {
-      setIssueError('発行に失敗しました。ネットワークを確認してください。')
+      const qtyLabel = qty > 1 ? ` を${qty}枚` : ' を'
+      setLastIssuedMsg(`「${currentTab.autoTitle}」${amtLabel}${qtyLabel}発行しました`)
+    } catch (err) {
+      console.error('[handleIssueTicket] error:', err)
+      setIssueError(`発行に失敗しました（${err instanceof Error ? err.message : String(err)}）`)
     } finally {
       setIssueLoading(false)
     }
@@ -523,6 +517,7 @@ export function AdminScreen() {
     setManualInput('')
     setTicketTab('coupon')
     setTicketAmount(0)
+    setOtokuQty(1)
     setIssueError(null)
     setIssuedCount(0)
     setLastIssuedMsg(null)
@@ -851,36 +846,27 @@ export function AdminScreen() {
             {/* ── Member card ── */}
             <div style={{
               borderRadius: 16, marginBottom: 16,
-              border: `1px solid ${rankColor}44`,
+              border: '1px solid rgba(201,162,74,0.28)',
               background: 'linear-gradient(160deg, #120A06 0%, #0A0504 100%)',
-              boxShadow: `0 8px 30px rgba(0,0,0,0.5), 0 0 0 1px ${rankColor}10`,
+              boxShadow: '0 8px 30px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,162,74,0.06)',
             }}>
-              <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${rankColor}, transparent)` }} />
+              <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #C9A24A, transparent)' }} />
               <div style={{ padding: '14px 18px' }}>
-                <span style={{
-                  display: 'inline-block', fontSize: 9, letterSpacing: '0.18em', fontWeight: 700,
-                  color: rankColor, padding: '2px 8px', borderRadius: 99,
-                  border: `1px solid ${rankColor}44`, background: `${rankColor}14`, marginBottom: 6,
-                }}>
-                  {RANK_LABEL[scannedData.rank] ?? scannedData.rank}
-                </span>
                 <h2 style={{
                   fontSize: 24, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF,
-                  letterSpacing: '0.06em', marginBottom: 2,
+                  letterSpacing: '0.06em', marginBottom: 4,
                 }}>
                   {scannedData.name}
                   <span style={{ fontSize: 14, marginLeft: 5, color: 'rgba(242,230,200,0.45)' }}>様</span>
                 </h2>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
-                  <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.28)', letterSpacing: '0.08em' }}>
-                    ID: {scannedData.userId}
+                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.28)', letterSpacing: '0.08em', marginBottom: 2 }}>
+                  ID: {scannedData.userId}
+                </p>
+                {prevLastVisitDate && (
+                  <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.32)' }}>
+                    最終来店日 {fmtDate(prevLastVisitDate)}
                   </p>
-                  {prevLastVisitDate && (
-                    <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.32)' }}>
-                      前回 {fmtDate(prevLastVisitDate)}
-                    </p>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
@@ -971,6 +957,32 @@ export function AdminScreen() {
                             ¥{amt.toLocaleString()}
                           </button>
                         ))}
+                      </div>
+                    )}
+
+                    {/* 枚数選択 — 漢トク券のみ */}
+                    {ticketTab === 'otoku' && (
+                      <div style={{ marginBottom: 12 }}>
+                        <p style={{ fontSize: 9, letterSpacing: '0.18em', color: 'rgba(242,230,200,0.35)', marginBottom: 8 }}>
+                          枚数（現在: {otokuQty}枚）
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {Array.from({ length: 15 }, (_, i) => i + 1).map(n => (
+                            <button
+                              key={n}
+                              onClick={() => setOtokuQty(n)}
+                              style={{
+                                width: 38, height: 38, borderRadius: 8, padding: 0,
+                                background: otokuQty === n ? tc.bg : 'transparent',
+                                border: `1px solid ${otokuQty === n ? tc.border : 'rgba(255,255,255,0.12)'}`,
+                                color: otokuQty === n ? tc.text : 'rgba(242,230,200,0.45)',
+                                fontSize: 13, fontFamily: SERIF, fontWeight: 700, cursor: 'pointer',
+                              }}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </>
