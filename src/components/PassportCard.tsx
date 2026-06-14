@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '../lib/supabase'
 import { getUserId } from '../utils/userId'
-import { loadMemberStatus } from '../utils/storage'
+import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -36,6 +36,7 @@ export function PassportCard() {
   const userId = getUserId()
 
   const [lastVisitDate, setLastVisitDate] = useState<string | null>(null)
+  const [qrEnlarged, setQrEnlarged] = useState(false)
 
   useEffect(() => {
     supabase
@@ -48,16 +49,19 @@ export function PassportCard() {
       })
   }, [userId])
 
+  const memberName = getStoredValue<string>(ONBOARDING_NAME_KEY, memberStatus.memberName) || 'ゲスト'
+
   const qrPayload = JSON.stringify({
     type: 'ginjiro-member',
     userId,
-    name: memberStatus.memberName,
+    name: memberName,
   })
 
   const shortId = userId.length > 26 ? userId.slice(0, 26) + '…' : userId
   const lastVisitFmt = lastVisitDate ? fmtLastVisit(lastVisitDate) : null
 
   return (
+    <>
     <div style={{ padding: '0 14px' }}>
       <style>{CARD_CSS}</style>
 
@@ -252,19 +256,24 @@ export function PassportCard() {
                 </div>
               </div>
 
-              {/* Right: QR code */}
+              {/* Right: QR code (tap to enlarge) */}
               <div style={{ flexShrink: 0 }}>
-                <div style={{
-                  padding: 8,
-                  background: '#000',
-                  borderRadius: 12,
-                  border: '1.5px solid rgba(0,210,255,0.82)',
-                  boxShadow: [
-                    '0 0 10px rgba(0,210,255,0.46)',
-                    '0 0 30px rgba(0,210,255,0.16)',
-                    'inset 0 0 10px rgba(0,210,255,0.06)',
-                  ].join(', '),
-                }}>
+                <div
+                  onClick={() => setQrEnlarged(true)}
+                  style={{
+                    padding: 8,
+                    background: '#000',
+                    borderRadius: 12,
+                    border: '1.5px solid rgba(0,210,255,0.82)',
+                    boxShadow: [
+                      '0 0 10px rgba(0,210,255,0.46)',
+                      '0 0 30px rgba(0,210,255,0.16)',
+                      'inset 0 0 10px rgba(0,210,255,0.06)',
+                    ].join(', '),
+                    cursor: 'pointer',
+                    position: 'relative',
+                  }}
+                >
                   <QRCodeSVG
                     value={qrPayload}
                     size={96}
@@ -274,6 +283,15 @@ export function PassportCard() {
                     bgColor="#000000"
                     style={{ display: 'block' }}
                   />
+                  {/* Tap hint */}
+                  <div style={{
+                    position: 'absolute', bottom: 2, right: 3,
+                    fontSize: 7, color: 'rgba(0,210,255,0.55)',
+                    letterSpacing: '0.04em', lineHeight: 1,
+                    pointerEvents: 'none',
+                  }}>
+                    ⊕
+                  </div>
                 </div>
               </div>
             </div>
@@ -300,5 +318,75 @@ export function PassportCard() {
         </div>
       </div>
     </div>
+
+    {/* QR Enlarged Modal */}
+    {qrEnlarged && (
+      <div
+        onClick={() => setQrEnlarged(false)}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 500,
+          background: 'rgba(0,0,0,0.94)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          padding: '32px',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        <p style={{
+          fontSize: 8, letterSpacing: '0.30em',
+          color: 'rgba(0,210,255,0.45)',
+          marginBottom: 20, fontFamily: 'monospace',
+        }}>
+          GINJIRO MEMBER QR — TAP TO CLOSE
+        </p>
+
+        <div style={{
+          padding: 16,
+          background: '#000',
+          borderRadius: 18,
+          border: '2px solid rgba(0,210,255,0.88)',
+          boxShadow: [
+            '0 0 20px rgba(0,210,255,0.55)',
+            '0 0 60px rgba(0,210,255,0.20)',
+            'inset 0 0 20px rgba(0,210,255,0.08)',
+          ].join(', '),
+        }}>
+          <QRCodeSVG
+            value={qrPayload}
+            size={240}
+            level="M"
+            marginSize={0}
+            fgColor="#FFFFFF"
+            bgColor="#000000"
+            style={{ display: 'block' }}
+          />
+        </div>
+
+        <div style={{ marginTop: 24, textAlign: 'center' }}>
+          <p style={{
+            fontFamily: SERIF, fontSize: 14, fontWeight: 700,
+            color: 'rgba(242,230,200,0.7)',
+            letterSpacing: '0.12em', marginBottom: 6,
+          }}>
+            {memberName}
+          </p>
+          <p style={{
+            fontSize: 9, color: 'rgba(242,230,200,0.3)',
+            letterSpacing: '0.08em', fontFamily: 'monospace',
+          }}>
+            {userId.slice(0, 24)}…
+          </p>
+        </div>
+
+        <p style={{
+          marginTop: 28, fontSize: 11,
+          color: 'rgba(242,230,200,0.28)',
+          letterSpacing: '0.14em',
+        }}>
+          タップして閉じる
+        </p>
+      </div>
+    )}
+    </>
   )
 }

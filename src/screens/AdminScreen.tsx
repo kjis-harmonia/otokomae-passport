@@ -149,11 +149,11 @@ function parseQR(text: string): AnyQRData | null {
     if (d.type === 'ginjiro-ticket-use' && d.userId && d.selectedTicketId) {
       return d as TicketUseQRData
     }
-    if (d.type === 'ginjiro-member' && d.userId && d.name) {
-      return { type: d.type, userId: d.userId, name: d.name, rank: 'BRONZE', points: 0 }
+    if (d.type === 'ginjiro-member' && d.userId) {
+      return { type: d.type, userId: d.userId, name: d.name || '名前未設定', rank: d.rank || 'BRONZE', points: d.points ?? 0 }
     }
-    if (d.type === 'otokomae-passport' && d.userId && d.name && d.rank) {
-      return d as PassportQRData
+    if (d.type === 'otokomae-passport' && d.userId) {
+      return { type: d.type, userId: d.userId, name: d.name || '名前未設定', rank: d.rank || 'BRONZE', points: d.points ?? 0 }
     }
     return null
   } catch {
