@@ -16,6 +16,7 @@ import type { GachaResult } from './components/PremiumGachaExperience'
 import { MOCK_MEMBER } from './data/brand'
 import type { NavTab, MemberStatus } from './data/brand'
 import { loadMemberStatus, saveMemberStatus, getStoredValue, ONBOARDING_DONE_KEY } from './utils/storage'
+import { HERO_SLIDE_IMAGES } from './data/styleImages'
 import type { TicketRow } from './data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from './data/ticket'
 import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
@@ -27,7 +28,34 @@ type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function App() {
-  const [appLoading, setAppLoading] = useState(true)
+  const [minTimeDone, setMinTimeDone] = useState(false)
+  const [imgReady,    setImgReady]    = useState(false)
+  const appLoading = !minTimeDone || !imgReady
+
+  // ── Minimum display time (branding)
+  useEffect(() => {
+    const t = setTimeout(() => setMinTimeDone(true), 1300)
+    return () => clearTimeout(t)
+  }, [])
+
+  // ── Preload critical images: splash + first 2 hero slides
+  useEffect(() => {
+    const urls = [
+      '/images/ginjiro-splash.png',
+      HERO_SLIDE_IMAGES[0]?.src,
+      HERO_SLIDE_IMAGES[1]?.src,
+    ].filter(Boolean) as string[]
+
+    let remaining = urls.length
+    const onSettled = () => { if (--remaining <= 0) setImgReady(true) }
+
+    urls.forEach(src => {
+      const img = new Image()
+      img.onload  = onSettled
+      img.onerror = onSettled // graceful fail — don't block forever
+      img.src = src
+    })
+  }, [])
 
   const [phase, setPhase] = useState<AppPhase>(() => {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
@@ -164,12 +192,7 @@ function App() {
 
       {/* Loading screen — covers everything until initial render settles */}
       <AnimatePresence>
-        {appLoading && (
-          <GinjiroLoadingScreen
-            key="loading"
-            onDone={() => setAppLoading(false)}
-          />
-        )}
+        {appLoading && <GinjiroLoadingScreen key="loading" />}
       </AnimatePresence>
 
       {/* Transfer acceptance overlay — shown when app is opened via ?transfer=TOKEN */}

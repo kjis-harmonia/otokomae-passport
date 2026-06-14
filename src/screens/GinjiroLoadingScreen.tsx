@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -29,16 +28,7 @@ const CSS = `
 }
 `
 
-interface Props {
-  onDone: () => void
-}
-
-export function GinjiroLoadingScreen({ onDone }: Props) {
-  useEffect(() => {
-    const t = setTimeout(onDone, 1700)
-    return () => clearTimeout(t)
-  }, [onDone])
-
+export function GinjiroLoadingScreen() {
   return (
     <motion.div
       initial={{ opacity: 1 }}
