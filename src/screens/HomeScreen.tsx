@@ -71,18 +71,54 @@ function playWarningSound() {
   } catch { /* AudioContext unavailable */ }
 }
 
+/**
+ * Normalize a visit date string to YYYY-MM-DD regardless of display format.
+ * Accepts: "2026-06-10", "2026 / 06 / 10", "2026/06/10"
+ */
+function normalizeVisitDate(value: string): string | null {
+  if (!value) return null
+  const normalized = value
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/\//g, '-')
+  const date = new Date(`${normalized}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return null
+  return normalized
+}
+
+/**
+ * Days elapsed since isoDate (YYYY-MM-DD), using local calendar midnight.
+ */
+function daysSinceLocalMidnight(isoDate: string): number {
+  const past = new Date(`${isoDate}T00:00:00`)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  return Math.floor((today.getTime() - past.getTime()) / 86_400_000)
+}
+
 async function fetchLastVisitDateForUser(userId: string): Promise<string | null> {
+  // Try Supabase first
   try {
     const { data, error } = await supabase
       .from('maintenance_visits')
       .select('last_visit_date')
       .eq('user_id', userId)
       .maybeSingle()
-    if (!error && data?.last_visit_date) return data.last_visit_date as string
+    if (!error && data?.last_visit_date) return normalizeVisitDate(String(data.last_visit_date))
   } catch { /* ignore */ }
+  // Fallback: localStorage stored as Record<string, string> e.g. { "user-id": "2026-06-10" }
+  // (Legacy shape was Record<string, { last_visit_date: string }> — handle both)
   try {
-    const local = JSON.parse(localStorage.getItem(MAINTENANCE_LOCAL_KEY) ?? '{}') as Record<string, { last_visit_date?: string }>
-    return local[userId]?.last_visit_date ?? null
+    const raw = localStorage.getItem(MAINTENANCE_LOCAL_KEY)
+    if (!raw) return null
+    const local = JSON.parse(raw) as Record<string, unknown>
+    const val = local[userId]
+    if (!val) return null
+    if (typeof val === 'string') return normalizeVisitDate(val)
+    if (typeof val === 'object') {
+      const nested = (val as Record<string, unknown>).last_visit_date
+      if (typeof nested === 'string') return normalizeVisitDate(nested)
+    }
+    return null
   } catch { return null }
 }
 
@@ -625,26 +661,41 @@ function MaintenanceCutSection() {
       return
     }
 
-    const lastVisitDate = await fetchLastVisitDateForUser(userId)
+    const rawLastVisitDate = await fetchLastVisitDateForUser(userId)
+    const normalizedLastVisitDate = rawLastVisitDate ? normalizeVisitDate(rawLastVisitDate) : null
+    const parsedDate = normalizedLastVisitDate ? new Date(`${normalizedLastVisitDate}T00:00:00`) : null
+    const daysElapsed = normalizedLastVisitDate ? daysSinceLocalMidnight(normalizedLastVisitDate) : null
+    const isWithin14Days = daysElapsed !== null && daysElapsed <= 14
+    const maintenanceState = normalizedLastVisitDate === null
+      ? 'no-record'
+      : isWithin14Days
+      ? 'eligible'
+      : 'expired'
+
+    console.debug('[MaintenanceCut] rawLastVisitDate:', rawLastVisitDate)
+    console.debug('[MaintenanceCut] normalizedLastVisitDate:', normalizedLastVisitDate)
+    console.debug('[MaintenanceCut] parsedDate:', parsedDate)
+    console.debug('[MaintenanceCut] daysElapsed:', daysElapsed)
+    console.debug('[MaintenanceCut] isWithin14Days:', isWithin14Days)
+    console.debug('[MaintenanceCut] maintenanceState:', maintenanceState)
+
     setShowScanner(false)
 
-    if (!lastVisitDate) {
+    if (maintenanceState === 'no-record') {
       playWarningSound()
       setScanMsg('来店記録がありません。通常価格でのご予約をお願いします。')
       setScanProcessing(false)
       return
     }
 
-    const daysDiff = Math.floor((Date.now() - new Date(lastVisitDate).getTime()) / (1000 * 60 * 60 * 24))
-
-    if (daysDiff <= 14) {
+    if (maintenanceState === 'eligible') {
       playSuccessSound()
       activateMaintenance()
       setMaintenanceActive(true)
       setScanMsg(null)
     } else {
       playWarningSound()
-      setScanMsg(`前回来店から${daysDiff}日が経過しています。メンテナンスカットはご利用いただけません。`)
+      setScanMsg(`前回来店から${daysElapsed}日が経過しています。メンテナンスカットはご利用いただけません。`)
     }
     setScanProcessing(false)
   }
