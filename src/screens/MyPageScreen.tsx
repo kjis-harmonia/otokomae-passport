@@ -70,6 +70,37 @@ function computeMaintenance(lastVisitDate: string | null): MaintenanceInfo | nul
   return { lastVisitDate, nextDate, daysRemaining, color, headline, badge }
 }
 
+// ── Ticket grouping ───────────────────────────────────────────────────────────
+
+interface TicketGroup {
+  key: string               // `type::amount`
+  type: TicketType
+  title: string
+  amount: number
+  activeTickets: TicketRow[]   // 利用可能（期限内・非転送中）
+  pendingTickets: TicketRow[]  // 譲渡進行中
+  expiredTickets: TicketRow[]  // 期限切れ
+}
+
+function groupActiveTickets(tickets: TicketRow[]): TicketGroup[] {
+  const map = new Map<string, TicketGroup>()
+  for (const t of tickets) {
+    const key = `${t.type}::${t.amount}`
+    if (!map.has(key)) {
+      map.set(key, {
+        key, type: t.type, title: t.title, amount: t.amount,
+        activeTickets: [], pendingTickets: [], expiredTickets: [],
+      })
+    }
+    const g = map.get(key)!
+    const isExpired = !!t.expires_at && new Date(t.expires_at) < new Date()
+    if (isExpired)              g.expiredTickets.push(t)
+    else if (t.pending_transfer) g.pendingTickets.push(t)
+    else                        g.activeTickets.push(t)
+  }
+  return Array.from(map.values())
+}
+
 async function fetchUserLastVisitDate(userId: string): Promise<string | null> {
   try {
     const { data, error } = await supabase
@@ -252,6 +283,8 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
     (acc, t) => { acc[t.type] = (acc[t.type] ?? 0) + 1; return acc },
     {} as Partial<Record<TicketType, number>>
   )
+
+  const groups = groupActiveTickets(allActiveTickets)
 
   const maintenanceInfo      = lastVisitDate === undefined ? null : computeMaintenance(lastVisitDate)
   const isMaintenanceLoading = lastVisitDate === undefined
@@ -598,7 +631,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               <p style={{ fontSize: 8, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.36)', textTransform: 'uppercase' }}>③ 保有チケット</p>
               {allActiveTickets.length > 0 && (
                 <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 99, background: 'rgba(201,162,74,0.1)', border: '1px solid rgba(201,162,74,0.24)', color: 'rgba(201,162,74,0.68)' }}>
-                  {allActiveTickets.length}枚
+                  {groups.length}種 · {allActiveTickets.length}枚
                 </span>
               )}
             </div>
@@ -628,39 +661,130 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.13)', lineHeight: 1.7 }}>スタッフが来店時にチケットを発行します</p>
             </div>
           ) : (
+            /* ── 数量管理カルーセル：券種＋金額の組み合わせごとに1枚 ── */
             <div className="gj-hscroll" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', gap: 12, paddingLeft: 16, paddingRight: 16, paddingBottom: 4, scrollbarWidth: 'none' }}>
-              {allActiveTickets.map(ticket => {
-                const tc        = TICKET_TYPE_COLORS[ticket.type]
-                const isPending = !!ticket.pending_transfer
-                const isExpired = !!ticket.expires_at && new Date(ticket.expires_at) < new Date()
+              {groups.map(group => {
+                const tc           = TICKET_TYPE_COLORS[group.type]
+                const usableCount  = group.activeTickets.length
+                const pendingCount = group.pendingTickets.length
+                const expiredCount = group.expiredTickets.length
+                const displayCount = usableCount + pendingCount
+                const canUse       = usableCount > 0
+                const canGift      = usableCount > 0
+                // 表示・日付参照用の代表チケット
+                const repTicket    = group.activeTickets[0]
+                  ?? group.pendingTickets[0]
+                  ?? group.expiredTickets[0]
+
                 return (
-                  <div key={ticket.id} style={{ minWidth: 252, maxWidth: 272, flexShrink: 0, scrollSnapAlign: 'start', borderRadius: 18, overflow: 'hidden', background: 'linear-gradient(155deg, #160B07 0%, #0A0504 100%)', border: `1px solid ${isPending ? 'rgba(255,180,0,0.34)' : isExpired ? 'rgba(255,255,255,0.06)' : tc.border}`, boxShadow: '0 12px 32px rgba(0,0,0,0.52)' }}>
-                    <div style={{ height: 2, background: `linear-gradient(90deg, ${tc.border} 0%, transparent 65%)` }} />
-                    <div style={{ padding: '16px 16px 14px' }}>
-                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
-                        <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: tc.bg, border: `1px solid ${tc.border}`, color: tc.text, letterSpacing: '0.1em' }}>{TICKET_TYPE_LABELS[ticket.type]}</span>
-                        {isPending && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.38)', color: '#FFB400' }}>贈り中</span>}
-                        {isExpired && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: 'rgba(224,96,80,0.1)', border: '1px solid rgba(224,96,80,0.34)', color: '#E06050' }}>期限切れ</span>}
-                        {!isPending && !isExpired && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: 'rgba(120,192,80,0.1)', border: '1px solid rgba(120,192,80,0.28)', color: '#78C050' }}>未使用</span>}
+                  <div
+                    key={group.key}
+                    style={{
+                      minWidth: 264, maxWidth: 284,
+                      flexShrink: 0, scrollSnapAlign: 'start',
+                      borderRadius: 20, overflow: 'hidden',
+                      background: tc.cardBg,
+                      border: `1px solid ${canUse ? tc.border : 'rgba(255,255,255,0.07)'}`,
+                      boxShadow: [
+                        '0 14px 36px rgba(0,0,0,0.60)',
+                        canUse ? `0 0 24px ${tc.border}24` : '',
+                      ].filter(Boolean).join(', '),
+                      opacity: canUse ? 1 : 0.65,
+                    }}
+                  >
+                    {/* 天面アクセントライン */}
+                    <div style={{ height: 2, background: `linear-gradient(90deg, ${tc.border} 0%, transparent 70%)` }} />
+
+                    <div style={{ padding: '16px 16px 12px' }}>
+
+                      {/* 券種ラベル ＋ 枚数バッジ */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tc.bg, border: `1px solid ${tc.border}`, color: tc.text, letterSpacing: '0.10em' }}>
+                          {TICKET_TYPE_LABELS[group.type]}
+                        </span>
+                        {displayCount > 0 && (
+                          <span style={{ fontSize: 12, fontWeight: 700, color: tc.text, fontFamily: 'monospace', letterSpacing: '0.04em' }}>
+                            ×{displayCount}枚
+                          </span>
+                        )}
                       </div>
-                      <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.03em', marginBottom: ticket.amount > 0 ? 2 : 10 }}>{ticket.title}</p>
-                      {ticket.amount > 0 && (
-                        <p style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#C9A24A', letterSpacing: '0.02em', marginBottom: 8, lineHeight: 1 }}>¥{ticket.amount.toLocaleString()}</p>
-                      )}
-                      <p style={{ fontSize: 9, color: isExpired ? '#E06050' : 'rgba(242,230,200,0.26)', letterSpacing: '0.06em', marginBottom: 14 }}>
-                        {ticket.expires_at ? `期限 ${fmtDate(ticket.expires_at)}` : `発行 ${fmtDate(ticket.created_at)}`}
+
+                      {/* タイトル */}
+                      <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.03em', marginBottom: group.amount > 0 ? 2 : 12 }}>
+                        {group.title}
                       </p>
+
+                      {/* 金額 */}
+                      {group.amount > 0 && (
+                        <p style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#C9A24A', letterSpacing: '0.02em', marginBottom: 10, lineHeight: 1 }}>
+                          ¥{group.amount.toLocaleString()}
+                        </p>
+                      )}
+
+                      {/* 贈り中 / 期限切れ の内訳バッジ */}
+                      {(pendingCount > 0 || expiredCount > 0) && (
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                          {pendingCount > 0 && (
+                            <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,180,0,0.10)', border: '1px solid rgba(255,180,0,0.34)', color: '#FFB400' }}>
+                              贈り中 {pendingCount}枚
+                            </span>
+                          )}
+                          {expiredCount > 0 && (
+                            <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(224,96,80,0.10)', border: '1px solid rgba(224,96,80,0.30)', color: '#E06050' }}>
+                              期限切れ {expiredCount}枚
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 発行日 / 期限 */}
+                      <p style={{ fontSize: 9, letterSpacing: '0.06em', color: 'rgba(242,230,200,0.26)', marginBottom: 14 }}>
+                        {repTicket?.expires_at
+                          ? `期限 ${fmtDate(repTicket.expires_at)}`
+                          : repTicket ? `発行 ${fmtDate(repTicket.created_at)}` : ''}
+                      </p>
+
                       <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.07)', marginBottom: 12 }} />
-                      <div style={{ display: 'flex', gap: 7 }}>
-                        <button type="button" onClick={() => openGiftModal(ticket)} disabled={isPending || isExpired}
-                          style={{ flex: 1, padding: '11px 0', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: isPending || isExpired ? 'rgba(242,230,200,0.18)' : 'rgba(242,230,200,0.52)', fontFamily: SERIF, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', cursor: isPending || isExpired ? 'default' : 'pointer' }}>
-                          友人へ贈る
-                        </button>
-                        <button type="button" onClick={() => openUseModal(ticket)} disabled={isExpired}
-                          style={{ flex: 1, padding: '11px 0', borderRadius: 10, background: isExpired ? 'rgba(255,255,255,0.03)' : tc.bg, border: `1px solid ${isExpired ? 'rgba(255,255,255,0.06)' : tc.border}`, color: isExpired ? 'rgba(242,230,200,0.18)' : tc.text, fontFamily: SERIF, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', cursor: isExpired ? 'default' : 'pointer' }}>
-                          使用する
-                        </button>
-                      </div>
+
+                      {/* Primary CTA: 使用する */}
+                      <button
+                        type="button"
+                        onClick={() => { if (canUse) openUseModal(group.activeTickets[0]) }}
+                        disabled={!canUse}
+                        style={{
+                          width: '100%', padding: '14px 0', borderRadius: 12,
+                          background: canUse ? tc.btnBg : 'rgba(255,255,255,0.03)',
+                          border: `1.5px solid ${canUse ? tc.border : 'rgba(255,255,255,0.06)'}`,
+                          boxShadow: canUse ? `0 4px 20px ${tc.border}38` : 'none',
+                          color: canUse ? tc.text : 'rgba(242,230,200,0.18)',
+                          fontFamily: SERIF, fontSize: 13, fontWeight: 700,
+                          letterSpacing: '0.18em',
+                          cursor: canUse ? 'pointer' : 'default',
+                        }}
+                      >
+                        使用する
+                      </button>
+
+                      {/* Secondary: 譲る */}
+                      <button
+                        type="button"
+                        onClick={() => { if (canGift) openGiftModal(group.activeTickets[0]) }}
+                        disabled={!canGift}
+                        style={{
+                          display: 'block', width: '100%',
+                          padding: '9px 0 2px',
+                          background: 'none', border: 'none',
+                          fontSize: 11,
+                          color: canGift ? 'rgba(242,230,200,0.38)' : 'rgba(242,230,200,0.14)',
+                          fontFamily: SERIF, letterSpacing: '0.12em',
+                          cursor: canGift ? 'pointer' : 'default',
+                          textDecoration: canGift ? 'underline' : 'none',
+                          textUnderlineOffset: '3px',
+                          textAlign: 'center',
+                        }}
+                      >
+                        譲る
+                      </button>
                     </div>
                   </div>
                 )
