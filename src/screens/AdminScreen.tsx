@@ -11,8 +11,8 @@ const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Minc
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 const STAFF_NAMES  = ['テイテイ', 'ヨンピル', '銀二郎', 'シルビア', 'リアン', 'キャンディ', 'ヒョウ']
-const MAX_QTY      = 15
-const QTY_PRESETS  = [1, 2, 3, 5, 10]
+const MAX_QTY      = 30
+const QTY_PRESETS  = [1, 2, 3, 5, 10, 30]
 const OTOKU_AMOUNTS = [300, 500, 1000, 3000, 5000, 9500]
 
 const TICKET_TABS: { type: TicketType; label: string; autoTitle: string }[] = [
