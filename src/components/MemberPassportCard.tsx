@@ -1,197 +1,245 @@
 import { motion } from 'framer-motion'
-import { QrCode, Crown, Star } from 'lucide-react'
-import type { Member, MemberRank } from '../data/brand'
-import { BRAND } from '../data/brand'
-import { formatDate, formatPoints } from '../utils/date'
+import { QRCodeSVG } from 'qrcode.react'
 
-function RankIcon({ rank }: { rank: MemberRank }) {
-  if (rank === 'ゴールド' || rank === 'プラチナ') {
-    return <Crown size={12} strokeWidth={2} style={{ color: '#C9A227' }} />
-  }
-  return <Star size={12} strokeWidth={2} style={{ color: '#C9A227' }} />
+const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+
+const CARD_CSS = `
+@keyframes gjOnbShine {
+  from { transform: translate(-50%,-50%) rotate(0deg); }
+  to   { transform: translate(-50%,-50%) rotate(360deg); }
 }
+@keyframes gjOnbFloat {
+  0%,100% { transform: translateY(0px); }
+  50%     { transform: translateY(-4px); }
+}
+@keyframes gjOnbAura {
+  0%,100% { transform: scale(1.00) translate(0px,0px);  opacity: 0.20; }
+  33%     { transform: scale(1.04) translate(4px,-3px);  opacity: 0.28; }
+  66%     { transform: scale(1.02) translate(-3px,3px);  opacity: 0.22; }
+}
+`
 
 interface Props {
-  member: Member
-  onQrTap?: () => void
+  name: string
+  userId: string
 }
 
-export function MemberPassportCard({ member, onQrTap }: Props) {
+export function MemberPassportCard({ name, userId }: Props) {
+  const displayName = name || 'ゲスト'
+  const shortId = userId.length > 26 ? userId.slice(0, 26) + '…' : userId
+
+  const qrPayload = JSON.stringify({
+    type: 'ginjiro-member',
+    userId,
+    name: displayName,
+  })
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="relative mx-4 rounded-2xl overflow-hidden"
-      style={{
-        background:
-          'radial-gradient(circle at 18% 18%, rgba(139,26,42,0.34), transparent 34%), linear-gradient(135deg, #201713 0%, #0A0A09 48%, #17080C 100%)',
-        border: '1px solid rgba(232,197,71,0.48)',
-        boxShadow:
-          '0 18px 54px rgba(0,0,0,0.76), 0 0 32px rgba(139,26,42,0.16), inset 0 1px 0 rgba(245,240,232,0.12), inset 0 0 34px rgba(201,162,39,0.12)',
-      }}
+      style={{ padding: '0 16px' }}
     >
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'linear-gradient(120deg, transparent 0%, rgba(245,240,232,0.08) 35%, rgba(232,197,71,0.08) 44%, transparent 58%)',
-        }}
-      />
-      <div
-        className="pointer-events-none absolute inset-3 rounded-xl"
-        style={{ border: '1px solid rgba(201,162,39,0.18)' }}
-      />
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0"
-        style={{
-          height: 1,
-          background: 'linear-gradient(90deg, transparent, rgba(232,197,71,0.8), transparent)',
-        }}
-      />
-      {['top-3 left-3', 'top-3 right-3', 'bottom-3 left-3', 'bottom-3 right-3'].map((pos) => (
-        <div
-          key={pos}
-          className={`pointer-events-none absolute ${pos} h-3 w-3`}
-          style={{
-            borderStyle: 'solid',
-            borderColor: 'rgba(232,197,71,0.42)',
-            borderTopWidth: pos.includes('top') ? 1 : 0,
-            borderBottomWidth: pos.includes('bottom') ? 1 : 0,
-            borderLeftWidth: pos.includes('left') ? 1 : 0,
-            borderRightWidth: pos.includes('right') ? 1 : 0,
-          }}
-        />
-      ))}
-      {/* Header */}
-      <div className="relative flex items-start justify-between px-5 pt-3.5 pb-0.5">
-        <div>
-          <p
-            className="text-[10px] tracking-[0.26em] font-semibold"
-            style={{ color: '#E8C547', textShadow: '0 0 14px rgba(201,162,39,0.26)' }}
-          >
-            {BRAND.nameEn}
-          </p>
-          <p className="mt-0.5 text-[8px] tracking-[0.24em]" style={{ color: 'rgba(245,240,232,0.34)' }}>
-            GINJIRO MEMBERSHIP
-          </p>
-          <div
-            className="inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-full"
-            style={{
-              background:
-                'linear-gradient(135deg, rgba(201,162,39,0.2), rgba(139,26,42,0.18))',
-              border: '1px solid rgba(232,197,71,0.38)',
-              boxShadow: '0 0 18px rgba(201,162,39,0.1), inset 0 0 12px rgba(201,162,39,0.08)',
-            }}
-          >
-            <RankIcon rank={member.rank} />
-            <span
-              className="text-[11px] font-semibold tracking-wider"
-              style={{ color: '#C9A227' }}
-            >
-              {member.rank}会員
-            </span>
-          </div>
-        </div>
-        {onQrTap ? (
-          <button
-            type="button"
-            onClick={onQrTap}
-            aria-label="男前証QRを表示"
-            className="rounded-xl p-2.5 transition-opacity active:opacity-60"
-            style={{
-              background: 'linear-gradient(145deg, rgba(12,12,10,0.86), rgba(201,162,39,0.09))',
-              border: '1px solid rgba(201,162,39,0.3)',
-              boxShadow: 'inset 0 0 18px rgba(201,162,39,0.1), 0 8px 18px rgba(0,0,0,0.28)',
-              cursor: 'pointer',
-            }}
-          >
-            <QrCode size={44} strokeWidth={1.3} style={{ color: 'rgba(201,162,39,0.72)' }} />
-          </button>
-        ) : (
-          <div
-            className="rounded-xl p-2.5"
-            style={{
-              background: 'linear-gradient(145deg, rgba(12,12,10,0.86), rgba(201,162,39,0.09))',
-              border: '1px solid rgba(201,162,39,0.3)',
-              boxShadow: 'inset 0 0 18px rgba(201,162,39,0.1), 0 8px 18px rgba(0,0,0,0.28)',
-            }}
-          >
-            <QrCode size={44} strokeWidth={1.3} style={{ color: 'rgba(201,162,39,0.55)' }} />
-          </div>
-        )}
-      </div>
+      <style>{CARD_CSS}</style>
 
-      {/* Name */}
-      <div className="relative px-5 py-2.5">
-        <p className="text-2xl font-bold tracking-wide" style={{ color: '#F5F0E8' }}>
-          {member.name}
-        </p>
-        <p className="text-[11px] tracking-[0.22em] mt-1" style={{ color: 'rgba(245,240,232,0.35)' }}>
-          {member.nameKana}
-        </p>
-      </div>
+      {/* Float wrapper */}
+      <div style={{ animation: 'gjOnbFloat 5s ease-in-out infinite' }}>
 
-      {/* Divider */}
-      <div
-        className="relative mx-5"
-        style={{
-          height: '1px',
-          background: 'linear-gradient(90deg, transparent, rgba(201,162,39,0.46), transparent)',
-        }}
-      />
+        {/* Card */}
+        <div style={{
+          position: 'relative',
+          borderRadius: 22,
+          background: [
+            'linear-gradient(158deg,',
+            '  #090102 0%,',
+            '  #130308 18%,',
+            '  #1E060D 36%,',
+            '  #260811 50%,',
+            '  #1E060D 66%,',
+            '  #100203 84%,',
+            '  #090102 100%)',
+          ].join(''),
+          border: '1px solid rgba(201,162,74,0.30)',
+          boxShadow: [
+            '0 24px 68px rgba(0,0,0,0.92)',
+            '0 0 0 0.5px rgba(201,162,74,0.06)',
+            'inset 0 1px 0 rgba(201,162,74,0.18)',
+            'inset 0 -1px 0 rgba(201,162,74,0.04)',
+            '0 0 44px rgba(100,5,25,0.22)',
+          ].join(', '),
+          overflow: 'hidden',
+          padding: '20px 18px 16px',
+        }}>
 
-      {/* Points + ID */}
-      <div className="relative flex items-end justify-between px-5 py-3.5">
-        <div>
-          <p className="text-[9px] tracking-[0.22em] uppercase" style={{ color: 'rgba(201,162,39,0.58)' }}>
-            Points
-          </p>
-          <p className="text-[28px] font-bold leading-none mt-1" style={{ color: '#E8C547', textShadow: '0 0 20px rgba(201,162,39,0.22)' }}>
-            {formatPoints(member.points)}
-            <span
-              className="text-[13px] font-normal ml-1"
-              style={{ color: 'rgba(201,162,39,0.6)' }}
-            >
-              pt
-            </span>
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[9px] tracking-[0.2em] uppercase" style={{ color: 'rgba(245,240,232,0.25)' }}>
-            Member ID
-          </p>
-          <p className="text-[11px] font-mono mt-1" style={{ color: 'rgba(245,240,232,0.55)' }}>
-            {member.id}
-          </p>
-          {member.memberSince && (
-            <p className="text-[9px] mt-1" style={{ color: 'rgba(201,162,39,0.42)' }}>
-              入会 {formatDate(member.memberSince)}
+          {/* Layer 0: crimson aura */}
+          <div aria-hidden style={{
+            position: 'absolute', top: '20%', left: '10%', width: '80%', height: '65%',
+            background: 'radial-gradient(ellipse at 50% 50%, rgba(130,8,34,0.40) 0%, rgba(85,5,20,0.16) 45%, transparent 70%)',
+            animation: 'gjOnbAura 9s ease-in-out infinite',
+            pointerEvents: 'none', zIndex: 0,
+          }} />
+
+          {/* Layer 1: conic shine sweep */}
+          <div aria-hidden style={{
+            position: 'absolute', top: '50%', left: '50%',
+            width: '260%', height: '260%',
+            background: [
+              'conic-gradient(',
+              '  from 0deg at 50% 50%,',
+              '  transparent 0deg,',
+              '  transparent 156deg,',
+              '  rgba(255,246,206,0.012) 170deg,',
+              '  rgba(255,250,218,0.062) 180deg,',
+              '  rgba(201,162,74,0.018) 190deg,',
+              '  transparent 204deg,',
+              '  transparent 360deg',
+              ')',
+            ].join(''),
+            animation: 'gjOnbShine 4s linear infinite',
+            pointerEvents: 'none', zIndex: 1,
+          }} />
+
+          {/* Layer 2: glass gloss */}
+          <div aria-hidden style={{
+            position: 'absolute', inset: 0,
+            background: [
+              'linear-gradient(136deg,',
+              '  transparent 35%,',
+              '  rgba(255,255,255,0.014) 43%,',
+              '  rgba(255,255,255,0.050) 50%,',
+              '  rgba(255,255,255,0.014) 57%,',
+              '  transparent 65%)',
+            ].join(''),
+            pointerEvents: 'none', zIndex: 2,
+          }} />
+
+          {/* Layer 3: top gold accent line */}
+          <div aria-hidden style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+            background: 'linear-gradient(90deg, transparent 0%, rgba(201,162,74,0.44) 15%, rgba(255,240,195,0.92) 50%, rgba(201,162,74,0.44) 85%, transparent 100%)',
+            zIndex: 3,
+          }} />
+
+          {/* Content */}
+          <div style={{ position: 'relative', zIndex: 4 }}>
+
+            {/* Header label */}
+            <p style={{
+              fontSize: 8, fontWeight: 700, letterSpacing: '0.30em',
+              color: 'rgba(201,162,74,0.50)', fontFamily: 'monospace', marginBottom: 16,
+            }}>
+              GINJIRO OFFICIAL MEMBER CARD
             </p>
-          )}
-        </div>
-      </div>
 
-      {/* Visit progress */}
-      <div className="relative px-5 pb-3.5">
-        <div
-          className="flex items-center justify-between text-[10px] mb-1.5"
-          style={{ color: 'rgba(245,240,232,0.42)' }}
-        >
-          <span>来店回数</span>
-          <span>{member.visitCount}回</span>
-        </div>
-        <div
-          className="rounded-full overflow-hidden"
-          style={{ height: '2px', background: 'rgba(255,255,255,0.06)' }}
-        >
-          <div
-            className="h-full rounded-full"
-            style={{
-              width: `${Math.min(100, (member.visitCount / 24) * 100)}%`,
-              background: 'linear-gradient(90deg, rgba(201,162,39,0.55), rgba(232,197,71,0.85))',
-            }}
-          />
+            {/* Main row */}
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+
+              {/* Left: name / ID / last visit */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+
+                {/* Member name */}
+                <p style={{
+                  fontFamily: SERIF,
+                  fontSize: 'clamp(22px, 6.5vw, 30px)',
+                  fontWeight: 700,
+                  color: '#F2E6C8',
+                  lineHeight: 1.15,
+                  letterSpacing: '0.06em',
+                  textShadow: '0 2px 18px rgba(0,0,0,0.80), 0 0 30px rgba(201,162,74,0.06)',
+                  marginBottom: 6,
+                }}>
+                  {displayName}
+                  <span style={{
+                    fontSize: 'clamp(15px, 4.2vw, 20px)',
+                    fontWeight: 400,
+                    color: 'rgba(242,230,200,0.50)',
+                    marginLeft: '0.24em',
+                  }}>様</span>
+                </p>
+
+                {/* Member ID */}
+                <p style={{
+                  fontFamily: 'monospace',
+                  fontSize: 'clamp(7px, 1.8vw, 9px)',
+                  color: 'rgba(242,230,200,0.24)',
+                  letterSpacing: '0.04em',
+                  lineHeight: 1.4,
+                  wordBreak: 'break-all',
+                  marginBottom: 12,
+                }}>
+                  {shortId}
+                </p>
+
+                {/* Divider */}
+                <div style={{
+                  height: 1,
+                  background: 'linear-gradient(90deg, rgba(201,162,74,0.28) 0%, rgba(201,162,74,0.06) 75%, transparent 100%)',
+                  marginBottom: 10,
+                }} />
+
+                {/* Last visit — always --- on initial issue */}
+                <div>
+                  <p style={{
+                    fontSize: 7, letterSpacing: '0.20em',
+                    color: 'rgba(201,162,74,0.46)', fontFamily: 'monospace', marginBottom: 4,
+                  }}>
+                    最終来店日
+                  </p>
+                  <p style={{
+                    fontFamily: SERIF,
+                    fontSize: 'clamp(14px, 3.8vw, 18px)',
+                    fontWeight: 600,
+                    color: 'rgba(242,230,200,0.22)',
+                    letterSpacing: '0.08em',
+                    lineHeight: 1,
+                  }}>
+                    ———
+                  </p>
+                </div>
+              </div>
+
+              {/* Right: QR code — blue neon */}
+              <div style={{ flexShrink: 0 }}>
+                <div style={{
+                  padding: 6,
+                  background: '#FFFFFF',
+                  borderRadius: 10,
+                  border: '1.5px solid rgba(0,210,255,0.82)',
+                  boxShadow: [
+                    '0 0 10px rgba(0,210,255,0.46)',
+                    '0 0 28px rgba(0,210,255,0.16)',
+                    'inset 0 0 10px rgba(0,210,255,0.06)',
+                  ].join(', '),
+                }}>
+                  <QRCodeSVG
+                    value={qrPayload}
+                    size={88}
+                    level="M"
+                    marginSize={1}
+                    fgColor="#000000"
+                    bgColor="#FFFFFF"
+                    style={{ display: 'block', borderRadius: 3 }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom divider */}
+            <div style={{
+              height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.20) 25%, rgba(201,162,74,0.20) 75%, transparent)',
+              marginTop: 18, marginBottom: 10,
+            }} />
+
+            {/* Tagline */}
+            <p style={{
+              textAlign: 'center', fontSize: 8, letterSpacing: '0.30em',
+              color: 'rgba(201,162,74,0.38)', fontFamily: SERIF,
+            }}>
+              男前を、維持する。
+            </p>
+          </div>
         </div>
       </div>
     </motion.div>

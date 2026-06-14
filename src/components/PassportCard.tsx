@@ -261,8 +261,8 @@ export function PassportCard() {
                 <div
                   onClick={() => setQrEnlarged(true)}
                   style={{
-                    padding: 8,
-                    background: '#000',
+                    padding: 6,
+                    background: '#FFFFFF',
                     borderRadius: 12,
                     border: '1.5px solid rgba(0,210,255,0.82)',
                     boxShadow: [
@@ -278,10 +278,10 @@ export function PassportCard() {
                     value={qrPayload}
                     size={96}
                     level="M"
-                    marginSize={0}
-                    fgColor="#FFFFFF"
-                    bgColor="#000000"
-                    style={{ display: 'block' }}
+                    marginSize={1}
+                    fgColor="#000000"
+                    bgColor="#FFFFFF"
+                    style={{ display: 'block', borderRadius: 4 }}
                   />
                   {/* Tap hint */}
                   <div style={{
@@ -341,8 +341,8 @@ export function PassportCard() {
         </p>
 
         <div style={{
-          padding: 16,
-          background: '#000',
+          padding: 12,
+          background: '#FFFFFF',
           borderRadius: 18,
           border: '2px solid rgba(0,210,255,0.88)',
           boxShadow: [
@@ -355,9 +355,9 @@ export function PassportCard() {
             value={qrPayload}
             size={240}
             level="M"
-            marginSize={0}
-            fgColor="#FFFFFF"
-            bgColor="#000000"
+            marginSize={2}
+            fgColor="#000000"
+            bgColor="#FFFFFF"
             style={{ display: 'block' }}
           />
         </div>

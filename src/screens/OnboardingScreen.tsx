@@ -1,13 +1,10 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MOCK_MEMBER } from '../data/brand'
-import type { Member, MemberStatus } from '../data/brand'
+import type { MemberStatus } from '../data/brand'
 import { setStoredValue, ONBOARDING_DONE_KEY, ONBOARDING_NAME_KEY } from '../utils/storage'
-import { MemberPassportCard } from '../components/MemberPassportCard'
-import { MemberQrModal } from '../components/MemberQrModal'
 import { getUserId, getMemberIssuedAt } from '../utils/userId'
 
-type Step = 0 | 1 | 2
+type Step = 0 | 1
 
 interface Props {
   memberStatus: MemberStatus
@@ -23,7 +20,6 @@ const slideVariants = {
 export function OnboardingScreen({ memberStatus, onDone }: Props) {
   const [step, setStep] = useState<Step>(0)
   const [name, setName] = useState('')
-  const [showQr, setShowQr] = useState(false)
 
   const trimmedName = name.trim() || 'ゲスト'
 
@@ -38,14 +34,6 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
     setStep(1)
   }
 
-  const previewMember: Member = {
-    ...MOCK_MEMBER,
-    name: trimmedName,
-    rank: memberStatus.rank,
-    points: memberStatus.points,
-    visitCount: memberStatus.visitCount,
-  }
-
   function handleFinish() {
     const nextStatus: MemberStatus = { ...memberStatus, memberName: trimmedName }
     setStoredValue(ONBOARDING_DONE_KEY, true)
@@ -54,10 +42,6 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   }
 
   return (
-    <>
-    {showQr && (
-      <MemberQrModal onClose={() => setShowQr(false)} />
-    )}
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -74,7 +58,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       {/* Progress dots — hidden on step 0 (splash handles its own dots) */}
       {step > 0 && (
         <div className="flex justify-center gap-2 pt-14 pb-6 shrink-0">
-          {([0, 1, 2] as const).map((i) => (
+          {([0, 1] as const).map((i) => (
             <div
               key={i}
               style={{
@@ -169,7 +153,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   zIndex: 2,
                 }}
               >
-                {([0, 1, 2] as const).map((i) => (
+                {([0, 1] as const).map((i) => (
                   <div
                     key={i}
                     style={{
@@ -200,7 +184,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   className="text-[10px] tracking-[0.3em] uppercase"
                   style={{ color: 'rgba(201,162,39,0.55)' }}
                 >
-                  Step 2 / 3
+                  Step 2 / 2
                 </p>
                 <h2
                   className="text-2xl font-bold tracking-wide"
@@ -231,10 +215,9 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                 <button
                   type="button"
                   onClick={() => {
-                    // userId と issuedAt をここで確定する
                     getUserId()
                     getMemberIssuedAt()
-                    setStep(2)
+                    handleFinish()
                   }}
                   className="w-full py-3.5 rounded-xl text-sm font-semibold tracking-widest transition-opacity active:opacity-70"
                   style={{
@@ -250,58 +233,8 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
             </motion.div>
           )}
 
-          {/* ── Step 2: Passport issued ── */}
-          {step === 2 && (
-            <motion.div
-              key={2}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.32 }}
-              className="absolute inset-0 flex flex-col justify-center gap-6 pb-6"
-            >
-              <div className="px-8 space-y-1.5">
-                <p
-                  className="text-[10px] tracking-[0.3em] uppercase"
-                  style={{ color: 'rgba(201,162,39,0.55)' }}
-                >
-                  発行完了
-                </p>
-                <h2
-                  className="text-xl font-bold tracking-wide leading-snug"
-                  style={{ color: '#F5F0E8' }}
-                >
-                  {trimmedName} 様の<br />男前証が発行されました。
-                </h2>
-              </div>
-
-              <MemberPassportCard
-                member={previewMember}
-                onQrTap={() => setShowQr(true)}
-              />
-
-              <div className="px-8">
-                <button
-                  type="button"
-                  onClick={handleFinish}
-                  className="w-full py-3.5 rounded-xl text-sm font-semibold tracking-widest transition-opacity active:opacity-70"
-                  style={{
-                    background:
-                      'linear-gradient(135deg, rgba(201,162,39,0.22), rgba(139,26,42,0.18))',
-                    border: '1px solid rgba(201,162,39,0.42)',
-                    color: '#E8C547',
-                  }}
-                >
-                  アプリを始める
-                </button>
-              </div>
-            </motion.div>
-          )}
-
         </AnimatePresence>
       </div>
     </motion.div>
-    </>
   )
 }

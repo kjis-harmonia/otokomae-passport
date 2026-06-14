@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '../lib/supabase'
@@ -177,43 +177,83 @@ type Phase = 'scan' | 'loading' | 'result' | 'ticket-loading' | 'ticket-result'
 
 const QR_EL_ID = 'gj-qr-reader'
 
+/** スキャナーインスタンスを安全に停止・クリアする（モジュールレベル関数） */
+async function haltScanner(scanner: Html5Qrcode): Promise<void> {
+  try {
+    if (scanner.isScanning) await scanner.stop()
+    scanner.clear()
+  } catch { /* ignore cleanup errors */ }
+}
+
 interface ScannerProps {
   onScan: (text: string) => void
   onCameraError: (msg: string) => void
 }
 
 function QrCameraScanner({ onScan, onCameraError }: ScannerProps) {
-  const instanceRef = useRef<Html5Qrcode | null>(null)
+  const scannerRef = useRef<Html5Qrcode | null>(null)
   const [active, setActive] = useState(false)
 
-  const stop = useCallback(async () => {
-    const s = instanceRef.current
+  /**
+   * スキャナー参照をアトミックに取得しnullに戻す。
+   * これにより stop() の二重呼び出しを防ぐ。
+   */
+  function claimScanner(): Html5Qrcode | null {
+    const s = scannerRef.current
+    scannerRef.current = null
+    return s
+  }
+
+  const stop = useCallback(() => {
+    const s = claimScanner()
     if (!s) return
-    try {
-      if (s.isScanning) await s.stop()
-      s.clear()
-    } catch { /* ignore */ }
-    instanceRef.current = null
     setActive(false)
+    void haltScanner(s)
   }, [])
 
   const start = useCallback(async () => {
-    if (instanceRef.current) return
-    const scanner = new Html5Qrcode(QR_EL_ID)
-    instanceRef.current = scanner
+    if (scannerRef.current) return
+
+    // ① Html5Qrcode コンストラクタ（要素不在で throw する）を個別 try-catch
+    let scanner: Html5Qrcode
+    try {
+      scanner = new Html5Qrcode(QR_EL_ID)
+    } catch {
+      onCameraError('カメラを初期化できません。ページを再読み込みしてください。')
+      return
+    }
+
+    scannerRef.current = scanner
+
+    // ② カメラ起動
     try {
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
-        (decoded) => { onScan(decoded); stop() },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decoded) => {
+          // アトミックにスキャナーを確保し、停止完了後に onScan を呼ぶ
+          const s = claimScanner()
+          if (!s) return          // 既に別ルートで停止済み
+          setActive(false)
+          void haltScanner(s).then(() => { onScan(decoded) })
+        },
         undefined,
       )
       setActive(true)
     } catch {
-      instanceRef.current = null
+      const s = claimScanner()
+      if (s) void haltScanner(s)
       onCameraError('カメラにアクセスできません。手動入力をご利用ください。')
     }
-  }, [onScan, onCameraError, stop])
+  }, [onScan, onCameraError])
+
+  // アンマウント時にカメラストリームを確実に解放する
+  useEffect(() => {
+    return () => {
+      const s = claimScanner()
+      if (s) void haltScanner(s)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div>
@@ -229,7 +269,7 @@ function QrCameraScanner({ onScan, onCameraError }: ScannerProps) {
       />
       {!active ? (
         <button
-          onClick={start}
+          onClick={() => { void start() }}
           style={{
             width: '100%', padding: '18px', borderRadius: 14,
             background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
