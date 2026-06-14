@@ -90,8 +90,8 @@ export function StyleDetailModal({
           >
             <X size={16} />
           </button>
-          {/* Title + catchCopy overlaid on image */}
-          <div className="absolute bottom-0 left-0 right-0 px-6 pb-6">
+          {/* Title + catchCopy + tag chips overlaid on image */}
+          <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
             <h2
               style={{
                 fontSize: 32,
@@ -118,6 +118,37 @@ export function StyleDetailModal({
                 {style.catchCopy}
               </p>
             )}
+            {style.tags.length > 0 && (
+              <div
+                className="[&::-webkit-scrollbar]:hidden"
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  overflowX: 'auto',
+                  flexWrap: 'nowrap',
+                  scrollbarWidth: 'none',
+                  marginTop: 10,
+                } as React.CSSProperties}
+              >
+                {style.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    style={{
+                      flexShrink: 0,
+                      fontSize: 12,
+                      padding: '4px 12px',
+                      borderRadius: 99,
+                      background: 'rgba(201,162,74,0.09)',
+                      border: '1px solid rgba(201,162,74,0.24)',
+                      color: 'rgba(242,230,200,0.6)',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -132,56 +163,7 @@ export function StyleDetailModal({
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 36px)',
           }}
         >
-          <div className="px-5 pt-6 space-y-5">
-            {/* こんな人におすすめ */}
-            {style.tags.length > 0 && (
-              <div
-                style={{
-                  borderRadius: 16,
-                  background: 'linear-gradient(145deg, rgba(22,9,7,0.92), rgba(10,5,4,0.96))',
-                  border: '1px solid rgba(201,162,74,0.14)',
-                  padding: '18px 20px',
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: 9,
-                    letterSpacing: '0.26em',
-                    textTransform: 'uppercase',
-                    color: 'rgba(201,162,74,0.44)',
-                    marginBottom: 14,
-                  }}
-                >
-                  こんな人におすすめ
-                </p>
-                <div className="space-y-2.5">
-                  {style.tags.map((tag) => (
-                    <div key={tag} className="flex items-center gap-3">
-                      <div
-                        style={{
-                          width: 4,
-                          height: 4,
-                          borderRadius: '50%',
-                          background: 'rgba(201,162,74,0.64)',
-                          flexShrink: 0,
-                        }}
-                      />
-                      <span
-                        style={{
-                          fontSize: 14,
-                          color: 'rgba(242,230,200,0.78)',
-                          fontFamily: SERIF,
-                          letterSpacing: '0.04em',
-                        }}
-                      >
-                        {tag}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
+          <div className="px-5 pt-5 space-y-5">
             {/* オーダー文 */}
             {style.description && (
               <div
@@ -218,32 +200,44 @@ export function StyleDetailModal({
               </div>
             )}
 
-            {/* 予約する */}
-            <motion.button
-              type="button"
-              onClick={() => {
-                if (reserveUrl) {
-                  window.open(reserveUrl, '_blank', 'noopener,noreferrer')
-                  onClose()
-                } else {
-                  onReserve()
-                }
-              }}
-              className="w-full rounded-xl py-4 font-bold tracking-[0.36em]"
-              style={{
-                background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-                border: '1px solid rgba(201,162,74,0.44)',
-                color: '#F2E6C8',
-                fontSize: 16,
-                fontFamily: SERIF,
-                boxShadow:
-                  '0 4px 28px rgba(107,15,18,0.5), inset 0 1px 0 rgba(242,230,200,0.06)',
-              }}
-              whileTap={{ scale: 0.98 }}
-              transition={{ duration: 0.15, ease: [0.25, 0, 0.25, 1] }}
-            >
-              予約する
-            </motion.button>
+            {/* PRICE + 予約する */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flexShrink: 0 }}>
+                <p style={{ fontSize: 10, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.46)', marginBottom: 2 }}>PRICE</p>
+                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#C9A24A' }}>
+                  ¥{style.price.toLocaleString()}
+                </p>
+              </div>
+              <motion.button
+                type="button"
+                onClick={() => {
+                  if (reserveUrl) {
+                    window.open(reserveUrl, '_blank', 'noopener,noreferrer')
+                    onClose()
+                  } else {
+                    onReserve()
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '15px 0',
+                  borderRadius: 14,
+                  background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+                  border: '1px solid rgba(201,162,74,0.44)',
+                  color: '#F2E6C8',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  fontFamily: SERIF,
+                  letterSpacing: '0.2em',
+                  boxShadow: '0 4px 28px rgba(107,15,18,0.5)',
+                  cursor: 'pointer',
+                }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ duration: 0.15, ease: [0.25, 0, 0.25, 1] }}
+              >
+                予約する
+              </motion.button>
+            </div>
           </div>
         </div>
       </motion.div>
