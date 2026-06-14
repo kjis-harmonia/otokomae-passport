@@ -358,9 +358,9 @@ function TicketWalletSection() {
               {/* 天面アクセントライン */}
               <div style={{ height: 2, background: `linear-gradient(90deg, ${tc.border} 0%, transparent 70%)` }} />
 
-              <div style={{ padding: '16px 18px 14px' }}>
+              <div style={{ padding: '13px 18px 10px' }}>
                 {/* 券種ラベル + 枚数バッジ */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <span style={{
                     fontSize: 9, fontWeight: 700, letterSpacing: '0.10em',
                     padding: '2px 8px', borderRadius: 99,
@@ -380,9 +380,9 @@ function TicketWalletSection() {
 
                 {/* タイトル */}
                 <p style={{
-                  fontFamily: SERIF, fontSize: 22, fontWeight: 700,
+                  fontFamily: SERIF, fontSize: 20, fontWeight: 700,
                   color: '#F2E6C8', letterSpacing: '0.04em', lineHeight: 1.15,
-                  marginBottom: group.amount > 0 ? 4 : 12,
+                  marginBottom: group.amount > 0 ? 3 : 8,
                 }}>
                   {group.title}
                 </p>
@@ -390,8 +390,8 @@ function TicketWalletSection() {
                 {/* 金額 */}
                 {group.amount > 0 && (
                   <p style={{
-                    fontFamily: SERIF, fontSize: 28, fontWeight: 700,
-                    color: '#C9A24A', letterSpacing: '0.01em', lineHeight: 1, marginBottom: 8,
+                    fontFamily: SERIF, fontSize: 26, fontWeight: 700,
+                    color: '#C9A24A', letterSpacing: '0.01em', lineHeight: 1, marginBottom: 6,
                   }}>
                     ¥{group.amount.toLocaleString()}
                   </p>
@@ -399,7 +399,7 @@ function TicketWalletSection() {
 
                 {/* 内訳バッジ（渡し中 / 期限切れ） */}
                 {(pendingCount > 0 || expiredCount > 0) && (
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 5 }}>
                     {pendingCount > 0 && (
                       <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,180,0,0.10)', border: '1px solid rgba(255,180,0,0.34)', color: '#FFB400' }}>
                         渡し中 {pendingCount}枚
@@ -414,13 +414,13 @@ function TicketWalletSection() {
                 )}
 
                 {/* 有効期限 */}
-                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.34)', marginBottom: 14, letterSpacing: '0.06em' }}>
+                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.34)', marginBottom: 10, letterSpacing: '0.06em' }}>
                   {repTicket?.expires_at
                     ? `有効期限 ${repTicket.expires_at.slice(0, 10).replace(/-/g, '/')}`
                     : '有効期限なし'}
                 </p>
 
-                <div style={{ height: '0.5px', background: `linear-gradient(90deg, ${tc.border}22, transparent)`, marginBottom: 12 }} />
+                <div style={{ height: '0.5px', background: `linear-gradient(90deg, ${tc.border}22, transparent)`, marginBottom: 10 }} />
 
                 {/* Primary: 使用する */}
                 <button
@@ -428,12 +428,12 @@ function TicketWalletSection() {
                   onClick={() => { if (canUse && group.activeItems[0]) setConfirmItem(group.activeItems[0]) }}
                   disabled={!canUse}
                   style={{
-                    width: '100%', padding: '12px 0', borderRadius: 10,
+                    width: '100%', padding: '11px 0', borderRadius: 10,
                     background: canUse ? tc.btnBg : 'rgba(255,255,255,0.02)',
                     border: `1.5px solid ${canUse ? tc.border : 'rgba(255,255,255,0.07)'}`,
                     boxShadow: canUse ? `0 4px 18px ${tc.border}38` : 'none',
-                    fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-                    color: canUse ? tc.text : 'rgba(242,230,200,0.2)',
+                    fontSize: 12, fontWeight: 700, letterSpacing: '0.14em',
+                    color: canUse ? '#e6ca65' : 'rgba(242,230,200,0.2)',
                     fontFamily: SERIF, cursor: canUse ? 'pointer' : 'default',
                   }}
                 >
@@ -447,14 +447,13 @@ function TicketWalletSection() {
                   disabled={!canGift || xferring}
                   style={{
                     display: 'block', width: '100%',
-                    padding: '8px 0 2px',
+                    padding: '5px 0 0',
                     background: 'none', border: 'none',
                     fontSize: 11,
-                    color: canGift ? 'rgba(242,230,200,0.36)' : 'rgba(242,230,200,0.14)',
-                    fontFamily: SERIF, letterSpacing: '0.12em',
+                    color: canGift ? 'rgba(107,114,128,0.88)' : 'rgba(107,114,128,0.28)',
+                    letterSpacing: '0.08em',
                     cursor: canGift ? 'pointer' : 'default',
-                    textDecoration: canGift ? 'underline' : 'none',
-                    textUnderlineOffset: '3px',
+                    textDecoration: 'none',
                     textAlign: 'center',
                   }}
                 >
@@ -488,31 +487,31 @@ function TicketWalletSection() {
               }}
             >
               <div style={{ height: 2, background: cs.bar }} />
-              <div style={{ padding: '16px 18px 14px' }}>
-                <div style={{ marginBottom: 12 }}>
+              <div style={{ padding: '13px 18px 10px' }}>
+                <div style={{ marginBottom: 10 }}>
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.18em', color: cs.label, textTransform: 'uppercase' }}>
                     Specialクーポン
                   </span>
                 </div>
-                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em', lineHeight: 1.15, marginBottom: amount > 0 ? 4 : 14 }}>
+                <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em', lineHeight: 1.15, marginBottom: amount > 0 ? 3 : 10 }}>
                   {title}
                 </p>
                 {amount > 0 && (
-                  <p style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: cs.accent, letterSpacing: '0.01em', lineHeight: 1, marginBottom: 8 }}>
+                  <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: cs.accent, letterSpacing: '0.01em', lineHeight: 1, marginBottom: 6 }}>
                     ¥{amount.toLocaleString()}
                   </p>
                 )}
-                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.34)', marginBottom: 14, letterSpacing: '0.06em' }}>有効期限なし</p>
-                <div style={{ height: '0.5px', background: `linear-gradient(90deg, ${cs.accent}22, transparent)`, marginBottom: 12 }} />
+                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.34)', marginBottom: 10, letterSpacing: '0.06em' }}>有効期限なし</p>
+                <div style={{ height: '0.5px', background: `linear-gradient(90deg, ${cs.accent}22, transparent)`, marginBottom: 10 }} />
                 <button
                   type="button"
                   onClick={() => setConfirmItem(item)}
                   style={{
-                    width: '100%', padding: '12px 0', borderRadius: 10,
+                    width: '100%', padding: '11px 0', borderRadius: 10,
                     background: `${cs.accent}1a`, border: `1.5px solid ${cs.accent}44`,
                     boxShadow: `0 4px 18px ${cs.accent}30`,
-                    fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-                    color: '#F2E6C8', fontFamily: SERIF, cursor: 'pointer',
+                    fontSize: 12, fontWeight: 700, letterSpacing: '0.14em',
+                    color: '#e6ca65', fontFamily: SERIF, cursor: 'pointer',
                   }}
                 >
                   使用する
