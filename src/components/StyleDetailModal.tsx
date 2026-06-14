@@ -152,93 +152,50 @@ export function StyleDetailModal({
           </div>
         </div>
 
-        {/* Scrollable content */}
+        {/* PRICE + 予約する */}
         <div
-          data-modal-scroll
           style={{
-            flex: 1,
-            overflowY: 'auto',
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 36px)',
+            padding: '20px 20px calc(env(safe-area-inset-bottom, 0px) + 24px)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
           }}
         >
-          <div className="px-5 pt-5 space-y-5">
-            {/* オーダー文 */}
-            {style.description && (
-              <div
-                style={{
-                  borderRadius: 16,
-                  background: 'linear-gradient(145deg, rgba(22,9,7,0.92), rgba(10,5,4,0.96))',
-                  border: '1px solid rgba(201,162,74,0.14)',
-                  padding: '18px 20px',
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: 9,
-                    letterSpacing: '0.26em',
-                    textTransform: 'uppercase',
-                    color: 'rgba(201,162,74,0.44)',
-                    marginBottom: 12,
-                  }}
-                >
-                  オーダー文
-                </p>
-                <p
-                  style={{
-                    fontSize: 14,
-                    color: 'rgba(242,230,200,0.66)',
-                    lineHeight: 1.9,
-                    fontFamily: SERIF,
-                    letterSpacing: '0.04em',
-                    whiteSpace: 'pre-line',
-                  }}
-                >
-                  {style.description}
-                </p>
-              </div>
-            )}
-
-            {/* PRICE + 予約する */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flexShrink: 0 }}>
-                <p style={{ fontSize: 10, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.46)', marginBottom: 2 }}>PRICE</p>
-                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#C9A24A' }}>
-                  ¥{style.price.toLocaleString()}
-                </p>
-              </div>
-              <motion.button
-                type="button"
-                onClick={() => {
-                  if (reserveUrl) {
-                    window.open(reserveUrl, '_blank', 'noopener,noreferrer')
-                    onClose()
-                  } else {
-                    onReserve()
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: '15px 0',
-                  borderRadius: 14,
-                  background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-                  border: '1px solid rgba(201,162,74,0.44)',
-                  color: '#F2E6C8',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  fontFamily: SERIF,
-                  letterSpacing: '0.2em',
-                  boxShadow: '0 4px 28px rgba(107,15,18,0.5)',
-                  cursor: 'pointer',
-                }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ duration: 0.15, ease: [0.25, 0, 0.25, 1] }}
-              >
-                予約する
-              </motion.button>
-            </div>
+          <div style={{ flexShrink: 0 }}>
+            <p style={{ fontSize: 10, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.46)', marginBottom: 2 }}>PRICE</p>
+            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#C9A24A' }}>
+              ¥{style.price.toLocaleString()}
+            </p>
           </div>
+          <motion.button
+            type="button"
+            onClick={() => {
+              if (reserveUrl) {
+                window.open(reserveUrl, '_blank', 'noopener,noreferrer')
+                onClose()
+              } else {
+                onReserve()
+              }
+            }}
+            style={{
+              flex: 1,
+              padding: '15px 0',
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+              border: '1px solid rgba(201,162,74,0.44)',
+              color: '#F2E6C8',
+              fontSize: 16,
+              fontWeight: 700,
+              fontFamily: SERIF,
+              letterSpacing: '0.2em',
+              boxShadow: '0 4px 28px rgba(107,15,18,0.5)',
+              cursor: 'pointer',
+            }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ duration: 0.15, ease: [0.25, 0, 0.25, 1] }}
+          >
+            予約する
+          </motion.button>
         </div>
       </motion.div>
     </>

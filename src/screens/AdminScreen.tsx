@@ -121,7 +121,15 @@ async function upsertLastVisitDate(userId: string, date: string): Promise<void> 
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-function todayISO(): string { return new Date().toISOString().slice(0, 10) }
+/** 日本時間（Asia/Tokyo）の今日の日付を YYYY-MM-DD で返す */
+function getJapanDateString(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
 
 function daysSince(dateStr: string): number {
   const base = new Date(dateStr); base.setHours(0, 0, 0, 0)
@@ -129,7 +137,11 @@ function daysSince(dateStr: string): number {
   return Math.floor((today.getTime() - base.getTime()) / 86_400_000)
 }
 
-function fmtDate(iso: string): string { return iso.replace(/-/g, '/') }
+/** YYYY-MM-DD → YYYY / MM / DD */
+function fmtVisitDate(iso: string): string {
+  const p = iso.split('-')
+  return p.length === 3 ? `${p[0]} / ${p[1]} / ${p[2]}` : iso
+}
 
 function fmtCreatedAt(iso: string): string {
   const d = new Date(iso)
@@ -279,6 +291,10 @@ export function AdminScreen() {
   const [ticketBlockMsg, setTicketBlockMsg]       = useState<string | null>(null)
   const [ticketUsedThisSession, setTicketUsedThisSession] = useState(false)
 
+  // Checkin
+  const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+  const [checkInDate, setCheckInDate]     = useState<string | null>(null)
+
   // Store QR
   const [showStoreQr, setShowStoreQr] = useState(false)
 
@@ -362,6 +378,8 @@ export function AdminScreen() {
     setTicketConfirmed(false)
     setTicketBlockMsg(null)
     setTicketUsedThisSession(false)
+    setCheckInStatus('idle')
+    setCheckInDate(null)
   }
 
   const loadUserTickets = useCallback(async (userId: string) => {
@@ -396,7 +414,6 @@ export function AdminScreen() {
     setPhase('loading')
     const prev = await fetchLastVisitDate(passportData.userId)
     setPrevLastVisitDate(prev)
-    await upsertLastVisitDate(passportData.userId, todayISO())
     if (prev === null) { /* first visit — no sound */ }
     else if (daysSince(prev) <= 14) playSuccessSound()
     else playWarningSound()
@@ -471,6 +488,20 @@ export function AdminScreen() {
     finally { setMarkingUsed(null) }
   }
 
+  const handleCheckIn = async () => {
+    if (!scannedData || checkInStatus === 'loading') return
+    setCheckInStatus('loading')
+    const today = getJapanDateString()
+    try {
+      await upsertLastVisitDate(scannedData.userId, today)
+      setCheckInDate(today)
+      setCheckInStatus('done')
+      playSuccessSound()
+    } catch {
+      setCheckInStatus('idle')
+    }
+  }
+
   const handleConfirmTicketUse = async () => {
     if (!ticketUseData || !ticketForUse || !staffId.trim()) return
     if (ticketUsedThisSession) { setTicketBlockMsg('このお会計では既にチケットを1枚使用しています。'); return }
@@ -478,7 +509,7 @@ export function AdminScreen() {
     setTicketConfirming(true); setTicketBlockMsg(null)
     try {
       await markTicketUsed(ticketForUse.id, staffId)
-      await upsertLastVisitDate(ticketUseData.userId, todayISO())
+      await upsertLastVisitDate(ticketUseData.userId, getJapanDateString())
       setTicketForUse(prev => prev ? { ...prev, used: true, used_at: new Date().toISOString() } : prev)
       setTicketConfirmed(true); setTicketUsedThisSession(true)
       playSuccessSound()
@@ -781,7 +812,7 @@ export function AdminScreen() {
                       </p>
                       {prevLastVisitDate && (
                         <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.36)', letterSpacing: '0.04em' }}>
-                          最終来店 {fmtDate(prevLastVisitDate)}
+                          最終来店 {fmtVisitDate(prevLastVisitDate)}
                         </p>
                       )}
                     </div>
@@ -800,6 +831,59 @@ export function AdminScreen() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* ── 来店チェックイン ── */}
+            <div style={{ marginBottom: 14 }}>
+              {checkInStatus === 'done' && checkInDate ? (
+                <div style={{
+                  borderRadius: 16, padding: '20px',
+                  background: 'linear-gradient(135deg, rgba(15,50,22,0.7) 0%, rgba(8,35,15,0.9) 100%)',
+                  border: '1px solid rgba(80,192,90,0.38)',
+                  boxShadow: '0 4px 24px rgba(20,100,40,0.18)',
+                  textAlign: 'center',
+                }}>
+                  <div style={{
+                    width: 44, height: 44, borderRadius: '50%', margin: '0 auto 12px',
+                    background: 'rgba(80,192,90,0.15)',
+                    border: '1.5px solid rgba(80,192,90,0.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 20, color: '#80E060',
+                  }}>✓</div>
+                  <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#80E060', letterSpacing: '0.1em', marginBottom: 10 }}>
+                    来店チェックイン完了
+                  </p>
+                  <p style={{ fontFamily: SERIF, fontSize: 13, color: 'rgba(242,230,200,0.72)', lineHeight: 1.8, letterSpacing: '0.04em' }}>
+                    {scannedData.name}様の前回来店日を<br />
+                    <span style={{ fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.12em' }}>{fmtVisitDate(checkInDate)}</span><br />
+                    として記録しました。
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { void handleCheckIn() }}
+                  disabled={checkInStatus === 'loading'}
+                  style={{
+                    width: '100%', padding: '18px 0', borderRadius: 16,
+                    background: checkInStatus === 'loading'
+                      ? 'rgba(20,60,30,0.5)'
+                      : 'linear-gradient(135deg, rgba(20,60,30,0.85) 0%, rgba(10,45,20,0.95) 100%)',
+                    border: '1px solid rgba(100,200,100,0.35)',
+                    boxShadow: checkInStatus === 'loading' ? 'none' : '0 4px 22px rgba(20,90,42,0.28)',
+                    fontFamily: SERIF, fontSize: 17, fontWeight: 700,
+                    letterSpacing: '0.14em', color: checkInStatus === 'loading' ? 'rgba(208,244,216,0.45)' : '#D0F4D8',
+                    cursor: checkInStatus === 'loading' ? 'default' : 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {checkInStatus === 'loading' ? '記録中…' : '来店チェックイン'}
+                  {checkInStatus !== 'loading' && (
+                    <span style={{ display: 'block', fontSize: 10, fontWeight: 400, color: 'rgba(208,244,216,0.5)', letterSpacing: '0.08em', marginTop: 4 }}>
+                      本日の来店日を記録します
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* ── Ticket issue form ── */}
