@@ -906,21 +906,38 @@ function MaintenanceCutSection() {
   )
 }
 
-// ── StylesRow (horizontal scroll preview) ────────────────────────────────────
+// ── StylesRow (home carousel preview — max 6 priority styles) ────────────────
+
+const HOME_PRIORITY_TITLES = [
+  '海軍御用達',
+  '俺は濡れパン',
+  'バチバチパンチパーマ',
+  '昭和のアイパー',
+  'カールアイパー',
+  '銀パラ',
+] as const
 
 function StylesRow({
   styles,
   onStyleSelect,
+  onSeeAll,
 }: {
   styles: StyleCard[]
   onStyleSelect: (s: StyleCard) => void
+  onSeeAll: () => void
 }) {
-  if (styles.length === 0) return null
+  const byTitle = new Map(styles.map(s => [s.title, s]))
+  const featured = HOME_PRIORITY_TITLES
+    .map(t => byTitle.get(t))
+    .filter((s): s is StyleCard => s !== undefined)
+  const displayStyles = featured.length > 0 ? featured : styles.slice(0, 6)
+
+  if (displayStyles.length === 0) return null
 
   return (
     <div>
       {/* Section header */}
-      <div className="flex items-center gap-3 px-5 mb-3">
+      <div className="flex items-center gap-3 px-5 mb-4">
         <p
           className="text-[17px] font-bold leading-none flex-shrink-0"
           style={{ color: '#F2E6C8', fontFamily: SERIF }}
@@ -933,38 +950,48 @@ function StylesRow({
             background: 'linear-gradient(90deg, rgba(201,162,74,0.28), transparent)',
           }}
         />
-        <p
+        <button
+          type="button"
+          onClick={onSeeAll}
           style={{
-            fontSize: 8, letterSpacing: '0.22em',
-            color: 'rgba(201,162,74,0.46)', flexShrink: 0,
+            flexShrink: 0,
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            fontSize: 9, letterSpacing: '0.18em',
+            color: 'rgba(201,162,74,0.58)',
           }}
         >
-          {styles.length} STYLES
-        </p>
+          全て見る →
+        </button>
       </div>
 
-      {/* 2-column grid — 図鑑レイアウト */}
+      {/* Horizontal carousel */}
       <div
+        className="[&::-webkit-scrollbar]:hidden"
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
+          display: 'flex',
           gap: 10,
-          padding: '0 20px 20px',
-        }}
+          overflowX: 'scroll',
+          paddingLeft: 20,
+          paddingRight: 20,
+          paddingBottom: 4,
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
+        } as React.CSSProperties}
       >
-        {styles.map((style, i) => (
+        {displayStyles.map((style, i) => (
           <motion.button
             key={style.id}
             type="button"
             onClick={() => onStyleSelect(style)}
-            whileTap={{ scale: 0.96 }}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.04, duration: 0.3, ease: EASE_OUT }}
+            whileTap={{ scale: 0.94 }}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.05, duration: 0.3, ease: EASE_OUT }}
             style={{
-              width: '100%',
-              aspectRatio: '2/3',
-              borderRadius: 10,
+              flexShrink: 0,
+              width: 'clamp(140px, 44vw, 162px)',
+              aspectRatio: '3/4',
+              borderRadius: 12,
               overflow: 'hidden',
               position: 'relative',
               background: '#0A0504',
@@ -973,22 +1000,6 @@ function StylesRow({
               cursor: 'pointer',
             }}
           >
-            {/* No. バッジ */}
-            <div
-              style={{
-                position: 'absolute', top: 7, left: 7, zIndex: 2,
-                fontSize: 8, fontWeight: 700, letterSpacing: '0.12em',
-                color: 'rgba(201,162,74,0.70)',
-                background: 'rgba(5,3,2,0.72)',
-                border: '1px solid rgba(201,162,74,0.20)',
-                borderRadius: 4, padding: '2px 5px',
-                backdropFilter: 'blur(4px)',
-                WebkitBackdropFilter: 'blur(4px)',
-              }}
-            >
-              {`No.${String(i + 1).padStart(2, '0')}`}
-            </div>
-
             <StyleCardImage
               src={resolveStyleImageUrl(style)}
               alt={style.title}
@@ -1000,17 +1011,17 @@ function StylesRow({
               className="absolute inset-0 pointer-events-none"
               style={{ background: getThumbOverlay(style) }}
             />
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 8px 10px' }}>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 10px 10px' }}>
               <p
                 style={{
-                  fontFamily: SERIF, fontSize: 12, fontWeight: 700,
+                  fontFamily: SERIF, fontSize: 11, fontWeight: 700,
                   color: '#F2E6C8', lineHeight: 1.22,
                   textShadow: '0 1px 8px rgba(0,0,0,0.95)',
                 }}
               >
                 {style.title}
               </p>
-              <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.84)', marginTop: 3 }}>
+              <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.84)', marginTop: 2 }}>
                 ¥{style.price.toLocaleString()}
               </p>
             </div>
@@ -1596,7 +1607,11 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.27, duration: 0.44, ease: EASE_OUT }}
         >
-          <StylesRow styles={styles} onStyleSelect={setSelectedStyle} />
+          <StylesRow
+            styles={styles}
+            onStyleSelect={setSelectedStyle}
+            onSeeAll={() => onTabChange('styles')}
+          />
         </motion.div>
 
         {/* ⑤ メンテナンス予報 */}
