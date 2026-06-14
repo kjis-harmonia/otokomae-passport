@@ -1583,13 +1583,17 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
           <PassportCard />
         </motion.div>
 
-        {/* ② メンテナンスカット */}
+        {/* ② 銀二郎スタイル */}
         <motion.div
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12, duration: 0.44, ease: EASE_OUT }}
         >
-          <MaintenanceCutSection />
+          <StylesRow
+            styles={styles}
+            onStyleSelect={setSelectedStyle}
+            onSeeAll={() => onTabChange('styles')}
+          />
         </motion.div>
 
         {/* ③ 保有チケット */}
@@ -1601,17 +1605,13 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
           <TicketWalletSection />
         </motion.div>
 
-        {/* ④ 銀二郎スタイル */}
+        {/* ④ 期間限定クーポン */}
         <motion.div
           initial={{ opacity: 0, y: 22 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.27, duration: 0.44, ease: EASE_OUT }}
         >
-          <StylesRow
-            styles={styles}
-            onStyleSelect={setSelectedStyle}
-            onSeeAll={() => onTabChange('styles')}
-          />
+          <MaintenanceCutSection />
         </motion.div>
 
         {/* ⑤ メンテナンス予報 */}
