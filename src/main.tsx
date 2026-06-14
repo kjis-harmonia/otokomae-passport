@@ -4,7 +4,7 @@ import './index.css'
 import './styles/tokens.css'
 import App from './App.tsx'
 import { CMSApp } from './cms/CMSApp.tsx'
-import { AdminScreen } from './screens/AdminScreen.tsx'
+import { StaffPinGate } from './screens/StaffPinGate.tsx'
 import { seedInitialStyles } from './utils/styleStorage'
 
 seedInitialStyles()
@@ -42,6 +42,10 @@ function exitCMS() {
 const STAFF_KEY = 'ginjiro_staff_mode'
 
 function detectStaff(): boolean {
+  if (window.location.pathname === '/staff') {
+    sessionStorage.setItem(STAFF_KEY, '1')
+    return true
+  }
   const params = new URLSearchParams(window.location.search)
   if (params.get('staff') === '1') {
     sessionStorage.setItem(STAFF_KEY, '1')
@@ -75,7 +79,7 @@ const isCMS   = !isStaff && detectCMS()
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isStaff ? (
-      <AdminScreen />
+      <StaffPinGate />
     ) : isCMS ? (
       <CMSApp onExit={exitCMS} />
     ) : (
