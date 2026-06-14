@@ -172,18 +172,6 @@ export function PassportCard() {
           {/* Content */}
           <div style={{ position: 'relative', zIndex: 4 }}>
 
-            {/* Primary title */}
-            <p style={{
-              fontFamily: SERIF,
-              fontSize: 'clamp(16px, 4.5vw, 20px)',
-              fontWeight: 700,
-              color: 'rgba(212,175,55,0.90)',
-              letterSpacing: '0.14em',
-              marginBottom: 4,
-            }}>
-              男前パスポート
-            </p>
-
             {/* Header label — kept small so it never overflows */}
             <p style={{
               fontSize: 7,
