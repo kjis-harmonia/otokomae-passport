@@ -10,6 +10,7 @@ import { MyPageScreen } from './screens/MyPageScreen'
 import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
 import { DiagnosisScreen } from './screens/DiagnosisScreen'
 import { OnboardingScreen } from './screens/OnboardingScreen'
+import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import PremiumGachaExperience from './components/PremiumGachaExperience'
 import type { GachaResult } from './components/PremiumGachaExperience'
 import { MOCK_MEMBER } from './data/brand'
@@ -26,6 +27,8 @@ type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function App() {
+  const [appLoading, setAppLoading] = useState(true)
+
   const [phase, setPhase] = useState<AppPhase>(() => {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
     return done ? 'app' : 'onboarding'
@@ -158,6 +161,16 @@ function App() {
           onComplete={handleGachaComplete}
         />
       )}
+
+      {/* Loading screen — covers everything until initial render settles */}
+      <AnimatePresence>
+        {appLoading && (
+          <GinjiroLoadingScreen
+            key="loading"
+            onDone={() => setAppLoading(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Transfer acceptance overlay — shown when app is opened via ?transfer=TOKEN */}
       {transferToken && (

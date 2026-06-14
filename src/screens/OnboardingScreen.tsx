@@ -27,6 +27,17 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
 
   const trimmedName = name.trim() || 'ゲスト'
 
+  function handleStart() {
+    // BGM: play on user gesture to satisfy browser autoplay policy
+    try {
+      const audio = new Audio('/audio/ginjiro-theme.mp3')
+      audio.volume = 0.28
+      audio.loop = false
+      void audio.play()
+    } catch { /* audio unavailable — silent fail */ }
+    setStep(1)
+  }
+
   const previewMember: Member = {
     ...MOCK_MEMBER,
     name: trimmedName,
@@ -122,7 +133,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
               {/* CTA button */}
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={handleStart}
                 style={{
                   position: 'absolute',
                   left: '50%',
