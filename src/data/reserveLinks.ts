@@ -21,15 +21,24 @@ export const RESERVE_LINKS: Readonly<Record<string, string>> = {
   // TryOnScreen short names (subset of above)
   '濡れパン':             NUREPAN_URL,
   'パンチパーマ':         PUNCH_PERM_URL,
-  // 新スタイル — CUT_URL 未定義のため暫定で既存URLへ誘導
-  '昭和のアイパー':       CURL_IPER_URL,
-  'リーゼントパンチ':     PUNCH_PERM_URL,
+  // 昭和の漢 — 専用クーポンURL
+  '昭和のアイパー':       'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008875458&add=0&addMenu=0&rootCd=10',
+  'サイドバックアイパー': 'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008875458&add=0&addMenu=0&rootCd=10',
+  'リーゼントパンチ':     'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008914837&add=0&addMenu=0&rootCd=10',
+  'ヤンキーパンチ':       PUNCH_PERM_URL,
+  // 王道パーマ — 専用クーポンURL
+  'ニグロパーマ':         'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008396582&add=0&addMenu=0&rootCd=10',
+  '銀パラカーリー':       GINPARA_URL,
+  // 威圧感MAX — 専用クーポンURL
+  '海軍御用達':           'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000009719263&add=0&addMenu=0&rootCd=10',
+  'シンサイ刈り':         'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000009719263&add=0&addMenu=0&rootCd=10',
+  // 既存スタイル — 暫定から専用クーポンURLへ更新
   'ジャマイカンアフロ':   CURL_IPER_URL,
   'スペインパーマ':       CURL_IPER_URL,
   'テイテイ刈り':         CURL_IPER_URL,
   '極道ボウズ':           PUNCH_PERM_URL,
   'トラック野郎御用達':   PUNCH_PERM_URL,
-  // 新スタイル (2025-06 追加分) — 専用クーポンURL
+  // 専用クーポンURL 確定分
   'シンサイパンチ':                     'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008914837&add=0&addMenu=0&rootCd=10',
   '覚醒の色':                           'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000010603641&add=0&addMenu=0&rootCd=10',
   'サラリーマン専用 ギリギリパーマ':     'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000009996260&add=0&addMenu=0&rootCd=10',
