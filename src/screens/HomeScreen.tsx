@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Html5Qrcode } from 'html5-qrcode'
 import { supabase } from '../lib/supabase'
-import { isInStoreModeActive, activateInStoreMode, clearInStoreMode } from '../utils/inStoreMode'
 import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import { StyleDetailModal } from '../components/StyleDetailModal'
@@ -31,10 +30,9 @@ import {
 } from '../utils/pushNotification'
 import { getUserId } from '../utils/userId'
 import { getUserTickets, getActiveTicket, setActiveTicket, clearActiveTicket, initiateTransfer, cancelTransfer } from '../utils/ticketStore'
-import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY, loadCoupons, saveCoupons } from '../utils/storage'
+import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
-import type { Coupon } from '../data/brand'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -116,9 +114,7 @@ interface Props {
 
 // ── TicketWalletSection ───────────────────────────────────────────────────────
 
-type WalletItem =
-  | { kind: 'ticket'; data: TicketRow }
-  | { kind: 'coupon'; data: Coupon & { amount: number } }
+type WalletItem = { kind: 'ticket'; data: TicketRow }
 
 // 券種＋金額でグループ化
 interface HomeTicketGroup {
@@ -152,31 +148,6 @@ function groupWalletTickets(ticketItems: WalletItem[]): HomeTicketGroup[] {
   return Array.from(map.values())
 }
 
-function walletCardStyle(item: WalletItem): { bg: string; accent: string; bar: string; label: string } {
-  if (item.kind === 'ticket' && item.data.type === 'cut-ticket') {
-    return {
-      bg:     'linear-gradient(145deg, #050b18 0%, #030610 60%, #060810 100%)',
-      accent: '#6AABF0',
-      bar:    'linear-gradient(90deg, transparent, #1a3a6b 30%, #6AABF0 50%, #1a3a6b 70%, transparent)',
-      label:  'rgba(106,171,240,0.65)',
-    }
-  }
-  if (item.kind === 'coupon' && item.data.id === 'preset-otoku-1000') {
-    return {
-      bg:     'linear-gradient(145deg, #040e06 0%, #030a05 60%, #050e07 100%)',
-      accent: '#80D060',
-      bar:    'linear-gradient(90deg, transparent, #1a4820 30%, #80D060 50%, #1a4820 70%, transparent)',
-      label:  'rgba(128,208,96,0.65)',
-    }
-  }
-  return {
-    bg:     'linear-gradient(145deg, #100608 0%, #080304 60%, #0e0508 100%)',
-    accent: '#C9A24A',
-    bar:    'linear-gradient(90deg, transparent, #6B0F12 30%, #C9A24A 50%, #6B0F12 70%, transparent)',
-    label:  'rgba(201,162,74,0.65)',
-  }
-}
-
 function TicketWalletSection() {
   const userId   = getUserId()
   const memberStatus = loadMemberStatus()
@@ -194,67 +165,48 @@ function TicketWalletSection() {
   function refreshItems() {
     getUserTickets(userId)
       .then(tickets => {
-        const ti: WalletItem[] = tickets.filter(t => !t.used).map(t => ({ kind: 'ticket' as const, data: t }))
-        const ci: WalletItem[] = loadCoupons()
-          .filter(c => !c.used && typeof c.amount === 'number')
-          .map(c => ({ kind: 'coupon' as const, data: c as Coupon & { amount: number } }))
-        setItems([...ti, ...ci])
+        const walletTickets = tickets
+          .filter(t => !t.used && (t.type === 'otoku' || t.type === 'discount'))
+          .map(t => ({ kind: 'ticket' as const, data: t }))
+        setItems(walletTickets)
       })
-      .catch(() => {
-        const ci: WalletItem[] = loadCoupons()
-          .filter(c => !c.used && typeof c.amount === 'number')
-          .map(c => ({ kind: 'coupon' as const, data: c as Coupon & { amount: number } }))
-        setItems(ci)
-      })
+      .catch(() => setItems([]))
   }
 
   useEffect(() => { refreshItems() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 券種グループと個別クーポンに分離
-  const ticketItems  = items.filter(item => item.kind === 'ticket')
-  const couponItems  = items.filter(item => item.kind === 'coupon')
-  const ticketGroups = groupWalletTickets(ticketItems)
+  const ticketGroups = groupWalletTickets(items)
 
   const qrValue = qrItem
-    ? qrItem.kind === 'ticket'
-      ? JSON.stringify({ type: 'otokomae-passport', userId, name: memberName, rank: RANK_EN_MAP[memberStatus.rank] ?? 'BRONZE', points: memberStatus.points })
-      : JSON.stringify({ type: 'otokomae-coupon', id: qrItem.data.id, title: qrItem.data.title, amount: qrItem.data.amount })
+    ? JSON.stringify({ type: 'otokomae-passport', userId, name: memberName, rank: RANK_EN_MAP[memberStatus.rank] ?? 'BRONZE', points: memberStatus.points })
     : ''
 
   function handleUseConfirm() {
     if (!confirmItem) return
-    if (confirmItem.kind === 'ticket') {
-      const t = confirmItem.data
-      const active = getActiveTicket()
-      if (active && active !== t.id) {
-        alert('他のチケットが使用中です。先にそちらを閉じてください。')
-        setConfirmItem(null)
-        return
-      }
-      if (t.pending_transfer) {
-        alert('このチケットは渡し手続き中です。')
-        setConfirmItem(null)
-        return
-      }
-      setActiveTicket(t.id)
+    const t = confirmItem.data
+    const active = getActiveTicket()
+    if (active && active !== t.id) {
+      alert('他のチケットが使用中です。先にそちらを閉じてください。')
+      setConfirmItem(null)
+      return
     }
+    if (t.pending_transfer) {
+      alert('このチケットは渡し手続き中です。')
+      setConfirmItem(null)
+      return
+    }
+    setActiveTicket(t.id)
     setQrItem(confirmItem)
     setConfirmItem(null)
   }
 
   function handleQrClose() {
-    if (qrItem?.kind === 'ticket') {
-      clearActiveTicket()
-    } else if (qrItem?.kind === 'coupon') {
-      const next = loadCoupons().map(c => c.id === qrItem.data.id ? { ...c, used: true } : c)
-      saveCoupons(next)
-    }
+    clearActiveTicket()
     setQrItem(null)
     refreshItems()
   }
 
   async function handleTransfer(item: WalletItem) {
-    if (item.kind !== 'ticket') return
     const t = item.data
     if (t.used || t.pending_transfer) return
     setXferring(true)
@@ -271,7 +223,7 @@ function TicketWalletSection() {
   }
 
   async function handleCancelTransfer() {
-    if (transferItem?.kind !== 'ticket') return
+    if (!transferItem) return
     try { await cancelTransfer(transferItem.data.id, userId) } catch {}
     setTransferToken(null)
     setTransferItem(null)
@@ -306,7 +258,7 @@ function TicketWalletSection() {
         <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.28), transparent)' }} />
         {items.length > 0 && (
           <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 99, background: 'rgba(201,162,74,0.10)', border: '1px solid rgba(201,162,74,0.24)', color: 'rgba(201,162,74,0.68)', flexShrink: 0 }}>
-            {ticketGroups.length + couponItems.length}種 · {items.length}枚
+            {ticketGroups.length}種 · {items.length}枚
           </span>
         )}
         <p style={{ fontSize: 8, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.44)', flexShrink: 0 }}>WALLET</p>
@@ -464,63 +416,6 @@ function TicketWalletSection() {
           )
         })}
 
-        {/* ── 個別クーポン（旧来型、グループ化しない） ── */}
-        {couponItems.map((item, i) => {
-          const cs     = walletCardStyle(item)
-          const title  = item.data.title
-          const amount = item.data.amount ?? 0
-
-          return (
-            <motion.div
-              key={item.data.id}
-              initial={{ opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: (ticketGroups.length + i) * 0.07, duration: 0.38 }}
-              style={{
-                flexShrink: 0,
-                width: 'clamp(256px, 76vw, 284px)',
-                borderRadius: 20,
-                background: cs.bg,
-                border: `1px solid ${cs.accent}38`,
-                boxShadow: `0 16px 48px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.035)`,
-                overflow: 'hidden',
-              }}
-            >
-              <div style={{ height: 2, background: cs.bar }} />
-              <div style={{ padding: '13px 18px 10px' }}>
-                <div style={{ marginBottom: 10 }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.18em', color: cs.label, textTransform: 'uppercase' }}>
-                    Specialクーポン
-                  </span>
-                </div>
-                <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em', lineHeight: 1.15, marginBottom: amount > 0 ? 3 : 10 }}>
-                  {title}
-                </p>
-                {amount > 0 && (
-                  <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: cs.accent, letterSpacing: '0.01em', lineHeight: 1, marginBottom: 6 }}>
-                    ¥{amount.toLocaleString()}
-                  </p>
-                )}
-                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.34)', marginBottom: 10, letterSpacing: '0.06em' }}>有効期限なし</p>
-                <div style={{ height: '0.5px', background: `linear-gradient(90deg, ${cs.accent}22, transparent)`, marginBottom: 10 }} />
-                <button
-                  type="button"
-                  onClick={() => setConfirmItem(item)}
-                  style={{
-                    width: '100%', padding: '11px 0', borderRadius: 10,
-                    background: `${cs.accent}1a`, border: `1.5px solid ${cs.accent}44`,
-                    boxShadow: `0 4px 18px ${cs.accent}30`,
-                    fontSize: 12, fontWeight: 700, letterSpacing: '0.14em',
-                    color: '#e6ca65', fontFamily: SERIF, cursor: 'pointer',
-                  }}
-                >
-                  使用する
-                </button>
-              </div>
-            </motion.div>
-          )
-        })}
-
         <div style={{ width: 8, flexShrink: 0 }} />
       </div>
 
@@ -547,9 +442,7 @@ function TicketWalletSection() {
                 </p>
               )}
               <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.46)', textAlign: 'center', lineHeight: 1.75, marginBottom: 24 }}>
-                {confirmItem.kind === 'ticket'
-                  ? 'スタッフにQRコードを提示してください。'
-                  : 'このクーポンを使用します。\nスタッフに確認してもらってください。'}
+                スタッフにQRコードを提示してください。
               </p>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button type="button" onClick={() => setConfirmItem(null)}
@@ -584,13 +477,11 @@ function TicketWalletSection() {
                 <QRCodeSVG value={qrValue} size={200} level="M" />
               </div>
               <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.38)', lineHeight: 1.75, marginBottom: 20 }}>
-                {qrItem.kind === 'ticket'
-                  ? 'スタッフがスキャン後に使用確定されます。\n確定後「閉じる」を押してください。'
-                  : 'スタッフに見せて確認してもらってください。\n確認後「使用済みにする」を押してください。'}
+                スタッフがスキャン後に使用確定されます。{'\n'}確定後「閉じる」を押してください。
               </p>
               <button type="button" onClick={handleQrClose}
                 style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', fontSize: 13, color: 'rgba(242,230,200,0.72)', fontFamily: SERIF, letterSpacing: '0.16em', cursor: 'pointer' }}>
-                {qrItem.kind === 'ticket' ? '閉じる' : '使用済みにする'}
+                閉じる
               </button>
             </motion.div>
           </div>
@@ -635,17 +526,38 @@ function TicketWalletSection() {
 
 // ── MaintenanceCutSection ─────────────────────────────────────────────────────
 
+const MAINT_ACTIVE_KEY  = 'ginjiro_maintenance_active'
+const MAINT_USED_AT_KEY = 'ginjiro_maintenance_used_at'
+
+function isMaintenanceActive(): boolean {
+  try {
+    const raw = localStorage.getItem(MAINT_ACTIVE_KEY)
+    if (!raw) return false
+    const { activatedAt } = JSON.parse(raw) as { activatedAt: string }
+    return Date.now() - new Date(activatedAt).getTime() < 2 * 60 * 60 * 1000
+  } catch { return false }
+}
+
+function activateMaintenance(): void {
+  localStorage.setItem(MAINT_ACTIVE_KEY, JSON.stringify({ activatedAt: new Date().toISOString() }))
+}
+
+function clearMaintenance(): void {
+  localStorage.removeItem(MAINT_ACTIVE_KEY)
+  localStorage.setItem(MAINT_USED_AT_KEY, new Date().toISOString())
+}
+
 const RANK_EN_MAP: Record<string, string> = {
   ブロンズ: 'BRONZE', シルバー: 'SILVER', ゴールド: 'GOLD', プラチナ: 'PLATINUM',
 }
 
-function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => void }) {
+function MaintenanceCutSection() {
   const userId = getUserId()
-  const [tickets, setTickets] = useState<TicketRow[]>([])
-  const [ticketsLoaded, setTicketsLoaded] = useState(false)
 
-  // In-store mode state (2-hour localStorage expiry)
-  const [inStoreMode, setInStoreMode] = useState(() => isInStoreModeActive())
+  // Maintenance right state — set by in-store QR scan, expires in 2 hours
+  const [maintenanceActive, setMaintenanceActive] = useState(isMaintenanceActive)
+  const [showMaintenanceQr, setShowMaintenanceQr] = useState(false)
+
   const [showScanner, setShowScanner] = useState(false)
   const [scannerActive, setScannerActive] = useState(false)
   const [scanMsg, setScanMsg] = useState<string | null>(null)
@@ -657,16 +569,10 @@ function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => 
   const daysRemaining = lastVisit ? getDaysRemaining(lastVisit.visitedAt) : null
   const isEligible = daysRemaining !== null && daysRemaining >= 0
 
-  async function fetchTickets() {
-    try { setTickets(await getUserTickets(userId)) }
-    catch { setTickets([]) }
-    finally { setTicketsLoaded(true) }
-  }
-
-  useEffect(() => { fetchTickets() }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 未使用のメンテナンスカット券
-  const unusedCutTicket: TicketRow | undefined = tickets.find(t => t.type === 'cut-ticket' && !t.used)
+  // Maintenance coupon QR payload
+  const memberStatus  = loadMemberStatus()
+  const memberName    = getStoredValue<string>(ONBOARDING_NAME_KEY, memberStatus.memberName)
+  const maintenanceQrValue = JSON.stringify({ type: 'ginjiro-maintenance-coupon', userId, name: memberName })
 
   // ── QR scanner helpers ──────────────────────────────────────────────────────
 
@@ -733,8 +639,8 @@ function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => 
 
     if (daysDiff <= 14) {
       playSuccessSound()
-      activateInStoreMode()
-      setInStoreMode(true)
+      activateMaintenance()
+      setMaintenanceActive(true)
       setScanMsg(null)
     } else {
       playWarningSound()
@@ -743,13 +649,11 @@ function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => 
     setScanProcessing(false)
   }
 
-  function handleCouponPageTap() {
-    clearInStoreMode()
-    setInStoreMode(false)
-    onTabChange('mypage')
+  function handleMaintenanceQrClose() {
+    clearMaintenance()
+    setMaintenanceActive(false)
+    setShowMaintenanceQr(false)
   }
-
-  const showCouponBtn = inStoreMode && !!unusedCutTicket
 
   return (
     <div className="px-4">
@@ -780,18 +684,18 @@ function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => 
               style={{
                 display: 'inline-flex', alignItems: 'center',
                 padding: '3px 10px', borderRadius: 99,
-                background: showCouponBtn
+                background: maintenanceActive
                   ? 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 100%)'
                   : 'linear-gradient(135deg, #3d0608 0%, #6B0F12 100%)',
-                border: `1px solid ${showCouponBtn ? 'rgba(100,200,100,0.36)' : 'rgba(201,162,74,0.36)'}`,
+                border: `1px solid ${maintenanceActive ? 'rgba(100,200,100,0.36)' : 'rgba(201,162,74,0.36)'}`,
                 fontSize: 10, fontWeight: 700, letterSpacing: '0.14em',
-                color: showCouponBtn ? '#90E8A0' : '#F2E6C8', fontFamily: SERIF,
+                color: maintenanceActive ? '#90E8A0' : '#F2E6C8', fontFamily: SERIF,
               }}
             >
-              {showCouponBtn ? 'クーポン有効' : '14DAY CYCLE'}
+              {maintenanceActive ? 'クーポン有効' : '14DAY CYCLE'}
             </span>
-            {/* 店内QR読み取りボタン */}
-            {!inStoreMode && (
+            {/* 店内QR読み取りボタン（クーポン未有効時のみ） */}
+            {!maintenanceActive && (
               <button
                 type="button"
                 onClick={() => { setScanMsg(null); setShowScanner(true) }}
@@ -817,21 +721,8 @@ function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => 
             フェード・刈り上げ・ラインを整えて男前をキープ。
           </p>
 
-          {/* 未使用クーポン情報 */}
-          {unusedCutTicket && (
-            <div style={{ borderRadius: 12, background: 'rgba(100,200,100,0.05)', border: '1px solid rgba(100,200,100,0.22)', padding: '10px 14px', marginBottom: 16 }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.16em', color: 'rgba(144,232,160,0.6)', marginBottom: 3 }}>メンテナンスカット券</p>
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>{unusedCutTicket.title}</p>
-              {unusedCutTicket.expires_at && (
-                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.38)', marginTop: 3 }}>
-                  有効期限 {unusedCutTicket.expires_at.slice(0, 10).replace(/-/g, '/')}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* 来店日・残り日数（クーポン無し・来店記録あり） */}
-          {!unusedCutTicket && ticketsLoaded && lastVisit && (
+          {/* 来店日・残り日数（来店記録あり） */}
+          {lastVisit && (
             <div style={{ borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: `1px solid ${isEligible ? 'rgba(201,162,74,0.22)' : 'rgba(139,26,26,0.32)'}`, padding: '10px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div>
                 <p style={{ fontSize: 9, letterSpacing: '0.16em', color: 'rgba(242,230,200,0.36)', marginBottom: 2 }}>前回来店</p>
@@ -860,13 +751,11 @@ function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => 
             <p style={{ fontSize: 22, fontWeight: 700, color: '#C9A24A', fontFamily: SERIF, letterSpacing: '0.02em', lineHeight: 1 }}>¥3,000</p>
           </div>
 
-          {/* ボタン */}
-          {!ticketsLoaded ? (
-            <div style={{ height: 48, borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }} />
-          ) : showCouponBtn ? (
+          {/* ボタン：State B（クーポン有効） or State A/C（予約） */}
+          {maintenanceActive ? (
             <button
               type="button"
-              onClick={handleCouponPageTap}
+              onClick={() => setShowMaintenanceQr(true)}
               style={{
                 display: 'block', width: '100%', textAlign: 'center',
                 padding: '14px 0', borderRadius: 14,
@@ -877,7 +766,7 @@ function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => 
               }}
             >
               <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.18em', color: '#D0F4D8', fontFamily: SERIF }}>
-                クーポンページへ
+                メンテナンスクーポンを使用する
               </span>
             </button>
           ) : (
@@ -901,6 +790,36 @@ function MaintenanceCutSection({ onTabChange }: { onTabChange: (tab: NavTab) => 
           )}
         </div>
       </div>
+
+      {/* ── メンテナンスクーポン QRモーダル ── */}
+      <AnimatePresence>
+        {showMaintenanceQr && (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+            onClick={handleMaintenanceQrClose}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
+              transition={{ duration: 0.24 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #060e09 0%, #040a06 100%)', border: '1px solid rgba(100,200,100,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.92)', padding: '28px 24px', textAlign: 'center' }}
+            >
+              <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(144,232,160,0.5)', marginBottom: 8 }}>MAINTENANCE COUPON</p>
+              <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#F2E6C8', marginBottom: 18, lineHeight: 1.4 }}>メンテナンスクーポン</p>
+              <div style={{ display: 'inline-block', padding: 16, background: '#FFFFFF', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', marginBottom: 20 }}>
+                <QRCodeSVG value={maintenanceQrValue} size={200} level="M" />
+              </div>
+              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.38)', lineHeight: 1.75, marginBottom: 20 }}>
+                スタッフにQRを提示してください。{'\n'}確認後「使用済みにする」を押してください。
+              </p>
+              <button type="button" onClick={handleMaintenanceQrClose}
+                style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(100,200,100,0.08)', border: '1px solid rgba(100,200,100,0.30)', fontSize: 13, fontWeight: 700, color: '#D0F4D8', fontFamily: SERIF, letterSpacing: '0.16em', cursor: 'pointer' }}>
+                使用済みにする
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── QRスキャナーモーダル ── */}
       {showScanner && (
@@ -1597,7 +1516,7 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12, duration: 0.44, ease: EASE_OUT }}
         >
-          <MaintenanceCutSection onTabChange={onTabChange} />
+          <MaintenanceCutSection />
         </motion.div>
 
         {/* ③ 保有チケット */}

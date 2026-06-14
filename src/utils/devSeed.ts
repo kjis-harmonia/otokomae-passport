@@ -2,7 +2,7 @@ import { getUserId } from './userId'
 import { getStoredValue, setStoredValue } from './storage'
 import type { TicketRow } from '../data/ticket'
 
-const DEV_SEED_KEY          = 'ginjiro_dev_seeded_v1'
+const DEV_SEED_KEY          = 'ginjiro_dev_seeded_v2'
 const LOCAL_TICKETS_KEY     = 'ginjiro_local_tickets'
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 
@@ -23,23 +23,6 @@ export function seedDevData(): void {
   // ── チケット ────────────────────────────────────────────────────────────────
   const existing = getStoredValue<TicketRow[]>(LOCAL_TICKETS_KEY, [])
   const tickets: TicketRow[] = []
-
-  // クーポン × 15
-  for (let i = 0; i < 15; i++) {
-    tickets.push({
-      id: `dev-coupon-${i + 1}`,
-      user_id:    userId,
-      type:       'coupon',
-      title:      'メンテナンスクーポン',
-      amount:     0,
-      memo:       null,
-      used:       false,
-      issued_by:  'dev',
-      created_at: now,
-      used_at:    null,
-      expires_at: null,
-    })
-  }
 
   // 割引券 × 15（¥300 × 5, ¥500 × 5, ¥1,000 × 5）
   const discountAmounts = [300, 500, 1000]
