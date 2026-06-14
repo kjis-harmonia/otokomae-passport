@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { getUserId } from '../utils/userId'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 
+const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
+
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
 const CARD_CSS = `
@@ -44,8 +46,14 @@ export function PassportCard() {
       .select('last_visit_date')
       .eq('user_id', userId)
       .maybeSingle()
-      .then(({ data }) => {
-        if (data?.last_visit_date) setLastVisitDate(data.last_visit_date as string)
+      .then(({ data, error }) => {
+        if (!error && data?.last_visit_date) {
+          setLastVisitDate(data.last_visit_date as string)
+        } else {
+          // localStorage fallback（Supabase 未設定・オフライン時）
+          const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
+          if (local[userId]) setLastVisitDate(local[userId])
+        }
       })
   }, [userId])
 
@@ -172,12 +180,12 @@ export function PassportCard() {
           {/* Content */}
           <div style={{ position: 'relative', zIndex: 4 }}>
 
-            {/* Header label — kept small so it never overflows */}
+            {/* Header label */}
             <p style={{
-              fontSize: 7,
+              fontSize: 10,
               fontWeight: 700,
-              letterSpacing: '0.16em',
-              color: 'rgba(201,162,74,0.38)',
+              letterSpacing: '0.18em',
+              color: 'rgba(201,162,74,0.46)',
               fontFamily: 'monospace',
               marginBottom: 16,
               whiteSpace: 'nowrap',
@@ -237,9 +245,9 @@ export function PassportCard() {
                 {/* Last visit date */}
                 <div>
                   <p style={{
-                    fontSize: 9,
-                    letterSpacing: '0.20em',
-                    color: 'rgba(201,162,74,0.55)',
+                    fontSize: 11,
+                    letterSpacing: '0.18em',
+                    color: 'rgba(201,162,74,0.62)',
                     fontFamily: 'monospace',
                     marginBottom: 6,
                   }}>
@@ -247,7 +255,7 @@ export function PassportCard() {
                   </p>
                   <p style={{
                     fontFamily: SERIF,
-                    fontSize: 'clamp(26px, 7.0vw, 34px)',
+                    fontSize: 'clamp(28px, 7.5vw, 36px)',
                     fontWeight: 700,
                     color: lastVisitDate ? '#F2E6C8' : 'rgba(242,230,200,0.22)',
                     letterSpacing: '0.04em',

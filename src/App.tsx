@@ -22,6 +22,7 @@ import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from './data/ticket'
 import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
 import { getUserId } from './utils/userId'
 import { useBgm } from './hooks/useBgm'
+import { seedDevData } from './utils/devSeed'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -29,6 +30,9 @@ type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function App() {
+  // テストデータを localStorage に1度だけ投入
+  seedDevData()
+
   // ── Loading state: min time + critical image preload ──────────────────────────
   const [minTimeDone, setMinTimeDone] = useState(false)
   const [imgReady,    setImgReady]    = useState(false)
