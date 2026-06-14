@@ -30,6 +30,34 @@ create policy "allow_all" on public.tickets
   using (true)
   with check (true);
 
+-- ── ticket_issue_logs: スタッフ端末での発行ログ（全端末リアルタイム共有） ────────
+
+create table if not exists public.ticket_issue_logs (
+  id            uuid        default gen_random_uuid() primary key,
+  issued_at     timestamptz default now() not null,
+  staff_name    text        not null,
+  customer_name text        not null,
+  user_id       text        not null,
+  ticket_type   text        not null,
+  amount        integer     not null,
+  quantity      integer     not null default 1,
+  terminal      text        not null default 'staff-terminal',
+  status        text        not null default 'issued'
+);
+
+create index if not exists ticket_issue_logs_issued_at_idx on public.ticket_issue_logs (issued_at desc);
+
+alter table public.ticket_issue_logs enable row level security;
+
+create policy "allow_all" on public.ticket_issue_logs
+  for all
+  using (true)
+  with check (true);
+
+-- Supabase Realtime: enable postgres_changes for this table
+-- Run this separately in the SQL editor if postgres_changes are needed:
+-- alter publication supabase_realtime add table public.ticket_issue_logs;
+
 -- ── maintenance_visits: スタッフ端末QRスキャンでのみ更新される来店日 ──────────
 -- 顧客側からは書き込めない（RLSで管理）。
 -- last_visit_date が 14 日以内ならメンテナンスカット対象。

@@ -10,16 +10,56 @@ import { issueTicket, getUserTickets, markTicketUsed } from '../utils/ticketStor
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
-const STAFF_NAMES = ['テイテイ', 'ヨンピル', '銀二郎', 'シルビア', 'リアン', 'キャンディ', 'ヒョウ']
-const HIGH_VALUE_AMTS = [5000, 9500]
-const HOLD_MS  = 3000
-const MAX_QTY  = 15
-const QTY_PRESETS = [1, 2, 3, 5, 10]
+const STAFF_NAMES  = ['テイテイ', 'ヨンピル', '銀二郎', 'シルビア', 'リアン', 'キャンディ', 'ヒョウ']
+const MAX_QTY      = 15
+const QTY_PRESETS  = [1, 2, 3, 5, 10]
+const OTOKU_AMOUNTS = [300, 500, 1000, 3000, 5000, 9500]
 
-const TICKET_TABS: { type: TicketType; label: string; autoTitle: string; amounts: number[] }[] = [
-  { type: 'discount', label: '割引券',   autoTitle: '割引券',   amounts: [300, 500, 1000, 3000, 5000, 9500] },
-  { type: 'otoku',    label: '漢トク券', autoTitle: '漢トク券', amounts: [300, 500, 1000, 3000, 5000, 9500] },
+const TICKET_TABS: { type: TicketType; label: string; autoTitle: string }[] = [
+  { type: 'discount', label: '割引券',   autoTitle: '割引券' },
+  { type: 'otoku',    label: '漢トク券', autoTitle: '漢トク券' },
 ]
+
+// ── Issue log ─────────────────────────────────────────────────────────────────
+
+interface IssueLogEntry {
+  id: string
+  issued_at: string
+  staff_name: string
+  customer_name: string
+  user_id: string
+  ticket_type: string
+  amount: number
+  quantity: number
+  terminal: string
+  status: string
+}
+
+async function saveIssueLog(entry: Omit<IssueLogEntry, 'id' | 'issued_at'>): Promise<void> {
+  try {
+    await supabase.from('ticket_issue_logs').insert({
+      ...entry,
+      issued_at: new Date().toISOString(),
+    })
+  } catch { /* non-fatal */ }
+}
+
+async function fetchRecentLogs(limit = 12): Promise<IssueLogEntry[]> {
+  try {
+    const { data, error } = await supabase
+      .from('ticket_issue_logs')
+      .select('*')
+      .order('issued_at', { ascending: false })
+      .limit(limit)
+    if (!error && data) return data as IssueLogEntry[]
+  } catch { /* ignore */ }
+  return []
+}
+
+function fmtLogTime(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
 
 // ── Sound ─────────────────────────────────────────────────────────────────────
 
@@ -210,23 +250,20 @@ export function AdminScreen() {
   const [staffId, setStaffId]               = useState(() => getStoredValue<string>(STAFF_NAME_KEY, ''))
   const [showStaffPicker, setShowStaffPicker] = useState(false)
 
-  // Ticket form — no text inputs
-  const [ticketTab, setTicketTab]     = useState<TicketType>('discount')
-  const [ticketAmount, setTicketAmount] = useState<number>(300)
-  const [quantity, setQuantity]         = useState(1)
-  const [issueLoading, setIssueLoading] = useState(false)
-  const [issueError, setIssueError]     = useState<string | null>(null)
+  // Ticket form
+  const [ticketTab, setTicketTab]           = useState<TicketType>('discount')
+  const [discountAmountInput, setDiscountAmountInput] = useState('')  // free-form for 割引券
+  const [ticketAmount, setTicketAmount]     = useState<number>(OTOKU_AMOUNTS[0])  // preset for 漢トク券
+  const [quantity, setQuantity]             = useState(1)
+  const [issueLoading, setIssueLoading]     = useState(false)
+  const [issueError, setIssueError]         = useState<string | null>(null)
 
-  // Hold-to-unlock state
-  const [holdProgress, setHoldProgress] = useState(0)
-  const [holdingAmt, setHoldingAmt]     = useState<number | null>(null)
-  const [highValueUnlocked, setHighValueUnlocked] = useState(false)
-  const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const holdStartRef    = useRef<number | null>(null)
+  // Confirmation modal
+  const [showConfirm, setShowConfirm] = useState(false)
 
   // Success overlay
   const [showSuccess, setShowSuccess] = useState(false)
-  const [successMsg, setSuccessMsg]   = useState('')
+  const [successInfo, setSuccessInfo] = useState<{ name: string; label: string; amount: number; qty: number } | null>(null)
 
   // Existing tickets
   const [userTickets, setUserTickets]       = useState<TicketRow[]>([])
@@ -245,43 +282,58 @@ export function AdminScreen() {
   // Store QR
   const [showStoreQr, setShowStoreQr] = useState(false)
 
+  // Issue log (realtime toast + log view)
+  const [logToast, setLogToast]         = useState<IssueLogEntry | null>(null)
+  const logToastTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showLogPanel, setShowLogPanel] = useState(false)
+  const [recentLogs, setRecentLogs]     = useState<IssueLogEntry[]>([])
+  const [logsLoading, setLogsLoading]   = useState(false)
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
+  const discountParsed = parseInt(discountAmountInput.replace(/[^\d]/g, ''), 10) || 0
+  const effectiveAmount = ticketTab === 'discount' ? discountParsed : ticketAmount
   const isFirstVisit  = prevLastVisitDate === null
   const elapsedDays   = prevLastVisitDate ? daysSince(prevLastVisitDate) : null
   const isEligible    = !isFirstVisit && prevLastVisitDate !== undefined && elapsedDays !== null && elapsedDays <= 14
-  const canIssue      = staffId.trim() !== '' && !issueLoading && ticketAmount > 0
+  const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0
   const activeTickets = userTickets.filter(t => !t.used)
+  const currentTab    = TICKET_TABS.find(t => t.type === ticketTab) ?? TICKET_TABS[0]
+  const tc            = TICKET_TYPE_COLORS[ticketTab]
 
-  // ── Hold logic ────────────────────────────────────────────────────────────
+  // ── Realtime subscription ─────────────────────────────────────────────────
 
-  function startHold(amt: number) {
-    if (holdIntervalRef.current) return
-    holdStartRef.current = Date.now()
-    setHoldingAmt(amt)
-    setHoldProgress(0)
-    holdIntervalRef.current = setInterval(() => {
-      const ms   = Date.now() - (holdStartRef.current ?? Date.now())
-      const prog = Math.min(ms / HOLD_MS, 1)
-      setHoldProgress(prog)
-      if (prog >= 1) {
-        clearInterval(holdIntervalRef.current!)
-        holdIntervalRef.current = null
-        setHighValueUnlocked(true)
-        setTicketAmount(amt)
-        setHoldingAmt(null)
-        setHoldProgress(0)
-      }
-    }, 33)
-  }
+  useEffect(() => {
+    const channel = supabase
+      .channel('ticket-issue-logs-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'ticket_issue_logs' },
+        (payload) => {
+          const entry = payload.new as IssueLogEntry
+          if (logToastTimerRef.current) clearTimeout(logToastTimerRef.current)
+          setLogToast(entry)
+          logToastTimerRef.current = setTimeout(() => setLogToast(null), 6000)
+          // If log panel is open, prepend the new entry
+          setRecentLogs(prev => [entry, ...prev].slice(0, 12))
+        },
+      )
+      .subscribe()
 
-  function cancelHold() {
-    if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null }
-    setHoldingAmt(null)
-    setHoldProgress(0)
-  }
+    return () => { void supabase.removeChannel(channel) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => () => { if (holdIntervalRef.current) clearInterval(holdIntervalRef.current) }, [])
+  // ── Log panel ─────────────────────────────────────────────────────────────
+
+  const loadRecentLogs = useCallback(async () => {
+    setLogsLoading(true)
+    setRecentLogs(await fetchRecentLogs(12))
+    setLogsLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (showLogPanel) void loadRecentLogs()
+  }, [showLogPanel, loadRecentLogs])
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -294,13 +346,14 @@ export function AdminScreen() {
     setShowManual(false)
     setManualInput('')
     setTicketTab('discount')
-    setTicketAmount(300)
+    setDiscountAmountInput('')
+    setTicketAmount(OTOKU_AMOUNTS[0])
     setQuantity(1)
     setIssueLoading(false)
     setIssueError(null)
-    setHighValueUnlocked(false)
-    cancelHold()
+    setShowConfirm(false)
     setShowSuccess(false)
+    setSuccessInfo(null)
     setUserTickets([])
     setTicketsLoading(false)
     setTicketUseData(null)
@@ -352,17 +405,23 @@ export function AdminScreen() {
   }, [loadUserTickets])
 
   function handleTabChange(type: TicketType) {
-    const tab = TICKET_TABS.find(t => t.type === type)!
     setTicketTab(type)
-    setTicketAmount(tab.amounts[0])
-    setHighValueUnlocked(false)
-    cancelHold()
+    setDiscountAmountInput('')
+    setTicketAmount(OTOKU_AMOUNTS[0])
     setIssueError(null)
   }
 
+  // Called by fixed bottom button — shows confirm modal
+  function handleIssueClick() {
+    if (!canIssue || issueLoading) return
+    setIssueError(null)
+    setShowConfirm(true)
+  }
+
+  // Called from confirm modal — does the actual issue + log
   const handleIssueTicket = async () => {
-    if (!scannedData || !staffId.trim() || ticketAmount <= 0) return
-    const currentTab = TICKET_TABS.find(t => t.type === ticketTab)!
+    if (!scannedData || !staffId.trim() || effectiveAmount <= 0) return
+    setShowConfirm(false)
     setIssueLoading(true)
     setIssueError(null)
     try {
@@ -372,17 +431,29 @@ export function AdminScreen() {
           user_id:   scannedData.userId,
           type:      ticketTab,
           title:     currentTab.autoTitle,
-          amount:    ticketAmount,
+          amount:    effectiveAmount,
           issued_by: staffId,
         })
         issued.push(ticket)
       }
       setUserTickets(prev => [...issued, ...prev])
+
+      // Write issue log to Supabase (triggers Realtime on all other terminals)
+      await saveIssueLog({
+        staff_name:    staffId,
+        customer_name: scannedData.name,
+        user_id:       scannedData.userId,
+        ticket_type:   ticketTab,
+        amount:        effectiveAmount,
+        quantity,
+        terminal:      'staff-terminal',
+        status:        'issued',
+      })
+
       playSuccessSound()
-      const val = `¥${ticketAmount.toLocaleString()}`
-      setSuccessMsg(`${scannedData.name}様に ${currentTab.autoTitle} ${val} × ${quantity}枚 を付与`)
+      setSuccessInfo({ name: scannedData.name, label: currentTab.autoTitle, amount: effectiveAmount, qty: quantity })
       setShowSuccess(true)
-      setTimeout(() => { setShowSuccess(false); handleReset() }, 1500)
+      setTimeout(() => { setShowSuccess(false); handleReset() }, 2500)
     } catch (err) {
       setIssueError(`発行に失敗しました（${err instanceof Error ? err.message : String(err)}）`)
     } finally {
@@ -422,9 +493,6 @@ export function AdminScreen() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const currentTab = TICKET_TABS.find(t => t.type === ticketTab) ?? TICKET_TABS[0]
-  const tc = TICKET_TYPE_COLORS[ticketTab]
-
   return (
     <div style={{ minHeight: '100dvh', background: 'linear-gradient(180deg, #080302 0%, #0A0403 60%, #090304 100%)', display: 'flex', flexDirection: 'column' }}>
       <style>{`
@@ -442,8 +510,8 @@ export function AdminScreen() {
         }
         @keyframes gj-success-fade {
           0%   { opacity: 0; }
-          12%  { opacity: 1; }
-          80%  { opacity: 1; }
+          10%  { opacity: 1; }
+          75%  { opacity: 1; }
           100% { opacity: 0; }
         }
         @keyframes gj-success-pop {
@@ -460,10 +528,50 @@ export function AdminScreen() {
           0%, 100% { box-shadow: 0 0 16px rgba(128,12,20,0.5), 0 0 0 2px rgba(230,202,101,0.55); }
           50%       { box-shadow: 0 0 36px rgba(128,12,20,0.8), 0 0 60px rgba(128,12,20,0.35), 0 0 0 2px rgba(230,202,101,0.9); }
         }
+        @keyframes gj-toast-in {
+          from { opacity: 0; transform: translateY(-100%); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
       `}</style>
 
+      {/* ── Realtime log toast ── */}
+      {logToast && (
+        <div
+          onClick={() => setLogToast(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 700,
+            background: 'rgba(12,6,3,0.97)', borderBottom: '1px solid rgba(201,162,74,0.3)',
+            padding: '12px 16px', cursor: 'pointer',
+            animation: 'gj-toast-in 0.28s ease-out both',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.7)',
+          }}
+        >
+          <p style={{ fontSize: 8, letterSpacing: '0.3em', color: 'rgba(201,162,74,0.5)', marginBottom: 4 }}>ISSUE LOG — 他端末からの通知</p>
+          <p style={{ fontFamily: SERIF, fontSize: 13, color: '#F2E6C8', lineHeight: 1.5 }}>
+            <span style={{ color: '#C9A24A' }}>{logToast.staff_name}</span>
+            {' が '}
+            <span style={{ color: '#F2E6C8' }}>{logToast.customer_name}様</span>
+            {' に '}
+            {logToast.ticket_type === 'discount' ? '割引券' : '漢トク券'}
+            {' ¥'}{logToast.amount.toLocaleString()}
+            {' ×'}{logToast.quantity}枚 を発行
+          </p>
+          <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.3)', marginTop: 3 }}>{fmtLogTime(logToast.issued_at)}</p>
+        </div>
+      )}
+
       {/* ── Header ── */}
-      <header style={{ padding: '18px 20px 14px', borderBottom: '1px solid rgba(201,162,74,0.12)', background: 'linear-gradient(180deg, rgba(201,162,74,0.03) 0%, transparent 100%)', flexShrink: 0 }}>
+      <header style={{
+        padding: '18px 20px 14px',
+        borderBottom: '1px solid rgba(201,162,74,0.12)',
+        background: 'linear-gradient(180deg, rgba(201,162,74,0.03) 0%, transparent 100%)',
+        flexShrink: 0,
+        marginTop: logToast ? 72 : 0,
+        transition: 'margin-top 0.3s ease',
+      }}>
         <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)', marginBottom: 12 }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
@@ -582,6 +690,49 @@ export function AdminScreen() {
                 </div>
               )}
             </div>
+
+            {/* Issue log panel */}
+            <div style={{ marginTop: 14 }}>
+              <button
+                onClick={() => setShowLogPanel(v => !v)}
+                style={{ width: '100%', padding: '11px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.12)', color: 'rgba(201,162,74,0.40)', fontSize: 11, letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF }}
+              >
+                {showLogPanel ? '発行ログを閉じる' : '最近の発行ログを確認する'}
+              </button>
+              {showLogPanel && (
+                <div style={{ marginTop: 10, borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,162,74,0.1)', padding: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <p style={{ fontSize: 9, letterSpacing: '0.2em', color: 'rgba(201,162,74,0.5)' }}>ISSUE LOG — 全端末共有</p>
+                    <button onClick={() => void loadRecentLogs()} style={{ fontSize: 9, color: 'rgba(201,162,74,0.45)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.1em' }}>
+                      更新
+                    </button>
+                  </div>
+                  {logsLoading ? (
+                    <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.28)', textAlign: 'center', padding: '8px 0' }}>読込中…</p>
+                  ) : recentLogs.length === 0 ? (
+                    <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.24)', textAlign: 'center', padding: '8px 0' }}>発行ログはありません</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {recentLogs.map(log => (
+                        <div key={log.id} style={{ padding: '8px 10px', borderRadius: 9, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                            <span style={{ fontSize: 10, color: '#C9A24A', fontFamily: SERIF, fontWeight: 700 }}>
+                              {log.staff_name}
+                            </span>
+                            <span style={{ fontSize: 9, color: 'rgba(242,230,200,0.3)', letterSpacing: '0.04em' }}>
+                              {fmtLogTime(log.issued_at)}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: 11, color: '#F2E6C8', lineHeight: 1.4 }}>
+                            {log.customer_name}様 ／ {log.ticket_type === 'discount' ? '割引券' : '漢トク券'} ¥{log.amount.toLocaleString()} × {log.quantity}枚
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -596,9 +747,8 @@ export function AdminScreen() {
         {/* ===== RESULT ===== */}
         {phase === 'result' && scannedData && (
           <div>
-            {/* ── Customer card (slot-in + burst) ── */}
+            {/* ── Customer card ── */}
             <div style={{ position: 'relative', marginBottom: 16 }}>
-              {/* Golden radial burst */}
               <div
                 key={`burst-${scannedData.userId}`}
                 style={{
@@ -607,7 +757,6 @@ export function AdminScreen() {
                   animation: 'gj-burst 0.9s ease-out both',
                 }}
               />
-              {/* Card */}
               <div
                 key={scannedData.userId}
                 style={{
@@ -636,27 +785,15 @@ export function AdminScreen() {
                         </p>
                       )}
                     </div>
-
-                    {/* Eligibility badge */}
                     <div style={{
                       flexShrink: 0, padding: '10px 14px', borderRadius: 14, textAlign: 'center', minWidth: 72,
-                      background: isFirstVisit
-                        ? 'rgba(90,130,210,0.1)'
-                        : isEligible
-                        ? 'rgba(80,192,80,0.1)'
-                        : 'rgba(200,80,60,0.1)',
+                      background: isFirstVisit ? 'rgba(90,130,210,0.1)' : isEligible ? 'rgba(80,192,80,0.1)' : 'rgba(200,80,60,0.1)',
                       border: `1px solid ${isFirstVisit ? 'rgba(90,130,210,0.28)' : isEligible ? 'rgba(80,192,80,0.32)' : 'rgba(200,80,60,0.28)'}`,
                     }}>
-                      <p style={{
-                        fontFamily: SERIF, fontSize: 18, fontWeight: 700, lineHeight: 1.1, marginBottom: 3,
-                        color: isFirstVisit ? 'rgba(140,180,240,0.9)' : isEligible ? '#80E060' : '#E06040',
-                      }}>
+                      <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, lineHeight: 1.1, marginBottom: 3, color: isFirstVisit ? 'rgba(140,180,240,0.9)' : isEligible ? '#80E060' : '#E06040' }}>
                         {isFirstVisit ? '初回' : `${elapsedDays}日`}
                       </p>
-                      <p style={{
-                        fontSize: 8, fontWeight: 700, letterSpacing: '0.08em',
-                        color: isFirstVisit ? 'rgba(140,180,240,0.55)' : isEligible ? 'rgba(128,224,96,0.6)' : 'rgba(224,96,64,0.6)',
-                      }}>
+                      <p style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: isFirstVisit ? 'rgba(140,180,240,0.55)' : isEligible ? 'rgba(128,224,96,0.6)' : 'rgba(224,96,64,0.6)' }}>
                         {isFirstVisit ? '初回来店' : isEligible ? '対象◎' : '対象外'}
                       </p>
                     </div>
@@ -667,11 +804,12 @@ export function AdminScreen() {
 
             {/* ── Ticket issue form ── */}
             <div style={{ borderRadius: 18, marginBottom: 14, border: '1px solid rgba(201,162,74,0.18)', background: 'linear-gradient(160deg, #0e0808 0%, #090504 100%)', padding: '18px' }}>
+
               {/* Tab selector */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
                 {TICKET_TABS.map(tab => {
-                  const tabTc   = TICKET_TYPE_COLORS[tab.type]
-                  const active  = ticketTab === tab.type
+                  const tabTc  = TICKET_TYPE_COLORS[tab.type]
+                  const active = ticketTab === tab.type
                   return (
                     <button
                       key={tab.type}
@@ -693,63 +831,74 @@ export function AdminScreen() {
                 })}
               </div>
 
-              {/* Amount presets */}
-              <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>金額を選択</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>
-                {currentTab.amounts.map(amt => {
-                  const isHigh     = HIGH_VALUE_AMTS.includes(amt)
-                  const locked     = isHigh && !highValueUnlocked
-                  const isSelected = ticketAmount === amt
-                  const isHolding  = holdingAmt === amt
-
-                  return (
-                    <button
-                      key={amt}
-                      onPointerDown={locked ? (e) => { e.preventDefault(); startHold(amt) } : undefined}
-                      onPointerUp={locked ? cancelHold : undefined}
-                      onPointerLeave={locked ? cancelHold : undefined}
-                      onPointerCancel={locked ? cancelHold : undefined}
-                      onClick={!locked ? () => setTicketAmount(amt) : undefined}
-                      style={{
-                        position: 'relative', overflow: 'hidden',
-                        padding: '18px 6px 14px', borderRadius: 13,
-                        background: isSelected
-                          ? tc.btnBg
-                          : 'rgba(255,255,255,0.04)',
-                        border: `1.5px solid ${isSelected ? tc.border : locked ? 'rgba(201,162,74,0.18)' : 'rgba(255,255,255,0.09)'}`,
-                        color: isSelected
-                          ? tc.text
-                          : locked ? 'rgba(201,162,74,0.48)' : 'rgba(242,230,200,0.72)',
-                        fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.02em',
-                        cursor: 'pointer', touchAction: 'none', userSelect: 'none',
-                        WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
-                        animation: isSelected ? 'gj-pulse-gold 2s ease-in-out infinite' : 'none',
-                        transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+              {/* ── Amount input: 割引券 = free-form; 漢トク券 = presets ── */}
+              {ticketTab === 'discount' ? (
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>金額を入力</p>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: discountParsed > 0 ? '#C9A24A' : 'rgba(242,230,200,0.22)', pointerEvents: 'none' }}>¥</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      max="99999"
+                      value={discountAmountInput}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^\d]/g, '')
+                        setDiscountAmountInput(v)
                       }}
-                    >
-                      ¥{amt.toLocaleString()}
-                      {locked && !isHolding && (
-                        <span style={{ display: 'block', fontSize: 9, color: 'rgba(201,162,74,0.52)', letterSpacing: '0.04em', marginTop: 4, lineHeight: 1.2 }}>
-                          ※長押しで解除
-                        </span>
-                      )}
-                      {locked && isHolding && (
-                        <>
-                          <div style={{ position: 'absolute', bottom: 0, left: 0, height: 3, width: `${holdProgress * 100}%`, background: 'linear-gradient(90deg, #C9A24A, #F2E6C8)', transition: 'width 0.033s linear' }} />
-                          <span style={{ display: 'block', fontSize: 9, color: 'rgba(230,202,101,0.75)', letterSpacing: '0.04em', marginTop: 4 }}>
-                            {Math.round(holdProgress * 100)}%
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+                      placeholder="0"
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        padding: '18px 16px 18px 40px', borderRadius: 14,
+                        background: discountParsed > 0 ? tc.cardBg : 'rgba(255,255,255,0.04)',
+                        border: `1.5px solid ${discountParsed > 0 ? tc.border : 'rgba(255,255,255,0.12)'}`,
+                        color: '#F2E6C8', fontFamily: SERIF, fontSize: 28, fontWeight: 700,
+                        outline: 'none', letterSpacing: '0.04em',
+                        transition: 'border-color 0.15s, background 0.15s',
+                      }}
+                    />
+                  </div>
+                  {discountParsed > 0 && (
+                    <p style={{ fontSize: 11, color: 'rgba(201,162,74,0.55)', textAlign: 'right', marginTop: 6, letterSpacing: '0.06em' }}>
+                      ¥{discountParsed.toLocaleString()} の割引券
+                    </p>
+                  )}
+                  {discountAmountInput !== '' && discountParsed <= 0 && (
+                    <p style={{ fontSize: 11, color: '#E06060', marginTop: 6 }}>1円以上の金額を入力してください</p>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>金額を選択</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {OTOKU_AMOUNTS.map(amt => {
+                      const isSelected = ticketAmount === amt
+                      return (
+                        <button
+                          key={amt}
+                          onClick={() => setTicketAmount(amt)}
+                          style={{
+                            padding: '18px 6px', borderRadius: 13,
+                            background: isSelected ? tc.btnBg : 'rgba(255,255,255,0.04)',
+                            border: `1.5px solid ${isSelected ? tc.border : 'rgba(255,255,255,0.09)'}`,
+                            color: isSelected ? tc.text : 'rgba(242,230,200,0.72)',
+                            fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.02em',
+                            cursor: 'pointer',
+                            animation: isSelected ? 'gj-pulse-gold 2s ease-in-out infinite' : 'none',
+                            transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+                          }}
+                        >
+                          ¥{amt.toLocaleString()}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Quantity */}
               <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>枚数を選択</p>
-
-              {/* Qty presets */}
               <div style={{ display: 'flex', gap: 7, marginBottom: 12 }}>
                 {QTY_PRESETS.map(n => (
                   <button
@@ -771,37 +920,28 @@ export function AdminScreen() {
                 ))}
               </div>
 
-              {/* Micro adjusters */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginBottom: 18 }}>
-                <button
-                  onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                  style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: 'rgba(242,230,200,0.75)', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  −
-                </button>
+                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: 'rgba(242,230,200,0.75)', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
                 <div style={{ textAlign: 'center', minWidth: 72 }}>
                   <span style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 700, color: '#F2E6C8', letterSpacing: '-0.01em' }}>{quantity}</span>
                   <span style={{ fontSize: 12, color: 'rgba(242,230,200,0.38)', marginLeft: 4 }}>枚</span>
                 </div>
-                <button
-                  onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))}
-                  style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: 'rgba(242,230,200,0.75)', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  ＋
-                </button>
+                <button onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: 'rgba(242,230,200,0.75)', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
               </div>
 
-              {/* Issue summary */}
-              <div style={{ padding: '10px 16px', borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.18)', textAlign: 'center' }}>
-                <p style={{ fontFamily: SERIF, fontSize: 14, color: '#C9A24A', letterSpacing: '0.06em' }}>
-                  {currentTab.autoTitle}　¥{ticketAmount.toLocaleString()}　×　{quantity}枚
-                </p>
-              </div>
+              {/* Summary */}
+              {effectiveAmount > 0 && (
+                <div style={{ padding: '10px 16px', borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.18)', textAlign: 'center' }}>
+                  <p style={{ fontFamily: SERIF, fontSize: 14, color: '#C9A24A', letterSpacing: '0.06em' }}>
+                    {currentTab.autoTitle}　¥{effectiveAmount.toLocaleString()}　×　{quantity}枚
+                  </p>
+                </div>
+              )}
 
               {issueError && <p style={{ fontSize: 12, color: '#E06060', marginTop: 10, lineHeight: 1.5 }}>{issueError}</p>}
             </div>
 
-            {/* ── Existing tickets (compact) ── */}
+            {/* ── Existing tickets ── */}
             {(activeTickets.length > 0 || ticketsLoading) && (
               <div style={{ borderRadius: 14, marginBottom: 14, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)', padding: '12px 14px' }}>
                 <p style={{ fontSize: 9, letterSpacing: '0.18em', color: 'rgba(242,230,200,0.32)', marginBottom: 10, fontFamily: SERIF }}>
@@ -825,9 +965,7 @@ export function AdminScreen() {
                               )}
                             </div>
                             <p style={{ fontSize: 11, color: '#F2E6C8', fontFamily: SERIF }}>{ticket.title}</p>
-                            <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)', marginTop: 1 }}>
-                              発行日 {fmtCreatedAt(ticket.created_at)}
-                            </p>
+                            <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)', marginTop: 1 }}>発行日 {fmtCreatedAt(ticket.created_at)}</p>
                           </div>
                           <button
                             onClick={() => { void handleMarkUsed(ticket.id) }}
@@ -961,7 +1099,7 @@ export function AdminScreen() {
           padding: '14px 20px calc(14px + env(safe-area-inset-bottom, 0px))',
         }}>
           <button
-            onClick={() => { if (canIssue && !issueLoading) void handleIssueTicket() }}
+            onClick={handleIssueClick}
             disabled={!canIssue}
             style={{
               width: '100%', height: 66, borderRadius: 18,
@@ -970,13 +1108,7 @@ export function AdminScreen() {
                 : 'rgba(255,255,255,0.04)',
               border: `2px solid ${canIssue ? '#e6ca65' : 'rgba(255,255,255,0.07)'}`,
               boxShadow: canIssue
-                ? [
-                    '0 0 32px rgba(128,12,20,0.72)',
-                    '0 0 64px rgba(128,12,20,0.36)',
-                    'inset 0 1px 0 rgba(230,202,101,0.28)',
-                    'inset 0 -1px 0 rgba(230,202,101,0.1)',
-                    '0 6px 32px rgba(0,0,0,0.85)',
-                  ].join(', ')
+                ? ['0 0 32px rgba(128,12,20,0.72)', '0 0 64px rgba(128,12,20,0.36)', 'inset 0 1px 0 rgba(230,202,101,0.28)', 'inset 0 -1px 0 rgba(230,202,101,0.1)', '0 6px 32px rgba(0,0,0,0.85)'].join(', ')
                 : 'none',
               color: canIssue ? '#F2E6C8' : 'rgba(242,230,200,0.18)',
               fontFamily: SERIF, fontSize: 22, fontWeight: 700, letterSpacing: '0.26em',
@@ -990,29 +1122,91 @@ export function AdminScreen() {
         </div>
       )}
 
+      {/* ── Confirmation modal ── */}
+      {showConfirm && scannedData && (
+        <div
+          onClick={() => setShowConfirm(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 440, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.32)', boxShadow: '0 32px 80px rgba(0,0,0,0.9)', overflow: 'hidden' }}
+          >
+            <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
+            <div style={{ padding: '28px 26px 24px' }}>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.5)', marginBottom: 10, textAlign: 'center' }}>CONFIRM ISSUE</p>
+              <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', marginBottom: 22 }}>
+                {currentTab.autoTitle}を発行します
+              </p>
+
+              {/* Issue details */}
+              <div style={{ borderRadius: 14, background: 'rgba(201,162,74,0.05)', border: '1px solid rgba(201,162,74,0.18)', padding: '16px 18px', marginBottom: 18 }}>
+                {[
+                  { label: 'お客様', value: `${scannedData.name} 様` },
+                  { label: '種別',   value: currentTab.autoTitle },
+                  { label: '金額',   value: `¥${effectiveAmount.toLocaleString()}` },
+                  { label: '枚数',   value: `${quantity}枚` },
+                  { label: '担当',   value: staffId },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(201,162,74,0.09)' }}>
+                    <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>{label}</span>
+                    <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8' }}>{value}</span>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>合計</span>
+                  <span style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#C9A24A' }}>
+                    ¥{(effectiveAmount * quantity).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.36)', textAlign: 'center', lineHeight: 1.75, marginBottom: 22, letterSpacing: '0.04em' }}>
+                この操作は店舗端末に記録されます。{'\n'}内容を確認してから発行してください。
+              </p>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={() => { void handleIssueTicket() }}
+                  style={{ flex: 2, padding: '14px 0', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.50)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', fontSize: 15, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.18em', cursor: 'pointer' }}
+                >
+                  発行する
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Success overlay ── */}
-      {showSuccess && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'gj-success-fade 1.5s ease-in-out both' }}>
+      {showSuccess && successInfo && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'gj-success-fade 2.5s ease-in-out both' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(6,2,1,0.97)' }} />
-          {/* Screen-edge crimson/gold flash */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: 'inset 0 0 120px rgba(201,162,74,0.32), inset 0 0 60px rgba(139,26,26,0.28)' }} />
-          {/* Content */}
           <div style={{ position: 'relative', textAlign: 'center', padding: '32px 28px', maxWidth: 380, animation: 'gj-success-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            {/* Gold check circle */}
             <div style={{ width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px', background: 'radial-gradient(circle, rgba(201,162,74,0.18) 0%, rgba(139,26,26,0.12) 60%, transparent 100%)', border: '1.5px solid rgba(201,162,74,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(201,162,74,0.38), 0 0 64px rgba(201,162,74,0.18)' }}>
               <span style={{ fontSize: 38, color: '#e6ca65', lineHeight: 1 }}>✓</span>
             </div>
             <p style={{ fontSize: 10, letterSpacing: '0.44em', color: 'rgba(201,162,74,0.62)', marginBottom: 14 }}>ISSUED</p>
-            <p style={{
-              fontFamily: SERIF, fontSize: 40, fontWeight: 700,
-              color: '#e6ca65', letterSpacing: '0.14em', marginBottom: 22, lineHeight: 1.1,
-              textShadow: '0 0 40px rgba(201,162,74,0.55), 0 0 80px rgba(139,26,26,0.4), 0 2px 6px rgba(0,0,0,0.95)',
-            }}>
+            <p style={{ fontFamily: SERIF, fontSize: 40, fontWeight: 700, color: '#e6ca65', letterSpacing: '0.14em', marginBottom: 20, lineHeight: 1.1, textShadow: '0 0 40px rgba(201,162,74,0.55), 0 0 80px rgba(139,26,26,0.4), 0 2px 6px rgba(0,0,0,0.95)' }}>
               発行完了
             </p>
-            <p style={{ fontFamily: SERIF, fontSize: 15, color: '#F2E6C8', lineHeight: 1.85, letterSpacing: '0.07em', textShadow: '0 1px 10px rgba(0,0,0,0.95)' }}>
-              {successMsg}
+            <p style={{ fontFamily: SERIF, fontSize: 16, color: '#F2E6C8', lineHeight: 1.9, letterSpacing: '0.06em', textShadow: '0 1px 10px rgba(0,0,0,0.95)', marginBottom: 14 }}>
+              {successInfo.name}様に<br />
+              {successInfo.label} ¥{successInfo.amount.toLocaleString()} × {successInfo.qty}枚<br />
+              を付与しました。
             </p>
+            <div style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(201,162,74,0.08)', border: '1px solid rgba(201,162,74,0.22)' }}>
+              <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.65)', letterSpacing: '0.08em', lineHeight: 1.6 }}>
+                割引券発行ログを店舗端末に通知しました
+              </p>
+            </div>
           </div>
         </div>
       )}
