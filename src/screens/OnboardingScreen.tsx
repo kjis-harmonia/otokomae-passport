@@ -113,6 +113,52 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                 }}
               />
 
+              {/* Music notice — shimmer */}
+              <style>{`
+                @keyframes gjSplashShimmer {
+                  0%   { background-position: -200% center; }
+                  100% { background-position:  200% center; }
+                }
+              `}</style>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  bottom: 'calc(env(safe-area-inset-bottom, 0px) + 124px)',
+                  width: 'min(78vw, 320px)',
+                  textAlign: 'center',
+                  zIndex: 2,
+                  pointerEvents: 'none',
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                    letterSpacing: '0.04em',
+                    display: 'inline-block',
+                    background: [
+                      'linear-gradient(90deg,',
+                      '  rgba(212,175,55,0.85) 0%,',
+                      '  rgba(255,250,210,0.97) 44%,',
+                      '  rgba(255,255,255,0.95) 50%,',
+                      '  rgba(255,250,210,0.97) 56%,',
+                      '  rgba(212,175,55,0.85) 100%)',
+                    ].join(''),
+                    backgroundSize: '200% auto',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    color: 'transparent',
+                    animation: 'gjSplashShimmer 3s linear infinite',
+                  }}
+                >
+                  ※「始める」を押すと音楽が流れます<br />
+                  男前の準備をしてからお進みください。
+                </p>
+              </div>
+
               {/* CTA button */}
               <button
                 type="button"
