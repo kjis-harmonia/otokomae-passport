@@ -172,14 +172,28 @@ export function PassportCard() {
           {/* Content */}
           <div style={{ position: 'relative', zIndex: 4 }}>
 
-            {/* Header label */}
+            {/* Primary title */}
             <p style={{
-              fontSize: 8,
+              fontFamily: SERIF,
+              fontSize: 'clamp(16px, 4.5vw, 20px)',
               fontWeight: 700,
-              letterSpacing: '0.30em',
-              color: 'rgba(201,162,74,0.50)',
+              color: 'rgba(212,175,55,0.90)',
+              letterSpacing: '0.14em',
+              marginBottom: 4,
+            }}>
+              男前パスポート
+            </p>
+
+            {/* Header label — kept small so it never overflows */}
+            <p style={{
+              fontSize: 7,
+              fontWeight: 700,
+              letterSpacing: '0.16em',
+              color: 'rgba(201,162,74,0.38)',
               fontFamily: 'monospace',
-              marginBottom: 18,
+              marginBottom: 16,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
             }}>
               GINJIRO OFFICIAL MEMBER CARD
             </p>
@@ -215,8 +229,8 @@ export function PassportCard() {
                 {/* Member ID */}
                 <p style={{
                   fontFamily: 'monospace',
-                  fontSize: 'clamp(8px, 2.1vw, 10px)',
-                  color: 'rgba(242,230,200,0.26)',
+                  fontSize: 'clamp(10px, 2.8vw, 13px)',
+                  color: 'rgba(242,230,200,0.38)',
                   letterSpacing: '0.04em',
                   lineHeight: 1.4,
                   wordBreak: 'break-all',
@@ -235,20 +249,20 @@ export function PassportCard() {
                 {/* Last visit date */}
                 <div>
                   <p style={{
-                    fontSize: 8,
+                    fontSize: 9,
                     letterSpacing: '0.20em',
-                    color: 'rgba(201,162,74,0.48)',
+                    color: 'rgba(201,162,74,0.55)',
                     fontFamily: 'monospace',
-                    marginBottom: 5,
+                    marginBottom: 6,
                   }}>
                     最終来店日
                   </p>
                   <p style={{
                     fontFamily: SERIF,
-                    fontSize: 'clamp(15px, 4.2vw, 20px)',
-                    fontWeight: 600,
+                    fontSize: 'clamp(26px, 7.0vw, 34px)',
+                    fontWeight: 700,
                     color: lastVisitDate ? '#F2E6C8' : 'rgba(242,230,200,0.22)',
-                    letterSpacing: '0.05em',
+                    letterSpacing: '0.04em',
                     lineHeight: 1,
                   }}>
                     {lastVisitFmt ?? '——.——.——'}
@@ -307,9 +321,9 @@ export function PassportCard() {
             {/* Tagline */}
             <p style={{
               textAlign: 'center',
-              fontSize: 9,
-              letterSpacing: '0.32em',
-              color: 'rgba(201,162,74,0.42)',
+              fontSize: 13,
+              letterSpacing: '0.28em',
+              color: 'rgba(201,162,74,0.48)',
               fontFamily: SERIF,
             }}>
               男前を、維持する。
