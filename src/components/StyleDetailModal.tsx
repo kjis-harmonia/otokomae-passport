@@ -74,11 +74,11 @@ export function StyleDetailModal({
                 `linear-gradient(180deg, rgba(5,3,2,${topOpacity}) 0%, rgba(5,3,2,0.0) 30%, rgba(5,3,2,0.0) 52%, rgba(5,3,2,0.82) 76%, rgba(5,3,2,1.0) 100%)`,
             }}
           />
-          {/* Close button */}
+          {/* Close button — left to avoid overlap with BGM record icon */}
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full transition-opacity active:opacity-60"
+            className="absolute top-4 left-4 p-2 rounded-full transition-opacity active:opacity-60"
             style={{
               background: 'rgba(5,3,2,0.62)',
               border: '1px solid rgba(201,162,74,0.24)',

@@ -939,35 +939,30 @@ function StylesRow({
             color: 'rgba(201,162,74,0.46)', flexShrink: 0,
           }}
         >
-          ALL STYLES
+          {styles.length} STYLES
         </p>
       </div>
 
-      {/* Horizontal strip */}
+      {/* 2-column grid — 図鑑レイアウト */}
       <div
-        className="[&::-webkit-scrollbar]:hidden"
         style={{
-          display: 'flex',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
           gap: 10,
-          overflowX: 'scroll',
-          paddingLeft: 20,
-          paddingRight: 32,
-          scrollbarWidth: 'none',
-          WebkitOverflowScrolling: 'touch',
-        } as React.CSSProperties}
+          padding: '0 20px 20px',
+        }}
       >
         {styles.map((style, i) => (
           <motion.button
             key={style.id}
             type="button"
             onClick={() => onStyleSelect(style)}
-            whileTap={{ scale: 0.92 }}
+            whileTap={{ scale: 0.96 }}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.04, duration: 0.3, ease: EASE_OUT }}
             style={{
-              flexShrink: 0,
-              width: 'clamp(108px, 34vw, 144px)',
+              width: '100%',
               aspectRatio: '2/3',
               borderRadius: 10,
               overflow: 'hidden',
@@ -978,6 +973,22 @@ function StylesRow({
               cursor: 'pointer',
             }}
           >
+            {/* No. バッジ */}
+            <div
+              style={{
+                position: 'absolute', top: 7, left: 7, zIndex: 2,
+                fontSize: 8, fontWeight: 700, letterSpacing: '0.12em',
+                color: 'rgba(201,162,74,0.70)',
+                background: 'rgba(5,3,2,0.72)',
+                border: '1px solid rgba(201,162,74,0.20)',
+                borderRadius: 4, padding: '2px 5px',
+                backdropFilter: 'blur(4px)',
+                WebkitBackdropFilter: 'blur(4px)',
+              }}
+            >
+              {`No.${String(i + 1).padStart(2, '0')}`}
+            </div>
+
             <StyleCardImage
               src={resolveStyleImageUrl(style)}
               alt={style.title}
@@ -989,17 +1000,17 @@ function StylesRow({
               className="absolute inset-0 pointer-events-none"
               style={{ background: getThumbOverlay(style) }}
             />
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 8px 9px' }}>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 8px 10px' }}>
               <p
                 style={{
-                  fontFamily: SERIF, fontSize: 11, fontWeight: 700,
+                  fontFamily: SERIF, fontSize: 12, fontWeight: 700,
                   color: '#F2E6C8', lineHeight: 1.22,
                   textShadow: '0 1px 8px rgba(0,0,0,0.95)',
                 }}
               >
                 {style.title}
               </p>
-              <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.84)', marginTop: 2 }}>
+              <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.84)', marginTop: 3 }}>
                 ¥{style.price.toLocaleString()}
               </p>
             </div>
