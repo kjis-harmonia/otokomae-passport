@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, Share2 } from 'lucide-react'
+import diagnosisHero from '../assets/diagnosis/otokomae-diagnosis-hero.png'
 import { loadStyles } from '../utils/styleStorage'
 import { getReserveUrl } from '../data/reserveLinks'
 import type { StyleCard } from '../data/styleCard'
@@ -472,72 +473,64 @@ export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
         {phase === 'intro' && (
           <motion.div
             key="intro"
-            className="flex-1 flex flex-col items-center justify-center px-7 py-10 text-center"
+            className="flex-1 flex flex-col px-4"
+            style={{ paddingTop: 'max(24px, env(safe-area-inset-top, 24px))', paddingBottom: 32 }}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.38 }}
           >
-            <div
-              className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 flex-shrink-0"
+            {/* Hero image — tap to start diagnosis */}
+            <motion.div
+              onClick={styles.length > 0 ? handleStart : undefined}
+              whileTap={styles.length > 0 ? { scale: 0.976, opacity: 0.88 } : {}}
+              transition={{ duration: 0.12 }}
               style={{
-                background: 'linear-gradient(145deg, #1C0A0B, #5A0D12)',
-                border: '1px solid rgba(201,162,74,0.28)',
-                boxShadow: '0 0 32px rgba(107,15,18,0.38)',
-                fontSize: 28,
-              }}
+                borderRadius: 24,
+                overflow: 'hidden',
+                border: '1px solid rgba(201,162,74,0.44)',
+                boxShadow: [
+                  '0 0 0 1px rgba(201,162,74,0.07)',
+                  '0 12px 52px rgba(0,0,0,0.75)',
+                  '0 0 72px rgba(110,5,28,0.32)',
+                  'inset 0 1px 0 rgba(201,162,74,0.18)',
+                ].join(', '),
+                cursor: styles.length > 0 ? 'pointer' : 'default',
+                WebkitTapHighlightColor: 'transparent',
+                userSelect: 'none',
+                opacity: styles.length === 0 ? 0.44 : 1,
+              } as React.CSSProperties}
             >
-              ✂
-            </div>
+              <img
+                src={diagnosisHero}
+                alt="男前診断をはじめる"
+                style={{ display: 'block', width: '100%', height: 'auto' }}
+                draggable={false}
+              />
+            </motion.div>
 
-            <p
-              className="text-[10px] tracking-[0.3em] uppercase mb-2"
-              style={{ color: 'rgba(201,162,74,0.54)' }}
-            >
-              Style Diagnosis
-            </p>
-            <h1 className="text-3xl font-bold mb-3" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
-              男前診断
-            </h1>
-            <p className="text-sm leading-relaxed mb-2" style={{ color: 'rgba(242,230,200,0.52)' }}>
-              {QUESTIONS.length}つの質問に答えるだけで、
-              <br />
-              あなたに最適なスタイルを提案します。
-            </p>
-            <p className="text-[11px] mb-8" style={{ color: 'rgba(201,162,74,0.42)' }}>
+            {/* Subtext */}
+            <p style={{
+              textAlign: 'center',
+              fontSize: 11,
+              letterSpacing: '0.18em',
+              color: 'rgba(201,162,74,0.44)',
+              marginTop: 16,
+              fontFamily: SERIF,
+            }}>
               所要時間：約1分
             </p>
 
-            {styles.length === 0 ? (
-              <div
-                className="w-full rounded-xl px-4 py-5 text-center"
-                style={{
-                  background: 'rgba(201,162,74,0.04)',
-                  border: '1px solid rgba(201,162,74,0.14)',
-                }}
-              >
-                <p className="text-sm" style={{ color: 'rgba(242,230,200,0.42)' }}>
-                  スタイルが登録されていません
-                </p>
-                <p className="text-[11px] mt-1" style={{ color: 'rgba(201,162,74,0.34)' }}>
-                  CMSでスタイルを追加してください
-                </p>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStart}
-                className="w-full rounded-2xl py-4 text-sm font-bold tracking-[0.22em] transition-opacity active:opacity-70"
-                style={{
-                  background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-                  border: '1px solid rgba(201,162,74,0.44)',
-                  color: '#F2E6C8',
-                  boxShadow:
-                    '0 4px 24px rgba(107,15,18,0.48), inset 0 1px 0 rgba(242,230,200,0.06)',
-                }}
-              >
-                診断をはじめる
-              </button>
+            {styles.length === 0 && (
+              <p style={{
+                textAlign: 'center',
+                fontSize: 12,
+                color: 'rgba(242,230,200,0.34)',
+                marginTop: 10,
+                letterSpacing: '0.08em',
+              }}>
+                スタイルが登録されていません
+              </p>
             )}
           </motion.div>
         )}
