@@ -1,0 +1,20 @@
+{
+  "name": "銀二郎 店舗端末",
+  "short_name": "店舗端末",
+  "description": "銀二郎スタッフ専用端末",
+  "start_url": "/staff",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050000",
+  "theme_color": "#050000",
+  "lang": "ja",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/app-icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
