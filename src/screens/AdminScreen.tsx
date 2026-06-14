@@ -8,7 +8,8 @@ import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
 import { issueTicket, getUserTickets, markTicketUsed } from '../utils/ticketStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
-const STAFF_ID_KEY = 'ginjiro_staff_id'
+const STAFF_NAME_KEY = 'ginjiro_staff_name'
+const STAFF_NAMES = ['テイテイ', 'ヨンピル', '銀二郎', 'シルビア', 'リアン', 'キャンディ', 'ヒョウ']
 // localStorage fallback key for dev / offline
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 
@@ -230,11 +231,11 @@ function QrCameraScanner({ onScan, onCameraError }: ScannerProps) {
         <button
           onClick={start}
           style={{
-            width: '100%', padding: '14px', borderRadius: 14,
+            width: '100%', padding: '18px', borderRadius: 14,
             background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
             border: '1px solid rgba(201,162,74,0.44)',
             boxShadow: '0 4px 20px rgba(107,15,18,0.45)',
-            color: '#F2E6C8', fontFamily: SERIF, fontSize: 14,
+            color: '#F2E6C8', fontFamily: SERIF, fontSize: 18,
             fontWeight: 700, letterSpacing: '0.2em', cursor: 'pointer',
           }}
         >
@@ -272,10 +273,9 @@ export function AdminScreen() {
   const [showManual, setShowManual]               = useState(false)
   const [manualInput, setManualInput]             = useState('')
 
-  // Staff ID
-  const [staffId, setStaffId]                   = useState(() => getStoredValue<string>(STAFF_ID_KEY, ''))
-  const [showStaffIdInput, setShowStaffIdInput] = useState(false)
-  const [staffIdDraft, setStaffIdDraft]         = useState('')
+  // Staff name
+  const [staffId, setStaffId]               = useState(() => getStoredValue<string>(STAFF_NAME_KEY, ''))
+  const [showStaffPicker, setShowStaffPicker] = useState(false)
 
   // Ticket form
   const [ticketTab, setTicketTab]         = useState<TicketType>('coupon')
@@ -497,12 +497,10 @@ export function AdminScreen() {
     setTicketUsedThisSession(false)
   }
 
-  function handleSaveStaffId() {
-    const trimmed = staffIdDraft.trim()
-    if (!trimmed) return
-    setStaffId(trimmed)
-    setStoredValue(STAFF_ID_KEY, trimmed)
-    setShowStaffIdInput(false)
+  function handleSelectStaff(name: string) {
+    setStaffId(name)
+    setStoredValue(STAFF_NAME_KEY, name)
+    setShowStaffPicker(false)
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -538,62 +536,22 @@ export function AdminScreen() {
           OTOKOMAE PASSPORT SCANNER
         </p>
 
-        {/* Staff ID */}
-        {showStaffIdInput ? (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="text"
-              value={staffIdDraft}
-              onChange={e => setStaffIdDraft(e.target.value)}
-              placeholder="担当者名 / ID"
-              autoFocus
-              onKeyDown={e => { if (e.key === 'Enter') handleSaveStaffId() }}
-              style={{
-                flex: 1, padding: '8px 12px', borderRadius: 10,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(201,162,74,0.3)',
-                color: '#F2E6C8', fontSize: 12, fontFamily: SERIF, outline: 'none',
-              }}
-            />
-            <button
-              onClick={handleSaveStaffId}
-              disabled={!staffIdDraft.trim()}
-              style={{
-                padding: '8px 14px', borderRadius: 10,
-                background: staffIdDraft.trim() ? 'rgba(201,162,74,0.18)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${staffIdDraft.trim() ? 'rgba(201,162,74,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                color: staffIdDraft.trim() ? '#C9A24A' : 'rgba(255,255,255,0.2)',
-                fontSize: 12, fontFamily: SERIF, fontWeight: 700,
-                cursor: staffIdDraft.trim() ? 'pointer' : 'default',
-              }}
-            >
-              設定
-            </button>
-            <button
-              onClick={() => setShowStaffIdInput(false)}
-              style={{
-                padding: '8px 10px', borderRadius: 10,
-                background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
-                color: 'rgba(242,230,200,0.3)', fontSize: 12, cursor: 'pointer',
-              }}
-            >✕</button>
-          </div>
-        ) : (
-          <button
-            onClick={() => { setStaffIdDraft(staffId); setShowStaffIdInput(true) }}
-            style={{
-              display: 'block', margin: '0 auto',
-              padding: '4px 14px', borderRadius: 99,
-              background: staffId ? 'rgba(201,162,74,0.1)' : 'rgba(224,96,70,0.12)',
-              border: `1px solid ${staffId ? 'rgba(201,162,74,0.28)' : 'rgba(224,96,70,0.35)'}`,
-              color: staffId ? '#C9A24A' : '#E07050',
-              fontSize: 10, fontFamily: SERIF, fontWeight: 700,
-              letterSpacing: '0.12em', cursor: 'pointer',
-            }}
-          >
-            {staffId ? `担当: ${staffId}` : '担当者IDを設定'}
-          </button>
-        )}
+        {/* Staff Name */}
+        <button
+          onClick={() => setShowStaffPicker(true)}
+          style={{
+            display: 'block', margin: '0 auto',
+            padding: '10px 28px', borderRadius: 12,
+            background: staffId ? 'rgba(139,26,26,0.35)' : 'rgba(224,96,70,0.12)',
+            border: `1.5px solid ${staffId ? 'rgba(201,162,74,0.6)' : 'rgba(224,96,70,0.45)'}`,
+            boxShadow: staffId ? '0 0 12px rgba(201,162,74,0.12)' : 'none',
+            color: staffId ? '#F2E6C8' : '#E07050',
+            fontSize: 16, fontFamily: SERIF, fontWeight: 700,
+            letterSpacing: '0.10em', cursor: 'pointer',
+          }}
+        >
+          {staffId ? `担当者：${staffId}` : '担当者IDを設定'}
+        </button>
       </header>
 
       {/* ── Main ── */}
@@ -627,10 +585,40 @@ export function AdminScreen() {
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <QrCameraScanner
-                onScan={(text) => { void handleScanned(text) }}
-                onCameraError={(msg) => { setCameraError(msg); setShowManual(true) }}
-              />
+              {!staffId.trim() ? (
+                <div style={{
+                  padding: '28px 20px', borderRadius: 16,
+                  background: 'rgba(139,26,26,0.12)',
+                  border: '1px solid rgba(201,162,74,0.24)',
+                  textAlign: 'center',
+                }}>
+                  <p style={{
+                    fontFamily: SERIF, fontSize: 20, fontWeight: 700,
+                    color: '#C9A24A', letterSpacing: '0.06em',
+                    marginBottom: 18, lineHeight: 1.6,
+                  }}>
+                    先に担当者を選択してください
+                  </p>
+                  <button
+                    onClick={() => setShowStaffPicker(true)}
+                    style={{
+                      padding: '16px 32px', borderRadius: 14,
+                      background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+                      border: '1px solid rgba(201,162,74,0.5)',
+                      boxShadow: '0 4px 20px rgba(107,15,18,0.4)',
+                      color: '#F2E6C8', fontFamily: SERIF, fontSize: 17,
+                      fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer',
+                    }}
+                  >
+                    担当者を選択する
+                  </button>
+                </div>
+              ) : (
+                <QrCameraScanner
+                  onScan={(text) => { void handleScanned(text) }}
+                  onCameraError={(msg) => { setCameraError(msg); setShowManual(true) }}
+                />
+              )}
             </div>
 
             {cameraError && (
@@ -650,9 +638,9 @@ export function AdminScreen() {
             <button
               onClick={() => setShowManual(v => !v)}
               style={{
-                width: '100%', padding: '11px', borderRadius: 12,
+                width: '100%', padding: '15px', borderRadius: 12,
                 background: 'transparent', border: '1px solid rgba(201,162,74,0.18)',
-                color: 'rgba(201,162,74,0.55)', fontSize: 12,
+                color: 'rgba(201,162,74,0.55)', fontSize: 15,
                 letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF,
               }}
             >
@@ -679,11 +667,11 @@ export function AdminScreen() {
                   onClick={() => { if (manualInput.trim()) { void handleScanned(manualInput.trim()); setManualInput('') } }}
                   disabled={!manualInput.trim()}
                   style={{
-                    width: '100%', padding: '12px', borderRadius: 12,
+                    width: '100%', padding: '16px', borderRadius: 12,
                     background: manualInput.trim() ? 'rgba(40,80,20,0.5)' : 'rgba(255,255,255,0.04)',
                     border: `1px solid ${manualInput.trim() ? 'rgba(120,180,80,0.4)' : 'rgba(255,255,255,0.1)'}`,
                     color: manualInput.trim() ? '#C8F0A0' : 'rgba(255,255,255,0.25)',
-                    fontFamily: SERIF, fontSize: 13, fontWeight: 700,
+                    fontFamily: SERIF, fontSize: 16, fontWeight: 700,
                     letterSpacing: '0.14em',
                     cursor: manualInput.trim() ? 'pointer' : 'default',
                   }}
@@ -975,7 +963,7 @@ export function AdminScreen() {
                 {issueLoading
                   ? '発行中…'
                   : !staffId.trim()
-                  ? '担当者IDを設定してください'
+                  ? '担当者を選択してください'
                   : '発行する'}
               </button>
             </div>
@@ -1171,10 +1159,10 @@ export function AdminScreen() {
                   </div>
                 )}
 
-                {/* スタッフID未設定警告 */}
+                {/* スタッフ未選択警告 */}
                 {!staffId.trim() && (
                   <div style={{ borderRadius: 12, background: 'rgba(224,140,0,0.1)', border: '1px solid rgba(224,140,0,0.3)', padding: '10px 14px', marginBottom: 12 }}>
-                    <p style={{ fontSize: 11, color: '#E08C00' }}>担当者IDを設定してください</p>
+                    <p style={{ fontSize: 11, color: '#E08C00' }}>担当者を選択してください</p>
                   </div>
                 )}
 
@@ -1225,6 +1213,107 @@ export function AdminScreen() {
           GINJIRO STAFF TERMINAL — Phase 1
         </p>
       </footer>
+
+      {/* ── Staff Picker Modal ── */}
+      {showStaffPicker && (
+        <div
+          onClick={() => setShowStaffPicker(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 300,
+            background: 'rgba(0,0,0,0.88)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 500,
+              background: 'linear-gradient(180deg, #0D0403 0%, #0A0302 100%)',
+              border: '1px solid rgba(201,162,74,0.32)',
+              borderRadius: 22,
+              boxShadow: '0 32px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(201,162,74,0.08)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{
+              height: 2,
+              background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)',
+            }} />
+            <div style={{ padding: '24px 24px 20px', textAlign: 'center', borderBottom: '1px solid rgba(201,162,74,0.12)' }}>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.5)', marginBottom: 6 }}>
+                STAFF SELECTION
+              </p>
+              <h2 style={{
+                fontFamily: SERIF, fontSize: 20, fontWeight: 700,
+                color: '#F2E6C8', letterSpacing: '0.08em',
+              }}>
+                担当者を選んでください
+              </h2>
+            </div>
+
+            {/* Staff name grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 10,
+              padding: '20px 20px 16px',
+            }}>
+              {STAFF_NAMES.map(name => {
+                const selected = staffId === name
+                return (
+                  <button
+                    key={name}
+                    onClick={() => handleSelectStaff(name)}
+                    style={{
+                      padding: '22px 10px',
+                      borderRadius: 14,
+                      background: selected
+                        ? 'linear-gradient(135deg, rgba(139,26,26,0.7) 0%, rgba(107,15,18,0.85) 100%)'
+                        : 'rgba(0,0,0,0.5)',
+                      border: `1.5px solid ${selected ? 'rgba(201,162,74,0.80)' : 'rgba(201,162,74,0.22)'}`,
+                      boxShadow: selected ? '0 0 20px rgba(201,162,74,0.18), inset 0 1px 0 rgba(201,162,74,0.15)' : 'none',
+                      color: selected ? '#F2E6C8' : 'rgba(242,230,200,0.7)',
+                      fontFamily: SERIF,
+                      fontSize: 22,
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    {name}
+                    {selected && (
+                      <span style={{ display: 'block', fontSize: 10, color: 'rgba(201,162,74,0.7)', letterSpacing: '0.16em', marginTop: 4, fontWeight: 400 }}>
+                        選択中
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Cancel */}
+            <div style={{ padding: '0 20px 20px' }}>
+              <button
+                onClick={() => setShowStaffPicker(false)}
+                style={{
+                  width: '100%', padding: '15px', borderRadius: 12,
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'rgba(242,230,200,0.38)',
+                  fontFamily: SERIF, fontSize: 14, cursor: 'pointer',
+                  letterSpacing: '0.12em',
+                }}
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

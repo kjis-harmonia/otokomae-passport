@@ -15,7 +15,7 @@ const PIN_CSS = `
 
 export function StaffPinGate() {
   const [authed, setAuthed] = useState(() =>
-    sessionStorage.getItem(PIN_AUTH_KEY) === '1'
+    localStorage.getItem(PIN_AUTH_KEY) === '1'
   )
   const [pin, setPin] = useState('')
   const [error, setError] = useState(false)
@@ -25,7 +25,7 @@ export function StaffPinGate() {
   const submitPin = useCallback((candidate: string) => {
     if (candidate === CORRECT_PIN) {
       setSuccess(true)
-      sessionStorage.setItem(PIN_AUTH_KEY, '1')
+      localStorage.setItem(PIN_AUTH_KEY, '1')
       setTimeout(() => setAuthed(true), 500)
     } else {
       setError(true)
@@ -118,10 +118,7 @@ export function StaffPinGate() {
               transform: 'translate(-50%,-50%)',
               width: 56, height: 56, borderRadius: '50%',
               background: '#0B0403',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <span style={{ fontSize: 20, opacity: 0.7 }}>✂</span>
-            </div>
+            }} />
           </div>
 
           <p style={{
