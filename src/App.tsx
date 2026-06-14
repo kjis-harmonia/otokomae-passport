@@ -25,9 +25,152 @@ import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
 
 type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
+
+// ── Music Guide Popup (one-time, first home screen visit) ─────────────────────
+function MusicGuidePopup({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.30 }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 300,
+        background: 'rgba(0,0,0,0.82)',
+        backdropFilter: 'blur(5px)',
+        WebkitBackdropFilter: 'blur(5px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.90, y: 20 }}
+        animate={{ opacity: 1, scale: 1,    y: 0  }}
+        exit={{    opacity: 0, scale: 0.94,  y: 8  }}
+        transition={{ duration: 0.38, ease: [0.22, 0.68, 0.34, 1.0] }}
+        style={{
+          width: '100%',
+          maxWidth: 360,
+          borderRadius: 28,
+          background: 'linear-gradient(162deg, #0e0b06 0%, #080602 100%)',
+          border: '1px solid rgba(212,175,55,0.30)',
+          boxShadow: [
+            '0 36px 90px rgba(0,0,0,0.95)',
+            '0 0 0 0.5px rgba(212,175,55,0.10)',
+            'inset 0 1px 0 rgba(212,175,55,0.16)',
+          ].join(', '),
+          padding: '36px 28px 30px',
+        }}
+      >
+        {/* Record icon medallion */}
+        <div style={{ textAlign: 'center', marginBottom: 22 }}>
+          <div style={{
+            width: 60,
+            height: 60,
+            borderRadius: '50%',
+            background: 'rgba(212,175,55,0.06)',
+            border: '1px solid rgba(212,175,55,0.30)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 0 22px rgba(212,175,55,0.18), inset 0 1px 0 rgba(212,175,55,0.10)',
+          }}>
+            <svg width="30" height="30" viewBox="0 0 19 19" fill="none" aria-hidden>
+              <circle cx="9.5" cy="9.5" r="8.5" stroke="#d4af37" strokeWidth="1"    fill="rgba(0,0,0,0.20)" />
+              <circle cx="9.5" cy="9.5" r="6.8" stroke="#d4af37" strokeWidth="0.45" fill="none" opacity="0.45" />
+              <circle cx="9.5" cy="9.5" r="5.5" stroke="#d4af37" strokeWidth="0.35" fill="none" opacity="0.30" />
+              <circle cx="9.5" cy="9.5" r="3.8" stroke="#d4af37" strokeWidth="0.8"  fill="rgba(0,0,0,0.35)" />
+              <circle cx="9.5" cy="9.5" r="1.3" fill="#d4af37" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Header */}
+        <h2 style={{
+          fontFamily: SERIF,
+          fontSize: 20,
+          fontWeight: 700,
+          color: '#e6ca65',
+          textAlign: 'center',
+          letterSpacing: '0.10em',
+          marginBottom: 18,
+          textShadow: '0 2px 14px rgba(212,175,55,0.30)',
+        }}>
+          🎵 音楽について
+        </h2>
+
+        {/* Divider */}
+        <div style={{
+          height: '0.5px',
+          background: 'linear-gradient(90deg, transparent, rgba(212,175,55,0.28) 30%, rgba(212,175,55,0.28) 70%, transparent)',
+          marginBottom: 24,
+        }} />
+
+        {/* Body */}
+        <p style={{
+          fontFamily: SERIF,
+          fontSize: 16,
+          lineHeight: 2.1,
+          color: '#F2E6C8',
+          textAlign: 'center',
+          letterSpacing: '0.05em',
+          marginBottom: 10,
+        }}>
+          銀二郎テーマソングは<br />
+          ホーム画面右上の<br />
+          レコード盤から<br />
+          いつでも ON / OFF を<br />
+          切り替えできます。
+        </p>
+        <p style={{
+          fontFamily: SERIF,
+          fontSize: 13,
+          lineHeight: 1.8,
+          color: 'rgba(242,230,200,0.46)',
+          textAlign: 'center',
+          letterSpacing: '0.06em',
+          marginBottom: 28,
+        }}>
+          ごゆっくりお楽しみください。
+        </p>
+
+        {/* CTA */}
+        <motion.button
+          type="button"
+          onClick={onDismiss}
+          whileTap={{ scale: 0.97 }}
+          style={{
+            width: '100%',
+            padding: '17px 0',
+            borderRadius: 16,
+            background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 58%, #8B1A1A 100%)',
+            border: '1px solid rgba(212,175,55,0.46)',
+            boxShadow: [
+              '0 4px 28px rgba(107,15,18,0.58)',
+              '0 0 14px rgba(212,175,55,0.10)',
+            ].join(', '),
+            fontFamily: SERIF,
+            fontSize: 17,
+            fontWeight: 700,
+            letterSpacing: '0.26em',
+            color: '#F2E6C8',
+            cursor: 'pointer',
+          }}
+        >
+          男前開始
+        </motion.button>
+      </motion.div>
+    </motion.div>
+  )
+}
 
 function App() {
   // テストデータを localStorage に1度だけ投入
@@ -137,6 +280,21 @@ function App() {
 
   const bgm = useBgm()
 
+  // ── Music guide — show once after first home screen mount ─────────────────────
+  const [showMusicGuide, setShowMusicGuide] = useState(false)
+
+  useEffect(() => {
+    if (phase !== 'app') return
+    if (localStorage.getItem(MUSIC_GUIDE_KEY) === 'true') return
+    const t = setTimeout(() => setShowMusicGuide(true), 700)
+    return () => clearTimeout(t)
+  }, [phase])
+
+  function dismissMusicGuide() {
+    localStorage.setItem(MUSIC_GUIDE_KEY, 'true')
+    setShowMusicGuide(false)
+  }
+
   const liveMember = {
     ...MOCK_MEMBER,
     name: memberStatus.memberName,
@@ -192,7 +350,32 @@ function App() {
                   from { transform: rotate(0deg); }
                   to   { transform: rotate(360deg); }
                 }
+                @keyframes bgmRecordPulse {
+                  0%   { box-shadow: 0 0 0  0px rgba(212,175,55,0.00); }
+                  35%  { box-shadow: 0 0 0 10px rgba(212,175,55,0.42), 0 0 28px rgba(212,175,55,0.24); }
+                  65%  { box-shadow: 0 0 0  5px rgba(212,175,55,0.22), 0 0 14px rgba(212,175,55,0.12); }
+                  100% { box-shadow: 0 0 0  0px rgba(212,175,55,0.00); }
+                }
               `}</style>
+
+              {/* Pulse ring — golden aura around record button when music guide is open */}
+              {showMusicGuide && (
+                <div
+                  aria-hidden
+                  style={{
+                    position: 'fixed',
+                    top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+                    right: 16,
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    zIndex: 319,
+                    pointerEvents: 'none',
+                    animation: 'bgmRecordPulse 2.6s ease-in-out 2',
+                  }}
+                />
+              )}
+
               <button
                 type="button"
                 onClick={bgm.toggle}
@@ -201,7 +384,7 @@ function App() {
                   position: 'fixed',
                   top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
                   right: 16,
-                  zIndex: 120,
+                  zIndex: showMusicGuide ? 320 : 120,
                   width: 36,
                   height: 36,
                   borderRadius: '50%',
@@ -247,6 +430,13 @@ function App() {
               </button>
             </>
           )}
+
+          {/* Music guide — one-time popup, first home screen visit */}
+          <AnimatePresence>
+            {showMusicGuide && (
+              <MusicGuidePopup key="music-guide" onDismiss={dismissMusicGuide} />
+            )}
+          </AnimatePresence>
 
           {isPremiumGachaOpen && (
             <PremiumGachaExperience
