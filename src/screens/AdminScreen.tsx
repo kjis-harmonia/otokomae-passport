@@ -7,6 +7,8 @@ import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
 import { issueTicket, getUserTickets, markTicketUsed } from '../utils/ticketStore'
 import { getJapanDateString } from '../utils/dateUtils'
+import { upsertCustomer, searchCustomersByName, recoverMember } from '../utils/customerStore'
+import type { CustomerRow } from '../utils/customerStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -216,13 +218,22 @@ type Phase = 'scan' | 'loading' | 'result' | 'ticket-loading' | 'ticket-result'
 
 // ── QR Camera Scanner ─────────────────────────────────────────────────────────
 
-const QR_EL_ID = 'gj-qr-reader'
+const QR_EL_ID          = 'gj-qr-reader'
+const QR_RECOVERY_EL_ID = 'gj-qr-reader-recovery'
 
 async function haltScanner(scanner: Html5Qrcode): Promise<void> {
   try { if (scanner.isScanning) await scanner.stop(); scanner.clear() } catch { /* ignore */ }
 }
 
-function QrCameraScanner({ onScan, onCameraError }: { onScan: (t: string) => void; onCameraError: (m: string) => void }) {
+function QrCameraScanner({
+  onScan,
+  onCameraError,
+  elId = QR_EL_ID,
+}: {
+  onScan: (t: string) => void
+  onCameraError: (m: string) => void
+  elId?: string
+}) {
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const [active, setActive] = useState(false)
 
@@ -238,7 +249,7 @@ function QrCameraScanner({ onScan, onCameraError }: { onScan: (t: string) => voi
   const start = useCallback(async () => {
     if (scannerRef.current) return
     let scanner: Html5Qrcode
-    try { scanner = new Html5Qrcode(QR_EL_ID) }
+    try { scanner = new Html5Qrcode(elId) }
     catch { onCameraError('カメラを初期化できません。'); return }
     scannerRef.current = scanner
     try {
@@ -256,13 +267,13 @@ function QrCameraScanner({ onScan, onCameraError }: { onScan: (t: string) => voi
       const s = claimScanner(); if (s) void haltScanner(s)
       onCameraError('カメラにアクセスできません。手動入力をご利用ください。')
     }
-  }, [onScan, onCameraError]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onScan, onCameraError, elId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { const s = claimScanner(); if (s) void haltScanner(s) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div>
-      <div id={QR_EL_ID} style={{ width: '100%', minHeight: active ? 280 : 0, borderRadius: active ? 16 : 0, overflow: 'hidden', marginBottom: active ? 12 : 0 }} />
+      <div id={elId} style={{ width: '100%', minHeight: active ? 280 : 0, borderRadius: active ? 16 : 0, overflow: 'hidden', marginBottom: active ? 12 : 0 }} />
       {!active ? (
         <button onClick={() => { void start() }} style={{ width: '100%', padding: '20px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 20px rgba(107,15,18,0.45)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 20, fontWeight: 700, letterSpacing: '0.2em', cursor: 'pointer' }}>
           QRを読み取る
@@ -336,6 +347,24 @@ export function AdminScreen() {
 
   // Store QR
   const [showStoreQr, setShowStoreQr] = useState(false)
+
+  // ── Main tab (issue / recovery) ───────────────────────────────────────────
+  const [mainTab, setMainTab] = useState<'issue' | 'recovery'>('issue')
+
+  // Recovery tab state
+  const [recoveryStep, setRecoveryStep]               = useState<'search' | 'detail' | 'scan' | 'confirm' | 'done'>('search')
+  const [recoveryQuery, setRecoveryQuery]             = useState('')
+  const [recoveryResults, setRecoveryResults]         = useState<CustomerRow[]>([])
+  const [recoverySearching, setRecoverySearching]     = useState(false)
+  const [selectedCustomer, setSelectedCustomer]       = useState<CustomerRow | null>(null)
+  const [customerLastVisit, setCustomerLastVisit]     = useState<string | null | undefined>(undefined)
+  const [customerTicketCount, setCustomerTicketCount] = useState<number | null>(null)
+  const [recoveryNewUserId, setRecoveryNewUserId]     = useState<string | null>(null)
+  const [recoveryReason, setRecoveryReason]           = useState('機種変更')
+  const [recoveryLoading, setRecoveryLoading]         = useState(false)
+  const [recoveryError, setRecoveryError]             = useState<string | null>(null)
+  const [recoveryScanError, setRecoveryScanError]     = useState<string | null>(null)
+  const [recoveryManualInput, setRecoveryManualInput] = useState('')
 
   // Issue log (realtime toast + log view)
   const [logToast, setLogToast]         = useState<IssueLogEntry | null>(null)
@@ -459,6 +488,8 @@ export function AdminScreen() {
     const passportData = data as PassportQRData
     setScannedData(passportData)
     setPhase('loading')
+    // Phase2: 会員テーブルへ初回登録（非致命的 — 失敗しても発行フローは継続）
+    void upsertCustomer(passportData.userId, passportData.name)
     const prev = await fetchLastVisitDate(passportData.userId)
     setPrevLastVisitDate(prev)
     if (prev === null) { /* first visit — no sound */ }
@@ -612,6 +643,78 @@ export function AdminScreen() {
     setStaffId(name); setStoredValue(STAFF_NAME_KEY, name); setShowStaffPicker(false)
   }
 
+  // ── Recovery tab handlers ─────────────────────────────────────────────────
+
+  const handleRecoverySearch = useCallback(async () => {
+    if (!recoveryQuery.trim()) return
+    setRecoverySearching(true)
+    setRecoveryResults(await searchCustomersByName(recoveryQuery.trim()))
+    setRecoverySearching(false)
+  }, [recoveryQuery])
+
+  const handleSelectCustomer = useCallback(async (customer: CustomerRow) => {
+    setSelectedCustomer(customer)
+    setRecoveryStep('detail')
+    setCustomerLastVisit(undefined)
+    setCustomerTicketCount(null)
+    const [lastVisit, countResult] = await Promise.all([
+      fetchLastVisitDate(customer.user_id),
+      supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('user_id', customer.user_id).eq('used', false),
+    ])
+    setCustomerLastVisit(lastVisit)
+    setCustomerTicketCount(countResult.count ?? 0)
+  }, [])
+
+  const handleRecoveryQrScan = useCallback((text: string) => {
+    const parsed = parseQR(text)
+    if (!parsed) {
+      setRecoveryScanError('認識できないQRコードです。パスポートQRを読み取ってください。')
+      return
+    }
+    if (parsed.type === 'ginjiro-ticket-use') {
+      setRecoveryScanError('チケット使用QRです。パスポートQRを読み取ってください。')
+      return
+    }
+    const newUserId = (parsed as PassportQRData).userId
+    if (newUserId === selectedCustomer?.user_id) {
+      setRecoveryScanError('同じ端末のQRです。新しい端末のQRを読み取ってください。')
+      return
+    }
+    setRecoveryNewUserId(newUserId)
+    setRecoveryScanError(null)
+    setRecoveryStep('confirm')
+  }, [selectedCustomer])
+
+  const handleRecoveryExecute = useCallback(async () => {
+    if (!selectedCustomer || !recoveryNewUserId || !staffId.trim()) return
+    setRecoveryLoading(true)
+    setRecoveryError(null)
+    const result = await recoverMember(selectedCustomer.user_id, recoveryNewUserId, staffId, recoveryReason)
+    setRecoveryLoading(false)
+    if ('error' in result) {
+      setRecoveryError(result.error)
+      return
+    }
+    playSuccessSound()
+    setRecoveryStep('done')
+  }, [selectedCustomer, recoveryNewUserId, staffId, recoveryReason])
+
+  const handleRecoveryReset = useCallback(() => {
+    setRecoveryStep('search')
+    setRecoveryQuery('')
+    setRecoveryResults([])
+    setRecoverySearching(false)
+    setSelectedCustomer(null)
+    setCustomerLastVisit(undefined)
+    setCustomerTicketCount(null)
+    setRecoveryNewUserId(null)
+    setRecoveryReason('機種変更')
+    setRecoveryLoading(false)
+    setRecoveryError(null)
+    setRecoveryScanError(null)
+    setRecoveryManualInput('')
+  }, [])
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -714,15 +817,42 @@ export function AdminScreen() {
         </div>
       </header>
 
+      {/* ── Main tab switcher ── */}
+      <div style={{ display: 'flex', borderBottom: '1px solid rgba(201,162,74,0.12)', background: 'rgba(0,0,0,0.25)', flexShrink: 0 }}>
+        {([
+          { id: 'issue',    label: 'チケット発行' },
+          { id: 'recovery', label: '会員復旧' },
+        ] as { id: 'issue' | 'recovery'; label: string }[]).map(tab => {
+          const isActive = mainTab === tab.id
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setMainTab(tab.id)}
+              style={{
+                flex: 1, padding: '13px 8px',
+                background: isActive ? 'rgba(201,162,74,0.06)' : 'transparent',
+                border: 'none',
+                borderBottom: `2px solid ${isActive ? 'rgba(201,162,74,0.65)' : 'transparent'}`,
+                color: isActive ? '#C9A24A' : 'rgba(242,230,200,0.32)',
+                fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
+                cursor: 'pointer', transition: 'all 0.18s', WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
       {/* ── Main scroll area ── */}
       <main style={{
         flex: 1, overflowY: 'auto',
-        padding: `20px 20px ${phase === 'result' ? '108px' : '32px'}`,
+        padding: `20px 20px ${mainTab === 'issue' && phase === 'result' ? '108px' : '32px'}`,
         maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box',
       }}>
 
         {/* ===== SCAN ===== */}
-        {phase === 'scan' && (
+        {mainTab === 'issue' && phase === 'scan' && (
           <div>
             {/* Waiting card */}
             <div style={{ borderRadius: 20, border: '1px solid rgba(201,162,74,0.16)', background: '#0A0504', overflow: 'hidden', marginBottom: 20 }}>
@@ -858,7 +988,7 @@ export function AdminScreen() {
         )}
 
         {/* ===== LOADING ===== */}
-        {phase === 'loading' && (
+        {mainTab === 'issue' && phase === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 80 }}>
             <div style={{ width: 48, height: 48, borderRadius: '50%', border: '2px solid rgba(201,162,74,0.14)', borderTop: '2px solid rgba(201,162,74,0.7)', animation: 'gj-spin 0.8s linear infinite', marginBottom: 20 }} />
             <p style={{ fontSize: 14, color: 'rgba(242,230,200,0.4)', fontFamily: SERIF, letterSpacing: '0.14em' }}>判定中...</p>
@@ -866,7 +996,7 @@ export function AdminScreen() {
         )}
 
         {/* ===== RESULT ===== */}
-        {phase === 'result' && scannedData && (
+        {mainTab === 'issue' && phase === 'result' && scannedData && (
           <div>
             {/* ── Customer card ── */}
             <div style={{ position: 'relative', marginBottom: 16 }}>
@@ -1166,7 +1296,7 @@ export function AdminScreen() {
         )}
 
         {/* ===== TICKET-LOADING ===== */}
-        {phase === 'ticket-loading' && (
+        {mainTab === 'issue' && phase === 'ticket-loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 80 }}>
             <div style={{ width: 48, height: 48, borderRadius: '50%', border: '2px solid rgba(201,162,74,0.14)', borderTop: '2px solid rgba(201,162,74,0.7)', animation: 'gj-spin 0.8s linear infinite', marginBottom: 20 }} />
             <p style={{ fontSize: 14, color: 'rgba(242,230,200,0.4)', fontFamily: SERIF, letterSpacing: '0.14em' }}>チケット確認中...</p>
@@ -1174,7 +1304,7 @@ export function AdminScreen() {
         )}
 
         {/* ===== TICKET-RESULT ===== */}
-        {phase === 'ticket-result' && ticketUseData && (
+        {mainTab === 'issue' && phase === 'ticket-result' && ticketUseData && (
           <div>
             {ticketQrExpired ? (
               <div style={{ borderRadius: 18, background: 'linear-gradient(135deg, rgba(70,15,15,0.6), rgba(50,8,8,0.8))', border: '1px solid rgba(200,80,60,0.3)', padding: '28px 22px', textAlign: 'center', marginBottom: 16 }}>
@@ -1270,10 +1400,223 @@ export function AdminScreen() {
             </button>
           </div>
         )}
+        {/* ===== RECOVERY TAB ===== */}
+        {mainTab === 'recovery' && (
+          <div>
+            {/* Step: search */}
+            {recoveryStep === 'search' && (
+              <div>
+                <div style={{ marginBottom: 20, borderRadius: 18, background: 'linear-gradient(155deg, #0D0805 0%, #080403 100%)', border: '1px solid rgba(201,162,74,0.14)', padding: '16px 18px' }}>
+                  <p style={{ fontSize: 8, letterSpacing: '0.32em', color: 'rgba(201,162,74,0.48)', marginBottom: 8 }}>MEMBER RECOVERY</p>
+                  <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8', marginBottom: 6, letterSpacing: '0.04em' }}>会員データ復旧</p>
+                  <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.34)', lineHeight: 1.7 }}>
+                    お客様の名前で旧会員データを検索し、<br />新端末へ移管します。
+                  </p>
+                </div>
+
+                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>お客様名で検索</p>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <input
+                    type="text"
+                    value={recoveryQuery}
+                    onChange={e => setRecoveryQuery(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') void handleRecoverySearch() }}
+                    placeholder="名前を入力"
+                    style={{
+                      flex: 1, padding: '14px 16px', borderRadius: 12,
+                      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(201,162,74,0.22)',
+                      color: '#F2E6C8', fontSize: 16, fontFamily: SERIF, outline: 'none', letterSpacing: '0.04em',
+                    }}
+                  />
+                  <button
+                    onClick={() => void handleRecoverySearch()}
+                    disabled={!recoveryQuery.trim() || recoverySearching}
+                    style={{
+                      padding: '14px 20px', borderRadius: 12, flexShrink: 0,
+                      background: recoveryQuery.trim() ? 'rgba(201,162,74,0.12)' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${recoveryQuery.trim() ? 'rgba(201,162,74,0.4)' : 'rgba(255,255,255,0.09)'}`,
+                      color: recoveryQuery.trim() ? '#C9A24A' : 'rgba(242,230,200,0.24)',
+                      fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.1em',
+                      cursor: recoveryQuery.trim() ? 'pointer' : 'default',
+                    }}
+                  >
+                    {recoverySearching ? '…' : '検索'}
+                  </button>
+                </div>
+
+                {recoveryResults.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {recoveryResults.map(customer => (
+                      <button
+                        key={customer.id}
+                        onClick={() => void handleSelectCustomer(customer)}
+                        style={{
+                          width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14,
+                          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(201,162,74,0.18)',
+                          cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                        }}
+                      >
+                        <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', marginBottom: 3 }}>{customer.name}</p>
+                        <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.3)', letterSpacing: '0.06em' }}>
+                          登録 {new Date(customer.created_at).toLocaleDateString('ja-JP')} ／ コード {customer.recovery_code}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {recoveryResults.length === 0 && recoveryQuery && !recoverySearching && (
+                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.28)', textAlign: 'center', padding: '20px 0', lineHeight: 1.7 }}>
+                    該当する会員が見つかりません<br />
+                    <span style={{ fontSize: 10 }}>初回来店時にスタッフ端末でQRスキャンすると登録されます</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Step: detail */}
+            {recoveryStep === 'detail' && selectedCustomer && (
+              <div>
+                <button
+                  onClick={() => { setRecoveryStep('search'); setSelectedCustomer(null) }}
+                  style={{ marginBottom: 16, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.4)', fontSize: 12, fontFamily: SERIF, cursor: 'pointer', letterSpacing: '0.1em' }}
+                >
+                  ← 検索に戻る
+                </button>
+
+                <div style={{ borderRadius: 18, background: 'linear-gradient(155deg, #130A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.32)', overflow: 'hidden', marginBottom: 18 }}>
+                  <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
+                  <div style={{ padding: '18px 20px' }}>
+                    <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.48)', marginBottom: 6 }}>CUSTOMER</p>
+                    <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#F2E6C8', marginBottom: 16 }}>
+                      {selectedCustomer.name} <span style={{ fontSize: 14, color: 'rgba(242,230,200,0.42)' }}>様</span>
+                    </p>
+                    {([
+                      { label: '登録日',       value: new Date(selectedCustomer.created_at).toLocaleDateString('ja-JP') },
+                      { label: '復旧コード',   value: selectedCustomer.recovery_code, highlight: true },
+                      { label: '前回来店日',   value: customerLastVisit === undefined ? '読込中…' : (customerLastVisit ?? '記録なし') },
+                      { label: '保有チケット', value: customerTicketCount === null ? '読込中…' : `${customerTicketCount}枚` },
+                    ] as { label: string; value: string; highlight?: boolean }[]).map(({ label, value, highlight }) => (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>{label}</span>
+                        <span style={{ fontFamily: SERIF, fontSize: highlight ? 17 : 14, fontWeight: 700, color: highlight ? '#C9A24A' : '#F2E6C8', letterSpacing: highlight ? '0.14em' : '0.04em' }}>{value}</span>
+                      </div>
+                    ))}
+                    <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.3)', lineHeight: 1.7, marginTop: 4 }}>
+                      ※ 復旧コードをお客様に口頭確認してください
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => { setRecoveryStep('scan'); setRecoveryError(null); setRecoveryScanError(null) }}
+                  style={{
+                    width: '100%', padding: '20px', borderRadius: 14,
+                    background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+                    border: '1px solid rgba(201,162,74,0.44)',
+                    boxShadow: '0 4px 20px rgba(107,15,18,0.45)',
+                    color: '#F2E6C8', fontFamily: SERIF, fontSize: 18, fontWeight: 700, letterSpacing: '0.18em', cursor: 'pointer',
+                  }}
+                >
+                  新端末のQRをスキャン
+                </button>
+              </div>
+            )}
+
+            {/* Step: scan (new device) */}
+            {recoveryStep === 'scan' && (
+              <div>
+                <button
+                  onClick={() => { setRecoveryStep('detail'); setRecoveryScanError(null) }}
+                  style={{ marginBottom: 16, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.4)', fontSize: 12, fontFamily: SERIF, cursor: 'pointer', letterSpacing: '0.1em' }}
+                >
+                  ← 戻る
+                </button>
+
+                <div style={{ marginBottom: 14, padding: '12px 16px', borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.18)' }}>
+                  <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.55)', lineHeight: 1.7 }}>
+                    新しい端末でパスポートアプリを開き、<br />マイページのQRコードを読み取ってください。
+                  </p>
+                </div>
+
+                {recoveryScanError && (
+                  <div style={{ borderRadius: 10, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '8px 12px', marginBottom: 12 }}>
+                    <p style={{ fontSize: 11, color: '#E06060' }}>{recoveryScanError}</p>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 16 }}>
+                  <QrCameraScanner
+                    elId={QR_RECOVERY_EL_ID}
+                    onScan={text => handleRecoveryQrScan(text)}
+                    onCameraError={msg => setRecoveryScanError(msg)}
+                  />
+                </div>
+
+                <p style={{ textAlign: 'center', fontSize: 10, color: 'rgba(242,230,200,0.22)', letterSpacing: '0.1em', marginBottom: 10 }}>または直接入力</p>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    value={recoveryManualInput}
+                    onChange={e => setRecoveryManualInput(e.target.value)}
+                    placeholder="u-xxxxxx-xxxxxx"
+                    style={{
+                      flex: 1, padding: '12px 14px', borderRadius: 10,
+                      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)',
+                      color: '#F2E6C8', fontSize: 12, fontFamily: 'monospace', outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const uid = recoveryManualInput.trim()
+                      if (uid) {
+                        handleRecoveryQrScan(JSON.stringify({ type: 'ginjiro-member', userId: uid, name: '' }))
+                        setRecoveryManualInput('')
+                      }
+                    }}
+                    disabled={!recoveryManualInput.trim()}
+                    style={{
+                      padding: '12px 16px', borderRadius: 10, flexShrink: 0,
+                      background: recoveryManualInput.trim() ? 'rgba(40,80,20,0.5)' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${recoveryManualInput.trim() ? 'rgba(120,180,80,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                      color: recoveryManualInput.trim() ? '#C8F0A0' : 'rgba(255,255,255,0.25)',
+                      fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.1em',
+                      cursor: recoveryManualInput.trim() ? 'pointer' : 'default',
+                    }}
+                  >
+                    確定
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step: done */}
+            {recoveryStep === 'done' && (
+              <div style={{ textAlign: 'center', paddingTop: 40 }}>
+                <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'radial-gradient(circle, rgba(80,192,80,0.16) 0%, rgba(20,100,40,0.1) 60%, transparent 100%)', border: '1.5px solid rgba(100,200,100,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 22px', boxShadow: '0 0 32px rgba(80,192,80,0.28)' }}>
+                  <span style={{ fontSize: 36, color: '#64D26E', lineHeight: 1 }}>✓</span>
+                </div>
+                <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#80E060', marginBottom: 16, letterSpacing: '0.08em' }}>復旧完了</p>
+                <p style={{ fontSize: 13, color: '#F2E6C8', lineHeight: 1.9, marginBottom: 8 }}>
+                  {selectedCustomer?.name}様のデータを<br />新端末へ移管しました。
+                </p>
+                <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.38)', lineHeight: 1.7, marginBottom: 32 }}>
+                  新端末でアプリを再読み込みすると<br />チケット・来店履歴が復旧されます。
+                </p>
+                <button
+                  onClick={handleRecoveryReset}
+                  style={{ padding: '16px 40px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 16, fontWeight: 700, letterSpacing: '0.18em', cursor: 'pointer' }}
+                >
+                  続けて復旧する
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* ── Fixed bottom: 発行する ── */}
-      {phase === 'result' && scannedData && (
+      {mainTab === 'issue' && phase === 'result' && scannedData && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
           background: 'linear-gradient(0deg, rgba(6,2,1,0.99) 0%, rgba(6,2,1,0.92) 70%, transparent 100%)',
@@ -1300,6 +1643,98 @@ export function AdminScreen() {
           >
             {issueLoading ? '発行中…' : '発行する'}
           </button>
+        </div>
+      )}
+
+      {/* ── Recovery confirm modal ── */}
+      {mainTab === 'recovery' && recoveryStep === 'confirm' && selectedCustomer && recoveryNewUserId && (
+        <div
+          onClick={() => { setRecoveryStep('scan'); setRecoveryError(null) }}
+          style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 440, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.32)', boxShadow: '0 32px 80px rgba(0,0,0,0.9)', overflow: 'hidden' }}
+          >
+            <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
+            <div style={{ padding: '28px 26px 24px' }}>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.5)', marginBottom: 10, textAlign: 'center' }}>CONFIRM RECOVERY</p>
+              <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', marginBottom: 22 }}>
+                会員データを復旧します
+              </p>
+
+              <div style={{ borderRadius: 14, background: 'rgba(201,162,74,0.04)', border: '1px solid rgba(201,162,74,0.16)', padding: '16px 18px', marginBottom: 16 }}>
+                {([
+                  { label: '会員名', value: `${selectedCustomer.name} 様` },
+                  { label: '旧ID',   value: selectedCustomer.user_id.slice(0, 18) + '…' },
+                  { label: '新ID',   value: recoveryNewUserId.slice(0, 18) + '…' },
+                  { label: '担当',   value: staffId || '未設定' },
+                ] as { label: string; value: string }[]).map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(201,162,74,0.08)' }}>
+                    <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>{label}</span>
+                    <span style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: '#F2E6C8', wordBreak: 'break-all', maxWidth: '65%', textAlign: 'right' }}>{value}</span>
+                  </div>
+                ))}
+
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em', marginBottom: 8 }}>復旧理由</p>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {['機種変更', 'Safariデータ削除', 'その他'].map(reason => (
+                      <button
+                        key={reason}
+                        onClick={() => setRecoveryReason(reason)}
+                        style={{
+                          flex: 1, padding: '8px 4px', borderRadius: 8,
+                          background: recoveryReason === reason ? 'rgba(201,162,74,0.15)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${recoveryReason === reason ? 'rgba(201,162,74,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                          color: recoveryReason === reason ? '#C9A24A' : 'rgba(242,230,200,0.3)',
+                          fontSize: 10, fontFamily: SERIF, letterSpacing: '0.04em', cursor: 'pointer',
+                        }}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {recoveryError && (
+                <div style={{ borderRadius: 10, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '8px 12px', marginBottom: 14 }}>
+                  <p style={{ fontSize: 11, color: '#E06060' }}>{recoveryError}</p>
+                </div>
+              )}
+
+              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.4)', textAlign: 'center', marginBottom: 20, lineHeight: 1.7 }}>
+                旧端末のチケット・来店履歴・使用ログが<br />すべて新端末に移管されます。
+              </p>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => { setRecoveryStep('scan'); setRecoveryError(null) }}
+                  disabled={recoveryLoading}
+                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={() => void handleRecoveryExecute()}
+                  disabled={recoveryLoading || !staffId.trim()}
+                  style={{
+                    flex: 2, padding: '14px 0', borderRadius: 14,
+                    background: recoveryLoading ? 'rgba(20,60,30,0.5)' : 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
+                    border: `1px solid ${recoveryLoading ? 'rgba(100,200,100,0.12)' : 'rgba(100,200,100,0.44)'}`,
+                    boxShadow: recoveryLoading ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
+                    fontSize: 15, fontWeight: 700,
+                    color: recoveryLoading ? 'rgba(208,244,216,0.4)' : '#D0F4D8',
+                    fontFamily: SERIF, letterSpacing: '0.18em',
+                    cursor: recoveryLoading ? 'default' : 'pointer',
+                  }}
+                >
+                  {recoveryLoading ? '移管中…' : '復旧実行'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
