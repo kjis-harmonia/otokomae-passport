@@ -171,64 +171,54 @@ class ValidationError extends Error {
   }
 }
 
+/** Supabase の uuid 型として有効かチェック */
+function isValidUUID(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+}
+
+/** Supabase エラーの詳細を文字列で返す */
+function supabaseErrDetail(err: unknown): string {
+  if (err && typeof err === 'object') {
+    const e = err as Record<string, unknown>
+    return JSON.stringify({ message: e['message'], details: e['details'], hint: e['hint'], code: e['code'] })
+  }
+  return String(err)
+}
+
 /**
  * 譲渡開始。ticket_transfers にレコードを挿入し、ワンタイムトークンを返す。
- * 返り値のトークンで受け取りURL `?token=TOKEN` を組み立てる。
+ * UUID 形式でないチケット（local-, dev-, 数値IDなど）は譲渡不可として throw する。
  */
 export async function initiateTransfer(ticketId: string, fromUserId: string): Promise<string> {
   const token     = crypto.randomUUID()
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24時間後
   console.log('[Transfer] initiateTransfer start', { ticketId, fromUserId, token, expiresAt })
 
-  // local- プレフィックスのチケットは Supabase に UUID として保存できない
-  if (ticketId.startsWith('local-')) {
-    console.warn('[Transfer] ticket_id is local (non-UUID). Falling back to localStorage only. Cross-device transfer will NOT work.')
-    upsertLocalTransfer({
-      id:           `local-xfer-${Date.now()}`,
-      token,
-      ticket_id:    ticketId,
-      from_user_id: fromUserId,
-      to_user_id:   null,
-      status:       'pending',
-      created_at:   new Date().toISOString(),
-      expires_at:   expiresAt,
-      claimed_at:   null,
-    })
-    return token
+  // UUID 形式でないチケット（local-xxx, dev-xxx, 数値など）は Supabase に保存できない
+  // → 譲渡不可として throw し、UI で明示的なエラーを表示する
+  if (!isValidUUID(ticketId)) {
+    console.warn('[Transfer] ticket_id is not a valid UUID, cannot transfer:', ticketId)
+    throw new ValidationError('このチケットは旧ローカル保存のため譲渡できません。店舗端末で再発行してください。')
   }
 
-  try {
-    const { data, error } = await supabase
-      .from('ticket_transfers')
-      .insert({
-        token,
-        ticket_id:    ticketId,
-        from_user_id: fromUserId,
-        status:       'pending',
-        expires_at:   expiresAt,
-      })
-      .select()
-      .single()
-    if (error) {
-      console.error('[Transfer] initiateTransfer Supabase INSERT error:', error)
-      throw error
-    }
-    console.log('[Transfer] initiateTransfer INSERT success:', data)
-  } catch (err) {
-    console.error('[Transfer] initiateTransfer failed, using localStorage fallback:', err)
-    // localStorage fallback（同端末テスト用）
-    upsertLocalTransfer({
-      id:           `local-xfer-${Date.now()}`,
+  const { data, error } = await supabase
+    .from('ticket_transfers')
+    .insert({
       token,
       ticket_id:    ticketId,
       from_user_id: fromUserId,
-      to_user_id:   null,
       status:       'pending',
-      created_at:   new Date().toISOString(),
       expires_at:   expiresAt,
-      claimed_at:   null,
     })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[Transfer] initiateTransfer Supabase INSERT error:', supabaseErrDetail(error))
+    throw new Error(`譲渡の開始に失敗しました。(${error.message ?? error.code ?? 'unknown'})`)
   }
+
+  console.log('[Transfer] initiateTransfer INSERT success:', data)
   return token
 }
 
@@ -284,7 +274,7 @@ export async function getTicketByTransferToken(token: string): Promise<TicketRow
     console.log('[Transfer] getTicketByTransferToken tickets query result:', { ticket, ticketErr, ticketId })
     return (ticket ?? null) as TicketRow | null
   } catch (err) {
-    console.warn('[Transfer] getTicketByTransferToken Supabase error, trying localStorage:', err)
+    console.warn('[Transfer] getTicketByTransferToken Supabase error, trying localStorage:', supabaseErrDetail(err))
     // localStorage fallback（Supabase 未設定・オフライン時の同端末テスト用）
     const transfer = getAllLocalTransfers().find(t =>
       t.token === token &&
@@ -328,7 +318,7 @@ export async function acceptTransfer(token: string, toUserId: string): Promise<T
       console.warn('[Transfer] RPC returned validation error:', (rpcErr as Error).message)
       throw rpcErr
     }
-    console.warn('[Transfer] RPC failed (non-validation), falling back to sequential queries:', rpcErr)
+    console.warn('[Transfer] RPC failed (non-validation), falling back to sequential queries:', supabaseErrDetail(rpcErr))
     // RPC が存在しない場合やネットワークエラー → 順次クエリで代替
   }
 
@@ -384,7 +374,7 @@ export async function acceptTransfer(token: string, toUserId: string): Promise<T
       console.warn('[Transfer] sequential validation error:', (supaErr as Error).message)
       throw supaErr
     }
-    console.warn('[Transfer] sequential Supabase error, falling back to localStorage:', supaErr)
+    console.warn('[Transfer] sequential Supabase error, falling back to localStorage:', supabaseErrDetail(supaErr))
 
     // ── localStorage fallback（同端末テスト用） ───────────────────────────
     const transfers = getAllLocalTransfers()

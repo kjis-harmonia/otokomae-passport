@@ -193,6 +193,7 @@ function TicketWalletSection() {
   const [transferToken, setTransferToken] = useState<string | null>(null)
   const [showXferQr,    setShowXferQr]    = useState(false)
   const [xferring,      setXferring]      = useState(false)
+  const [xferError,     setXferError]     = useState<string | null>(null)
   const [copied,        setCopied]        = useState(false)
 
   // 当日使用済み（種別を問わず1日1枚制限）
@@ -280,13 +281,14 @@ function TicketWalletSection() {
     const t = item.data
     if (t.used || t.pending_transfer) return
     setXferring(true)
+    setXferError(null)
     try {
       const token = await initiateTransfer(t.id, userId)
       setTransferToken(token)
       setTransferItem(item)
       setShowXferQr(true)
-    } catch {
-      alert('渡す処理が失敗しました。')
+    } catch (err) {
+      setXferError(err instanceof Error ? err.message : '渡す処理が失敗しました。')
     } finally {
       setXferring(false)
     }
@@ -541,6 +543,32 @@ function TicketWalletSection() {
                   {useLoading ? '処理中…' : 'はい、使用する'}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── 譲渡エラーモーダル ── */}
+      <AnimatePresence>
+        {xferError && (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+            onClick={() => setXferError(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.22 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 380, borderRadius: 20, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(224,96,80,0.32)', padding: '24px 20px', textAlign: 'center' }}
+            >
+              <p style={{ fontSize: 20, marginBottom: 12, color: '#E06060' }}>✕</p>
+              <p style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: '#F2E6C8', marginBottom: 10, lineHeight: 1.7 }}>
+                {xferError}
+              </p>
+              <button type="button" onClick={() => setXferError(null)}
+                style={{ width: '100%', marginTop: 8, padding: '12px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                閉じる
+              </button>
             </motion.div>
           </div>
         )}

@@ -257,7 +257,10 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
       setTransferToken(token)
       setGiftModalTicket(prev => prev ? { ...prev, pending_transfer: true } : prev)
       setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: true } : t))
-    } catch { alert('処理に失敗しました。') }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '処理に失敗しました。'
+      alert(msg)
+    }
     finally { setTransferring(false) }
   }
 
