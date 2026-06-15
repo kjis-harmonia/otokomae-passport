@@ -20,6 +20,47 @@ const TICKET_TABS: { type: TicketType; label: string; autoTitle: string }[] = [
   { type: 'otoku',    label: '漢トク券', autoTitle: '漢トク券' },
 ]
 
+// ── Usage log (ticket consumption) ───────────────────────────────────────────
+
+interface UsageLogEntry {
+  id: string
+  used_at: string
+  usage_date: string
+  staff_name: string
+  customer_name: string
+  user_id: string
+  ticket_id: string | null
+  ticket_type: string
+  amount: number
+  terminal: string
+  status: string
+}
+
+async function saveUsageLog(entry: Omit<UsageLogEntry, 'id' | 'used_at'>): Promise<void> {
+  try {
+    await supabase.from('ticket_usage_logs').insert({
+      ...entry,
+      used_at: new Date().toISOString(),
+    })
+  } catch { /* non-fatal: log failure must not block UI */ }
+}
+
+/** JST 当日に userId が使用済みの ticket_type 一覧を返す */
+async function fetchTodayUsedTypes(userId: string, today: string): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('ticket_usage_logs')
+      .select('ticket_type')
+      .eq('user_id', userId)
+      .eq('usage_date', today)
+      .eq('status', 'used')
+    if (!error && data) {
+      return [...new Set((data as { ticket_type: string }[]).map(r => r.ticket_type))]
+    }
+  } catch { /* table may not exist yet — treat as no restriction */ }
+  return []
+}
+
 // ── Issue log ─────────────────────────────────────────────────────────────────
 
 interface IssueLogEntry {
@@ -271,7 +312,15 @@ export function AdminScreen() {
   // Existing tickets
   const [userTickets, setUserTickets]       = useState<TicketRow[]>([])
   const [ticketsLoading, setTicketsLoading] = useState(false)
-  const [markingUsed, setMarkingUsed]       = useState<string | null>(null)
+
+  // Manual use confirm (staff-side)
+  const [showUseConfirm, setShowUseConfirm]       = useState(false)
+  const [pendingUseTicket, setPendingUseTicket]   = useState<TicketRow | null>(null)
+  const [useConfirmLoading, setUseConfirmLoading] = useState(false)
+  const [useError, setUseError]                   = useState<string | null>(null)
+  const [todayUsedTypes, setTodayUsedTypes]       = useState<string[]>([])
+  const [showUseComplete, setShowUseComplete]     = useState(false)
+  const [useCompleteInfo, setUseCompleteInfo]     = useState<{ name: string; label: string; amount: number; remaining: number } | null>(null)
 
   // Ticket-use QR flow
   const [ticketUseData, setTicketUseData]         = useState<TicketUseQRData | null>(null)
@@ -372,6 +421,13 @@ export function AdminScreen() {
     setTicketUsedThisSession(false)
     setCheckInStatus('idle')
     setCheckInDate(null)
+    setShowUseConfirm(false)
+    setPendingUseTicket(null)
+    setUseConfirmLoading(false)
+    setUseError(null)
+    setTodayUsedTypes([])
+    setShowUseComplete(false)
+    setUseCompleteInfo(null)
   }
 
   const loadUserTickets = useCallback(async (userId: string) => {
@@ -410,6 +466,9 @@ export function AdminScreen() {
     else if (daysSince(prev) <= 14) playSuccessSound()
     else playWarningSound()
     await loadUserTickets(passportData.userId)
+    const todayJST = getJapanDateString()
+    const usedTypes = await fetchTodayUsedTypes(passportData.userId, todayJST)
+    setTodayUsedTypes(usedTypes)
     setPhase('result')
   }, [loadUserTickets])
 
@@ -470,14 +529,54 @@ export function AdminScreen() {
     }
   }
 
-  const handleMarkUsed = async (ticketId: string) => {
-    if (!staffId.trim()) return
-    setMarkingUsed(ticketId)
+  function handleUseTicketClick(ticket: TicketRow) {
+    if (todayUsedTypes.includes(ticket.type) || !staffId.trim()) return
+    setUseError(null)
+    setPendingUseTicket(ticket)
+    setShowUseConfirm(true)
+  }
+
+  const handleConfirmUse = async () => {
+    if (!pendingUseTicket || !scannedData || !staffId.trim()) return
+    setUseConfirmLoading(true)
+    setUseError(null)
+    const today = getJapanDateString()
+    const ticketId   = pendingUseTicket.id
+    const ticketType = pendingUseTicket.type
     try {
       await markTicketUsed(ticketId, staffId)
-      setUserTickets(prev => prev.map(t => t.id === ticketId ? { ...t, used: true, used_at: new Date().toISOString() } : t))
-    } catch { /* non-fatal */ }
-    finally { setMarkingUsed(null) }
+      await saveUsageLog({
+        usage_date:    today,
+        staff_name:    staffId,
+        customer_name: scannedData.name,
+        user_id:       scannedData.userId,
+        ticket_id:     ticketId,
+        ticket_type:   ticketType,
+        amount:        pendingUseTicket.amount,
+        terminal:      'staff-terminal',
+        status:        'used',
+      })
+      const remaining = userTickets.filter(t => !t.used && t.id !== ticketId && t.type === ticketType).length
+      setUserTickets(prev => prev.map(t =>
+        t.id === ticketId ? { ...t, used: true, used_at: new Date().toISOString() } : t
+      ))
+      setTodayUsedTypes(prev => prev.includes(ticketType) ? prev : [...prev, ticketType])
+      setUseCompleteInfo({
+        name:      scannedData.name,
+        label:     TICKET_TYPE_LABELS[ticketType] ?? pendingUseTicket.title,
+        amount:    pendingUseTicket.amount,
+        remaining,
+      })
+      setShowUseConfirm(false)
+      setPendingUseTicket(null)
+      setShowUseComplete(true)
+      setTimeout(() => setShowUseComplete(false), 3500)
+      playSuccessSound()
+    } catch (err) {
+      setUseError(`使用確定に失敗しました。${err instanceof Error ? err.message : 'ネットワークを確認してください。'}`)
+    } finally {
+      setUseConfirmLoading(false)
+    }
   }
 
   const handleCheckIn = async () => {
@@ -878,7 +977,81 @@ export function AdminScreen() {
               )}
             </div>
 
-            {/* ── Ticket issue form ── */}
+            {/* ── 使用可能チケット一覧 ── */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 9, letterSpacing: '0.24em', color: 'rgba(201,162,74,0.5)', marginBottom: 10, fontFamily: SERIF }}>
+                保有チケット（未使用 {ticketsLoading ? '—' : `${activeTickets.length}枚`}）
+              </p>
+              {ticketsLoading ? (
+                <div style={{ padding: '16px', textAlign: 'center', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.28)' }}>読込中…</p>
+                </div>
+              ) : activeTickets.length === 0 ? (
+                <div style={{ padding: '16px', textAlign: 'center', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.24)' }}>保有チケットなし</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {activeTickets.map(ticket => {
+                    const tktTc = TICKET_TYPE_COLORS[ticket.type]
+                    const isBlockedToday = todayUsedTypes.includes(ticket.type)
+                    const noStaff = !staffId.trim()
+                    const btnDisabled = isBlockedToday || noStaff
+                    return (
+                      <div key={ticket.id} style={{ borderRadius: 16, background: tktTc.cardBg, border: `1px solid ${tktTc.border}`, overflow: 'hidden' }}>
+                        <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${tktTc.border}, transparent)` }} />
+                        <div style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tktTc.bg, border: `1px solid ${tktTc.border}`, color: tktTc.text, letterSpacing: '0.1em' }}>
+                              {TICKET_TYPE_LABELS[ticket.type]}
+                            </span>
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(80,210,120,0.15)', border: '1px solid rgba(80,210,120,0.4)', color: '#50d278' }}>未使用</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#F2E6C8', marginBottom: 2 }}>{ticket.title}</p>
+                              {ticket.amount > 0 && (
+                                <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#C9A24A', lineHeight: 1, marginBottom: 4 }}>¥{ticket.amount.toLocaleString()}</p>
+                              )}
+                              <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)' }}>発行日 {fmtCreatedAt(ticket.created_at)}</p>
+                              {ticket.expires_at && (
+                                <p style={{ fontSize: 9, color: 'rgba(255,180,0,0.55)', marginTop: 1 }}>有効期限 {fmtCreatedAt(ticket.expires_at)}</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleUseTicketClick(ticket)}
+                              disabled={btnDisabled}
+                              style={{
+                                flexShrink: 0, padding: '13px 16px', borderRadius: 12,
+                                background: btnDisabled ? 'rgba(255,255,255,0.04)' : 'linear-gradient(135deg, #0a3d1a 0%, #1a7a38 100%)',
+                                border: `1.5px solid ${btnDisabled ? 'rgba(255,255,255,0.09)' : 'rgba(100,200,100,0.44)'}`,
+                                boxShadow: btnDisabled ? 'none' : '0 4px 16px rgba(20,90,42,0.35)',
+                                color: btnDisabled ? 'rgba(242,230,200,0.22)' : '#D0F4D8',
+                                fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em',
+                                cursor: btnDisabled ? 'default' : 'pointer',
+                                whiteSpace: 'nowrap', minWidth: 80, textAlign: 'center',
+                              }}
+                            >
+                              {isBlockedToday ? '本日使用済' : '使用確定'}
+                            </button>
+                          </div>
+                          {isBlockedToday && (
+                            <p style={{ fontSize: 9, color: 'rgba(224,96,80,0.55)', marginTop: 8, lineHeight: 1.5 }}>
+                              本日はすでにこの種別を使用済みです（1日1回まで）
+                            </p>
+                          )}
+                          {noStaff && !isBlockedToday && (
+                            <p style={{ fontSize: 9, color: 'rgba(224,140,0,0.55)', marginTop: 8 }}>担当者を選択してください</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── チケット発行フォーム ── */}
             <div style={{ borderRadius: 18, marginBottom: 14, border: '1px solid rgba(201,162,74,0.18)', background: 'linear-gradient(160deg, #0e0808 0%, #090504 100%)', padding: '18px' }}>
 
               {/* Tab selector */}
@@ -990,47 +1163,6 @@ export function AdminScreen() {
               {issueError && <p style={{ fontSize: 12, color: '#E06060', marginTop: 10, lineHeight: 1.5 }}>{issueError}</p>}
             </div>
 
-            {/* ── Existing tickets ── */}
-            {(activeTickets.length > 0 || ticketsLoading) && (
-              <div style={{ borderRadius: 14, marginBottom: 14, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)', padding: '12px 14px' }}>
-                <p style={{ fontSize: 9, letterSpacing: '0.18em', color: 'rgba(242,230,200,0.32)', marginBottom: 10, fontFamily: SERIF }}>
-                  保有チケット（未使用 {ticketsLoading ? '—' : `${activeTickets.length}件`}）
-                </p>
-                {ticketsLoading ? (
-                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.28)', textAlign: 'center', padding: '6px 0' }}>読込中…</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                    {activeTickets.map(ticket => {
-                      const tktTc = TICKET_TYPE_COLORS[ticket.type]
-                      return (
-                        <div key={ticket.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10, background: tktTc.bg, border: `1px solid ${tktTc.border}` }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(80,210,120,0.15)', border: '1px solid rgba(80,210,120,0.40)', color: '#50d278' }}>未使用</span>
-                              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: tktTc.bg, border: `1px solid ${tktTc.border}`, color: tktTc.text }}>
-                                {TICKET_TYPE_LABELS[ticket.type]}
-                              </span>
-                              {ticket.amount > 0 && (
-                                <span style={{ fontSize: 11, color: '#C9A24A', fontFamily: SERIF, fontWeight: 700 }}>¥{ticket.amount.toLocaleString()}</span>
-                              )}
-                            </div>
-                            <p style={{ fontSize: 11, color: '#F2E6C8', fontFamily: SERIF }}>{ticket.title}</p>
-                            <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)', marginTop: 1 }}>発行日 {fmtCreatedAt(ticket.created_at)}</p>
-                          </div>
-                          <button
-                            onClick={() => { void handleMarkUsed(ticket.id) }}
-                            disabled={markingUsed === ticket.id}
-                            style={{ flexShrink: 0, padding: '5px 9px', borderRadius: 7, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.11)', color: 'rgba(242,230,200,0.5)', fontSize: 10, fontFamily: SERIF, fontWeight: 700, cursor: markingUsed === ticket.id ? 'default' : 'pointer' }}
-                          >
-                            {markingUsed === ticket.id ? '…' : '使用確定'}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
 
@@ -1230,6 +1362,105 @@ export function AdminScreen() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Use confirm modal ── */}
+      {showUseConfirm && pendingUseTicket && scannedData && (
+        <div
+          onClick={() => { if (!useConfirmLoading) { setShowUseConfirm(false); setPendingUseTicket(null); setUseError(null) } }}
+          style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(0,0,0,0.90)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 440, borderRadius: 24, background: 'linear-gradient(160deg, #060e07 0%, #040a04 100%)', border: '1px solid rgba(100,200,100,0.28)', boxShadow: '0 32px 80px rgba(0,0,0,0.92)', overflow: 'hidden' }}
+          >
+            <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #0a3d1a 30%, #1a7a38 50%, #0a3d1a 70%, transparent)' }} />
+            <div style={{ padding: '28px 26px 24px' }}>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(100,200,100,0.5)', marginBottom: 10, textAlign: 'center' }}>CONFIRM USE</p>
+              <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', marginBottom: 22 }}>
+                チケットを使用します
+              </p>
+
+              <div style={{ borderRadius: 14, background: 'rgba(100,200,100,0.04)', border: '1px solid rgba(100,200,100,0.16)', padding: '16px 18px', marginBottom: 16 }}>
+                {([
+                  { label: 'お客様', value: `${scannedData.name} 様` },
+                  { label: '種別',   value: TICKET_TYPE_LABELS[pendingUseTicket.type] },
+                  ...(pendingUseTicket.amount > 0 ? [{ label: '金額', value: `¥${pendingUseTicket.amount.toLocaleString()}` }] : []),
+                  { label: '担当',   value: staffId },
+                ] as { label: string; value: string }[]).map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(100,200,100,0.08)' }}>
+                    <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>{label}</span>
+                    <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8' }}>{value}</span>
+                  </div>
+                ))}
+                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.36)', lineHeight: 1.7, letterSpacing: '0.04em' }}>
+                  この操作は取り消せません。
+                </p>
+              </div>
+
+              {useError && (
+                <div style={{ borderRadius: 10, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '8px 12px', marginBottom: 14 }}>
+                  <p style={{ fontSize: 11, color: '#E06060' }}>{useError}</p>
+                </div>
+              )}
+
+              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.36)', textAlign: 'center', marginBottom: 20, letterSpacing: '0.04em' }}>
+                本当に使用しますか？
+              </p>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => { setShowUseConfirm(false); setPendingUseTicket(null); setUseError(null) }}
+                  disabled={useConfirmLoading}
+                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={() => { void handleConfirmUse() }}
+                  disabled={useConfirmLoading}
+                  style={{
+                    flex: 2, padding: '14px 0', borderRadius: 14,
+                    background: useConfirmLoading ? 'rgba(20,60,30,0.5)' : 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
+                    border: `1px solid ${useConfirmLoading ? 'rgba(100,200,100,0.12)' : 'rgba(100,200,100,0.44)'}`,
+                    boxShadow: useConfirmLoading ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
+                    fontSize: 15, fontWeight: 700,
+                    color: useConfirmLoading ? 'rgba(208,244,216,0.4)' : '#D0F4D8',
+                    fontFamily: SERIF, letterSpacing: '0.18em',
+                    cursor: useConfirmLoading ? 'default' : 'pointer',
+                  }}
+                >
+                  {useConfirmLoading ? '確定中…' : '使用確定'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Use complete overlay ── */}
+      {showUseComplete && useCompleteInfo && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 510, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'gj-success-fade 3.5s ease-in-out both' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(4,8,4,0.97)' }} />
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: 'inset 0 0 120px rgba(80,192,80,0.16), inset 0 0 60px rgba(0,100,40,0.12)' }} />
+          <div style={{ position: 'relative', textAlign: 'center', padding: '32px 28px', maxWidth: 380, animation: 'gj-success-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px', background: 'radial-gradient(circle, rgba(80,192,80,0.16) 0%, rgba(20,100,40,0.1) 60%, transparent 100%)', border: '1.5px solid rgba(100,200,100,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(80,192,80,0.28), 0 0 64px rgba(80,192,80,0.12)' }}>
+              <span style={{ fontSize: 38, color: '#64D26E', lineHeight: 1 }}>✓</span>
+            </div>
+            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: 'rgba(100,200,100,0.62)', marginBottom: 14 }}>USED</p>
+            <p style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 700, color: '#80E060', letterSpacing: '0.14em', marginBottom: 18, lineHeight: 1.1, textShadow: '0 0 40px rgba(80,192,80,0.4), 0 2px 6px rgba(0,0,0,0.95)' }}>
+              使用完了
+            </p>
+            <p style={{ fontFamily: SERIF, fontSize: 16, color: '#F2E6C8', lineHeight: 1.9, letterSpacing: '0.04em', textShadow: '0 1px 10px rgba(0,0,0,0.95)', marginBottom: 16 }}>
+              {useCompleteInfo.name}様の<br />
+              {useCompleteInfo.label}{useCompleteInfo.amount > 0 ? ` ¥${useCompleteInfo.amount.toLocaleString()}` : ''} を<br />
+              1枚使用しました。
+            </p>
+            <p style={{ fontFamily: SERIF, fontSize: 14, color: 'rgba(242,230,200,0.45)', letterSpacing: '0.06em' }}>
+              残り：{useCompleteInfo.remaining}枚
+            </p>
           </div>
         </div>
       )}
