@@ -218,24 +218,40 @@ function App() {
   const [hasOpenModal, setHasOpenModal] = useState(false)
 
   // ── Transfer acceptance overlay ───────────────────────────────────────────────
-  const [transferToken, setTransferToken]   = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get('transfer')
+  const [transferToken, setTransferToken]   = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token  = params.get('token')
+    console.log('[App] URL search:', window.location.search, '→ token param:', token)
+    return token
+  })
+  const [transferTicket,  setTransferTicket]  = useState<TicketRow | null>(null)
+  const [transferLoading, setTransferLoading] = useState(() =>
+    !!new URLSearchParams(window.location.search).get('token')
   )
-  const [transferTicket, setTransferTicket] = useState<TicketRow | null>(null)
   const [transferPhase, setTransferPhase]   = useState<TransferPhase>('preview')
   const [transferError, setTransferError]   = useState<string | null>(null)
   const [acceptedTicket, setAcceptedTicket] = useState<TicketRow | null>(null)
 
   useEffect(() => {
     if (!transferToken) return
+    console.log('[App] transferToken detected, fetching ticket for token:', transferToken)
+    setTransferLoading(true)
+    setTransferTicket(null)
     getTicketByTransferToken(transferToken)
-      .then(t => setTransferTicket(t))
-      .catch(() => setTransferTicket(null))
+      .then(t => {
+        console.log('[App] getTicketByTransferToken result:', t)
+        setTransferTicket(t)
+      })
+      .catch(err => {
+        console.error('[App] getTicketByTransferToken error:', err)
+        setTransferTicket(null)
+      })
+      .finally(() => setTransferLoading(false))
     window.history.replaceState({}, '', window.location.pathname)
   }, [transferToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleAcceptTransfer() {
-    if (!transferToken) return
+    if (!transferToken || !transferTicket) return
     setTransferPhase('accepting')
     try {
       const ticket = await acceptTransfer(transferToken, getUserId())
@@ -247,9 +263,24 @@ function App() {
     }
   }
 
+  function handleRetryTransfer() {
+    setTransferPhase('preview')
+    setTransferError(null)
+    // token はまだ state に残っているので再試行可能
+    if (transferToken) {
+      setTransferLoading(true)
+      setTransferTicket(null)
+      getTicketByTransferToken(transferToken)
+        .then(t => setTransferTicket(t))
+        .catch(() => setTransferTicket(null))
+        .finally(() => setTransferLoading(false))
+    }
+  }
+
   function handleDismissTransfer() {
     setTransferToken(null)
     setTransferTicket(null)
+    setTransferLoading(false)
     setTransferPhase('preview')
     setTransferError(null)
     setAcceptedTicket(null)
@@ -460,33 +491,60 @@ function App() {
                       チケットを受け取りますか？
                     </p>
 
-                    {transferTicket ? (() => {
+                    {transferLoading ? (
+                      <div style={{ borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', padding: '16px', marginBottom: 16, textAlign: 'center' }}>
+                        <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.44)' }}>チケット情報を取得中…</p>
+                      </div>
+                    ) : transferTicket ? (() => {
                       const tc = TICKET_TYPE_COLORS[transferTicket.type]
                       return (
                         <div style={{ borderRadius: 12, background: tc.bg, border: `1px solid ${tc.border}`, padding: '12px 16px', marginBottom: 16 }}>
                           <p style={{ fontSize: 9, fontWeight: 700, color: tc.text, letterSpacing: '0.14em', marginBottom: 4 }}>{TICKET_TYPE_LABELS[transferTicket.type]}</p>
                           <p style={{ fontSize: 16, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>{transferTicket.title}</p>
+                          {(transferTicket.amount ?? 0) > 0 && (
+                            <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#C9A24A', marginTop: 2 }}>¥{(transferTicket.amount ?? 0).toLocaleString()}</p>
+                          )}
                           {transferTicket.expires_at && <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.4)', marginTop: 4 }}>期限 {new Date(transferTicket.expires_at).toLocaleDateString('ja-JP')}</p>}
                         </div>
                       )
                     })() : (
-                      <div style={{ borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', padding: '12px 16px', marginBottom: 16, textAlign: 'center' }}>
-                        <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.44)' }}>チケット情報を取得中…</p>
+                      <div style={{ borderRadius: 12, background: 'rgba(224,96,80,0.08)', border: '1px solid rgba(224,96,80,0.28)', padding: '12px 16px', marginBottom: 16, textAlign: 'center' }}>
+                        <p style={{ fontSize: 12, color: '#E06060', lineHeight: 1.6 }}>
+                          このチケットは受け取れません。<br />
+                          トークンが無効・期限切れ、またはすでに受け取り済みです。
+                        </p>
                       </div>
                     )}
 
-                    <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.36)', textAlign: 'center', lineHeight: 1.7, marginBottom: 20 }}>
-                      受け取ると、あなたのチケット一覧に追加されます。{'\n'}
-                      この操作は取り消せません。
-                    </p>
+                    {transferTicket && (
+                      <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.36)', textAlign: 'center', lineHeight: 1.7, marginBottom: 20 }}>
+                        受け取ると、あなたのチケット一覧に追加されます。{'\n'}
+                        この操作は取り消せません。
+                      </p>
+                    )}
 
                     <div style={{ display: 'flex', gap: 10 }}>
                       <button type="button" onClick={handleDismissTransfer} disabled={transferPhase === 'accepting'}
-                        style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
-                        断る
+                        style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: transferPhase === 'accepting' ? 'default' : 'pointer' }}>
+                        {transferTicket ? '断る' : '閉じる'}
                       </button>
-                      <button type="button" onClick={handleAcceptTransfer} disabled={transferPhase === 'accepting'}
-                        style={{ flex: 2, padding: '13px 0', borderRadius: 14, background: 'linear-gradient(135deg, #5a3a00 0%, #9a6800 60%, #c9a24a 100%)', border: '1px solid rgba(201,162,74,0.5)', boxShadow: '0 4px 20px rgba(100,80,0,0.4)', fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.16em', cursor: transferPhase === 'accepting' ? 'default' : 'pointer' }}>
+                      <button
+                        type="button"
+                        onClick={() => { void handleAcceptTransfer() }}
+                        disabled={transferPhase === 'accepting' || transferLoading || !transferTicket}
+                        style={{
+                          flex: 2, padding: '13px 0', borderRadius: 14,
+                          background: (transferLoading || !transferTicket)
+                            ? 'rgba(201,162,74,0.08)'
+                            : 'linear-gradient(135deg, #5a3a00 0%, #9a6800 60%, #c9a24a 100%)',
+                          border: `1px solid ${(transferLoading || !transferTicket) ? 'rgba(201,162,74,0.18)' : 'rgba(201,162,74,0.5)'}`,
+                          boxShadow: (transferLoading || !transferTicket) ? 'none' : '0 4px 20px rgba(100,80,0,0.4)',
+                          fontSize: 13, fontWeight: 700,
+                          color: (transferLoading || !transferTicket) ? 'rgba(201,162,74,0.30)' : '#F2E6C8',
+                          fontFamily: SERIF, letterSpacing: '0.16em',
+                          cursor: (transferPhase === 'accepting' || transferLoading || !transferTicket) ? 'default' : 'pointer',
+                        }}
+                      >
                         {transferPhase === 'accepting' ? '処理中…' : '受け取る'}
                       </button>
                     </div>
@@ -514,13 +572,23 @@ function App() {
 
                 {transferPhase === 'error' && (
                   <>
-                    <p style={{ fontSize: 14, color: '#E06060', textAlign: 'center', marginBottom: 16, lineHeight: 1.6 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(224,96,80,0.10)', border: '1px solid rgba(224,96,80,0.36)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                      <span style={{ fontSize: 20, color: '#E06060' }}>✕</span>
+                    </div>
+                    <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#E06060', textAlign: 'center', marginBottom: 8 }}>受け取りに失敗しました</p>
+                    <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.52)', textAlign: 'center', marginBottom: 20, lineHeight: 1.6 }}>
                       {transferError ?? '受け取りに失敗しました'}
                     </p>
-                    <button type="button" onClick={handleDismissTransfer}
-                      style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, fontSize: 13, letterSpacing: '0.14em', cursor: 'pointer' }}>
-                      閉じる
-                    </button>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button type="button" onClick={handleDismissTransfer}
+                        style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, fontSize: 13, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                        閉じる
+                      </button>
+                      <button type="button" onClick={handleRetryTransfer}
+                        style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: 'rgba(201,162,74,0.08)', border: '1px solid rgba(201,162,74,0.28)', color: 'rgba(201,162,74,0.80)', fontFamily: SERIF, fontSize: 13, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                        再試行
+                      </button>
+                    </div>
                   </>
                 )}
               </motion.div>

@@ -240,7 +240,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   // ── GiftModal handlers ──────────────────────────────────────────────────────
 
   function openGiftModal(ticket: TicketRow) {
-    setTransferToken(ticket.transfer_token ?? null)
+    setTransferToken(null)
     setGiftModalTicket(ticket)
   }
 
@@ -255,8 +255,8 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
     try {
       const token = await initiateTransfer(ticket.id, userId)
       setTransferToken(token)
-      setGiftModalTicket(prev => prev ? { ...prev, pending_transfer: true, transfer_token: token } : prev)
-      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: true, transfer_token: token } : t))
+      setGiftModalTicket(prev => prev ? { ...prev, pending_transfer: true } : prev)
+      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: true } : t))
     } catch { alert('処理に失敗しました。') }
     finally { setTransferring(false) }
   }
@@ -265,8 +265,8 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
     try {
       await cancelTransfer(ticket.id, userId)
       setTransferToken(null)
-      setGiftModalTicket(prev => prev ? { ...prev, pending_transfer: false, transfer_token: null } : prev)
-      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: false, transfer_token: null } : t))
+      setGiftModalTicket(prev => prev ? { ...prev, pending_transfer: false } : prev)
+      setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: false } : t))
     } catch { alert('キャンセルに失敗しました。') }
   }
 
@@ -445,8 +445,8 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
           const t  = giftModalTicket
           const tc = TICKET_TYPE_COLORS[t.type]
           const isPending   = !!t.pending_transfer
-          const transferUrl = (transferToken ?? t.transfer_token)
-            ? `${window.location.origin}${window.location.pathname}?transfer=${transferToken ?? t.transfer_token}`
+          const transferUrl = transferToken
+            ? `${window.location.origin}/claim-ticket?token=${transferToken}`
             : null
           return (
             <motion.div

@@ -294,14 +294,14 @@ function TicketWalletSection() {
 
   async function handleCancelTransfer() {
     if (!transferItem) return
-    try { await cancelTransfer(transferItem.data.id, userId) } catch {}
+    try { await cancelTransfer(transferItem.data.id, userId) } catch { /* ignore */ }
     setTransferToken(null)
     setTransferItem(null)
     setShowXferQr(false)
     refreshItems()
   }
 
-  const transferUrl = transferToken ? `${window.location.origin}?transfer=${transferToken}` : null
+  const transferUrl = transferToken ? `${window.location.origin}/claim-ticket?token=${transferToken}` : null
 
   async function handleShareTransfer() {
     if (!transferUrl) return

@@ -60,12 +60,20 @@ export interface TicketRow {
   created_at: string
   used_at:    string | null
   expires_at: string | null
-  // Transfer fields
-  pending_transfer?:  boolean
-  transfer_token?:    string | null
-  transferred_from?:  string | null
-  transferred_to?:    string | null
-  transferred_at?:    string | null
+  // UI-only: set by getUserTickets from ticket_transfers table, not a DB column
+  pending_transfer?: boolean
+}
+
+export interface TicketTransferRow {
+  id:           string
+  token:        string
+  ticket_id:    string
+  from_user_id: string
+  to_user_id:   string | null
+  status:       'pending' | 'claimed' | 'cancelled'
+  created_at:   string
+  expires_at:   string
+  claimed_at:   string | null
 }
 
 export interface IssueTicketInput {
