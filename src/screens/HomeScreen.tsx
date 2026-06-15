@@ -18,6 +18,7 @@ import {
   MAINTENANCE_CYCLE_DAYS,
   fmtDate,
 } from '../utils/maintenanceSchedule'
+import { getJapanDateString } from '../utils/dateUtils'
 import {
   isNotificationSupported,
   getNotificationPermission,
@@ -1112,7 +1113,7 @@ function MaintenanceScheduleSection() {
       setShowScanner(false)
       return
     }
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getJapanDateString()
     try {
       await supabase
         .from('maintenance_visits')

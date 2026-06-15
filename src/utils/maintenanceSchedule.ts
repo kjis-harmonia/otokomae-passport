@@ -10,6 +10,7 @@
  */
 
 import { getStoredValue, setStoredValue, removeStoredValue } from './storage'
+import { getJapanDateString, addDaysToDateString } from './dateUtils'
 
 export const MAINTENANCE_VISIT_KEY     = 'ginjiro_maintenance_visit'
 export const MAINTENANCE_NOTIF_DATE_KEY = 'ginjiro_maintenance_last_notif'
@@ -74,23 +75,9 @@ export function clearMaintenanceVisit(): void {
 
 // ── 日付計算 ─────────────────────────────────────────────────────────────────
 
-function toMidnight(dateStr: string): Date {
-  const d = new Date(dateStr)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function todayMidnight(): Date {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
 /** 次回推奨日を返す（YYYY-MM-DD）。前回来店日 + MAINTENANCE_CYCLE_DAYS 日。 */
 export function getNextRecommendedDate(lastVisitDate: string): string {
-  const base = toMidnight(lastVisitDate)
-  base.setDate(base.getDate() + MAINTENANCE_CYCLE_DAYS)
-  return base.toISOString().slice(0, 10)
+  return addDaysToDateString(lastVisitDate, MAINTENANCE_CYCLE_DAYS)
 }
 
 /**
@@ -100,9 +87,11 @@ export function getNextRecommendedDate(lastVisitDate: string): string {
  *   負数  → 推奨日を N 日超過
  */
 export function getDaysUntilRecommended(lastVisitDate: string): number {
-  const recommended = toMidnight(getNextRecommendedDate(lastVisitDate))
-  const today = todayMidnight()
-  return Math.round((recommended.getTime() - today.getTime()) / 86_400_000)
+  const rec = getNextRecommendedDate(lastVisitDate).split('-').map(Number)
+  const tod = getJapanDateString().split('-').map(Number)
+  const recDate = new Date(rec[0], rec[1] - 1, rec[2])
+  const todDate = new Date(tod[0], tod[1] - 1, tod[2])
+  return Math.round((recDate.getTime() - todDate.getTime()) / 86_400_000)
 }
 
 /** 通知表示条件：推奨日まで NOTIFICATION_LEAD_DAYS 日以内（0・マイナス含む）。 */
@@ -113,12 +102,12 @@ export function shouldShowNotificationBanner(lastVisitDate: string): boolean {
 /** 今日すでに OS 通知を送信済みかどうか。 */
 export function hasNotifiedToday(): boolean {
   const last = getStoredValue<string | null>(MAINTENANCE_NOTIF_DATE_KEY, null)
-  return last === new Date().toISOString().slice(0, 10)
+  return last === getJapanDateString()
 }
 
 /** 今日 OS 通知済みとしてマーク。 */
 export function markNotifiedToday(): void {
-  setStoredValue(MAINTENANCE_NOTIF_DATE_KEY, new Date().toISOString().slice(0, 10))
+  setStoredValue(MAINTENANCE_NOTIF_DATE_KEY, getJapanDateString())
 }
 
 /** YYYY-MM-DD → YYYY/MM/DD（表示用） */

@@ -6,6 +6,7 @@ import { getStoredValue, setStoredValue } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
 import { issueTicket, getUserTickets, markTicketUsed } from '../utils/ticketStore'
+import { getJapanDateString } from '../utils/dateUtils'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -120,15 +121,6 @@ async function upsertLastVisitDate(userId: string, date: string): Promise<void> 
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-/** 日本時間（Asia/Tokyo）の今日の日付を YYYY-MM-DD で返す */
-function getJapanDateString(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Tokyo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
 
 function daysSince(dateStr: string): number {
   const base = new Date(dateStr); base.setHours(0, 0, 0, 0)
