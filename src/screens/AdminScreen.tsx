@@ -45,20 +45,19 @@ async function saveUsageLog(entry: Omit<UsageLogEntry, 'id' | 'used_at'>): Promi
   } catch { /* non-fatal: log failure must not block UI */ }
 }
 
-/** JST 当日に userId が使用済みの ticket_type 一覧を返す */
-async function fetchTodayUsedTypes(userId: string, today: string): Promise<string[]> {
+/** JST 当日に userId が1件でも使用済みなら true（種別を問わず） */
+async function fetchTodayUsed(userId: string, today: string): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('ticket_usage_logs')
-      .select('ticket_type')
+      .select('id')
       .eq('user_id', userId)
       .eq('usage_date', today)
       .eq('status', 'used')
-    if (!error && data) {
-      return [...new Set((data as { ticket_type: string }[]).map(r => r.ticket_type))]
-    }
+      .limit(1)
+    if (!error && data) return data.length > 0
   } catch { /* table may not exist yet — treat as no restriction */ }
-  return []
+  return false
 }
 
 // ── Issue log ─────────────────────────────────────────────────────────────────
@@ -318,7 +317,7 @@ export function AdminScreen() {
   const [pendingUseTicket, setPendingUseTicket]   = useState<TicketRow | null>(null)
   const [useConfirmLoading, setUseConfirmLoading] = useState(false)
   const [useError, setUseError]                   = useState<string | null>(null)
-  const [todayUsedTypes, setTodayUsedTypes]       = useState<string[]>([])
+  const [todayUsedThisDay, setTodayUsedThisDay]   = useState(false)
   const [showUseComplete, setShowUseComplete]     = useState(false)
   const [useCompleteInfo, setUseCompleteInfo]     = useState<{ name: string; label: string; amount: number; remaining: number } | null>(null)
 
@@ -425,7 +424,7 @@ export function AdminScreen() {
     setPendingUseTicket(null)
     setUseConfirmLoading(false)
     setUseError(null)
-    setTodayUsedTypes([])
+    setTodayUsedThisDay(false)
     setShowUseComplete(false)
     setUseCompleteInfo(null)
   }
@@ -467,8 +466,8 @@ export function AdminScreen() {
     else playWarningSound()
     await loadUserTickets(passportData.userId)
     const todayJST = getJapanDateString()
-    const usedTypes = await fetchTodayUsedTypes(passportData.userId, todayJST)
-    setTodayUsedTypes(usedTypes)
+    const usedThisDay = await fetchTodayUsed(passportData.userId, todayJST)
+    setTodayUsedThisDay(usedThisDay)
     setPhase('result')
   }, [loadUserTickets])
 
@@ -530,7 +529,7 @@ export function AdminScreen() {
   }
 
   function handleUseTicketClick(ticket: TicketRow) {
-    if (todayUsedTypes.includes(ticket.type) || !staffId.trim()) return
+    if (todayUsedThisDay || !staffId.trim()) return
     setUseError(null)
     setPendingUseTicket(ticket)
     setShowUseConfirm(true)
@@ -560,7 +559,7 @@ export function AdminScreen() {
       setUserTickets(prev => prev.map(t =>
         t.id === ticketId ? { ...t, used: true, used_at: new Date().toISOString() } : t
       ))
-      setTodayUsedTypes(prev => prev.includes(ticketType) ? prev : [...prev, ticketType])
+      setTodayUsedThisDay(true)
       setUseCompleteInfo({
         name:      scannedData.name,
         label:     TICKET_TYPE_LABELS[ticketType] ?? pendingUseTicket.title,
@@ -994,7 +993,7 @@ export function AdminScreen() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {activeTickets.map(ticket => {
                     const tktTc = TICKET_TYPE_COLORS[ticket.type]
-                    const isBlockedToday = todayUsedTypes.includes(ticket.type)
+                    const isBlockedToday = todayUsedThisDay
                     const noStaff = !staffId.trim()
                     const btnDisabled = isBlockedToday || noStaff
                     return (
@@ -1037,7 +1036,7 @@ export function AdminScreen() {
                           </div>
                           {isBlockedToday && (
                             <p style={{ fontSize: 9, color: 'rgba(224,96,80,0.55)', marginTop: 8, lineHeight: 1.5 }}>
-                              本日はすでにこの種別を使用済みです（1日1回まで）
+                              本日はすでにチケットを使用済みです。チケットの使用は1日1枚までです。
                             </p>
                           )}
                           {noStaff && !isBlockedToday && (

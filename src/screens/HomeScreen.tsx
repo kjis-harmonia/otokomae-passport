@@ -26,7 +26,7 @@ import {
   triggerMaintenanceNotification,
 } from '../utils/pushNotification'
 import { getUserId } from '../utils/userId'
-import { getUserTickets, getActiveTicket, setActiveTicket, clearActiveTicket, initiateTransfer, cancelTransfer } from '../utils/ticketStore'
+import { getUserTickets, clearActiveTicket, markLocalTicketUsed, initiateTransfer, cancelTransfer } from '../utils/ticketStore'
 import { loadMemberStatus, getStoredValue, setStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
@@ -189,12 +189,16 @@ function TicketWalletSection() {
 
   const [items,         setItems]         = useState<WalletItem[]>([])
   const [confirmItem,   setConfirmItem]   = useState<WalletItem | null>(null)
-  const [qrItem,        setQrItem]        = useState<WalletItem | null>(null)
   const [transferItem,  setTransferItem]  = useState<WalletItem | null>(null)
   const [transferToken, setTransferToken] = useState<string | null>(null)
   const [showXferQr,    setShowXferQr]    = useState(false)
   const [xferring,      setXferring]      = useState(false)
   const [copied,        setCopied]        = useState(false)
+
+  // 当日使用済み（種別を問わず1日1枚制限）
+  const [todayUsed,  setTodayUsed]  = useState(false)
+  const [useLoading, setUseLoading] = useState(false)
+  const [useSuccess, setUseSuccess] = useState<{ title: string; amount: number } | null>(null)
 
   function refreshItems() {
     getUserTickets(userId)
@@ -207,37 +211,69 @@ function TicketWalletSection() {
       .catch(() => setItems([]))
   }
 
-  useEffect(() => { refreshItems() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  async function loadTodayUsed() {
+    const today = getJapanDateString()
+    try {
+      const { data } = await supabase
+        .from('ticket_usage_logs')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('usage_date', today)
+        .eq('status', 'used')
+        .limit(1)
+      setTodayUsed((data?.length ?? 0) > 0)
+    } catch {
+      setTodayUsed(false)
+    }
+  }
+
+  useEffect(() => {
+    clearActiveTicket()  // 前セッションの残留 activeTicket をクリア
+    refreshItems()
+    void loadTodayUsed()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ticketGroups = groupWalletTickets(items)
 
-  const qrValue = qrItem
-    ? JSON.stringify({ type: 'otokomae-passport', userId, name: memberName, rank: RANK_EN_MAP[memberStatus.rank] ?? 'BRONZE', points: memberStatus.points })
-    : ''
-
-  function handleUseConfirm() {
-    if (!confirmItem) return
+  const handleUseConfirm = async () => {
+    if (!confirmItem || useLoading) return
     const t = confirmItem.data
-    const active = getActiveTicket()
-    if (active && active !== t.id) {
-      alert('他のチケットが使用中です。先にそちらを閉じてください。')
-      setConfirmItem(null)
-      return
-    }
-    if (t.pending_transfer) {
-      alert('このチケットは渡し手続き中です。')
-      setConfirmItem(null)
-      return
-    }
-    setActiveTicket(t.id)
-    setQrItem(confirmItem)
-    setConfirmItem(null)
-  }
+    if (t.pending_transfer) { setConfirmItem(null); return }
 
-  function handleQrClose() {
-    clearActiveTicket()
-    setQrItem(null)
+    setUseLoading(true)
+    const today = getJapanDateString()
+    try {
+      // Supabase に used=true を書き込む（anon key で RLS allow_all）
+      const { error } = await supabase
+        .from('tickets')
+        .update({ used: true, used_at: new Date().toISOString() })
+        .eq('id', t.id)
+      if (error) throw error
+
+      // 使用ログ
+      await supabase.from('ticket_usage_logs').insert({
+        usage_date:    today,
+        staff_name:    'self',
+        customer_name: memberName,
+        user_id:       userId,
+        ticket_id:     t.id,
+        ticket_type:   t.type,
+        amount:        t.amount,
+        terminal:      'user-app',
+        status:        'used',
+        used_at:       new Date().toISOString(),
+      })
+    } catch {
+      // Supabase 失敗時は localStorage のみ更新
+      markLocalTicketUsed(t.id)
+    }
+
+    setTodayUsed(true)
+    setUseSuccess({ title: t.title, amount: t.amount })
+    setConfirmItem(null)
     refreshItems()
+    setUseLoading(false)
+    setTimeout(() => setUseSuccess(null), 3500)
   }
 
   async function handleTransfer(item: WalletItem) {
@@ -411,19 +447,19 @@ function TicketWalletSection() {
                 {/* Primary: 使用する */}
                 <button
                   type="button"
-                  onClick={() => { if (canUse && group.activeItems[0]) setConfirmItem(group.activeItems[0]) }}
-                  disabled={!canUse}
+                  onClick={() => { if (canUse && !todayUsed && group.activeItems[0]) setConfirmItem(group.activeItems[0]) }}
+                  disabled={!canUse || todayUsed}
                   style={{
                     width: '100%', padding: '11px 0', borderRadius: 10,
-                    background: canUse ? tc.btnBg : 'rgba(255,255,255,0.02)',
-                    border: `1.5px solid ${canUse ? tc.border : 'rgba(255,255,255,0.07)'}`,
-                    boxShadow: canUse ? `0 4px 18px ${tc.border}38` : 'none',
+                    background: (canUse && !todayUsed) ? tc.btnBg : 'rgba(255,255,255,0.02)',
+                    border: `1.5px solid ${(canUse && !todayUsed) ? tc.border : 'rgba(255,255,255,0.07)'}`,
+                    boxShadow: (canUse && !todayUsed) ? `0 4px 18px ${tc.border}38` : 'none',
                     fontSize: 12, fontWeight: 700, letterSpacing: '0.14em',
-                    color: canUse ? '#e6ca65' : 'rgba(242,230,200,0.2)',
-                    fontFamily: SERIF, cursor: canUse ? 'pointer' : 'default',
+                    color: (canUse && !todayUsed) ? '#e6ca65' : 'rgba(242,230,200,0.2)',
+                    fontFamily: SERIF, cursor: (canUse && !todayUsed) ? 'pointer' : 'default',
                   }}
                 >
-                  使用する
+                  {todayUsed ? '本日使用済み' : '使用する'}
                 </button>
 
                 {/* Secondary: 譲る */}
@@ -453,6 +489,23 @@ function TicketWalletSection() {
         <div style={{ width: 8, flexShrink: 0 }} />
       </div>
 
+      {/* ── 使用完了バナー ── */}
+      <AnimatePresence>
+        {useSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'linear-gradient(135deg, rgba(10,40,18,0.97) 0%, rgba(6,26,12,0.99) 100%)', borderBottom: '1px solid rgba(100,200,100,0.32)', padding: '16px 20px', textAlign: 'center', boxShadow: '0 4px 32px rgba(0,0,0,0.7)' }}
+          >
+            <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(100,200,100,0.55)', marginBottom: 4 }}>USED</p>
+            <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#80E060', marginBottom: 2 }}>使用完了</p>
+            <p style={{ fontFamily: SERIF, fontSize: 13, color: 'rgba(242,230,200,0.7)', lineHeight: 1.6 }}>
+              {useSuccess.title}{useSuccess.amount > 0 ? ` ¥${useSuccess.amount.toLocaleString()}` : ''} を1枚使用しました。
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── 確認モーダル ── */}
       <AnimatePresence>
         {confirmItem && (
@@ -476,47 +529,18 @@ function TicketWalletSection() {
                 </p>
               )}
               <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.46)', textAlign: 'center', lineHeight: 1.75, marginBottom: 24 }}>
-                スタッフにQRコードを提示してください。
+                この操作は取り消せません。<br />使用すると本日中に他のチケットは使えなくなります。
               </p>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button type="button" onClick={() => setConfirmItem(null)}
+                <button type="button" onClick={() => setConfirmItem(null)} disabled={useLoading}
                   style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
                   キャンセル
                 </button>
-                <button type="button" onClick={handleUseConfirm}
-                  style={{ flex: 2, padding: '13px 0', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 20px rgba(107,15,18,0.45)', fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.16em', cursor: 'pointer' }}>
-                  はい、使用する
+                <button type="button" onClick={() => { void handleUseConfirm() }} disabled={useLoading}
+                  style={{ flex: 2, padding: '13px 0', borderRadius: 14, background: useLoading ? 'rgba(40,10,10,0.6)' : 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: `1px solid ${useLoading ? 'rgba(201,162,74,0.18)' : 'rgba(201,162,74,0.44)'}`, boxShadow: useLoading ? 'none' : '0 4px 20px rgba(107,15,18,0.45)', fontSize: 13, fontWeight: 700, color: useLoading ? 'rgba(242,230,200,0.35)' : '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.16em', cursor: useLoading ? 'default' : 'pointer' }}>
+                  {useLoading ? '処理中…' : 'はい、使用する'}
                 </button>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ── QR 表示モーダル ── */}
-      <AnimatePresence>
-        {qrItem && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
-              transition={{ duration: 0.24 }}
-              style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.92)', padding: '28px 24px', textAlign: 'center' }}
-            >
-              <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 8 }}>TICKET QR</p>
-              <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#F2E6C8', marginBottom: 2 }}>{qrItem.data.title}</p>
-              {(qrItem.data.amount ?? 0) > 0 && (
-                <p style={{ fontFamily: SERIF, fontSize: 14, color: '#C9A24A', marginBottom: 18 }}>¥{(qrItem.data.amount ?? 0).toLocaleString()}</p>
-              )}
-              <div style={{ display: 'inline-block', padding: 16, background: '#FFFFFF', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', marginBottom: 20 }}>
-                <QRCodeSVG value={qrValue} size={200} level="M" />
-              </div>
-              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.38)', lineHeight: 1.75, marginBottom: 20 }}>
-                スタッフがスキャン後に使用確定されます。{'\n'}確定後「閉じる」を押してください。
-              </p>
-              <button type="button" onClick={handleQrClose}
-                style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', fontSize: 13, color: 'rgba(242,230,200,0.72)', fontFamily: SERIF, letterSpacing: '0.16em', cursor: 'pointer' }}>
-                閉じる
-              </button>
             </motion.div>
           </div>
         )}
@@ -579,10 +603,6 @@ function activateMaintenance(): void {
 function clearMaintenance(): void {
   localStorage.removeItem(MAINT_ACTIVE_KEY)
   localStorage.setItem(MAINT_USED_AT_KEY, new Date().toISOString())
-}
-
-const RANK_EN_MAP: Record<string, string> = {
-  ブロンズ: 'BRONZE', シルバー: 'SILVER', ゴールド: 'GOLD', プラチナ: 'PLATINUM',
 }
 
 function MaintenanceCutSection() {
