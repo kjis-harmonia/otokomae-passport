@@ -13,7 +13,6 @@ const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 const STAFF_NAMES  = ['テイテイ', 'ヨンピル', '銀二郎', 'シルビア', 'リアン', 'キャンディ', 'ヒョウ']
 const MAX_QTY      = 30
 const QTY_PRESETS  = [1, 2, 3, 5, 10, 30]
-const OTOKU_AMOUNTS = [300, 500, 1000, 3000, 5000, 9500]
 
 const TICKET_TABS: { type: TicketType; label: string; autoTitle: string }[] = [
   { type: 'discount', label: '割引券',   autoTitle: '割引券' },
@@ -264,8 +263,8 @@ export function AdminScreen() {
 
   // Ticket form
   const [ticketTab, setTicketTab]           = useState<TicketType>('discount')
-  const [discountAmountInput, setDiscountAmountInput] = useState('')  // free-form for 割引券
-  const [ticketAmount, setTicketAmount]     = useState<number>(OTOKU_AMOUNTS[0])  // preset for 漢トク券
+  const [discountAmountInput, setDiscountAmountInput] = useState('')
+  const [otokuAmountInput, setOtokuAmountInput]       = useState('')
   const [quantity, setQuantity]             = useState(1)
   const [issueLoading, setIssueLoading]     = useState(false)
   const [issueError, setIssueError]         = useState<string | null>(null)
@@ -307,8 +306,9 @@ export function AdminScreen() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const discountParsed = parseInt(discountAmountInput.replace(/[^\d]/g, ''), 10) || 0
-  const effectiveAmount = ticketTab === 'discount' ? discountParsed : ticketAmount
+  const discountParsed  = parseInt(discountAmountInput.replace(/[^\d]/g, ''), 10) || 0
+  const otokuParsed     = parseInt(otokuAmountInput.replace(/[^\d]/g, ''), 10) || 0
+  const effectiveAmount = ticketTab === 'discount' ? discountParsed : otokuParsed
   const isFirstVisit  = prevLastVisitDate === null
   const elapsedDays   = prevLastVisitDate ? daysSince(prevLastVisitDate) : null
   const isEligible    = !isFirstVisit && prevLastVisitDate !== undefined && elapsedDays !== null && elapsedDays <= 14
@@ -363,7 +363,7 @@ export function AdminScreen() {
     setManualInput('')
     setTicketTab('discount')
     setDiscountAmountInput('')
-    setTicketAmount(OTOKU_AMOUNTS[0])
+    setOtokuAmountInput('')
     setQuantity(1)
     setIssueLoading(false)
     setIssueError(null)
@@ -424,7 +424,7 @@ export function AdminScreen() {
   function handleTabChange(type: TicketType) {
     setTicketTab(type)
     setDiscountAmountInput('')
-    setTicketAmount(OTOKU_AMOUNTS[0])
+    setOtokuAmountInput('')
     setIssueError(null)
   }
 
@@ -915,71 +915,44 @@ export function AdminScreen() {
                 })}
               </div>
 
-              {/* ── Amount input: 割引券 = free-form; 漢トク券 = presets ── */}
-              {ticketTab === 'discount' ? (
-                <div style={{ marginBottom: 20 }}>
-                  <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>金額を入力</p>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: discountParsed > 0 ? '#C9A24A' : 'rgba(242,230,200,0.22)', pointerEvents: 'none' }}>¥</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="1"
-                      max="99999"
-                      value={discountAmountInput}
-                      onChange={e => {
-                        const v = e.target.value.replace(/[^\d]/g, '')
-                        setDiscountAmountInput(v)
-                      }}
-                      placeholder="0"
-                      style={{
-                        width: '100%', boxSizing: 'border-box',
-                        padding: '18px 16px 18px 40px', borderRadius: 14,
-                        background: discountParsed > 0 ? tc.cardBg : 'rgba(255,255,255,0.04)',
-                        border: `1.5px solid ${discountParsed > 0 ? tc.border : 'rgba(255,255,255,0.12)'}`,
-                        color: '#F2E6C8', fontFamily: SERIF, fontSize: 28, fontWeight: 700,
-                        outline: 'none', letterSpacing: '0.04em',
-                        transition: 'border-color 0.15s, background 0.15s',
-                      }}
-                    />
-                  </div>
-                  {discountParsed > 0 && (
-                    <p style={{ fontSize: 11, color: 'rgba(201,162,74,0.55)', textAlign: 'right', marginTop: 6, letterSpacing: '0.06em' }}>
-                      ¥{discountParsed.toLocaleString()} の割引券
-                    </p>
-                  )}
-                  {discountAmountInput !== '' && discountParsed <= 0 && (
-                    <p style={{ fontSize: 11, color: '#E06060', marginTop: 6 }}>1円以上の金額を入力してください</p>
-                  )}
+              {/* ── Amount input: both tabs free-form ── */}
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>金額を入力</p>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: effectiveAmount > 0 ? '#C9A24A' : 'rgba(242,230,200,0.22)', pointerEvents: 'none' }}>¥</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    value={ticketTab === 'discount' ? discountAmountInput : otokuAmountInput}
+                    onChange={e => {
+                      const v = e.target.value.replace(/[^\d]/g, '')
+                      ticketTab === 'discount' ? setDiscountAmountInput(v) : setOtokuAmountInput(v)
+                    }}
+                    placeholder="0"
+                    style={{
+                      width: '100%', boxSizing: 'border-box',
+                      padding: '18px 16px 18px 40px', borderRadius: 14,
+                      background: effectiveAmount > 0 ? tc.cardBg : 'rgba(255,255,255,0.04)',
+                      border: `1.5px solid ${effectiveAmount > 0 ? tc.border : 'rgba(255,255,255,0.12)'}`,
+                      color: '#F2E6C8', fontFamily: SERIF, fontSize: 28, fontWeight: 700,
+                      outline: 'none', letterSpacing: '0.04em',
+                      transition: 'border-color 0.15s, background 0.15s',
+                    }}
+                  />
                 </div>
-              ) : (
-                <div style={{ marginBottom: 20 }}>
-                  <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>金額を選択</p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                    {OTOKU_AMOUNTS.map(amt => {
-                      const isSelected = ticketAmount === amt
-                      return (
-                        <button
-                          key={amt}
-                          onClick={() => setTicketAmount(amt)}
-                          style={{
-                            padding: '18px 6px', borderRadius: 13,
-                            background: isSelected ? tc.btnBg : 'rgba(255,255,255,0.04)',
-                            border: `1.5px solid ${isSelected ? tc.border : 'rgba(255,255,255,0.09)'}`,
-                            color: isSelected ? tc.text : 'rgba(242,230,200,0.72)',
-                            fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.02em',
-                            cursor: 'pointer',
-                            animation: isSelected ? 'gj-pulse-gold 2s ease-in-out infinite' : 'none',
-                            transition: 'background 0.15s, border-color 0.15s, color 0.15s',
-                          }}
-                        >
-                          ¥{amt.toLocaleString()}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
+                {effectiveAmount > 0 && (
+                  <p style={{ fontSize: 11, color: 'rgba(201,162,74,0.55)', textAlign: 'right', marginTop: 6, letterSpacing: '0.06em' }}>
+                    ¥{effectiveAmount.toLocaleString()} の{currentTab.autoTitle}
+                  </p>
+                )}
+                {(() => {
+                  const raw = ticketTab === 'discount' ? discountAmountInput : otokuAmountInput
+                  return raw !== '' && effectiveAmount <= 0
+                    ? <p style={{ fontSize: 11, color: '#E06060', marginTop: 6 }}>1円以上の金額を入力してください</p>
+                    : null
+                })()}
+              </div>
 
               {/* Quantity */}
               <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>枚数を選択</p>
