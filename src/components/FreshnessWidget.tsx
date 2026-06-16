@@ -40,8 +40,6 @@ export type FreshnessWidgetProps = {
   notifSupported?: boolean
   notifPermission?: NotificationPermission
   onRequestNotif?: () => void
-  onScan?: () => void
-  scanMsg?: string | null
 }
 
 type GaugeTheme = {
@@ -118,8 +116,6 @@ export function FreshnessWidget({
   notifSupported,
   notifPermission,
   onRequestNotif,
-  onScan,
-  scanMsg,
 }: FreshnessWidgetProps) {
   const [reducedMotion, setReducedMotion] = useState(false)
 
@@ -162,29 +158,9 @@ export function FreshnessWidget({
             来店記録なし
           </p>
           <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.34)', lineHeight: 1.9, marginBottom: 22 }}>
-            男前証QRを店頭で読み込むと、<br />
-            鮮度ステータスが開始されます。
+            店頭で男前証QRを提示してください。<br />
+            スタッフが確認すると、鮮度ステータスが開始されます。
           </p>
-
-          {scanMsg && (
-            <div style={{ borderRadius: 12, background: 'rgba(224,100,60,0.10)', border: '1px solid rgba(224,100,60,0.28)', padding: '10px 14px', marginBottom: 14 }}>
-              <p style={{ fontSize: 12, color: '#E06040', lineHeight: 1.6 }}>{scanMsg}</p>
-            </div>
-          )}
-
-          {onScan && (
-            <button type="button" onClick={onScan}
-              style={{
-                width: '100%', padding: '13px 0', borderRadius: 14,
-                background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-                border: '1px solid rgba(201,162,74,0.44)',
-                boxShadow: '0 4px 20px rgba(107,15,18,0.45)',
-                fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.22em',
-                color: '#F2E6C8', cursor: 'pointer',
-              }}>
-              店内QRを読む
-            </button>
-          )}
         </div>
       </div>
     )
@@ -657,13 +633,6 @@ export function FreshnessWidget({
               </p>
             </div>
           </div>
-
-          {/* Scan result message */}
-          {scanMsg && (
-            <div style={{ borderRadius: 12, background: 'rgba(224,100,60,0.10)', border: '1px solid rgba(224,100,60,0.28)', padding: '10px 14px', marginBottom: 14 }}>
-              <p style={{ fontSize: 12, color: '#E06040', lineHeight: 1.6 }}>{scanMsg}</p>
-            </div>
-          )}
 
           {/* ── CTA ── */}
           {reserveCTA}

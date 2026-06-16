@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Html5Qrcode } from 'html5-qrcode'
 import { supabase } from '../lib/supabase'
 import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage } from '../components/StyleCardPlaceholder'
@@ -12,7 +11,6 @@ import type { StyleCard } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
 import { MAINTENANCE_CUT_URL } from '../data/reserveLinks'
 import { QRCodeSVG } from 'qrcode.react'
-import { getDaysRemaining, formatVisitDate, getLastVisit } from '../utils/visitHistory'
 import {
   getNextRecommendedDate,
   getDaysUntilRecommended,
@@ -25,8 +23,8 @@ import {
   triggerMaintenanceNotification,
 } from '../utils/pushNotification'
 import { getUserId } from '../utils/userId'
-import { getUserTickets, clearActiveTicket, markLocalTicketUsed, initiateTransfer, cancelTransfer } from '../utils/ticketStore'
-import { loadMemberStatus, getStoredValue, setStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
+import { getUserTickets, clearActiveTicket, initiateTransfer, cancelTransfer } from '../utils/ticketStore'
+import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
 
@@ -36,37 +34,6 @@ const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Minc
 const EASE_OUT = [0.25, 0.46, 0.45, 0.94] as const
 
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
-const CUSTOMER_QR_EL_ID    = 'gj-customer-qr-reader'
-const MAINT_SCHED_QR_EL_ID = 'gj-maint-sched-qr'
-
-function playSuccessSound() {
-  try {
-    const ctx = new AudioContext()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain); gain.connect(ctx.destination)
-    osc.type = 'sine'; osc.frequency.value = 880
-    gain.gain.setValueAtTime(0.35, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5)
-    setTimeout(() => ctx.close(), 700)
-  } catch { /* AudioContext unavailable */ }
-}
-
-function playWarningSound() {
-  try {
-    const ctx = new AudioContext()
-    ;[0, 0.22, 0.44].forEach(offset => {
-      const osc = ctx.createOscillator(); const gain = ctx.createGain()
-      osc.connect(gain); gain.connect(ctx.destination)
-      osc.type = 'square'; osc.frequency.value = 440
-      gain.gain.setValueAtTime(0.25, ctx.currentTime + offset)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.16)
-      osc.start(ctx.currentTime + offset); osc.stop(ctx.currentTime + offset + 0.16)
-    })
-    setTimeout(() => ctx.close(), 900)
-  } catch { /* AudioContext unavailable */ }
-}
 
 /**
  * Normalize a visit date string to YYYY-MM-DD regardless of display format.
@@ -183,8 +150,6 @@ function groupWalletTickets(ticketItems: WalletItem[]): HomeTicketGroup[] {
 
 function TicketWalletSection() {
   const userId   = getUserId()
-  const memberStatus = loadMemberStatus()
-  const memberName   = getStoredValue<string>(ONBOARDING_NAME_KEY, memberStatus.memberName)
 
   const [items,         setItems]         = useState<WalletItem[]>([])
   const [confirmItem,   setConfirmItem]   = useState<WalletItem | null>(null)
@@ -197,9 +162,6 @@ function TicketWalletSection() {
 
   // 当日使用済み（種別を問わず1日1枚制限）
   const [todayUsed,  setTodayUsed]  = useState(false)
-  const [useLoading, setUseLoading] = useState(false)
-  const [useSuccess, setUseSuccess] = useState<{ title: string; amount: number } | null>(null)
-
   function refreshItems() {
     getUserTickets(userId)
       .then(tickets => {
@@ -234,47 +196,6 @@ function TicketWalletSection() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ticketGroups = groupWalletTickets(items)
-
-  const handleUseConfirm = async () => {
-    if (!confirmItem || useLoading) return
-    const t = confirmItem.data
-    if (t.pending_transfer) { setConfirmItem(null); return }
-
-    setUseLoading(true)
-    const today = getJapanDateString()
-    try {
-      // Supabase に used=true を書き込む（anon key で RLS allow_all）
-      const { error } = await supabase
-        .from('tickets')
-        .update({ used: true, used_at: new Date().toISOString() })
-        .eq('id', t.id)
-      if (error) throw error
-
-      // 使用ログ
-      await supabase.from('ticket_usage_logs').insert({
-        usage_date:    today,
-        staff_name:    'self',
-        customer_name: memberName,
-        user_id:       userId,
-        ticket_id:     t.id,
-        ticket_type:   t.type,
-        amount:        t.amount,
-        terminal:      'user-app',
-        status:        'used',
-        used_at:       new Date().toISOString(),
-      })
-    } catch {
-      // Supabase 失敗時は localStorage のみ更新
-      markLocalTicketUsed(t.id)
-    }
-
-    setTodayUsed(true)
-    setUseSuccess({ title: t.title, amount: t.amount })
-    setConfirmItem(null)
-    refreshItems()
-    setUseLoading(false)
-    setTimeout(() => setUseSuccess(null), 3500)
-  }
 
   async function handleTransfer(item: WalletItem) {
     const t = item.data
@@ -490,61 +411,52 @@ function TicketWalletSection() {
         <div style={{ width: 8, flexShrink: 0 }} />
       </div>
 
-      {/* ── 使用完了バナー ── */}
+      {/* ── チケット使用QRモーダル ── */}
       <AnimatePresence>
-        {useSuccess && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 400, background: 'linear-gradient(135deg, rgba(10,40,18,0.97) 0%, rgba(6,26,12,0.99) 100%)', borderBottom: '1px solid rgba(100,200,100,0.32)', padding: '16px 20px', textAlign: 'center', boxShadow: '0 4px 32px rgba(0,0,0,0.7)' }}
-          >
-            <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(100,200,100,0.55)', marginBottom: 4 }}>USED</p>
-            <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#80E060', marginBottom: 2 }}>使用完了</p>
-            <p style={{ fontFamily: SERIF, fontSize: 13, color: 'rgba(242,230,200,0.7)', lineHeight: 1.6 }}>
-              {useSuccess.title}{useSuccess.amount > 0 ? ` ¥${useSuccess.amount.toLocaleString()}` : ''} を1枚使用しました。
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── 確認モーダル ── */}
-      <AnimatePresence>
-        {confirmItem && (
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
-            onClick={() => setConfirmItem(null)}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }}
-              transition={{ duration: 0.24 }}
-              onClick={e => e.stopPropagation()}
-              style={{ width: '100%', maxWidth: 420, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.85)', padding: '28px 24px 24px' }}
+        {confirmItem && (() => {
+          const t = confirmItem.data
+          const qrPayload = JSON.stringify({
+            type: 'ginjiro-ticket-use',
+            userId,
+            selectedTicketId: t.id,
+            issuedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          })
+          return (
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.90)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+              onClick={() => setConfirmItem(null)}
             >
-              <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 10, textAlign: 'center' }}>USE TICKET</p>
-              <p style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', lineHeight: 1.45, marginBottom: 4 }}>
-                {confirmItem.data.title}
-              </p>
-              {(confirmItem.data.amount ?? 0) > 0 && (
-                <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#C9A24A', textAlign: 'center', marginBottom: 10 }}>
-                  ¥{(confirmItem.data.amount ?? 0).toLocaleString()}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
+                transition={{ duration: 0.24 }}
+                onClick={e => e.stopPropagation()}
+                style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.88)', padding: '28px 24px 24px', textAlign: 'center' }}
+              >
+                <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 10 }}>USE TICKET</p>
+                <p style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 700, color: '#F2E6C8', lineHeight: 1.4, marginBottom: 4 }}>
+                  {t.title}
                 </p>
-              )}
-              <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.46)', textAlign: 'center', lineHeight: 1.75, marginBottom: 24 }}>
-                この操作は取り消せません。<br />使用すると本日中に他のチケットは使えなくなります。
-              </p>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button type="button" onClick={() => setConfirmItem(null)} disabled={useLoading}
-                  style={{ flex: 1, padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
-                  キャンセル
+                {(t.amount ?? 0) > 0 && (
+                  <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#C9A24A', marginBottom: 16 }}>
+                    ¥{(t.amount ?? 0).toLocaleString()}
+                  </p>
+                )}
+                <div style={{ display: 'inline-block', padding: 14, background: '#FFFFFF', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', marginBottom: 16 }}>
+                  <QRCodeSVG value={qrPayload} size={180} level="M" />
+                </div>
+                <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.70)', lineHeight: 1.75, marginBottom: 20 }}>
+                  このQRをスタッフに提示してください。<br />
+                  使用確定は店舗端末でのみ行われます。
+                </p>
+                <button type="button" onClick={() => setConfirmItem(null)}
+                  style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.60)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                  閉じる
                 </button>
-                <button type="button" onClick={() => { void handleUseConfirm() }} disabled={useLoading}
-                  style={{ flex: 2, padding: '13px 0', borderRadius: 14, background: useLoading ? 'rgba(40,10,10,0.6)' : 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: `1px solid ${useLoading ? 'rgba(201,162,74,0.18)' : 'rgba(201,162,74,0.44)'}`, boxShadow: useLoading ? 'none' : '0 4px 20px rgba(107,15,18,0.45)', fontSize: 13, fontWeight: 700, color: useLoading ? 'rgba(242,230,200,0.35)' : '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.16em', cursor: useLoading ? 'default' : 'pointer' }}>
-                  {useLoading ? '処理中…' : 'はい、使用する'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+              </motion.div>
+            </div>
+          )
+        })()}
       </AnimatePresence>
 
       {/* ── 譲渡エラーモーダル ── */}
@@ -611,145 +523,28 @@ function TicketWalletSection() {
 
 // ── MaintenanceCutSection ─────────────────────────────────────────────────────
 
-const MAINT_ACTIVE_KEY  = 'ginjiro_maintenance_active'
-const MAINT_USED_AT_KEY = 'ginjiro_maintenance_used_at'
-
-function isMaintenanceActive(): boolean {
-  try {
-    const raw = localStorage.getItem(MAINT_ACTIVE_KEY)
-    if (!raw) return false
-    const { activatedAt } = JSON.parse(raw) as { activatedAt: string }
-    return Date.now() - new Date(activatedAt).getTime() < 2 * 60 * 60 * 1000
-  } catch { return false }
-}
-
-function activateMaintenance(): void {
-  localStorage.setItem(MAINT_ACTIVE_KEY, JSON.stringify({ activatedAt: new Date().toISOString() }))
-}
-
-function clearMaintenance(): void {
-  localStorage.removeItem(MAINT_ACTIVE_KEY)
-  localStorage.setItem(MAINT_USED_AT_KEY, new Date().toISOString())
-}
-
 function MaintenanceCutSection() {
   const userId = getUserId()
+  const memberStatus = loadMemberStatus()
+  const memberName   = getStoredValue<string>(ONBOARDING_NAME_KEY, memberStatus.memberName)
 
-  // Maintenance right state — set by in-store QR scan, expires in 2 hours
-  const [maintenanceActive, setMaintenanceActive] = useState(isMaintenanceActive)
+  // undefined = loading, null = no record, string = YYYY-MM-DD
+  const [lastVisitDate, setLastVisitDate] = useState<string | null | undefined>(undefined)
   const [showMaintenanceQr, setShowMaintenanceQr] = useState(false)
 
-  const [showScanner, setShowScanner] = useState(false)
-  const [scannerActive, setScannerActive] = useState(false)
-  const [scanMsg, setScanMsg] = useState<string | null>(null)
-  const [scanProcessing, setScanProcessing] = useState(false)
-  const scannerRef = useRef<Html5Qrcode | null>(null)
+  useEffect(() => {
+    fetchLastVisitDateForUser(userId).then(date => setLastVisitDate(date ?? null))
+  }, [userId])
 
-  // 来店日・残り日数（参考表示用）
-  const lastVisit = getLastVisit()
-  const daysRemaining = lastVisit ? getDaysRemaining(lastVisit.visitedAt) : null
-  const isEligible = daysRemaining !== null && daysRemaining >= 0
+  // Derive maintenance status from Supabase data (same source of truth as FreshnessWidget)
+  const daysElapsed    = lastVisitDate ? daysSinceLocalMidnight(lastVisitDate) : null
+  const daysRemaining  = daysElapsed !== null ? 14 - daysElapsed : null
+  const isEligible     = daysRemaining !== null && daysRemaining >= 0
+  const maintenanceActive = isEligible
 
-  // Maintenance coupon QR payload
-  const memberStatus  = loadMemberStatus()
-  const memberName    = getStoredValue<string>(ONBOARDING_NAME_KEY, memberStatus.memberName)
   const maintenanceQrValue = JSON.stringify({ type: 'ginjiro-maintenance-coupon', userId, name: memberName })
 
-  // ── QR scanner helpers ──────────────────────────────────────────────────────
-
-  const stopScanner = useCallback(async () => {
-    const s = scannerRef.current
-    if (!s) return
-    try { if (s.isScanning) await s.stop(); s.clear() } catch { /* ignore */ }
-    scannerRef.current = null
-    setScannerActive(false)
-  }, [])
-
-  const startScanner = useCallback(async () => {
-    if (scannerRef.current) return
-    const scanner = new Html5Qrcode(CUSTOMER_QR_EL_ID)
-    scannerRef.current = scanner
-    try {
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decoded) => { void handleStoreQrScan(decoded); void stopScanner() },
-        undefined,
-      )
-      setScannerActive(true)
-    } catch {
-      scannerRef.current = null
-      setScanMsg('カメラを起動できませんでした。設定を確認してください。')
-      setShowScanner(false)
-    }
-  }, [stopScanner]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (showScanner) { void startScanner() }
-    else { void stopScanner() }
-  }, [showScanner, startScanner, stopScanner])
-
-  async function handleStoreQrScan(text: string) {
-    setScanProcessing(true)
-    try {
-      const data = JSON.parse(text) as { type?: string }
-      if (data.type !== 'ginjiro-store-checkin') {
-        playWarningSound()
-        setScanMsg('店舗のQRコードを読み取ってください。')
-        setShowScanner(false)
-        return
-      }
-    } catch {
-      playWarningSound()
-      setScanMsg('QRコードを認識できませんでした。')
-      setShowScanner(false)
-      return
-    }
-
-    const rawLastVisitDate = await fetchLastVisitDateForUser(userId)
-    const normalizedLastVisitDate = rawLastVisitDate ? normalizeVisitDate(rawLastVisitDate) : null
-    const parsedDate = normalizedLastVisitDate ? new Date(`${normalizedLastVisitDate}T00:00:00`) : null
-    const daysElapsed = normalizedLastVisitDate ? daysSinceLocalMidnight(normalizedLastVisitDate) : null
-    const isWithin14Days = daysElapsed !== null && daysElapsed <= 14
-    const maintenanceState = normalizedLastVisitDate === null
-      ? 'no-record'
-      : isWithin14Days
-      ? 'eligible'
-      : 'expired'
-
-    console.debug('[MaintenanceCut] rawLastVisitDate:', rawLastVisitDate)
-    console.debug('[MaintenanceCut] normalizedLastVisitDate:', normalizedLastVisitDate)
-    console.debug('[MaintenanceCut] parsedDate:', parsedDate)
-    console.debug('[MaintenanceCut] daysElapsed:', daysElapsed)
-    console.debug('[MaintenanceCut] isWithin14Days:', isWithin14Days)
-    console.debug('[MaintenanceCut] maintenanceState:', maintenanceState)
-
-    setShowScanner(false)
-
-    if (maintenanceState === 'no-record') {
-      playWarningSound()
-      setScanMsg('来店記録がありません。通常価格でのご予約をお願いします。')
-      setScanProcessing(false)
-      return
-    }
-
-    if (maintenanceState === 'eligible') {
-      playSuccessSound()
-      activateMaintenance()
-      setMaintenanceActive(true)
-      setScanMsg(null)
-    } else {
-      playWarningSound()
-      setScanMsg(`前回来店から${daysElapsed}日が経過しています。メンテナンスカットはご利用いただけません。`)
-    }
-    setScanProcessing(false)
-  }
-
-  function handleMaintenanceQrClose() {
-    clearMaintenance()
-    setMaintenanceActive(false)
-    setShowMaintenanceQr(false)
-  }
+  if (lastVisitDate === undefined) return null  // loading
 
   return (
     <div className="px-4">
@@ -775,7 +570,7 @@ function MaintenanceCutSection() {
 
         <div className="px-5 pt-4 pb-5">
           {/* Badge row */}
-          <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-3">
             <span
               style={{
                 display: 'inline-flex', alignItems: 'center',
@@ -790,20 +585,6 @@ function MaintenanceCutSection() {
             >
               {maintenanceActive ? 'クーポン有効' : '14DAY CYCLE'}
             </span>
-            {/* 店内QR読み取りボタン（クーポン未有効時のみ） */}
-            {!maintenanceActive && (
-              <button
-                type="button"
-                onClick={() => { setScanMsg(null); setShowScanner(true) }}
-                style={{
-                  padding: '4px 10px', borderRadius: 99,
-                  background: 'rgba(201,162,74,0.08)', border: '1px solid rgba(201,162,74,0.28)',
-                  fontSize: 10, color: 'rgba(201,162,74,0.72)', fontFamily: SERIF, letterSpacing: '0.1em', cursor: 'pointer',
-                }}
-              >
-                店内QRを読む
-              </button>
-            )}
           </div>
 
           {/* Title */}
@@ -817,12 +598,23 @@ function MaintenanceCutSection() {
             フェード・刈り上げ・ラインを整えて男前をキープ。
           </p>
 
+          {/* 来店記録なし */}
+          {lastVisitDate === null && (
+            <div style={{ borderRadius: 12, background: 'rgba(201,162,74,0.04)', border: '1px solid rgba(201,162,74,0.14)', padding: '12px 14px', marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(242,230,200,0.60)', marginBottom: 4 }}>来店記録なし</p>
+              <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.42)', lineHeight: 1.75 }}>
+                店頭で男前証QRを提示してください。{'\n'}
+                スタッフが確認すると、鮮度ステータスが開始されます。
+              </p>
+            </div>
+          )}
+
           {/* 来店日・残り日数（来店記録あり） */}
-          {lastVisit && (
+          {lastVisitDate !== null && (
             <div style={{ borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: `1px solid ${isEligible ? 'rgba(201,162,74,0.22)' : 'rgba(139,26,26,0.32)'}`, padding: '10px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div>
                 <p style={{ fontSize: 13, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.80)', marginBottom: 2 }}>前回来店</p>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>{formatVisitDate(lastVisit.visitedAt)}</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>{lastVisitDate.replace(/-/g, '/')}</p>
               </div>
               <div style={{ width: '0.5px', height: 32, background: 'rgba(201,162,74,0.18)' }} />
               <div style={{ textAlign: 'right' }}>
@@ -831,13 +623,6 @@ function MaintenanceCutSection() {
                   {isEligible && daysRemaining !== null ? `あと${daysRemaining}日` : '期限切れ'}
                 </p>
               </div>
-            </div>
-          )}
-
-          {/* スキャン結果メッセージ */}
-          {scanMsg && (
-            <div style={{ borderRadius: 12, background: 'rgba(224,100,60,0.1)', border: '1px solid rgba(224,100,60,0.28)', padding: '10px 14px', marginBottom: 14 }}>
-              <p style={{ fontSize: 12, color: '#E06040', lineHeight: 1.6 }}>{scanMsg}</p>
             </div>
           )}
 
@@ -892,7 +677,7 @@ function MaintenanceCutSection() {
         {showMaintenanceQr && (
           <div
             style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-            onClick={handleMaintenanceQrClose}
+            onClick={() => setShowMaintenanceQr(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
@@ -905,48 +690,18 @@ function MaintenanceCutSection() {
               <div style={{ display: 'inline-block', padding: 16, background: '#FFFFFF', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', marginBottom: 20 }}>
                 <QRCodeSVG value={maintenanceQrValue} size={200} level="M" />
               </div>
-              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.38)', lineHeight: 1.75, marginBottom: 20 }}>
-                スタッフにQRを提示してください。{'\n'}確認後「使用済みにする」を押してください。
+              <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.70)', lineHeight: 1.75, marginBottom: 20 }}>
+                このQRをスタッフに提示してください。{'\n'}
+                使用確定は店舗端末でのみ行われます。
               </p>
-              <button type="button" onClick={handleMaintenanceQrClose}
+              <button type="button" onClick={() => setShowMaintenanceQr(false)}
                 style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(100,200,100,0.08)', border: '1px solid rgba(100,200,100,0.30)', fontSize: 13, fontWeight: 700, color: '#D0F4D8', fontFamily: SERIF, letterSpacing: '0.16em', cursor: 'pointer' }}>
-                使用済みにする
+                閉じる
               </button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* ── QRスキャナーモーダル ── */}
-      {showScanner && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={() => setShowScanner(false)}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
-            transition={{ duration: 0.22 }}
-            onClick={e => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #100806 0%, #080504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.9)', padding: '24px 20px', textAlign: 'center' }}
-          >
-            <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 8 }}>STORE CHECK-IN</p>
-            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', marginBottom: 18, lineHeight: 1.4 }}>
-              店内のQRコードを<br />カメラで読み取ってください
-            </p>
-            <div id={CUSTOMER_QR_EL_ID} style={{ width: '100%', minHeight: scannerActive ? 260 : 0, borderRadius: 16, overflow: 'hidden', marginBottom: scannerActive ? 14 : 0 }} />
-            {scanProcessing && (
-              <p style={{ fontSize: 12, color: 'rgba(201,162,74,0.6)', marginBottom: 12 }}>確認中…</p>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowScanner(false)}
-              style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 13, color: 'rgba(242,230,200,0.58)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer', marginTop: 8 }}
-            >
-              キャンセル
-            </button>
-          </motion.div>
-        </div>
-      )}
     </div>
   )
 }
@@ -1084,10 +839,6 @@ function MaintenanceScheduleSection() {
   // undefined = loading, null = no record, string = YYYY-MM-DD
   const [lastVisitDate, setLastVisitDate] = useState<string | null | undefined>(undefined)
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(getNotificationPermission)
-  const [showScanner, setShowScanner] = useState(false)
-  const [scannerActive, setScannerActive] = useState(false)
-  const [scanMsg, setScanMsg] = useState<string | null>(null)
-  const scannerRef = useRef<Html5Qrcode | null>(null)
 
   // Fetch last_visit_date from Supabase (localStorage fallback)
   async function fetchVisit() {
@@ -1112,68 +863,6 @@ function MaintenanceScheduleSection() {
     if (lastVisitDate) triggerMaintenanceNotification(lastVisitDate)
   }, [lastVisitDate])
 
-  // QR scanner for "店内QRを読む"
-  const stopScanner = useCallback(async () => {
-    const s = scannerRef.current
-    if (!s) return
-    try { if (s.isScanning) await s.stop(); s.clear() } catch { /* ignore */ }
-    scannerRef.current = null
-    setScannerActive(false)
-  }, [])
-
-  const startScanner = useCallback(async () => {
-    if (scannerRef.current) return
-    const scanner = new Html5Qrcode(MAINT_SCHED_QR_EL_ID)
-    scannerRef.current = scanner
-    try {
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decoded) => { void handleStoreQrScan(decoded); void stopScanner() },
-        undefined,
-      )
-      setScannerActive(true)
-    } catch {
-      scannerRef.current = null
-      setScanMsg('カメラを起動できませんでした。設定を確認してください。')
-      setShowScanner(false)
-    }
-  }, [stopScanner]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (showScanner) { void startScanner() }
-    else { void stopScanner() }
-  }, [showScanner, startScanner, stopScanner])
-
-  async function handleStoreQrScan(text: string) {
-    try {
-      const data = JSON.parse(text) as { type?: string }
-      if (data.type !== 'ginjiro-store-checkin') {
-        playWarningSound()
-        setScanMsg('店舗のQRコードを読み取ってください。')
-        setShowScanner(false)
-        return
-      }
-    } catch {
-      playWarningSound()
-      setScanMsg('QRコードを認識できませんでした。')
-      setShowScanner(false)
-      return
-    }
-    const today = getJapanDateString()
-    try {
-      await supabase
-        .from('maintenance_visits')
-        .upsert({ user_id: userId, last_visit_date: today, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-    } catch { /* ignore — fallback below */ }
-    const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
-    setStoredValue(MAINTENANCE_LOCAL_KEY, { ...local, [userId]: today })
-    setLastVisitDate(today)
-    setScanMsg(null)
-    setShowScanner(false)
-    playSuccessSound()
-  }
-
   async function handleRequestPermission() {
     const perm = await requestNotificationPermission()
     setNotifPerm(perm)
@@ -1186,7 +875,6 @@ function MaintenanceScheduleSection() {
   const nextDate = lastVisitDate ? getNextRecommendedDate(lastVisitDate) : null
   const notifSupported = isNotificationSupported()
 
-
   return (
     <div className="px-4">
       <FreshnessWidget
@@ -1196,35 +884,7 @@ function MaintenanceScheduleSection() {
         notifSupported={notifSupported}
         notifPermission={notifPerm}
         onRequestNotif={handleRequestPermission}
-        onScan={() => { setScanMsg(null); setShowScanner(true) }}
-        scanMsg={scanMsg}
       />
-
-      {/* QR scanner modal */}
-      {showScanner && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={() => setShowScanner(false)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #100806 0%, #080504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.9)', padding: '24px 20px', textAlign: 'center' }}
-          >
-            <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 8 }}>STORE CHECK-IN</p>
-            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', marginBottom: 18, lineHeight: 1.4 }}>
-              店内のQRコードを<br />カメラで読み取ってください
-            </p>
-            <div id={MAINT_SCHED_QR_EL_ID} style={{ width: '100%', minHeight: scannerActive ? 260 : 0, borderRadius: 16, overflow: 'hidden', marginBottom: scannerActive ? 14 : 0 }} />
-            <button
-              type="button"
-              onClick={() => setShowScanner(false)}
-              style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 13, color: 'rgba(242,230,200,0.58)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer', marginTop: 8 }}
-            >
-              キャンセル
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
