@@ -9,8 +9,10 @@ const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 /**
  * テスト用データをlocalStorageに1度だけ投入する。
  * DEV_SEED_KEY が立っていたら何もしない（冪等）。
+ * 本番ビルド（import.meta.env.DEV === false）では何もしない。
  */
 export function seedDevData(): void {
+  if (!import.meta.env.DEV) return
   if (getStoredValue<boolean>(DEV_SEED_KEY, false)) return
 
   const userId = getUserId()

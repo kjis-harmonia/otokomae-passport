@@ -109,7 +109,7 @@ async function fetchUserLastVisitDate(userId: string): Promise<string | null> {
       .from('maintenance_visits')
       .select('last_visit_date')
       .eq('user_id', userId)
-      .single()
+      .maybeSingle()
     if (!error && data) return (data as { last_visit_date: string }).last_visit_date
   } catch { /* ignore */ }
   try {
@@ -149,9 +149,6 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   // Stamp reward
   const [stampRewardMsg, setStampRewardMsg]     = useState<string | null>(null)
   const stampRewardIssuedRef                    = useRef(false)
-
-  // DEV: passport field calibration (kept for future use)
-  const [showCalibrate, setShowCalibrate]       = useState(false)
 
   // Recovery code (Phase2)
   const [customerData, setCustomerData]         = useState<CustomerRow | null | undefined>(undefined)
@@ -563,21 +560,6 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
             会計時にスタッフへ提示してください
           </p>
 
-          {/* DEV: キャリブレーション切替ボタン */}
-          <button
-            type="button"
-            onClick={() => { setShowCalibrate(p => !p) }}
-            style={{
-              display: 'block', width: '100%', marginTop: 6, padding: '5px 0',
-              fontSize: 9, letterSpacing: '0.06em', fontFamily: 'monospace',
-              color: showCalibrate ? '#0FF' : 'rgba(242,230,200,0.14)',
-              background: showCalibrate ? 'rgba(0,255,255,0.06)' : 'none',
-              border: showCalibrate ? '1px solid rgba(0,255,255,0.25)' : '1px solid transparent',
-              borderRadius: 6, cursor: 'pointer',
-            }}
-          >
-            {showCalibrate ? '📐 キャリブレーション中 — ホバーで座標確認' : '開発用：位置調整モード'}
-          </button>
         </div>
 
         {/* ══════════════════════

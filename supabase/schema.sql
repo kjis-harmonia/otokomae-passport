@@ -192,3 +192,31 @@ $$;
 
 -- anon / authenticated ロールに実行権限を付与（PostgREST経由での呼び出しに必要）
 grant execute on function public.claim_ticket_transfer(text, text) to anon, authenticated;
+
+-- ── ticket_usage_logs: チケット使用ログ（1日1枚制限・使用履歴） ────────────────
+-- usage_date は JST 当日の date 文字列（YYYY-MM-DD）。
+-- (user_id, usage_date, status) でクエリするため複合インデックスを張る。
+
+create table if not exists public.ticket_usage_logs (
+  id            uuid        default gen_random_uuid() primary key,
+  usage_date    date        not null,
+  staff_name    text        not null,
+  customer_name text        not null,
+  user_id       text        not null,
+  ticket_id     text,
+  ticket_type   text        not null,
+  amount        integer     not null default 0,
+  terminal      text        not null default 'user-app',
+  status        text        not null default 'used',
+  used_at       timestamptz not null default now()
+);
+
+create index if not exists ticket_usage_logs_daily_idx
+  on public.ticket_usage_logs (user_id, usage_date, status);
+
+alter table public.ticket_usage_logs enable row level security;
+
+create policy "allow_all" on public.ticket_usage_logs
+  for all
+  using (true)
+  with check (true);
