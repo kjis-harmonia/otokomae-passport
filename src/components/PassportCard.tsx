@@ -183,8 +183,8 @@ export function PassportCard() {
 
             {/* Header */}
             <p style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.18em',
-              color: 'rgba(201,162,74,0.52)', fontFamily: 'monospace',
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.20em',
+              color: 'rgba(230,210,140,0.82)', fontFamily: 'monospace',
               marginBottom: 16, whiteSpace: 'nowrap', overflow: 'hidden',
             }}>
               GINJIRO OFFICIAL MEMBER CARD
@@ -228,8 +228,8 @@ export function PassportCard() {
                 {/* ── 会員ID（シャンパンゴールド、先頭8文字） ── */}
                 <p style={{
                   fontFamily: 'monospace',
-                  fontSize: 'clamp(9px, 2.3vw, 11px)',
-                  color: 'rgba(230,202,101,0.75)',
+                  fontSize: 'clamp(11px, 2.6vw, 13px)',
+                  color: 'rgba(230,202,101,0.92)',
                   letterSpacing: '0.18em',
                   lineHeight: 1.4,
                   marginBottom: 12,
@@ -248,8 +248,8 @@ export function PassportCard() {
                 {/* ── 最終来店日 ── */}
                 <div>
                   <p style={{
-                    fontSize: 9, letterSpacing: '0.24em',
-                    color: 'rgba(201,162,74,0.65)',
+                    fontSize: 11, letterSpacing: '0.22em',
+                    color: 'rgba(201,162,74,0.88)',
                     fontFamily: 'monospace', marginBottom: 5,
                   }}>
                     LAST VISIT
@@ -323,9 +323,9 @@ export function PassportCard() {
             {/* Tagline */}
             <p style={{
               textAlign: 'center',
-              fontSize: 13,
+              fontSize: 14,
               letterSpacing: '0.28em',
-              color: 'rgba(201,162,74,0.54)',
+              color: 'rgba(230,202,101,0.82)',
               fontFamily: SERIF,
               textShadow: '0 1px 8px rgba(0,0,0,0.65)',
             }}>
@@ -350,8 +350,8 @@ export function PassportCard() {
         }}
       >
         <p style={{
-          fontSize: 8, letterSpacing: '0.30em',
-          color: 'rgba(201,162,74,0.52)',
+          fontSize: 10, letterSpacing: '0.24em',
+          color: 'rgba(201,162,74,0.72)',
           marginBottom: 20, fontFamily: 'monospace',
         }}>
           GINJIRO MEMBER QR — TAP TO CLOSE
@@ -391,7 +391,7 @@ export function PassportCard() {
             <span style={{ fontSize: 11, fontWeight: 300, color: 'rgba(200,200,212,0.65)', marginLeft: '0.28em' }}>様</span>
           </p>
           <p style={{
-            fontSize: 9, color: 'rgba(230,202,101,0.60)',
+            fontSize: 11, color: 'rgba(230,202,101,0.82)',
             letterSpacing: '0.14em', fontFamily: 'monospace',
           }}>
             ID · {userId.slice(0, 24)}
@@ -400,7 +400,7 @@ export function PassportCard() {
 
         <p style={{
           marginTop: 28, fontSize: 11,
-          color: 'rgba(242,230,200,0.28)',
+          color: 'rgba(242,230,200,0.52)',
           letterSpacing: '0.14em',
         }}>
           タップして閉じる

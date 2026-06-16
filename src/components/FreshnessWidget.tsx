@@ -574,9 +574,9 @@ export function FreshnessWidget({
               {/* Label: 漢の鮮度 */}
               <text x={CX} y={CY - 33} textAnchor="middle"
                 style={{
-                  fontSize: '7.5px',
+                  fontSize: '9px',
                   fontFamily: MONO,
-                  fill: 'rgba(201,162,74,0.68)',
+                  fill: '#F6E0A4',
                   letterSpacing: '1.8px',
                 }}>
                 漢の鮮度
@@ -597,7 +597,7 @@ export function FreshnessWidget({
               {/* Status text */}
               <text x={CX} y={CY + 33} textAnchor="middle"
                 style={{
-                  fontSize: '9.5px',
+                  fontSize: '11px',
                   fontFamily: SERIF,
                   fill: isCritical ? 'rgba(240,100,90,0.95)' : freshness < 25 ? 'rgba(240,165,125,0.92)' : '#FCF6BA',
                   letterSpacing: '0.4px',
@@ -609,8 +609,8 @@ export function FreshnessWidget({
               {daysLeft > 0 && (
                 <text x={CX} y={CY + 48} textAnchor="middle"
                   style={{
-                    fontSize: '8.5px',
-                    fill: 'rgba(245,240,210,0.72)',
+                    fontSize: '10px',
+                    fill: 'rgba(245,245,247,0.80)',
                     letterSpacing: '0.6px',
                   }}>
                   次回目安まで あと{daysLeft}日
@@ -620,10 +620,10 @@ export function FreshnessWidget({
               {/* Bottom label */}
               <text x={CX} y={CY + 62} textAnchor="middle"
                 style={{
-                  fontSize: '7px',
+                  fontSize: '8px',
                   fontFamily: MONO,
-                  fill: 'rgba(201,162,74,0.45)',
-                  letterSpacing: '1.8px',
+                  fill: 'rgba(201,162,74,0.55)',
+                  letterSpacing: '1.6px',
                 }}>
                 FRESHNESS · 14DAY CYCLE
               </text>
