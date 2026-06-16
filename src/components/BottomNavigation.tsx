@@ -111,7 +111,8 @@ function IconDiagnosis({ isActive }: IconProps) {
 function IconQRMedal() {
   const g = 'gj-qr-medal-gold'
   return (
-    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true"
+      style={{ display: 'block', flexShrink: 0 }}>
       <defs>
         <linearGradient id={g} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%"   stopColor="#b38728" />
@@ -262,68 +263,104 @@ export function BottomNavigation({ active, onChange, onQrPress, qrActive }: Prop
       <GinjiroNavGradients />
 
       {/*
-       * ── Center QR medal button ──────────────────────────────────────────────
-       * top: -10px  →  button protrudes exactly 10 px above the nav bar top
-       * The button (56 px tall) therefore sits 10 px above the bar + 46 px inside
+       * ── Center QR medal: wrapper + button + label ───────────────────────────
+       * top: -10px → protrudes 10 px above nav bar top; 46 px sits inside bar.
+       *
+       * Structure: outer wrapper (pointer-events:none) holds a strictly-sized
+       * circular <button> and a sibling <span> label.
+       * The border/shadow are on an absolute <span> inside the button so they
+       * never influence the button's flex layout or push the SVG off-center.
        */}
-      <button
-        type="button"
-        onClick={onQrPress}
-        aria-label="男前証QRを表示"
+      <div
         style={{
           position: 'absolute',
           top: -10,
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 10,
-          /* Reset button defaults */
-          background: 'none',
-          border: 'none',
-          padding: 0,
-          margin: 0,
-          cursor: 'pointer',
-          WebkitTapHighlightColor: 'transparent',
-          /* Stack circle + label */
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 4,
+          pointerEvents: 'none',   /* wrapper is click-through */
         } as React.CSSProperties}
       >
-        {/* ── Medal disc ── */}
-        <div style={{
-          width: 56,
-          height: 56,
-          borderRadius: '50%',
-          flexShrink: 0,
-          /* Dark hammered-metal background */
-          background: 'linear-gradient(155deg, #1E1208 0%, #0C0604 50%, #180C04 100%)',
-          /* Brass-gold inner ring */
-          border: '2.5px solid #C9A24A',
-          boxShadow: qrBoxShadow,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'box-shadow 0.28s ease',
-        }}>
-          <IconQRMedal />
-        </div>
+        {/* ── Circular button (strict 56×56) ── */}
+        <button
+          type="button"
+          onClick={onQrPress}
+          aria-label="男前証QRを表示"
+          style={{
+            position: 'relative',
+            width: 56,
+            height: 56,
+            flexShrink: 0,
+            borderRadius: '50%',
+            /* No border/background here — decorative ring is on inner span */
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            margin: 0,
+            cursor: 'pointer',
+            pointerEvents: 'auto',   /* only the button captures taps */
+            WebkitTapHighlightColor: 'transparent',
+            touchAction: 'manipulation',
+            /* Flex-center the icon span */
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'box-shadow 0.28s ease',
+          } as React.CSSProperties}
+        >
+          {/* Decorative ring layer — absolute so it never affects flex sizing */}
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: '50%',
+              background: 'linear-gradient(155deg, #1E1208 0%, #0C0604 50%, #180C04 100%)',
+              border: '2.5px solid #C9A24A',
+              boxShadow: qrBoxShadow,
+              pointerEvents: 'none',
+              transition: 'box-shadow 0.28s ease',
+            }}
+          />
 
-        {/* ── QR label ── */}
-        <span style={{
-          fontSize: 10,
-          fontFamily: MONO,
-          letterSpacing: '0.18em',
-          color: '#e6ca65',
-          lineHeight: 1,
-          opacity: qrActive ? 1 : 0.72,
-          transition: 'opacity 0.22s',
-          /* nudge up slightly so it sits closer to the circle */
-          marginTop: -1,
-        }}>
+          {/* Icon container — relative z-index, spans full button, perfectly centered */}
+          <span
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              display: 'flex',
+              width: '100%',
+              height: '100%',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              lineHeight: 1,
+            }}
+          >
+            <IconQRMedal />
+          </span>
+        </button>
+
+        {/* ── QR label — sibling below the button, not inside ── */}
+        <span
+          style={{
+            marginTop: 5,
+            fontSize: 10,
+            fontFamily: MONO,
+            letterSpacing: '0.18em',
+            color: '#e6ca65',
+            lineHeight: 1,
+            opacity: qrActive ? 1 : 0.72,
+            transition: 'opacity 0.22s',
+            pointerEvents: 'none',
+          }}
+        >
           QR
         </span>
-      </button>
+      </div>
 
       {/* ── Navigation bar ── */}
       <nav
