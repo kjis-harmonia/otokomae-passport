@@ -6,6 +6,7 @@ import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import { StyleDetailModal } from '../components/StyleDetailModal'
 import { PassportCard } from '../components/PassportCard'
+import { FreshnessWidget } from '../components/FreshnessWidget'
 import { HERO_SLIDE_IMAGES, resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
 import type { StyleCard } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
@@ -15,8 +16,6 @@ import { getDaysRemaining, formatVisitDate, getLastVisit } from '../utils/visitH
 import {
   getNextRecommendedDate,
   getDaysUntilRecommended,
-  MAINTENANCE_CYCLE_DAYS,
-  fmtDate,
 } from '../utils/maintenanceSchedule'
 import { getJapanDateString } from '../utils/dateUtils'
 import {
@@ -1181,173 +1180,51 @@ function MaintenanceScheduleSection() {
     if (perm === 'granted' && lastVisitDate) triggerMaintenanceNotification(lastVisitDate)
   }
 
-  if (lastVisitDate === undefined) return null // loading
+  if (lastVisitDate === undefined) return null
 
-  const daysLeft      = lastVisitDate ? getDaysUntilRecommended(lastVisitDate) : null
-  const nextDate      = lastVisitDate ? getNextRecommendedDate(lastVisitDate) : null
-  const isOverdue     = daysLeft !== null && daysLeft <= 0
-  const elapsed       = daysLeft !== null
-    ? Math.min(1, Math.max(0, (MAINTENANCE_CYCLE_DAYS - daysLeft) / MAINTENANCE_CYCLE_DAYS))
-    : 0
+  const daysLeft = lastVisitDate ? getDaysUntilRecommended(lastVisitDate) : null
+  const nextDate = lastVisitDate ? getNextRecommendedDate(lastVisitDate) : null
   const notifSupported = isNotificationSupported()
 
-  // Shared QR scanner modal
-  const scannerModal = showScanner ? (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-      onClick={() => setShowScanner(false)}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #100806 0%, #080504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.9)', padding: '24px 20px', textAlign: 'center' }}
-      >
-        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 8 }}>STORE CHECK-IN</p>
-        <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', marginBottom: 18, lineHeight: 1.4 }}>
-          店内のQRコードを<br />カメラで読み取ってください
-        </p>
-        <div id={MAINT_SCHED_QR_EL_ID} style={{ width: '100%', minHeight: scannerActive ? 260 : 0, borderRadius: 16, overflow: 'hidden', marginBottom: scannerActive ? 14 : 0 }} />
-        <button
-          type="button"
-          onClick={() => setShowScanner(false)}
-          style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 13, color: 'rgba(242,230,200,0.58)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer', marginTop: 8 }}
-        >
-          キャンセル
-        </button>
-      </div>
-    </div>
-  ) : null
 
-  // ── No visit date ──
-  if (!lastVisitDate) {
-    return (
-      <div className="px-4">
-        <div className="mb-4 flex items-center gap-3 px-1">
-          <p className="text-[17px] font-bold leading-none" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
-            メンテナンス予報
-          </p>
-          <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.3), transparent)' }} />
-        </div>
-        <div style={{ borderRadius: 20, background: 'linear-gradient(145deg, rgba(22,9,7,0.96), rgba(10,5,4,0.98))', border: '1px solid rgba(201,162,74,0.14)', padding: '24px 20px', textAlign: 'center' }}>
-          <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.42)', marginBottom: 14 }}>
-            MAINTENANCE SCHEDULE
-          </p>
-          <p style={{ fontFamily: SERIF, fontSize: 14, color: 'rgba(242,230,200,0.56)', lineHeight: 1.8, marginBottom: 22 }}>
-            店内QRを読み込むと<br />
-            次回カット時期を自動でお知らせします。
-          </p>
-          {scanMsg && (
-            <div style={{ borderRadius: 12, background: 'rgba(224,100,60,0.1)', border: '1px solid rgba(224,100,60,0.28)', padding: '10px 14px', marginBottom: 14 }}>
-              <p style={{ fontSize: 12, color: '#E06040', lineHeight: 1.6 }}>{scanMsg}</p>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => { setScanMsg(null); setShowScanner(true) }}
-            style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 20px rgba(107,15,18,0.45)', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.22em', color: '#F2E6C8', cursor: 'pointer' }}
-          >
-            店内QRを読む
-          </button>
-        </div>
-        {scannerModal}
-      </div>
-    )
-  }
-
-  // ── Overdue: 14日超過 ──
-  if (isOverdue) {
-    return (
-      <div className="px-4">
-        <div className="mb-4 flex items-center gap-3 px-1">
-          <p className="text-[17px] font-bold leading-none flex-shrink-0" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
-            メンテナンス予報
-          </p>
-          <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(180,40,40,0.38), transparent)' }} />
-        </div>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.97 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-          style={{ borderRadius: 20, background: 'linear-gradient(145deg, #2D0608, #1A0305)', border: '1px solid rgba(180,40,40,0.48)', boxShadow: '0 12px 40px rgba(120,10,10,0.42), inset 0 1px 0 rgba(255,80,60,0.06)', padding: '22px 20px 24px' }}
-        >
-          <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(200,60,50,0.68)', marginBottom: 8 }}>MAINTENANCE ALERT</p>
-          <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', lineHeight: 1.35, marginBottom: 4 }}>
-            {daysLeft! < 0 ? `男前崩壊中… ${Math.abs(daysLeft!)}日超過` : 'メンテナンス時期です。'}
-          </p>
-          <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.50)', marginBottom: 18 }}>メンテナンスカットの時間です。</p>
-          <div style={{ display: 'flex', gap: 16, marginBottom: 18, padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div>
-              <p style={{ fontSize: 8, letterSpacing: '0.2em', color: 'rgba(201,162,74,0.44)', marginBottom: 3 }}>前回来店日</p>
-              <p style={{ fontFamily: SERIF, fontSize: 13, color: 'rgba(242,230,200,0.72)' }}>{fmtDate(lastVisitDate)}</p>
-            </div>
-            <div style={{ width: 1, background: 'rgba(255,255,255,0.06)' }} />
-            <div>
-              <p style={{ fontSize: 8, letterSpacing: '0.2em', color: 'rgba(201,162,74,0.44)', marginBottom: 3 }}>次回推奨日</p>
-              <p style={{ fontFamily: SERIF, fontSize: 13, color: '#C9A24A' }}>{fmtDate(nextDate!)}</p>
-            </div>
-          </div>
-          <a
-            href={MAINTENANCE_CUT_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: 'block', textAlign: 'center', padding: '14px 0', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.55)', textDecoration: 'none', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', color: '#F2E6C8' }}
-          >
-            メンテナンスカットを予約する
-          </a>
-          {notifSupported && notifPerm === 'default' && (
-            <button type="button" onClick={handleRequestPermission} style={{ width: '100%', marginTop: 10, padding: '10px 0', borderRadius: 10, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.22)', fontSize: 11, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.72)', fontFamily: SERIF, cursor: 'pointer' }}>
-              カット時期になったら通知する
-            </button>
-          )}
-          {notifSupported && notifPerm === 'granted' && (
-            <p style={{ marginTop: 10, fontSize: 10, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.44)', textAlign: 'center' }}>通知ON — 次回以降も3日前にお知らせします</p>
-          )}
-        </motion.div>
-      </div>
-    )
-  }
-
-  // ── Active: 14日以内 ──
   return (
     <div className="px-4">
-      <div className="mb-4 flex items-center gap-3 px-1">
-        <p className="text-[17px] font-bold leading-none flex-shrink-0" style={{ color: '#F2E6C8', fontFamily: SERIF }}>
-          メンテナンス予報
-        </p>
-        <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.3), transparent)' }} />
-      </div>
-      <div style={{ borderRadius: 20, background: 'linear-gradient(145deg, rgba(22,9,7,0.96), rgba(10,5,4,0.98))', border: '1px solid rgba(201,162,74,0.18)', boxShadow: '0 12px 40px rgba(0,0,0,0.55)', padding: '20px 20px 22px' }}>
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 8, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.48)', marginBottom: 5 }}>前回来店日</p>
-            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8' }}>{fmtDate(lastVisitDate)}</p>
-          </div>
-          <div style={{ width: 1, background: 'rgba(201,162,74,0.12)' }} />
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 8, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.48)', marginBottom: 5 }}>次回推奨日</p>
-            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#C9A24A' }}>{fmtDate(nextDate!)}</p>
-          </div>
-        </div>
-        <div style={{ marginBottom: notifSupported ? 16 : 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-            <span style={{ fontSize: 8, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.38)' }}>{MAINTENANCE_CYCLE_DAYS}DAY CYCLE</span>
-            <span style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#C9A24A' }}>あと{Math.max(0, daysLeft!)}日</span>
-          </div>
-          <div style={{ height: 4, borderRadius: 2, background: 'rgba(201,162,74,0.10)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${elapsed * 100}%`, borderRadius: 2, background: 'linear-gradient(90deg, rgba(201,162,74,0.45), rgba(201,162,74,0.88))', transition: 'width 0.6s ease' }} />
-          </div>
-        </div>
-        {notifSupported && (
-          notifPerm === 'granted' ? (
-            <p style={{ fontSize: 10, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.44)', textAlign: 'center', marginTop: 12 }}>通知ON — 来店3日前にお知らせします</p>
-          ) : notifPerm === 'denied' ? (
-            <p style={{ fontSize: 10, letterSpacing: '0.12em', color: 'rgba(200,80,60,0.52)', textAlign: 'center', marginTop: 12 }}>通知が拒否されています（設定から変更できます）</p>
-          ) : (
-            <button type="button" onClick={handleRequestPermission} style={{ width: '100%', marginTop: 12, padding: '10px 0', borderRadius: 10, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.22)', fontSize: 11, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.76)', fontFamily: SERIF, cursor: 'pointer' }}>
-              カット時期になったら通知する
+      <FreshnessWidget
+        lastVisitDate={lastVisitDate}
+        nextRecommendedDate={nextDate}
+        daysRemaining={daysLeft}
+        notifSupported={notifSupported}
+        notifPermission={notifPerm}
+        onRequestNotif={handleRequestPermission}
+        onScan={() => { setScanMsg(null); setShowScanner(true) }}
+        scanMsg={scanMsg}
+      />
+
+      {/* QR scanner modal */}
+      {showScanner && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => setShowScanner(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #100806 0%, #080504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.9)', padding: '24px 20px', textAlign: 'center' }}
+          >
+            <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.5)', marginBottom: 8 }}>STORE CHECK-IN</p>
+            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', marginBottom: 18, lineHeight: 1.4 }}>
+              店内のQRコードを<br />カメラで読み取ってください
+            </p>
+            <div id={MAINT_SCHED_QR_EL_ID} style={{ width: '100%', minHeight: scannerActive ? 260 : 0, borderRadius: 16, overflow: 'hidden', marginBottom: scannerActive ? 14 : 0 }} />
+            <button
+              type="button"
+              onClick={() => setShowScanner(false)}
+              style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', fontSize: 13, color: 'rgba(242,230,200,0.58)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer', marginTop: 8 }}
+            >
+              キャンセル
             </button>
-          )
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
