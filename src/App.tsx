@@ -397,6 +397,7 @@ function App() {
                 active={navHighlight}
                 onChange={handleTabChange}
                 onQrPress={() => setShowQrModal(true)}
+                qrActive={showQrModal}
               />
             )}
           </div>
