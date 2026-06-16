@@ -220,3 +220,137 @@ create policy "allow_all" on public.ticket_usage_logs
   for all
   using (true)
   with check (true);
+
+-- ── customers: 会員マスタ（Phase2 会員復旧機能） ─────────────────────────────
+-- スタッフ端末でパスポートQRをスキャンするたびに upsert される。
+-- recovery_code は GIN-XXXX-XXXX 形式で初回登録時に自動付与。
+
+create table if not exists public.customers (
+  id            uuid        default gen_random_uuid() primary key,
+  user_id       text        not null unique,
+  name          text        not null,
+  phone_last4   text,
+  recovery_code text        not null unique,
+  created_at    timestamptz default now() not null,
+  updated_at    timestamptz default now() not null
+);
+
+create index if not exists customers_user_id_idx       on public.customers (user_id);
+create index if not exists customers_recovery_code_idx on public.customers (recovery_code);
+
+alter table public.customers enable row level security;
+
+create policy "allow_all" on public.customers
+  for all
+  using (true)
+  with check (true);
+
+-- ── customer_user_aliases: 端末変更履歴 ──────────────────────────────────────
+-- 初回登録時と recover_member 実行時に追記される。
+-- is_current=true が現在の有効 user_id。
+
+create table if not exists public.customer_user_aliases (
+  id          uuid        default gen_random_uuid() primary key,
+  customer_id uuid        not null references public.customers(id),
+  user_id     text        not null,
+  is_current  boolean     not null default false,
+  created_at  timestamptz default now() not null
+);
+
+create unique index if not exists customer_user_aliases_user_id_idx
+  on public.customer_user_aliases (user_id);
+create index if not exists customer_user_aliases_customer_id_idx
+  on public.customer_user_aliases (customer_id);
+
+alter table public.customer_user_aliases enable row level security;
+
+create policy "allow_all" on public.customer_user_aliases
+  for all
+  using (true)
+  with check (true);
+
+-- ── customer_recovery_logs: 復旧実行ログ ─────────────────────────────────────
+-- recover_member RPC が成功したときのみ追記される。
+
+create table if not exists public.customer_recovery_logs (
+  id              uuid        default gen_random_uuid() primary key,
+  customer_id     uuid        not null references public.customers(id),
+  old_user_id     text        not null,
+  new_user_id     text        not null,
+  staff_name      text        not null,
+  recovery_reason text        not null,
+  recovered_at    timestamptz default now() not null
+);
+
+alter table public.customer_recovery_logs enable row level security;
+
+create policy "allow_all" on public.customer_recovery_logs
+  for all
+  using (true)
+  with check (true);
+
+-- ── RPC: recover_member ───────────────────────────────────────────────────────
+-- 旧 user_id から新 user_id へ、tickets・maintenance_visits・エイリアスを
+-- 1トランザクションで移行する。
+-- 戻り値: { success: true } または { error: string }
+
+create or replace function public.recover_member(
+  p_old_user_id     text,
+  p_new_user_id     text,
+  p_staff_name      text,
+  p_recovery_reason text
+)
+returns json
+language plpgsql
+security definer
+as $$
+declare
+  v_customer record;
+begin
+  -- 1. 旧 user_id で会員を検索
+  select * into v_customer
+  from public.customers
+  where user_id = p_old_user_id;
+
+  if not found then
+    return json_build_object('error', 'customer_not_found');
+  end if;
+
+  -- 2. customers.user_id を新 user_id に更新
+  update public.customers
+  set user_id = p_new_user_id, updated_at = now()
+  where id = v_customer.id;
+
+  -- 3. 未使用チケットを新 user_id に移行
+  update public.tickets
+  set user_id = p_new_user_id
+  where user_id = p_old_user_id and used = false;
+
+  -- 4. maintenance_visits を移行（新 user_id に既存レコードがない場合のみ）
+  insert into public.maintenance_visits (user_id, last_visit_date, updated_at)
+  select p_new_user_id, last_visit_date, now()
+  from public.maintenance_visits
+  where user_id = p_old_user_id
+  on conflict (user_id) do nothing;
+
+  -- 5. エイリアス更新: 旧を is_current=false, 新を is_current=true に
+  update public.customer_user_aliases
+  set is_current = false
+  where customer_id = v_customer.id;
+
+  insert into public.customer_user_aliases (customer_id, user_id, is_current)
+  values (v_customer.id, p_new_user_id, true)
+  on conflict (user_id) do update
+    set is_current = true, customer_id = v_customer.id;
+
+  -- 6. 復旧ログ記録
+  insert into public.customer_recovery_logs
+    (customer_id, old_user_id, new_user_id, staff_name, recovery_reason)
+  values
+    (v_customer.id, p_old_user_id, p_new_user_id, p_staff_name, p_recovery_reason);
+
+  return json_build_object('success', true);
+end;
+$$;
+
+grant execute on function public.recover_member(text, text, text, text) to anon, authenticated;
