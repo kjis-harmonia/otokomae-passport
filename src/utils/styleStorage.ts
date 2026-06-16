@@ -131,7 +131,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
     catchCopy: '滴る色気。水面が揺れるような艶が男を語る。',
     description:
       '濡れたような光沢感がクセになるモダンウェットスタイル。強い整髪料で毛流れを作り、光を操ることで圧倒的な色気を演出する。デートにも夜の席にも対応する万能の艶男スタイル。',
-    price: 8800,
+    price: 8000,
     durationMinutes: 60,
     imageUrl: '/assets/hero-nurepan.jpg',
     tags: ['ウェット', '艶', 'モテ', '色気', 'モダン'],
@@ -544,6 +544,7 @@ export function seedInitialStyles(): void {
     '昭和のアイパー':       8000,
     '覚醒の色':             14500,
     'リーゼントパンチ':     8000,
+    '俺は濡れパン':         8000,
   }
 
   let priceChanged = false

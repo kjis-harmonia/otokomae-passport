@@ -5,7 +5,7 @@
 /** 【14日以内限定】メンテナンスカット専用クーポン予約URL */
 export const MAINTENANCE_CUT_URL = 'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000011140746&add=0&addMenu=0&rootCd=10'
 
-const NUREPAN_URL    = 'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000010686417&add=0&addMenu=0&rootCd=10'
+const NUREPAN_URL    = 'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008396672&add=0&addMenu=0&rootCd=10'
 const CURL_IPER_URL  = 'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008738705&add=0&addMenu=0&rootCd=10'
 const PUNCH_PERM_URL = 'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008396509&add=0&addMenu=0&rootCd=10'
 const GINPARA_URL    = 'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000009409138&add=0&addMenu=0&rootCd=10'
