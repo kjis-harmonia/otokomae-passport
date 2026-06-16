@@ -332,7 +332,7 @@ function TicketWalletSection() {
             {ticketGroups.length}種 · {items.length}枚
           </span>
         )}
-        <p style={{ fontSize: 10, letterSpacing: '0.20em', color: 'rgba(201,162,74,0.68)', flexShrink: 0 }}>WALLET</p>
+        <p style={{ fontSize: 12, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.82)', flexShrink: 0 }}>WALLET</p>
       </div>
 
       {/* Horizontal scroll */}
@@ -437,7 +437,7 @@ function TicketWalletSection() {
                 )}
 
                 {/* 有効期限 */}
-                <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.62)', marginBottom: 10, letterSpacing: '0.06em' }}>
+                <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.78)', marginBottom: 10, letterSpacing: '0.06em' }}>
                   {repTicket?.expires_at
                     ? `有効期限 ${repTicket.expires_at.slice(0, 10).replace(/-/g, '/')}`
                     : '有効期限なし'}
@@ -812,7 +812,7 @@ function MaintenanceCutSection() {
           </h3>
           <div style={{ height: '0.5px', background: 'linear-gradient(90deg, rgba(201,162,74,0.22), transparent)', marginBottom: 12 }} />
 
-          <p style={{ fontSize: 13, lineHeight: 1.75, color: 'rgba(245,245,247,0.80)', marginBottom: 16 }}>
+          <p style={{ fontSize: 14, lineHeight: 1.75, color: 'rgba(245,245,247,0.88)', marginBottom: 16 }}>
             前回来店から14日以内のお客様限定。{'\n'}
             フェード・刈り上げ・ラインを整えて男前をキープ。
           </p>
@@ -821,12 +821,12 @@ function MaintenanceCutSection() {
           {lastVisit && (
             <div style={{ borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: `1px solid ${isEligible ? 'rgba(201,162,74,0.22)' : 'rgba(139,26,26,0.32)'}`, padding: '10px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div>
-                <p style={{ fontSize: 11, letterSpacing: '0.14em', color: 'rgba(242,230,200,0.65)', marginBottom: 2 }}>前回来店</p>
+                <p style={{ fontSize: 13, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.80)', marginBottom: 2 }}>前回来店</p>
                 <p style={{ fontSize: 13, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF }}>{formatVisitDate(lastVisit.visitedAt)}</p>
               </div>
               <div style={{ width: '0.5px', height: 32, background: 'rgba(201,162,74,0.18)' }} />
               <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: 11, letterSpacing: '0.14em', color: 'rgba(242,230,200,0.65)', marginBottom: 2 }}>利用期限まで</p>
+                <p style={{ fontSize: 13, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.80)', marginBottom: 2 }}>利用期限まで</p>
                 <p style={{ fontSize: 13, fontWeight: 700, fontFamily: SERIF, color: isEligible ? (daysRemaining !== null && daysRemaining <= 3 ? '#E06060' : '#C9A24A') : 'rgba(242,230,200,0.32)' }}>
                   {isEligible && daysRemaining !== null ? `あと${daysRemaining}日` : '期限切れ'}
                 </p>
@@ -843,7 +843,7 @@ function MaintenanceCutSection() {
 
           {/* 価格 */}
           <div style={{ marginBottom: 14 }}>
-            <p style={{ fontSize: 11, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.82)', marginBottom: 1 }}>優待価格</p>
+            <p style={{ fontSize: 13, letterSpacing: '0.12em', color: 'rgba(201,162,74,0.92)', marginBottom: 1 }}>優待価格</p>
             <p style={{ fontSize: 22, fontWeight: 700, color: '#C9A24A', fontFamily: SERIF, letterSpacing: '0.02em', lineHeight: 1 }}>¥3,000</p>
           </div>
 

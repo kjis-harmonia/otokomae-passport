@@ -126,8 +126,8 @@ export function MemberPassportCard({ name, userId }: Props) {
 
             {/* Header label */}
             <p style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.20em',
-              color: 'rgba(230,210,140,0.78)', fontFamily: 'monospace', marginBottom: 16,
+              fontSize: 12, fontWeight: 700, letterSpacing: '0.18em',
+              color: 'rgba(230,210,140,0.88)', fontFamily: 'monospace', marginBottom: 16,
             }}>
               GINJIRO OFFICIAL MEMBER CARD
             </p>
@@ -161,8 +161,8 @@ export function MemberPassportCard({ name, userId }: Props) {
                 {/* Member ID */}
                 <p style={{
                   fontFamily: 'monospace',
-                  fontSize: 'clamp(10px, 2.2vw, 12px)',
-                  color: 'rgba(230,202,101,0.65)',
+                  fontSize: 'clamp(11px, 2.5vw, 13px)',
+                  color: 'rgba(230,202,101,0.82)',
                   letterSpacing: '0.04em',
                   lineHeight: 1.4,
                   wordBreak: 'break-all',
@@ -181,8 +181,8 @@ export function MemberPassportCard({ name, userId }: Props) {
                 {/* Last visit — always --- on initial issue */}
                 <div>
                   <p style={{
-                    fontSize: 10, letterSpacing: '0.18em',
-                    color: 'rgba(201,162,74,0.75)', fontFamily: 'monospace', marginBottom: 4,
+                    fontSize: 12, letterSpacing: '0.16em',
+                    color: 'rgba(201,162,74,0.88)', fontFamily: 'monospace', marginBottom: 4,
                   }}>
                     最終来店日
                   </p>
@@ -234,8 +234,8 @@ export function MemberPassportCard({ name, userId }: Props) {
 
             {/* Tagline */}
             <p style={{
-              textAlign: 'center', fontSize: 13, letterSpacing: '0.26em',
-              color: 'rgba(230,202,101,0.72)', fontFamily: SERIF,
+              textAlign: 'center', fontSize: 14, letterSpacing: '0.24em',
+              color: 'rgba(230,202,101,0.84)', fontFamily: SERIF,
             }}>
               男前を、維持する。
             </p>

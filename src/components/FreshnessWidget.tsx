@@ -574,10 +574,10 @@ export function FreshnessWidget({
               {/* Label: 漢の鮮度 */}
               <text x={CX} y={CY - 33} textAnchor="middle"
                 style={{
-                  fontSize: '9px',
+                  fontSize: '11px',
                   fontFamily: MONO,
                   fill: '#F6E0A4',
-                  letterSpacing: '1.8px',
+                  letterSpacing: '1.5px',
                 }}>
                 漢の鮮度
               </text>
@@ -609,9 +609,9 @@ export function FreshnessWidget({
               {daysLeft > 0 && (
                 <text x={CX} y={CY + 48} textAnchor="middle"
                   style={{
-                    fontSize: '10px',
-                    fill: 'rgba(245,245,247,0.80)',
-                    letterSpacing: '0.6px',
+                    fontSize: '12px',
+                    fill: 'rgba(245,245,247,0.88)',
+                    letterSpacing: '0.4px',
                   }}>
                   次回目安まで あと{daysLeft}日
                 </text>
@@ -620,10 +620,10 @@ export function FreshnessWidget({
               {/* Bottom label */}
               <text x={CX} y={CY + 62} textAnchor="middle"
                 style={{
-                  fontSize: '8px',
+                  fontSize: '9px',
                   fontFamily: MONO,
-                  fill: 'rgba(201,162,74,0.55)',
-                  letterSpacing: '1.6px',
+                  fill: 'rgba(201,162,74,0.68)',
+                  letterSpacing: '1.4px',
                 }}>
                 FRESHNESS · 14DAY CYCLE
               </text>
@@ -640,19 +640,19 @@ export function FreshnessWidget({
             marginBottom: 14,
           }}>
             <div style={{ flex: 1, padding: '10px 14px' }}>
-              <p style={{ fontSize: 10, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.76)', marginBottom: 3 }}>
+              <p style={{ fontSize: 12, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.88)', marginBottom: 3 }}>
                 前回来店日
               </p>
-              <p style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: '#FCF6BA' }}>
+              <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#FCF6BA' }}>
                 {fmtDate(lastVisitDate)}
               </p>
             </div>
             <div style={{ width: 1, background: 'rgba(201,162,74,0.10)' }} />
             <div style={{ flex: 1, padding: '10px 14px' }}>
-              <p style={{ fontSize: 10, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.76)', marginBottom: 3 }}>
+              <p style={{ fontSize: 12, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.88)', marginBottom: 3 }}>
                 次回推奨日
               </p>
-              <p style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: isOverdue ? 'rgba(242,230,200,0.45)' : '#E0B84A' }}>
+              <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: isOverdue ? 'rgba(242,230,200,0.55)' : '#E0B84A' }}>
                 {nextRecommendedDate ? fmtDate(nextRecommendedDate) : '—'}
               </p>
             </div>

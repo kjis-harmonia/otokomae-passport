@@ -218,9 +218,9 @@ function NavTabButton({
 
       {/* Label */}
       <span style={{
-        fontSize: 11,
+        fontSize: 12,
         letterSpacing: isActive ? '0.10em' : '0.07em',
-        color: isActive ? '#e6ca65' : 'rgba(230,202,101,0.65)',
+        color: isActive ? '#e6ca65' : 'rgba(230,202,101,0.78)',
         textShadow: isActive ? '0 0 10px rgba(230,202,101,0.30)' : 'none',
         transition: 'color 0.20s, text-shadow 0.20s, letter-spacing 0.20s',
       }}>
