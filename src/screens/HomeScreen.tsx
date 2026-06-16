@@ -1373,6 +1373,7 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
 
           {/* ③ 保有チケット */}
           <motion.div
+            id="gj-ticket-wallet"
             initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.20, duration: 0.44, ease: EASE_OUT }}

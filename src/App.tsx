@@ -13,6 +13,7 @@ import { OnboardingScreen } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import PremiumGachaExperience from './components/PremiumGachaExperience'
 import type { GachaResult } from './components/PremiumGachaExperience'
+import { MemberQrModal } from './components/MemberQrModal'
 import { MOCK_MEMBER } from './data/brand'
 import type { NavTab, MemberStatus } from './data/brand'
 import { loadMemberStatus, saveMemberStatus, getStoredValue, ONBOARDING_DONE_KEY } from './utils/storage'
@@ -216,6 +217,13 @@ function App() {
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
   const [isPremiumGachaOpen, setIsPremiumGachaOpen] = useState(false)
   const [hasOpenModal, setHasOpenModal] = useState(false)
+  const [showQrModal, setShowQrModal] = useState(false)
+  // navHighlight drives the bottom nav visual indicator independently from activeTab
+  const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    const navTabs: NavTab[] = ['home', 'styles', 'diagnosis']
+    return navTabs.includes(tab as NavTab) ? (tab as NavTab) : 'home'
+  })
 
   // ── Transfer acceptance overlay ───────────────────────────────────────────────
   const [transferToken, setTransferToken]   = useState<string | null>(() => {
@@ -297,6 +305,20 @@ function App() {
   }
 
   const handleTabChange = useCallback((tab: NavTab) => {
+    if (tab === 'tickets') {
+      setNavHighlight('tickets')
+      // Ensure home screen is visible, then scroll to the wallet section
+      setActiveTab(prev => {
+        const delay = prev !== 'home' ? 200 : 50
+        setTimeout(() => {
+          document.getElementById('gj-ticket-wallet')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, delay)
+        return 'home'
+      })
+      return
+    }
+    const navTabs: NavTab[] = ['home', 'styles', 'diagnosis']
+    if (navTabs.includes(tab)) setNavHighlight(tab)
     setActiveTab(tab)
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
   }, [])
@@ -370,7 +392,13 @@ function App() {
                 </motion.div>
               </AnimatePresence>
             </main>
-            {!hasOpenModal && <BottomNavigation active={activeTab} onChange={handleTabChange} />}
+            {!hasOpenModal && (
+              <BottomNavigation
+                active={navHighlight}
+                onChange={handleTabChange}
+                onQrPress={() => setShowQrModal(true)}
+              />
+            )}
           </div>
 
           {/* BGM toggle — fixed top-right, visible on home tab only */}
@@ -475,6 +503,12 @@ function App() {
               onComplete={handleGachaComplete}
             />
           )}
+
+          <AnimatePresence>
+            {showQrModal && (
+              <MemberQrModal key="member-qr" onClose={() => setShowQrModal(false)} />
+            )}
+          </AnimatePresence>
 
           {transferToken && (
             <div
