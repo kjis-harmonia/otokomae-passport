@@ -197,7 +197,13 @@ interface TicketUseQRData {
   expiresAt: string
 }
 
-type AnyQRData = PassportQRData | TicketUseQRData
+interface MaintenanceCouponQRData {
+  type: 'ginjiro-maintenance-coupon'
+  userId: string
+  name: string
+}
+
+type AnyQRData = PassportQRData | TicketUseQRData | MaintenanceCouponQRData
 
 const STORE_CHECKIN_QR_VALUE = JSON.stringify({ type: 'ginjiro-store-checkin' })
 
@@ -205,6 +211,7 @@ function parseQR(text: string): AnyQRData | null {
   try {
     const d = JSON.parse(text)
     if (d.type === 'ginjiro-ticket-use' && d.userId && d.selectedTicketId) return d as TicketUseQRData
+    if (d.type === 'ginjiro-maintenance-coupon' && d.userId) return d as MaintenanceCouponQRData
     if ((d.type === 'ginjiro-member' || d.type === 'otokomae-passport') && d.userId) {
       return { type: d.type, userId: d.userId, name: d.name || '名前未設定' }
     }
@@ -214,7 +221,7 @@ function parseQR(text: string): AnyQRData | null {
 
 // ── Phase ─────────────────────────────────────────────────────────────────────
 
-type Phase = 'scan' | 'loading' | 'result' | 'ticket-loading' | 'ticket-result'
+type Phase = 'scan' | 'loading' | 'result' | 'ticket-loading' | 'ticket-result' | 'maintenance-coupon'
 
 // ── QR Camera Scanner ─────────────────────────────────────────────────────────
 
@@ -341,6 +348,13 @@ export function AdminScreen() {
   const [ticketBlockMsg, setTicketBlockMsg]       = useState<string | null>(null)
   const [ticketUsedThisSession, setTicketUsedThisSession] = useState(false)
 
+  // Maintenance coupon QR flow
+  const [maintCouponData, setMaintCouponData]         = useState<MaintenanceCouponQRData | null>(null)
+  const [maintCouponTodayUsed, setMaintCouponTodayUsed] = useState(false)
+  const [maintCouponConfirming, setMaintCouponConfirming] = useState(false)
+  const [maintCouponConfirmed, setMaintCouponConfirmed] = useState(false)
+  const [maintCouponBlockMsg, setMaintCouponBlockMsg] = useState<string | null>(null)
+
   // Checkin
   const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
@@ -456,6 +470,11 @@ export function AdminScreen() {
     setTodayUsedThisDay(false)
     setShowUseComplete(false)
     setUseCompleteInfo(null)
+    setMaintCouponData(null)
+    setMaintCouponTodayUsed(false)
+    setMaintCouponConfirming(false)
+    setMaintCouponConfirmed(false)
+    setMaintCouponBlockMsg(null)
   }
 
   const loadUserTickets = useCallback(async (userId: string) => {
@@ -482,6 +501,19 @@ export function AdminScreen() {
         setTicketForUse(tickets.find(t => t.id === tuData.selectedTicketId) ?? null)
       } catch { setTicketForUse(null) }
       setPhase('ticket-result')
+      return
+    }
+
+    if (data.type === 'ginjiro-maintenance-coupon') {
+      const mcData = data as MaintenanceCouponQRData
+      setMaintCouponData(mcData)
+      setMaintCouponConfirmed(false)
+      setMaintCouponBlockMsg(null)
+      setMaintCouponConfirming(false)
+      setPhase('maintenance-coupon')
+      const todayJST = getJapanDateString()
+      const usedToday = await fetchTodayUsed(mcData.userId, todayJST)
+      setMaintCouponTodayUsed(usedToday)
       return
     }
 
@@ -628,15 +660,61 @@ export function AdminScreen() {
     if (ticketUsedThisSession) { setTicketBlockMsg('このお会計では既にチケットを1枚使用しています。'); return }
     if (ticketForUse.used) { setTicketBlockMsg('このチケットはすでに使用済みです。'); return }
     setTicketConfirming(true); setTicketBlockMsg(null)
+    const today = getJapanDateString()
     try {
+      // 当日利用チェック（3種共通 1日1枚制限）
+      const usedToday = await fetchTodayUsed(ticketUseData.userId, today)
+      if (usedToday) {
+        setTicketBlockMsg('本日はすでにクーポンを利用済みです（1日1枚制限）。')
+        setTicketConfirming(false)
+        return
+      }
       await markTicketUsed(ticketForUse.id, staffId)
-      await upsertLastVisitDate(ticketUseData.userId, getJapanDateString())
+      await saveUsageLog({
+        usage_date:    today,
+        staff_name:    staffId,
+        customer_name: '',
+        user_id:       ticketUseData.userId,
+        ticket_id:     ticketForUse.id,
+        ticket_type:   ticketForUse.type,
+        amount:        ticketForUse.amount,
+        terminal:      'staff-terminal',
+        status:        'used',
+      })
+      await upsertLastVisitDate(ticketUseData.userId, today)
       setTicketForUse(prev => prev ? { ...prev, used: true, used_at: new Date().toISOString() } : prev)
       setTicketConfirmed(true); setTicketUsedThisSession(true)
       playSuccessSound()
     } catch {
       setTicketBlockMsg('使用確定に失敗しました。ネットワークを確認してください。')
     } finally { setTicketConfirming(false) }
+  }
+
+  const handleConfirmMaintenanceCoupon = async () => {
+    if (!maintCouponData || !staffId.trim() || maintCouponTodayUsed || maintCouponConfirmed) return
+    setMaintCouponConfirming(true)
+    setMaintCouponBlockMsg(null)
+    const today = getJapanDateString()
+    try {
+      await saveUsageLog({
+        usage_date:    today,
+        staff_name:    staffId,
+        customer_name: maintCouponData.name,
+        user_id:       maintCouponData.userId,
+        ticket_id:     null,
+        ticket_type:   'coupon',
+        amount:        0,
+        terminal:      'staff-terminal',
+        status:        'used',
+      })
+      setMaintCouponConfirmed(true)
+      setMaintCouponTodayUsed(true)
+      playSuccessSound()
+    } catch {
+      setMaintCouponBlockMsg('使用確定に失敗しました。ネットワークを確認してください。')
+    } finally {
+      setMaintCouponConfirming(false)
+    }
   }
 
   function handleSelectStaff(name: string) {
@@ -1400,6 +1478,104 @@ export function AdminScreen() {
             </button>
           </div>
         )}
+
+        {/* ===== MAINTENANCE-COUPON ===== */}
+        {mainTab === 'issue' && phase === 'maintenance-coupon' && maintCouponData && (
+          <div>
+            {/* Customer card */}
+            <div style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(160deg, #1c0e08 0%, #0e0604 100%)', border: '1px solid rgba(100,200,100,0.38)', boxShadow: '0 0 25px rgba(100,200,100,0.12), 0 14px 44px rgba(0,0,0,0.75)', marginBottom: 16, animation: 'gj-slot-in 0.52s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+              <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #0a3d1a 30%, #1a7a38 50%, #0a3d1a 70%, transparent)' }} />
+              <div style={{ padding: '16px 20px' }}>
+                <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(100,200,100,0.5)', marginBottom: 4 }}>MAINTENANCE COUPON</p>
+                <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6, lineHeight: 1.1 }}>
+                  {maintCouponData.name}<span style={{ fontSize: 14, marginLeft: 4, color: 'rgba(242,230,200,0.42)' }}>様</span>
+                </h2>
+                <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)', letterSpacing: '0.06em' }}>
+                  ID: {maintCouponData.userId.slice(0, 22)}…
+                </p>
+              </div>
+            </div>
+
+            {/* Coupon detail card */}
+            <div style={{ borderRadius: 16, background: 'linear-gradient(155deg, #060e07 0%, #040a04 100%)', border: `1px solid ${maintCouponTodayUsed ? 'rgba(224,96,80,0.36)' : maintCouponConfirmed ? 'rgba(100,200,100,0.44)' : 'rgba(100,200,100,0.28)'}`, overflow: 'hidden', marginBottom: 14 }}>
+              <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${maintCouponConfirmed ? 'rgba(100,200,100,0.7)' : 'rgba(100,200,100,0.3)'}, transparent)` }} />
+              <div style={{ padding: '16px 18px' }}>
+                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(100,200,100,0.52)', marginBottom: 8, fontFamily: SERIF }}>メンテナンスクーポン確認</p>
+                <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', marginBottom: 4 }}>メンテナンスカット</p>
+                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#C9A24A', marginBottom: 8, lineHeight: 1 }}>¥3,000</p>
+                {maintCouponConfirmed ? (
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(100,200,100,0.15)', border: '1px solid rgba(100,200,100,0.5)', color: '#64D26E' }}>使用済み</span>
+                ) : maintCouponTodayUsed ? (
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(224,96,80,0.12)', border: '1px solid rgba(224,96,80,0.38)', color: '#E06050' }}>本日使用済み</span>
+                ) : (
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(100,210,110,0.08)', border: '1px solid rgba(100,210,110,0.3)', color: '#64D26E' }}>有効</span>
+                )}
+              </div>
+            </div>
+
+            {/* 当日利用済みメッセージ */}
+            {maintCouponTodayUsed && !maintCouponConfirmed && (
+              <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '12px 16px', marginBottom: 14 }}>
+                <p style={{ fontSize: 13, color: '#E06060', lineHeight: 1.7, fontFamily: SERIF }}>
+                  本日はすでにクーポンを利用済みです。<br />
+                  <span style={{ fontSize: 11, color: 'rgba(224,96,96,0.65)' }}>1日1枚制限（メンテ・漢トク券・割引券 共通）</span>
+                </p>
+              </div>
+            )}
+
+            {/* 使用確定済み */}
+            {maintCouponConfirmed && (
+              <div style={{ borderRadius: 16, background: 'linear-gradient(135deg, rgba(15,50,22,0.6), rgba(8,35,15,0.8))', border: '1px solid rgba(80,192,90,0.38)', padding: '22px', textAlign: 'center', marginBottom: 14, boxShadow: '0 4px 36px rgba(80,192,80,0.14)' }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(100,200,100,0.12)', border: '1px solid rgba(100,200,100,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>✓</div>
+                <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#80E060', marginBottom: 6 }}>使用確定しました</p>
+                <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.5)', lineHeight: 1.7 }}>
+                  メンテナンスクーポン ¥3,000<br />
+                  使用ログを記録しました。
+                </p>
+              </div>
+            )}
+
+            {/* エラーメッセージ */}
+            {maintCouponBlockMsg && (
+              <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '10px 14px', marginBottom: 12 }}>
+                <p style={{ fontSize: 12, color: '#E06060' }}>{maintCouponBlockMsg}</p>
+              </div>
+            )}
+
+            {/* 担当者未選択 */}
+            {!staffId.trim() && (
+              <div style={{ borderRadius: 12, background: 'rgba(224,140,0,0.1)', border: '1px solid rgba(224,140,0,0.3)', padding: '10px 14px', marginBottom: 12 }}>
+                <p style={{ fontSize: 11, color: '#E08C00' }}>担当者を選択してください</p>
+              </div>
+            )}
+
+            {/* 使用確定ボタン */}
+            {!maintCouponConfirmed && !maintCouponTodayUsed && (
+              <button
+                onClick={() => { void handleConfirmMaintenanceCoupon() }}
+                disabled={maintCouponConfirming || !staffId.trim()}
+                style={{
+                  width: '100%', padding: '16px', borderRadius: 14, marginBottom: 10,
+                  background: (maintCouponConfirming || !staffId.trim())
+                    ? 'rgba(255,255,255,0.04)'
+                    : 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
+                  border: `1px solid ${(maintCouponConfirming || !staffId.trim()) ? 'rgba(255,255,255,0.08)' : 'rgba(100,200,100,0.44)'}`,
+                  boxShadow: (maintCouponConfirming || !staffId.trim()) ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
+                  color: (maintCouponConfirming || !staffId.trim()) ? 'rgba(242,230,200,0.22)' : '#D0F4D8',
+                  fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.18em',
+                  cursor: (maintCouponConfirming || !staffId.trim()) ? 'default' : 'pointer',
+                }}
+              >
+                {maintCouponConfirming ? '確定中…' : '使用確定'}
+              </button>
+            )}
+
+            <button onClick={handleReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
+              次のお客様
+            </button>
+          </div>
+        )}
+
         {/* ===== RECOVERY TAB ===== */}
         {mainTab === 'recovery' && (
           <div>
