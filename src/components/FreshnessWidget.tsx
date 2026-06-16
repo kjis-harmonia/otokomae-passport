@@ -249,11 +249,11 @@ export function FreshnessWidget({
   ) : (
     notifSupported ? (
       notifPermission === 'granted' ? (
-        <p style={{ fontSize: 10, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.44)', textAlign: 'center' }}>
+        <p style={{ fontSize: 11, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.80)', textAlign: 'center' }}>
           通知ON — 来店3日前にお知らせします
         </p>
       ) : notifPermission === 'denied' ? (
-        <p style={{ fontSize: 10, letterSpacing: '0.12em', color: 'rgba(200,80,60,0.50)', textAlign: 'center' }}>
+        <p style={{ fontSize: 11, letterSpacing: '0.12em', color: 'rgba(220,80,60,0.78)', textAlign: 'center' }}>
           通知が拒否されています（設定から変更できます）
         </p>
       ) : (
@@ -261,7 +261,7 @@ export function FreshnessWidget({
           style={{
             width: '100%', padding: '13px 0', borderRadius: 14, cursor: 'pointer',
             background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.24)',
-            fontSize: 12, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.76)', fontFamily: SERIF,
+            fontSize: 13, letterSpacing: '0.14em', color: 'rgba(212,180,100,0.92)', fontFamily: SERIF,
           }}>
           カット時期になったら通知する
         </button>
@@ -368,12 +368,13 @@ export function FreshnessWidget({
                 {/* ── Gold shimmer gradient for percentage text ── */}
                 <linearGradient id="gj-fw-pct-gold" gradientUnits="userSpaceOnUse"
                   x1={CX - 52} y1="0" x2={CX + 52} y2="0">
-                  <stop offset="0%"   stopColor="#8B5E14" />
-                  <stop offset="20%"  stopColor="#C9A24A" />
-                  <stop offset="42%"  stopColor="#FCF6BA" />
-                  <stop offset="58%"  stopColor="#C9A24A" />
+                  <stop offset="0%"   stopColor="#7A4E10" />
+                  <stop offset="18%"  stopColor="#C9A24A" />
+                  <stop offset="36%"  stopColor="#F0DC8C" />
+                  <stop offset="48%"  stopColor="#FAF4E0" />
+                  <stop offset="60%"  stopColor="#E8C860" />
                   <stop offset="78%"  stopColor="#AA771C" />
-                  <stop offset="100%" stopColor="#8B5E14" />
+                  <stop offset="100%" stopColor="#7A4E10" />
                   {!reducedMotion && (
                     <animateTransform
                       attributeName="gradientTransform"
@@ -573,9 +574,9 @@ export function FreshnessWidget({
               {/* Label: 漢の鮮度 */}
               <text x={CX} y={CY - 33} textAnchor="middle"
                 style={{
-                  fontSize: '7px',
+                  fontSize: '7.5px',
                   fontFamily: MONO,
-                  fill: 'rgba(201,162,74,0.42)',
+                  fill: 'rgba(201,162,74,0.68)',
                   letterSpacing: '1.8px',
                 }}>
                 漢の鮮度
@@ -586,8 +587,8 @@ export function FreshnessWidget({
                 style={{
                   fontFamily: SERIF,
                   fill: isCritical ? 'url(#gj-fw-crit-gold)' : 'url(#gj-fw-pct-gold)',
-                  fontWeight: 'bold',
-                  filter: isCritical ? 'none' : 'drop-shadow(0 0 6px rgba(201,162,74,0.22))',
+                  fontWeight: 900,
+                  filter: isCritical ? 'none' : 'drop-shadow(0 1px 0 rgba(0,0,0,0.55)) drop-shadow(0 0 10px rgba(201,162,74,0.42))',
                 }}>
                 <tspan style={{ fontSize: '40px', letterSpacing: '-0.5px' }}>{freshness}</tspan>
                 <tspan dy="-16" style={{ fontSize: '15px', letterSpacing: '0' }}>%</tspan>
@@ -596,10 +597,9 @@ export function FreshnessWidget({
               {/* Status text */}
               <text x={CX} y={CY + 33} textAnchor="middle"
                 style={{
-                  fontSize: '8px',
+                  fontSize: '9.5px',
                   fontFamily: SERIF,
-                  fill: g.color,
-                  opacity: 0.88,
+                  fill: isCritical ? 'rgba(240,100,90,0.95)' : freshness < 25 ? 'rgba(240,165,125,0.92)' : '#FCF6BA',
                   letterSpacing: '0.4px',
                 }}>
                 {g.statusText}
@@ -609,8 +609,8 @@ export function FreshnessWidget({
               {daysLeft > 0 && (
                 <text x={CX} y={CY + 48} textAnchor="middle"
                   style={{
-                    fontSize: '7.5px',
-                    fill: 'rgba(242,230,200,0.30)',
+                    fontSize: '8.5px',
+                    fill: 'rgba(245,240,210,0.72)',
                     letterSpacing: '0.6px',
                   }}>
                   次回目安まで あと{daysLeft}日
@@ -620,9 +620,9 @@ export function FreshnessWidget({
               {/* Bottom label */}
               <text x={CX} y={CY + 62} textAnchor="middle"
                 style={{
-                  fontSize: '6.5px',
+                  fontSize: '7px',
                   fontFamily: MONO,
-                  fill: 'rgba(201,162,74,0.22)',
+                  fill: 'rgba(201,162,74,0.45)',
                   letterSpacing: '1.8px',
                 }}>
                 FRESHNESS · 14DAY CYCLE
@@ -640,19 +640,19 @@ export function FreshnessWidget({
             marginBottom: 14,
           }}>
             <div style={{ flex: 1, padding: '10px 14px' }}>
-              <p style={{ fontSize: 8, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.44)', marginBottom: 3 }}>
+              <p style={{ fontSize: 10, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.76)', marginBottom: 3 }}>
                 前回来店日
               </p>
-              <p style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, color: '#F2E6C8' }}>
+              <p style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: '#FCF6BA' }}>
                 {fmtDate(lastVisitDate)}
               </p>
             </div>
             <div style={{ width: 1, background: 'rgba(201,162,74,0.10)' }} />
             <div style={{ flex: 1, padding: '10px 14px' }}>
-              <p style={{ fontSize: 8, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.44)', marginBottom: 3 }}>
+              <p style={{ fontSize: 10, letterSpacing: '0.18em', color: 'rgba(201,162,74,0.76)', marginBottom: 3 }}>
                 次回推奨日
               </p>
-              <p style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, color: isOverdue ? 'rgba(242,230,200,0.32)' : '#C9A24A' }}>
+              <p style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: isOverdue ? 'rgba(242,230,200,0.45)' : '#E0B84A' }}>
                 {nextRecommendedDate ? fmtDate(nextRecommendedDate) : '—'}
               </p>
             </div>

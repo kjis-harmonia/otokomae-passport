@@ -209,7 +209,7 @@ function NavTabButton({
             ? 'drop-shadow(0 0 5px rgba(230,202,101,0.44)) drop-shadow(0 1px 3px rgba(180,130,40,0.26))'
             : 'none',
           transform: isActive ? 'scale(1.08)' : 'scale(1)',
-          opacity: isActive ? 1 : 0.52,
+          opacity: isActive ? 1 : 0.70,
           transition: 'filter 0.22s, transform 0.20s, opacity 0.20s',
         }}
       >
@@ -220,7 +220,7 @@ function NavTabButton({
       <span style={{
         fontSize: 10,
         letterSpacing: isActive ? '0.10em' : '0.07em',
-        color: isActive ? '#e6ca65' : 'rgba(138,111,62,0.62)',
+        color: isActive ? '#e6ca65' : 'rgba(176,138,66,0.82)',
         textShadow: isActive ? '0 0 10px rgba(230,202,101,0.30)' : 'none',
         transition: 'color 0.20s, text-shadow 0.20s, letter-spacing 0.20s',
       }}>
