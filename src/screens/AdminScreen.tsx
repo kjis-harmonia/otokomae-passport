@@ -337,7 +337,7 @@ export function AdminScreen() {
   const [useError, setUseError]                   = useState<string | null>(null)
   const [todayUsedThisDay, setTodayUsedThisDay]   = useState(false)
   const [showUseComplete, setShowUseComplete]     = useState(false)
-  const [useCompleteInfo, setUseCompleteInfo]     = useState<{ name: string; label: string; amount: number; remaining: number } | null>(null)
+  const [useCompleteInfo, setUseCompleteInfo]     = useState<{ name: string; label: string; amount: number; remaining: number; checkedIn: boolean } | null>(null)
 
   // Ticket-use QR flow
   const [ticketUseData, setTicketUseData]         = useState<TicketUseQRData | null>(null)
@@ -618,16 +618,20 @@ export function AdminScreen() {
         terminal:      'staff-terminal',
         status:        'used',
       })
+      await upsertLastVisitDate(scannedData.userId, today)
       const remaining = userTickets.filter(t => !t.used && t.id !== ticketId && t.type === ticketType).length
       setUserTickets(prev => prev.map(t =>
         t.id === ticketId ? { ...t, used: true, used_at: new Date().toISOString() } : t
       ))
       setTodayUsedThisDay(true)
+      setCheckInStatus('done')
+      setCheckInDate(today)
       setUseCompleteInfo({
         name:      scannedData.name,
         label:     TICKET_TYPE_LABELS[ticketType] ?? pendingUseTicket.title,
         amount:    pendingUseTicket.amount,
         remaining,
+        checkedIn: true,
       })
       setShowUseConfirm(false)
       setPendingUseTicket(null)
@@ -707,6 +711,7 @@ export function AdminScreen() {
         terminal:      'staff-terminal',
         status:        'used',
       })
+      await upsertLastVisitDate(maintCouponData.userId, today)
       setMaintCouponConfirmed(true)
       setMaintCouponTodayUsed(true)
       playSuccessSound()
@@ -1401,8 +1406,12 @@ export function AdminScreen() {
                 <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#80E060', marginBottom: 10 }}>使用確定しました</p>
                 <p style={{ fontFamily: SERIF, fontSize: 17, color: '#F2E6C8', marginBottom: 4 }}>{ticketForUse.title}</p>
                 {ticketForUse.amount > 0 && (
-                  <p style={{ fontFamily: SERIF, fontSize: 22, color: '#C9A24A', marginBottom: 4 }}>¥{ticketForUse.amount.toLocaleString()}</p>
+                  <p style={{ fontFamily: SERIF, fontSize: 22, color: '#C9A24A', marginBottom: 8 }}>¥{ticketForUse.amount.toLocaleString()}</p>
                 )}
+                <p style={{ fontSize: 12, color: 'rgba(128,224,96,0.65)', marginTop: 4, lineHeight: 1.6 }}>
+                  来店チェックイン完了<br />
+                  <span style={{ fontSize: 10, color: 'rgba(128,224,96,0.45)' }}>メンテナンスカウントダウンをリセットしました</span>
+                </p>
               </div>
             ) : (
               <>
@@ -1531,6 +1540,10 @@ export function AdminScreen() {
                 <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.5)', lineHeight: 1.7 }}>
                   メンテナンスクーポン ¥3,000<br />
                   使用ログを記録しました。
+                </p>
+                <p style={{ fontSize: 12, color: 'rgba(128,224,96,0.65)', marginTop: 10, lineHeight: 1.6 }}>
+                  来店チェックイン完了<br />
+                  <span style={{ fontSize: 10, color: 'rgba(128,224,96,0.45)' }}>メンテナンスカウントダウンをリセットしました</span>
                 </p>
               </div>
             )}
@@ -2071,6 +2084,11 @@ export function AdminScreen() {
             <p style={{ fontFamily: SERIF, fontSize: 14, color: 'rgba(242,230,200,0.45)', letterSpacing: '0.06em' }}>
               残り：{useCompleteInfo.remaining}枚
             </p>
+            {useCompleteInfo.checkedIn && (
+              <p style={{ fontFamily: SERIF, fontSize: 12, color: 'rgba(128,224,96,0.68)', marginTop: 14, letterSpacing: '0.08em' }}>
+                来店チェックインも完了しました
+              </p>
+            )}
           </div>
         </div>
       )}
