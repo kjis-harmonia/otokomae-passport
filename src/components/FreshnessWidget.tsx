@@ -6,10 +6,7 @@ import { fmtDate } from '../utils/maintenanceSchedule'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'
 
-// ── SVG gauge constants (viewBox 0 0 220 220) ─────────────────────────────────
-const CX = 110
-const CY = 110
-const RING_R = 84
+const CX = 110, CY = 110, RING_R = 84
 const CIRC = 2 * Math.PI * RING_R  // ≈ 527.79
 
 // 14 tick marks: one per day interval, day-0 at top (clockwise)
@@ -18,11 +15,18 @@ const TICKS = Array.from({ length: 14 }, (_, i) => {
   const isMajor = i === 0 || i === 7
   const r1 = isMajor ? 90 : 94
   return {
-    x1: CX + r1 * Math.cos(angle),
-    y1: CY + r1 * Math.sin(angle),
-    x2: CX + 100 * Math.cos(angle),
-    y2: CY + 100 * Math.sin(angle),
+    x1: CX + r1 * Math.cos(angle), y1: CY + r1 * Math.sin(angle),
+    x2: CX + 100 * Math.cos(angle), y2: CY + 100 * Math.sin(angle),
     isMajor,
+  }
+})
+
+// Brushed-metal sunburst texture (36 fine radial lines, clipped to dial)
+const SUNBURST = Array.from({ length: 36 }, (_, i) => {
+  const angle = (i / 36) * Math.PI * 2
+  return {
+    x1: CX + 3 * Math.cos(angle), y1: CY + 3 * Math.sin(angle),
+    x2: CX + 101 * Math.cos(angle), y2: CY + 101 * Math.sin(angle),
   }
 })
 
@@ -140,7 +144,6 @@ export function FreshnessWidget({
           padding: '28px 20px',
           textAlign: 'center',
         }}>
-          {/* Ambient empty ring */}
           <div style={{ margin: '0 auto 18px', width: 80, height: 80 }}>
             <svg viewBox="0 0 80 80" style={{ width: '100%', height: '100%' }} aria-hidden="true">
               <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(201,162,74,0.07)" strokeWidth={4} />
@@ -195,12 +198,27 @@ export function FreshnessWidget({
   const g = getGaugeTheme(freshness)
   const filledArc = (freshness / 100) * CIRC
 
-  const borderColor = isOverdue ? 'rgba(139,26,26,0.44)' : 'rgba(201,162,74,0.18)'
-  const accentLine = isOverdue
-    ? 'linear-gradient(90deg, transparent 0%, #6B0F12 30%, #8B1A1A 50%, #6B0F12 70%, transparent 100%)'
-    : 'linear-gradient(90deg, transparent 0%, #5A0A0E 20%, #C9A24A 50%, #5A0A0E 80%, transparent 100%)'
+  // Visual drama flags (independent of gauge theme thresholds)
+  const isLowWarning = freshness < 40 && freshness > 0
+  const isCritical   = freshness === 0
 
-  // CTA: use external callback if provided, otherwise link to URL
+  // Meteor tip: angle in degrees (0 = 12 o'clock, clockwise)
+  const tipFinalDeg = (freshness / 100) * 360
+  // Tip position in SVG coords (for static/reduced-motion fallback)
+  const tipAngleRad = (freshness / 100) * Math.PI * 2 - Math.PI / 2
+  const tipX = CX + RING_R * Math.cos(tipAngleRad)
+  const tipY = CY + RING_R * Math.sin(tipAngleRad)
+
+  const borderColor = isCritical ? 'rgba(139,26,26,0.55)'
+    : isLowWarning  ? 'rgba(160,40,30,0.32)'
+    : 'rgba(201,162,74,0.18)'
+
+  const accentLine = isCritical
+    ? 'linear-gradient(90deg, transparent, #6B0F12 30%, #8B1A1A 50%, #6B0F12 70%, transparent)'
+    : isOverdue
+    ? 'linear-gradient(90deg, transparent, #5A0A0E 20%, #C9A24A 50%, #5A0A0E 80%, transparent)'
+    : 'linear-gradient(90deg, transparent, #5A0A0E 20%, #C9A24A 50%, #5A0A0E 80%, transparent)'
+
   const reserveCTA = isOverdue ? (
     onReserve ? (
       <button type="button" onClick={onReserve}
@@ -256,14 +274,16 @@ export function FreshnessWidget({
       <SectionHeader />
       <div style={{
         borderRadius: 24,
-        background: 'linear-gradient(155deg, #120608 0%, #0A0404 60%, #080506 100%)',
+        background: 'linear-gradient(155deg, #130608 0%, #0A0404 55%, #080407 100%)',
         border: `1px solid ${borderColor}`,
         boxShadow: [
-          '0 16px 52px rgba(0,0,0,0.70)',
-          'inset 0 1px 0 rgba(255,255,255,0.02)',
-          g.isCritical ? '0 0 64px rgba(100,16,16,0.20)' : '',
+          '0 20px 60px rgba(0,0,0,0.78)',
+          'inset 0 1px 0 rgba(255,255,255,0.025)',
+          isCritical  ? '0 0 80px rgba(110,14,14,0.28)' : '',
+          isLowWarning ? '0 0 40px rgba(80,14,14,0.14)' : '',
         ].filter(Boolean).join(', '),
         overflow: 'hidden',
+        transition: 'border-color 0.6s, box-shadow 0.6s',
       }}>
         {/* Accent stripe */}
         <div style={{ height: 2, background: accentLine }} />
@@ -279,83 +299,214 @@ export function FreshnessWidget({
               aria-label={`漢の鮮度 ${freshness}% — ${g.statusText}`}
             >
               <defs>
-                {/* Brushed-gold bezel gradient */}
-                <linearGradient id="gj-fw-bezel" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%"   stopColor="#C9A24A" stopOpacity="0.68" />
-                  <stop offset="20%"  stopColor="#7A5A18" stopOpacity="0.34" />
-                  <stop offset="44%"  stopColor="#EDD070" stopOpacity="0.96" />
-                  <stop offset="68%"  stopColor="#6A4C10" stopOpacity="0.30" />
-                  <stop offset="100%" stopColor="#C9A24A" stopOpacity="0.62" />
+                {/* ── Clip path for dial interior ── */}
+                <clipPath id="gj-fw-dial-clip">
+                  <circle cx={CX} cy={CY} r={102} />
+                </clipPath>
+
+                {/* ── Outer bezel: antique deep shadow ── */}
+                <linearGradient id="gj-fw-bezel-outer" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"   stopColor="#1A0E06" stopOpacity="0.92" />
+                  <stop offset="35%"  stopColor="#3A2510" stopOpacity="0.70" />
+                  <stop offset="65%"  stopColor="#0E0804" stopOpacity="0.88" />
+                  <stop offset="100%" stopColor="#1A0E06" stopOpacity="0.92" />
                 </linearGradient>
-                {/* Dark metallic dial */}
-                <radialGradient id="gj-fw-dial" cx="42%" cy="34%" r="64%">
-                  <stop offset="0%"   stopColor="#1C0E0B" />
-                  <stop offset="55%"  stopColor="#0C0605" />
-                  <stop offset="100%" stopColor="#050303" />
+
+                {/* ── Main bezel: polished brass-gold shimmer ── */}
+                <linearGradient id="gj-fw-bezel" x1="10%" y1="0%" x2="90%" y2="100%">
+                  <stop offset="0%"   stopColor="#8B6218" stopOpacity="0.55" />
+                  <stop offset="16%"  stopColor="#EDD88A" stopOpacity="0.95" />
+                  <stop offset="32%"  stopColor="#7A5410" stopOpacity="0.40" />
+                  <stop offset="50%"  stopColor="#F0E090" stopOpacity="1.00" />
+                  <stop offset="68%"  stopColor="#6A4808" stopOpacity="0.38" />
+                  <stop offset="84%"  stopColor="#D4A030" stopOpacity="0.88" />
+                  <stop offset="100%" stopColor="#8B6218" stopOpacity="0.52" />
+                </linearGradient>
+
+                {/* ── Dark metallic dial with off-center lighting ── */}
+                <radialGradient id="gj-fw-dial" cx="38%" cy="30%" r="70%">
+                  <stop offset="0%"   stopColor="#221210" />
+                  <stop offset="40%"  stopColor="#100806" />
+                  <stop offset="80%"  stopColor="#070404" />
+                  <stop offset="100%" stopColor="#040202" />
                 </radialGradient>
-                {/* Arc glow blur */}
+
+                {/* ── Sapphire glass reflection (cool upper-left highlight) ── */}
+                <radialGradient id="gj-fw-sapphire" cx="28%" cy="22%" r="44%">
+                  <stop offset="0%"   stopColor="rgba(195,215,255,0.062)" />
+                  <stop offset="55%"  stopColor="rgba(195,215,255,0.016)" />
+                  <stop offset="100%" stopColor="rgba(195,215,255,0.000)" />
+                </radialGradient>
+
+                {/* ── Crimson inner aura for low freshness ── */}
+                <radialGradient id="gj-fw-warn-aura" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%"   stopColor="rgba(100,14,14,0.00)" />
+                  <stop offset="65%"  stopColor="rgba(100,14,14,0.00)" />
+                  <stop offset="100%" stopColor="rgba(110,16,16,0.55)" />
+                </radialGradient>
+
+                {/* ── Arc glow blur ── */}
                 <filter id="gj-fw-glow" x="-55%" y="-55%" width="210%" height="210%">
                   <feGaussianBlur in="SourceGraphic" stdDeviation="6" />
                 </filter>
-                {/* Subtle bezel glow for critical state */}
+
+                {/* ── Critical outer aura blur ── */}
                 <filter id="gj-fw-crit-aura" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur in="SourceGraphic" stdDeviation="4" />
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="5" />
                 </filter>
+
+                {/* ── Meteor tip: layered glow ── */}
+                <filter id="gj-fw-tip-glow" x="-120%" y="-120%" width="340%" height="340%">
+                  <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+
+                {/* ── Gold shimmer gradient for percentage text ── */}
+                <linearGradient id="gj-fw-pct-gold" gradientUnits="userSpaceOnUse"
+                  x1={CX - 52} y1="0" x2={CX + 52} y2="0">
+                  <stop offset="0%"   stopColor="#8B5E14" />
+                  <stop offset="20%"  stopColor="#C9A24A" />
+                  <stop offset="42%"  stopColor="#FCF6BA" />
+                  <stop offset="58%"  stopColor="#C9A24A" />
+                  <stop offset="78%"  stopColor="#AA771C" />
+                  <stop offset="100%" stopColor="#8B5E14" />
+                  {!reducedMotion && (
+                    <animateTransform
+                      attributeName="gradientTransform"
+                      type="translate"
+                      values="-200 0; 200 0; -200 0"
+                      dur="3.5s"
+                      repeatCount="indefinite"
+                    />
+                  )}
+                </linearGradient>
+
+                {/* ── Critical state text color ── */}
+                <linearGradient id="gj-fw-crit-gold" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#6B1212" />
+                  <stop offset="50%"  stopColor="#C03030" />
+                  <stop offset="100%" stopColor="#6B1212" />
+                </linearGradient>
               </defs>
 
-              {/* ── Outer critical aura ── */}
-              {g.isCritical && (
-                <circle cx={CX} cy={CY} r={109} fill="none"
-                  stroke="rgba(139,26,26,0.28)" strokeWidth={10}
+              {/* ── Critical outer crimson aura ── */}
+              {isCritical && (
+                <circle cx={CX} cy={CY} r={110}
+                  fill="none"
+                  stroke="rgba(120,18,18,0.32)" strokeWidth={14}
+                  filter="url(#gj-fw-crit-aura)" />
+              )}
+              {/* Low-warning outer bleed */}
+              {isLowWarning && !isCritical && (
+                <circle cx={CX} cy={CY} r={109}
+                  fill="none"
+                  stroke="rgba(100,16,16,0.20)" strokeWidth={10}
                   filter="url(#gj-fw-crit-aura)" />
               )}
 
-              {/* ── Bezel ring (brushed gold) ── */}
-              <circle cx={CX} cy={CY} r={107} fill="none"
-                stroke="url(#gj-fw-bezel)" strokeWidth={3.5} />
-              <circle cx={CX} cy={CY} r={103.8} fill="none"
-                stroke="rgba(0,0,0,0.52)" strokeWidth={0.5} />
+              {/* ══ BEZEL STACK ══ */}
 
-              {/* ── Dark metallic dial ── */}
+              {/* Outer shadow ring — depth and weight */}
+              <circle cx={CX} cy={CY} r={109.5} fill="none"
+                stroke="url(#gj-fw-bezel-outer)" strokeWidth={4} />
+
+              {/* Main bezel — polished brass-gold */}
+              <circle cx={CX} cy={CY} r={107} fill="none"
+                stroke="url(#gj-fw-bezel)" strokeWidth={3.8} />
+
+              {/* Bezel inner shadow line */}
+              <circle cx={CX} cy={CY} r={104.8} fill="none"
+                stroke="rgba(0,0,0,0.65)" strokeWidth={0.6} />
+
+              {/* Inner bezel accent ring */}
+              <circle cx={CX} cy={CY} r={103.8} fill="none"
+                stroke="rgba(180,140,50,0.18)" strokeWidth={0.5} />
+
+              {/* ══ DIAL ══ */}
+
+              {/* Dark metallic dial fill */}
               <circle cx={CX} cy={CY} r={103} fill="url(#gj-fw-dial)" />
 
-              {/* ── Inner bezel line (subtle depth) ── */}
-              <circle cx={CX} cy={CY} r={102} fill="none"
-                stroke="rgba(255,255,255,0.025)" strokeWidth={0.5} />
+              {/* Brushed-metal sunburst texture (fine radial lines) */}
+              <g clipPath="url(#gj-fw-dial-clip)" opacity="0.055" aria-hidden="true">
+                {SUNBURST.map((l, i) => (
+                  <line key={i}
+                    x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+                    stroke="#EAD88A" strokeWidth="0.5"
+                  />
+                ))}
+              </g>
 
-              {/* ── Tick marks: 14 day intervals ── */}
+              {/* Sapphire glass reflection */}
+              <circle cx={CX} cy={CY} r={103} fill="url(#gj-fw-sapphire)" />
+
+              {/* Inner dial separation ring */}
+              <circle cx={CX} cy={CY} r={102} fill="none"
+                stroke="rgba(255,255,255,0.028)" strokeWidth={0.5} />
+
+              {/* ══ 12 O'CLOCK MACHINED MARKER ══ */}
+              {/* Small polished metal index at top of bezel */}
+              <rect
+                x={CX - 2.2} y={CY - 107}
+                width={4.4} height={9}
+                rx={1.2}
+                fill="url(#gj-fw-bezel)"
+                opacity="0.90"
+              />
+              {/* Subtle shadow under the 12-marker */}
+              <rect
+                x={CX - 1.4} y={CY - 107}
+                width={2.8} height={9}
+                rx={0.8}
+                fill="rgba(0,0,0,0.30)"
+                opacity="0.55"
+              />
+
+              {/* ══ TICK MARKS ══ */}
               {TICKS.map((t, i) => (
                 <line key={i}
                   x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2}
-                  stroke={t.isMajor ? 'rgba(201,162,74,0.42)' : 'rgba(201,162,74,0.16)'}
-                  strokeWidth={t.isMajor ? 1.5 : 0.75}
+                  stroke={t.isMajor ? 'rgba(201,162,74,0.52)' : 'rgba(201,162,74,0.18)'}
+                  strokeWidth={t.isMajor ? 1.8 : 0.8}
                   strokeLinecap="round" />
               ))}
 
-              {/* ── Track ring (empty channel) ── */}
+              {/* ══ TRACK CHANNEL ══ */}
               <circle cx={CX} cy={CY} r={RING_R} fill="none"
-                stroke="rgba(255,255,255,0.045)" strokeWidth={11} />
+                stroke="rgba(255,255,255,0.035)" strokeWidth={11} />
 
-              {/* ── Glow behind progress arc (pulsing for critical) ── */}
+              {/* ══ CRIMSON INNER WARNING AURA ══ */}
+              {(isLowWarning || isCritical) && (
+                <circle cx={CX} cy={CY} r={103}
+                  fill="url(#gj-fw-warn-aura)"
+                  opacity={isCritical ? 0.85 : freshness < 25 ? 0.60 : 0.35}
+                />
+              )}
+
+              {/* ══ GLOW BEHIND PROGRESS ARC ══ */}
               {freshness > 0 && (
                 <motion.circle
                   cx={CX} cy={CY} r={RING_R}
                   fill="none"
                   stroke={g.glowColor}
-                  strokeWidth={24}
+                  strokeWidth={26}
                   strokeDasharray={`${filledArc} ${CIRC}`}
                   strokeLinecap="round"
                   transform={`rotate(-90 ${CX} ${CY})`}
                   filter="url(#gj-fw-glow)"
                   animate={g.isPulsing && !reducedMotion
-                    ? { opacity: [0.20, 0.52, 0.20] }
-                    : { opacity: 0.28 }
+                    ? { opacity: [0.18, 0.55, 0.18] }
+                    : { opacity: isLowWarning ? 0.38 : 0.28 }
                   }
                   transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
                 />
               )}
 
-              {/* ── Progress arc (freshness indicator) ── */}
+              {/* ══ PROGRESS ARC ══ */}
               {freshness > 0 && (
                 <motion.circle
                   cx={CX} cy={CY} r={RING_R}
@@ -368,37 +519,75 @@ export function FreshnessWidget({
                   animate={{ strokeDasharray: `${filledArc} ${CIRC}` }}
                   transition={reducedMotion
                     ? { duration: 0 }
-                    : { duration: 0.88, ease: [0.4, 0, 0.2, 1] }
+                    : { duration: 1.2, ease: [0.4, 0, 0.2, 1] }
                   }
                 />
               )}
 
+              {/* ══ METEOR TIP GLOW ══ */}
+              {freshness > 0 && (
+                reducedMotion ? (
+                  /* Static tip at final position */
+                  <g>
+                    <circle cx={tipX} cy={tipY} r={7}
+                      fill="rgba(252,246,186,0.22)"
+                      filter="url(#gj-fw-tip-glow)" />
+                    <circle cx={tipX} cy={tipY} r={3.8}
+                      fill="rgba(255,252,240,0.90)" />
+                    <circle cx={tipX} cy={tipY} r={1.8}
+                      fill="rgba(255,255,255,0.96)" />
+                  </g>
+                ) : (
+                  /* Animated tip sweeping along the arc */
+                  <motion.g
+                    initial={{ rotate: 0 }}
+                    animate={{ rotate: tipFinalDeg }}
+                    transition={{ duration: 1.2, ease: [0.4, 0, 0.2, 1] }}
+                    style={{
+                      transformOrigin: `${CX}px ${CY}px`,
+                      transformBox: 'view-box' as React.CSSProperties['transformBox'],
+                    }}
+                  >
+                    {/* Outer halo */}
+                    <circle cx={CX} cy={CY - RING_R} r={8}
+                      fill="rgba(252,246,186,0.18)"
+                      filter="url(#gj-fw-tip-glow)" />
+                    {/* Mid glow */}
+                    <circle cx={CX} cy={CY - RING_R} r={4.5}
+                      fill="rgba(252,246,186,0.72)" />
+                    {/* Hot core */}
+                    <circle cx={CX} cy={CY - RING_R} r={2}
+                      fill="rgba(255,255,252,0.98)" />
+                  </motion.g>
+                )
+              )}
+
               {/* ── Inner separator ring ── */}
               <circle cx={CX} cy={CY} r={71} fill="none"
-                stroke="rgba(201,162,74,0.07)" strokeWidth={0.5} />
+                stroke="rgba(201,162,74,0.08)" strokeWidth={0.5} />
 
-              {/* ════════════════════════════════
-                  Center text (all in SVG units so
-                  it scales with the gauge)
-                  ════════════════════════════════ */}
+              {/* ══════════════════════════════════
+                  CENTER TEXT
+                  ══════════════════════════════════ */}
 
-              {/* Top label: 漢の鮮度 */}
+              {/* Label: 漢の鮮度 */}
               <text x={CX} y={CY - 33} textAnchor="middle"
                 style={{
                   fontSize: '7px',
                   fontFamily: MONO,
-                  fill: 'rgba(201,162,74,0.40)',
+                  fill: 'rgba(201,162,74,0.42)',
                   letterSpacing: '1.8px',
                 }}>
                 漢の鮮度
               </text>
 
-              {/* Percentage number */}
+              {/* Percentage number — gold shimmer gradient fill */}
               <text x={CX} y={CY + 14} textAnchor="middle"
                 style={{
                   fontFamily: SERIF,
-                  fill: g.color,
+                  fill: isCritical ? 'url(#gj-fw-crit-gold)' : 'url(#gj-fw-pct-gold)',
                   fontWeight: 'bold',
+                  filter: isCritical ? 'none' : 'drop-shadow(0 0 6px rgba(201,162,74,0.22))',
                 }}>
                 <tspan style={{ fontSize: '40px', letterSpacing: '-0.5px' }}>{freshness}</tspan>
                 <tspan dy="-16" style={{ fontSize: '15px', letterSpacing: '0' }}>%</tspan>
@@ -410,18 +599,18 @@ export function FreshnessWidget({
                   fontSize: '8px',
                   fontFamily: SERIF,
                   fill: g.color,
-                  opacity: 0.82,
+                  opacity: 0.88,
                   letterSpacing: '0.4px',
                 }}>
                 {g.statusText}
               </text>
 
-              {/* Days remaining (only when within cycle) */}
+              {/* Days remaining */}
               {daysLeft > 0 && (
                 <text x={CX} y={CY + 48} textAnchor="middle"
                   style={{
                     fontSize: '7.5px',
-                    fill: 'rgba(242,230,200,0.28)',
+                    fill: 'rgba(242,230,200,0.30)',
                     letterSpacing: '0.6px',
                   }}>
                   次回目安まで あと{daysLeft}日
@@ -433,7 +622,7 @@ export function FreshnessWidget({
                 style={{
                   fontSize: '6.5px',
                   fontFamily: MONO,
-                  fill: 'rgba(201,162,74,0.20)',
+                  fill: 'rgba(201,162,74,0.22)',
                   letterSpacing: '1.8px',
                 }}>
                 FRESHNESS · 14DAY CYCLE
