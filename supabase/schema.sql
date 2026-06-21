@@ -354,3 +354,35 @@ end;
 $$;
 
 grant execute on function public.recover_member(text, text, text, text) to anon, authenticated;
+
+-- ── live_statuses: GINJIRO LIVE STATUS（座席ごとの本日受付状況） ─────────────
+-- スタッフ端末でカードをタップするたびに
+-- ready → limited → full → closed → ready の順で循環更新される。
+
+create table if not exists public.live_statuses (
+  id          text        primary key,
+  name        text        not null,
+  status      text        not null default 'ready',
+  sort_order  integer     not null default 0,
+  updated_at  timestamptz default now() not null,
+
+  constraint live_statuses_status_check check (status in ('ready', 'limited', 'full', 'closed'))
+);
+
+alter table public.live_statuses enable row level security;
+
+create policy "allow_all" on public.live_statuses
+  for all
+  using (true)
+  with check (true);
+
+-- Supabase Realtime: enable postgres_changes for this table
+-- Run this separately in the SQL editor if postgres_changes are needed:
+-- alter publication supabase_realtime add table public.live_statuses;
+
+-- 初期データ（3件固定。既存行があれば変更しない）
+insert into public.live_statuses (id, name, status, sort_order) values
+  ('teitei',  'テイテイ', 'ready', 1),
+  ('ginjiro', '銀二郎',   'ready', 2),
+  ('free',    'フリー',   'ready', 3)
+on conflict (id) do nothing;

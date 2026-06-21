@@ -6,6 +6,7 @@ import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import { StyleDetailModal } from '../components/StyleDetailModal'
 import { PassportCard } from '../components/PassportCard'
 import { FreshnessWidget } from '../components/FreshnessWidget'
+import { LiveStatusSection } from '../components/LiveStatusSection'
 import { HERO_SLIDE_IMAGES, resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
 import type { StyleCard } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
@@ -1057,6 +1058,15 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
             transition={{ delay: 0.34, duration: 0.44, ease: EASE_OUT }}
           >
             <MaintenanceScheduleSection />
+          </motion.div>
+
+          {/* ⑥ GINJIRO LIVE STATUS */}
+          <motion.div
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.40, duration: 0.44, ease: EASE_OUT }}
+          >
+            <LiveStatusSection />
           </motion.div>
         </div>
 

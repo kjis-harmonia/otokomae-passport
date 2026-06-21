@@ -11,6 +11,9 @@ import { upsertCustomer, searchCustomersByName, recoverMember } from '../utils/c
 import type { CustomerRow } from '../utils/customerStore'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
+import { getLiveStatuses, setLiveStatus, subscribeLiveStatuses } from '../utils/liveStatusStore'
+import { LIVE_STATUS_COLORS, liveStatusLabel, nextLiveStatus } from '../data/liveStatus'
+import type { LiveStatusRow } from '../data/liveStatus'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -364,8 +367,11 @@ export function AdminScreen() {
   // Store QR
   const [showStoreQr, setShowStoreQr] = useState(false)
 
-  // ── Main tab (issue / recovery) ───────────────────────────────────────────
-  const [mainTab, setMainTab] = useState<'issue' | 'recovery'>('issue')
+  // ── Main tab (issue / recovery / live-status) ─────────────────────────────
+  const [mainTab, setMainTab] = useState<'issue' | 'recovery' | 'live-status'>('issue')
+
+  // Live status tab state
+  const [liveStatusRows, setLiveStatusRows] = useState<LiveStatusRow[]>([])
 
   // Recovery tab state
   const [recoveryStep, setRecoveryStep]               = useState<'search' | 'detail' | 'scan' | 'confirm' | 'done'>('search')
@@ -423,6 +429,21 @@ export function AdminScreen() {
 
     return () => { void supabase.removeChannel(channel) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Live status (LIVE STATUS管理タブ) ───────────────────────────────────────
+
+  useEffect(() => {
+    getLiveStatuses().then(setLiveStatusRows)
+    const unsubscribe = subscribeLiveStatuses((updated) => {
+      setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
+    })
+    return unsubscribe
+  }, [])
+
+  const handleCycleLiveStatus = useCallback(async (row: LiveStatusRow) => {
+    const updated = await setLiveStatus(row.id, nextLiveStatus(row.status))
+    if (updated) setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
+  }, [])
 
   // ── Log panel ─────────────────────────────────────────────────────────────
 
@@ -907,9 +928,10 @@ export function AdminScreen() {
       {/* ── Main tab switcher ── */}
       <div style={{ display: 'flex', borderBottom: '1px solid rgba(201,162,74,0.12)', background: 'rgba(0,0,0,0.25)', flexShrink: 0 }}>
         {([
-          { id: 'issue',    label: 'チケット発行' },
-          { id: 'recovery', label: '会員復旧' },
-        ] as { id: 'issue' | 'recovery'; label: string }[]).map(tab => {
+          { id: 'issue',       label: 'チケット発行' },
+          { id: 'recovery',    label: '会員復旧' },
+          { id: 'live-status', label: 'LIVE STATUS' },
+        ] as { id: 'issue' | 'recovery' | 'live-status'; label: string }[]).map(tab => {
           const isActive = mainTab === tab.id
           return (
             <button
@@ -1804,6 +1826,58 @@ export function AdminScreen() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ===== LIVE STATUS管理 ===== */}
+        {mainTab === 'live-status' && (
+          <div>
+            <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.08em', marginBottom: 16, lineHeight: 1.7 }}>
+              カードをタップすると<br />
+              READY → LIMITED → FULL → CLOSED → READY の順で切り替わります。
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {liveStatusRows.map((row) => {
+                const c = LIVE_STATUS_COLORS[row.status]
+                const isDim = row.status === 'full' || row.status === 'closed'
+                const isGlowing = row.status === 'ready' || row.status === 'limited'
+                return (
+                  <button
+                    key={row.id}
+                    onClick={() => void handleCycleLiveStatus(row)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '16px 18px', borderRadius: 16,
+                      background: 'linear-gradient(155deg, #130608 0%, #0A0404 55%, #080407 100%)',
+                      border: `1.5px solid ${c.border}`,
+                      boxShadow: isGlowing ? `0 0 24px ${c.glow}` : 'none',
+                      opacity: isDim ? 0.6 : 1,
+                      cursor: 'pointer', textAlign: 'left',
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    <div>
+                      <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 4 }}>
+                        {row.name}
+                      </p>
+                      <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.30)', letterSpacing: '0.06em' }}>
+                        更新 {fmtLogTime(row.updated_at)}
+                      </p>
+                    </div>
+                    <span style={{
+                      padding: '6px 16px', borderRadius: 99,
+                      background: isGlowing ? c.glow : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${c.border}`,
+                      fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
+                      color: isDim ? c.color : '#0B0403',
+                      fontFamily: SERIF,
+                    }}>
+                      {liveStatusLabel(row.id, row.status)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
       </main>
