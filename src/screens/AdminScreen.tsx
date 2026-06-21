@@ -12,7 +12,7 @@ import type { CustomerRow } from '../utils/customerStore'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 import { getLiveStatuses, setLiveStatus, subscribeLiveStatuses } from '../utils/liveStatusStore'
-import { LIVE_STATUS_COLORS, liveStatusLabel, nextLiveStatus } from '../data/liveStatus'
+import { LIVE_STATUS_CODES, LIVE_STATUS_THEME, liveStatusLabel, nextLiveStatus } from '../data/liveStatus'
 import type { LiveStatusRow } from '../data/liveStatus'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -1836,43 +1836,56 @@ export function AdminScreen() {
               カードをタップすると<br />
               READY → LIMITED → FULL → CLOSED → READY の順で切り替わります。
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {liveStatusRows.map((row) => {
-                const c = LIVE_STATUS_COLORS[row.status]
-                const isDim = row.status === 'full' || row.status === 'closed'
-                const isGlowing = row.status === 'ready' || row.status === 'limited'
+                const t = LIVE_STATUS_THEME[row.status]
                 return (
                   <button
                     key={row.id}
                     onClick={() => void handleCycleLiveStatus(row)}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '16px 18px', borderRadius: 16,
+                      minHeight: 132, borderRadius: 18,
                       background: 'linear-gradient(155deg, #130608 0%, #0A0404 55%, #080407 100%)',
-                      border: `1.5px solid ${c.border}`,
-                      boxShadow: isGlowing ? `0 0 24px ${c.glow}` : 'none',
-                      opacity: isDim ? 0.6 : 1,
+                      border: `1.5px solid ${t.border}`,
+                      boxShadow: [
+                        '0 14px 36px rgba(0,0,0,0.55)',
+                        t.glow,
+                      ].filter(Boolean).join(', '),
+                      opacity: t.dim ? 0.62 : 1,
+                      padding: '16px 18px',
                       cursor: 'pointer', textAlign: 'left',
                       WebkitTapHighlightColor: 'transparent',
+                      position: 'relative', overflow: 'hidden',
                     }}
                   >
-                    <div>
-                      <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 4 }}>
+                    <div style={{ height: 2, position: 'absolute', top: 0, left: 0, right: 0, background: `linear-gradient(90deg, transparent, ${t.border} 50%, transparent)` }} />
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                      <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
                         {row.name}
                       </p>
-                      <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.30)', letterSpacing: '0.06em' }}>
+                      <p style={{ fontFamily: 'ui-monospace, "SF Mono", "Fira Code", monospace', fontSize: 21, fontWeight: 700, color: t.codeColor, letterSpacing: '0.06em', lineHeight: 1.15 }}>
+                        {LIVE_STATUS_CODES[row.status]}
+                      </p>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: t.descColor, letterSpacing: '0.04em' }}>
+                        {liveStatusLabel(row.id, row.status)}
+                      </p>
+                      <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.30)', letterSpacing: '0.06em', marginTop: 2 }}>
                         更新 {fmtLogTime(row.updated_at)}
                       </p>
                     </div>
+
                     <span style={{
-                      padding: '6px 16px', borderRadius: 99,
-                      background: isGlowing ? c.glow : 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${c.border}`,
-                      fontSize: 12, fontWeight: 700, letterSpacing: '0.08em',
-                      color: isDim ? c.color : '#0B0403',
-                      fontFamily: SERIF,
+                      flexShrink: 0, marginLeft: 12,
+                      padding: '6px 12px', borderRadius: 99,
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.10)',
+                      fontSize: 10, fontWeight: 700, letterSpacing: '0.10em',
+                      color: 'rgba(242,230,200,0.40)',
+                      fontFamily: SERIF, whiteSpace: 'nowrap',
                     }}>
-                      {liveStatusLabel(row.id, row.status)}
+                      タップで切替
                     </span>
                   </button>
                 )
