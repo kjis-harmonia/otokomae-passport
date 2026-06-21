@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AdminScreen } from './AdminScreen'
+import { isStaging } from '../utils/env'
+import { StgBadge } from '../components/StgBadge'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const CORRECT_PIN = '8181'
@@ -85,6 +87,8 @@ export function StaffPinGate() {
         }}
       >
         <style>{PIN_CSS}</style>
+
+        {isStaging() && <StgBadge />}
 
         {/* Top accent line */}
         <div style={{

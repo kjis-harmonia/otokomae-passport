@@ -9,6 +9,8 @@ import { issueTicket, getUserTickets, markTicketUsed } from '../utils/ticketStor
 import { getJapanDateString } from '../utils/dateUtils'
 import { upsertCustomer, searchCustomersByName, recoverMember } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
+import { isStaging } from '../utils/env'
+import { StgBadge } from '../components/StgBadge'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -869,6 +871,8 @@ export function AdminScreen() {
           <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.3)', marginTop: 3 }}>{fmtLogTime(logToast.issued_at)}</p>
         </div>
       )}
+
+      {isStaging() && <StgBadge />}
 
       {/* ── Header ── */}
       <header style={{
