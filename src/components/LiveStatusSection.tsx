@@ -234,13 +234,11 @@ export function LiveStatusSection() {
                   {liveStatusLabel(row.id, row.status)}
                 </p>
                 <p style={{
-                  fontSize: 13, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
+                  fontSize: 15, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
                   fontFamily: SANS, margin: 0, marginBottom: cta ? 7 : 0,
-                  whiteSpace: 'normal', overflow: 'hidden', maxWidth: '100%',
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                  lineHeight: 1.3,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
                 }}>
-                  {liveStatusAvailabilityMessage(row)}
+                  {row.status === 'closed' ? '本日終了' : liveStatusAvailabilityMessage(row)}
                 </p>
 
                 {cta && (
