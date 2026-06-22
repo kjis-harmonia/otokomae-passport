@@ -295,7 +295,7 @@ function QrCameraScanner({
           QRを読み取る
         </button>
       ) : (
-        <button onClick={stop} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(242,230,200,0.6)', fontFamily: SERIF, fontSize: 13, fontWeight: 600, letterSpacing: '0.14em', cursor: 'pointer' }}>
+        <button onClick={stop} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', color: '#e5e5e5', fontFamily: SERIF, fontSize: 13, fontWeight: 600, letterSpacing: '0.14em', cursor: 'pointer' }}>
           スキャン停止
         </button>
       )}
@@ -888,7 +888,7 @@ export function AdminScreen() {
             boxShadow: '0 4px 24px rgba(0,0,0,0.7)',
           }}
         >
-          <p style={{ fontSize: 8, letterSpacing: '0.3em', color: 'rgba(201,162,74,0.5)', marginBottom: 4 }}>ISSUE LOG — 他端末からの通知</p>
+          <p style={{ fontSize: 8, letterSpacing: '0.3em', color: '#e5e5e5', marginBottom: 4 }}>ISSUE LOG — 他端末からの通知</p>
           <p style={{ fontFamily: SERIF, fontSize: 13, color: '#F2E6C8', lineHeight: 1.5 }}>
             <span style={{ color: '#C9A24A' }}>{logToast.staff_name}</span>
             {' が '}
@@ -898,7 +898,7 @@ export function AdminScreen() {
             {' ¥'}{logToast.amount.toLocaleString()}
             {' ×'}{logToast.quantity}枚 を発行
           </p>
-          <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.3)', marginTop: 3 }}>{fmtLogTime(logToast.issued_at)}</p>
+          <p style={{ fontSize: 9, color: '#e5e5e5', marginTop: 3 }}>{fmtLogTime(logToast.issued_at)}</p>
         </div>
       )}
 
@@ -916,7 +916,7 @@ export function AdminScreen() {
         <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)', marginBottom: 12 }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <p style={{ fontSize: 8, letterSpacing: '0.32em', color: 'rgba(201,162,74,0.48)', marginBottom: 1 }}>STAFF TERMINAL</p>
+            <p style={{ fontSize: 8, letterSpacing: '0.32em', color: '#e5e5e5', marginBottom: 1 }}>STAFF TERMINAL</p>
             <h1 style={{ fontSize: 18, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.1em' }}>銀二郎端末</h1>
           </div>
           <button
@@ -951,7 +951,7 @@ export function AdminScreen() {
                 background: isActive ? 'rgba(201,162,74,0.06)' : 'transparent',
                 border: 'none',
                 borderBottom: `2px solid ${isActive ? 'rgba(201,162,74,0.65)' : 'transparent'}`,
-                color: isActive ? '#C9A24A' : 'rgba(242,230,200,0.32)',
+                color: isActive ? '#FFFFFF' : '#b3b3b3',
                 fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
                 cursor: 'pointer', transition: 'all 0.18s', WebkitTapHighlightColor: 'transparent',
               }}
@@ -985,7 +985,7 @@ export function AdminScreen() {
                     <div key={i} style={{ position: 'absolute', width: 22, height: 22, borderColor: 'rgba(201,162,74,0.40)', ...s }} />
                   ))}
                 </div>
-                <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.4)', fontFamily: SERIF, letterSpacing: '0.08em', textAlign: 'center', lineHeight: 1.7 }}>
+                <p style={{ fontSize: 15, color: '#ffffff', fontFamily: SERIF, letterSpacing: '0.08em', textAlign: 'center', lineHeight: 1.7 }}>
                   次の男前パスポートをスキャンしてください
                 </p>
               </div>
@@ -993,7 +993,7 @@ export function AdminScreen() {
 
             {!staffId.trim() ? (
               <div style={{ padding: '28px 20px', borderRadius: 16, background: 'rgba(139,26,26,0.1)', border: '1px solid rgba(201,162,74,0.22)', textAlign: 'center', marginBottom: 16 }}>
-                <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#C9A24A', letterSpacing: '0.06em', marginBottom: 18, lineHeight: 1.6 }}>
+                <p style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 700, color: '#ffffff', letterSpacing: '0.06em', marginBottom: 18, lineHeight: 1.6 }}>
                   先に担当者を選択してください
                 </p>
                 <button
@@ -1019,7 +1019,7 @@ export function AdminScreen() {
               </div>
             )}
 
-            <button onClick={() => setShowManual(v => !v)} style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.16)', color: 'rgba(201,162,74,0.50)', fontSize: 14, letterSpacing: '0.12em', cursor: 'pointer', fontFamily: SERIF, marginBottom: 10 }}>
+            <button onClick={() => setShowManual(v => !v)} style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.16)', color: '#e5e5e5', fontSize: 15, letterSpacing: '0.12em', cursor: 'pointer', fontFamily: SERIF, marginBottom: 10 }}>
               {showManual ? '手動入力を閉じる' : '手動入力（カメラ非対応時）'}
             </button>
 
@@ -1035,7 +1035,7 @@ export function AdminScreen() {
                 <button
                   onClick={() => { if (manualInput.trim()) { void handleScanned(manualInput.trim()); setManualInput('') } }}
                   disabled={!manualInput.trim()}
-                  style={{ width: '100%', padding: '16px', borderRadius: 12, background: manualInput.trim() ? 'rgba(40,80,20,0.5)' : 'rgba(255,255,255,0.04)', border: `1px solid ${manualInput.trim() ? 'rgba(120,180,80,0.4)' : 'rgba(255,255,255,0.1)'}`, color: manualInput.trim() ? '#C8F0A0' : 'rgba(255,255,255,0.25)', fontFamily: SERIF, fontSize: 16, fontWeight: 700, letterSpacing: '0.14em', cursor: manualInput.trim() ? 'pointer' : 'default' }}
+                  style={{ width: '100%', padding: '16px', borderRadius: 12, background: manualInput.trim() ? 'rgba(40,80,20,0.5)' : 'rgba(255,255,255,0.04)', border: `1px solid ${manualInput.trim() ? 'rgba(120,180,80,0.4)' : 'rgba(255,255,255,0.1)'}`, color: manualInput.trim() ? '#C8F0A0' : '#999999', fontFamily: SERIF, fontSize: 16, fontWeight: 700, letterSpacing: '0.14em', cursor: manualInput.trim() ? 'pointer' : 'default' }}
                 >
                   読み取る
                 </button>
@@ -1044,16 +1044,16 @@ export function AdminScreen() {
 
             {/* Store QR */}
             <div style={{ marginTop: 16 }}>
-              <button onClick={() => setShowStoreQr(v => !v)} style={{ width: '100%', padding: '11px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.12)', color: 'rgba(201,162,74,0.40)', fontSize: 11, letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF }}>
+              <button onClick={() => setShowStoreQr(v => !v)} style={{ width: '100%', padding: '11px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.12)', color: '#e5e5e5', fontSize: 13, letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF }}>
                 {showStoreQr ? '店内設置QRを閉じる' : '店内設置QRを表示（印刷用）'}
               </button>
               {showStoreQr && (
                 <div style={{ marginTop: 12, borderRadius: 16, background: '#0A0504', border: '1px solid rgba(201,162,74,0.16)', padding: '20px', textAlign: 'center' }}>
-                  <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.5)', marginBottom: 10 }}>STORE CHECK-IN QR</p>
+                  <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 10 }}>STORE CHECK-IN QR</p>
                   <div style={{ display: 'inline-block', padding: 14, background: '#FFFFFF', borderRadius: 12 }}>
                     <QRCodeSVG value={STORE_CHECKIN_QR_VALUE} size={180} level="M" />
                   </div>
-                  <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.3)', marginTop: 10, lineHeight: 1.6 }}>
+                  <p style={{ fontSize: 10, color: '#e5e5e5', marginTop: 10, lineHeight: 1.6 }}>
                     お客様がこのQRをアプリでスキャンすると<br />来店チェックインが完了します
                   </p>
                 </div>
@@ -1064,22 +1064,22 @@ export function AdminScreen() {
             <div style={{ marginTop: 14 }}>
               <button
                 onClick={() => setShowLogPanel(v => !v)}
-                style={{ width: '100%', padding: '11px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.12)', color: 'rgba(201,162,74,0.40)', fontSize: 11, letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF }}
+                style={{ width: '100%', padding: '11px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.12)', color: '#e5e5e5', fontSize: 13, letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF }}
               >
                 {showLogPanel ? '発行ログを閉じる' : '最近の発行ログを確認する'}
               </button>
               {showLogPanel && (
                 <div style={{ marginTop: 10, borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,162,74,0.1)', padding: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <p style={{ fontSize: 9, letterSpacing: '0.2em', color: 'rgba(201,162,74,0.5)' }}>ISSUE LOG — 全端末共有</p>
-                    <button onClick={() => void loadRecentLogs()} style={{ fontSize: 9, color: 'rgba(201,162,74,0.45)', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.1em' }}>
+                    <p style={{ fontSize: 9, letterSpacing: '0.2em', color: '#e5e5e5' }}>ISSUE LOG — 全端末共有</p>
+                    <button onClick={() => void loadRecentLogs()} style={{ fontSize: 9, color: '#e5e5e5', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.1em' }}>
                       更新
                     </button>
                   </div>
                   {logsLoading ? (
-                    <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.28)', textAlign: 'center', padding: '8px 0' }}>読込中…</p>
+                    <p style={{ fontSize: 12, color: '#e5e5e5', textAlign: 'center', padding: '8px 0' }}>読込中…</p>
                   ) : recentLogs.length === 0 ? (
-                    <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.24)', textAlign: 'center', padding: '8px 0' }}>発行ログはありません</p>
+                    <p style={{ fontSize: 11, color: '#e5e5e5', textAlign: 'center', padding: '8px 0' }}>発行ログはありません</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {recentLogs.map(log => (
@@ -1088,7 +1088,7 @@ export function AdminScreen() {
                             <span style={{ fontSize: 10, color: '#C9A24A', fontFamily: SERIF, fontWeight: 700 }}>
                               {log.staff_name}
                             </span>
-                            <span style={{ fontSize: 9, color: 'rgba(242,230,200,0.3)', letterSpacing: '0.04em' }}>
+                            <span style={{ fontSize: 9, color: '#e5e5e5', letterSpacing: '0.04em' }}>
                               {fmtLogTime(log.issued_at)}
                             </span>
                           </div>
@@ -1109,7 +1109,7 @@ export function AdminScreen() {
         {mainTab === 'issue' && phase === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 80 }}>
             <div style={{ width: 48, height: 48, borderRadius: '50%', border: '2px solid rgba(201,162,74,0.14)', borderTop: '2px solid rgba(201,162,74,0.7)', animation: 'gj-spin 0.8s linear infinite', marginBottom: 20 }} />
-            <p style={{ fontSize: 14, color: 'rgba(242,230,200,0.4)', fontFamily: SERIF, letterSpacing: '0.14em' }}>判定中...</p>
+            <p style={{ fontSize: 14, color: '#e5e5e5', fontFamily: SERIF, letterSpacing: '0.14em' }}>判定中...</p>
           </div>
         )}
 
@@ -1140,16 +1140,16 @@ export function AdminScreen() {
                 <div style={{ padding: '16px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.48)', marginBottom: 4 }}>CUSTOMER</p>
+                      <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#e5e5e5', marginBottom: 4 }}>CUSTOMER</p>
                       <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 3, lineHeight: 1.1 }}>
                         {scannedData.name}
-                        <span style={{ fontSize: 14, marginLeft: 4, color: 'rgba(242,230,200,0.42)' }}>様</span>
+                        <span style={{ fontSize: 14, marginLeft: 4, color: '#e5e5e5' }}>様</span>
                       </h2>
-                      <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)', letterSpacing: '0.06em', marginBottom: 2 }}>
+                      <p style={{ fontSize: 9, color: '#e5e5e5', letterSpacing: '0.06em', marginBottom: 2 }}>
                         ID: {scannedData.userId.slice(0, 22)}…
                       </p>
                       {prevLastVisitDate && (
-                        <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.36)', letterSpacing: '0.04em' }}>
+                        <p style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.04em' }}>
                           最終来店 {fmtVisitDate(prevLastVisitDate)}
                         </p>
                       )}
@@ -1162,7 +1162,7 @@ export function AdminScreen() {
                       <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, lineHeight: 1.1, marginBottom: 3, color: isFirstVisit ? 'rgba(140,180,240,0.9)' : isEligible ? '#80E060' : '#E06040' }}>
                         {isFirstVisit ? '初回' : `${elapsedDays}日`}
                       </p>
-                      <p style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: isFirstVisit ? 'rgba(140,180,240,0.55)' : isEligible ? 'rgba(128,224,96,0.6)' : 'rgba(224,96,64,0.6)' }}>
+                      <p style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: isFirstVisit ? 'rgba(140,180,240,1)' : isEligible ? 'rgba(128,224,96,1)' : 'rgba(224,96,64,1)' }}>
                         {isFirstVisit ? '初回来店' : isEligible ? '対象◎' : '対象外'}
                       </p>
                     </div>
@@ -1191,7 +1191,7 @@ export function AdminScreen() {
                   <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#80E060', letterSpacing: '0.1em', marginBottom: 10 }}>
                     来店チェックイン完了
                   </p>
-                  <p style={{ fontFamily: SERIF, fontSize: 13, color: 'rgba(242,230,200,0.72)', lineHeight: 1.8, letterSpacing: '0.04em' }}>
+                  <p style={{ fontFamily: SERIF, fontSize: 13, color: '#e5e5e5', lineHeight: 1.8, letterSpacing: '0.04em' }}>
                     {scannedData.name}様の前回来店日を<br />
                     <span style={{ fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.12em' }}>{fmtVisitDate(checkInDate)}</span><br />
                     として記録しました。
@@ -1209,14 +1209,14 @@ export function AdminScreen() {
                     border: '1px solid rgba(100,200,100,0.35)',
                     boxShadow: checkInStatus === 'loading' ? 'none' : '0 4px 22px rgba(20,90,42,0.28)',
                     fontFamily: SERIF, fontSize: 17, fontWeight: 700,
-                    letterSpacing: '0.14em', color: checkInStatus === 'loading' ? 'rgba(208,244,216,0.45)' : '#D0F4D8',
+                    letterSpacing: '0.14em', color: checkInStatus === 'loading' ? '#999999' : '#D0F4D8',
                     cursor: checkInStatus === 'loading' ? 'default' : 'pointer',
                     transition: 'all 0.15s',
                   }}
                 >
                   {checkInStatus === 'loading' ? '記録中…' : '来店チェックイン'}
                   {checkInStatus !== 'loading' && (
-                    <span style={{ display: 'block', fontSize: 10, fontWeight: 400, color: 'rgba(208,244,216,0.5)', letterSpacing: '0.08em', marginTop: 4 }}>
+                    <span style={{ display: 'block', fontSize: 10, fontWeight: 400, color: 'rgba(208,244,216,1)', letterSpacing: '0.08em', marginTop: 4 }}>
                       本日の来店日を記録します
                     </span>
                   )}
@@ -1226,16 +1226,16 @@ export function AdminScreen() {
 
             {/* ── 使用可能チケット一覧 ── */}
             <div style={{ marginBottom: 14 }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.24em', color: 'rgba(201,162,74,0.5)', marginBottom: 10, fontFamily: SERIF }}>
+              <p style={{ fontSize: 9, letterSpacing: '0.24em', color: '#e5e5e5', marginBottom: 10, fontFamily: SERIF }}>
                 保有チケット（未使用 {ticketsLoading ? '—' : `${activeTickets.length}枚`}）
               </p>
               {ticketsLoading ? (
                 <div style={{ padding: '16px', textAlign: 'center', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.28)' }}>読込中…</p>
+                  <p style={{ fontSize: 12, color: '#e5e5e5' }}>読込中…</p>
                 </div>
               ) : activeTickets.length === 0 ? (
                 <div style={{ padding: '16px', textAlign: 'center', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.24)' }}>保有チケットなし</p>
+                  <p style={{ fontSize: 12, color: '#e5e5e5' }}>保有チケットなし</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1260,9 +1260,9 @@ export function AdminScreen() {
                               {ticket.amount > 0 && (
                                 <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#C9A24A', lineHeight: 1, marginBottom: 4 }}>¥{ticket.amount.toLocaleString()}</p>
                               )}
-                              <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)' }}>発行日 {fmtCreatedAt(ticket.created_at)}</p>
+                              <p style={{ fontSize: 9, color: '#e5e5e5' }}>発行日 {fmtCreatedAt(ticket.created_at)}</p>
                               {ticket.expires_at && (
-                                <p style={{ fontSize: 9, color: 'rgba(255,180,0,0.55)', marginTop: 1 }}>有効期限 {fmtCreatedAt(ticket.expires_at)}</p>
+                                <p style={{ fontSize: 9, color: 'rgba(255,180,0,1)', marginTop: 1 }}>有効期限 {fmtCreatedAt(ticket.expires_at)}</p>
                               )}
                             </div>
                             <button
@@ -1273,7 +1273,7 @@ export function AdminScreen() {
                                 background: btnDisabled ? 'rgba(255,255,255,0.04)' : 'linear-gradient(135deg, #0a3d1a 0%, #1a7a38 100%)',
                                 border: `1.5px solid ${btnDisabled ? 'rgba(255,255,255,0.09)' : 'rgba(100,200,100,0.44)'}`,
                                 boxShadow: btnDisabled ? 'none' : '0 4px 16px rgba(20,90,42,0.35)',
-                                color: btnDisabled ? 'rgba(242,230,200,0.22)' : '#D0F4D8',
+                                color: btnDisabled ? '#999999' : '#D0F4D8',
                                 fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em',
                                 cursor: btnDisabled ? 'default' : 'pointer',
                                 whiteSpace: 'nowrap', minWidth: 80, textAlign: 'center',
@@ -1283,12 +1283,12 @@ export function AdminScreen() {
                             </button>
                           </div>
                           {isBlockedToday && (
-                            <p style={{ fontSize: 9, color: 'rgba(224,96,80,0.55)', marginTop: 8, lineHeight: 1.5 }}>
+                            <p style={{ fontSize: 9, color: 'rgba(224,96,80,1)', marginTop: 8, lineHeight: 1.5 }}>
                               本日はすでにチケットを使用済みです。チケットの使用は1日1枚までです。
                             </p>
                           )}
                           {noStaff && !isBlockedToday && (
-                            <p style={{ fontSize: 9, color: 'rgba(224,140,0,0.55)', marginTop: 8 }}>担当者を選択してください</p>
+                            <p style={{ fontSize: 9, color: 'rgba(224,140,0,1)', marginTop: 8 }}>担当者を選択してください</p>
                           )}
                         </div>
                       </div>
@@ -1314,7 +1314,7 @@ export function AdminScreen() {
                         flex: 1, padding: '15px 4px', borderRadius: 13,
                         background: active ? tabTc.cardBg : 'rgba(255,255,255,0.03)',
                         border: `1.5px solid ${active ? tabTc.border : 'rgba(255,255,255,0.08)'}`,
-                        color: active ? tabTc.text : 'rgba(242,230,200,0.28)',
+                        color: active ? tabTc.text : '#b3b3b3',
                         fontSize: 15, fontFamily: SERIF, fontWeight: 700, letterSpacing: '0.06em',
                         cursor: 'pointer',
                         animation: active ? 'gj-pulse-gold 2.4s ease-in-out infinite' : 'none',
@@ -1329,9 +1329,9 @@ export function AdminScreen() {
 
               {/* ── Amount input: both tabs free-form ── */}
               <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>金額を入力</p>
+                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 10 }}>金額を入力</p>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: effectiveAmount > 0 ? '#C9A24A' : 'rgba(242,230,200,0.22)', pointerEvents: 'none' }}>¥</span>
+                  <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: effectiveAmount > 0 ? '#C9A24A' : '#999999', pointerEvents: 'none' }}>¥</span>
                   <input
                     type="number"
                     inputMode="numeric"
@@ -1354,7 +1354,7 @@ export function AdminScreen() {
                   />
                 </div>
                 {effectiveAmount > 0 && (
-                  <p style={{ fontSize: 11, color: 'rgba(201,162,74,0.55)', textAlign: 'right', marginTop: 6, letterSpacing: '0.06em' }}>
+                  <p style={{ fontSize: 11, color: '#e5e5e5', textAlign: 'right', marginTop: 6, letterSpacing: '0.06em' }}>
                     ¥{effectiveAmount.toLocaleString()} の{currentTab.autoTitle}
                   </p>
                 )}
@@ -1367,7 +1367,7 @@ export function AdminScreen() {
               </div>
 
               {/* Quantity */}
-              <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>枚数を選択</p>
+              <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 10 }}>枚数を選択</p>
               <div style={{ display: 'flex', gap: 7, marginBottom: 12 }}>
                 {QTY_PRESETS.map(n => (
                   <button
@@ -1377,7 +1377,7 @@ export function AdminScreen() {
                       flex: 1, padding: '14px 2px', borderRadius: 11,
                       background: quantity === n ? tc.cardBg : 'rgba(255,255,255,0.04)',
                       border: `1.5px solid ${quantity === n ? tc.border : 'rgba(255,255,255,0.09)'}`,
-                      color: quantity === n ? tc.text : 'rgba(242,230,200,0.55)',
+                      color: quantity === n ? tc.text : '#e5e5e5',
                       fontFamily: SERIF, fontSize: 16, fontWeight: 700,
                       cursor: 'pointer',
                       animation: quantity === n ? 'gj-pulse-gold 2.2s ease-in-out infinite' : 'none',
@@ -1390,12 +1390,12 @@ export function AdminScreen() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginBottom: 18 }}>
-                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: 'rgba(242,230,200,0.75)', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: '#e5e5e5', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
                 <div style={{ textAlign: 'center', minWidth: 72 }}>
                   <span style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 700, color: '#F2E6C8', letterSpacing: '-0.01em' }}>{quantity}</span>
-                  <span style={{ fontSize: 12, color: 'rgba(242,230,200,0.38)', marginLeft: 4 }}>枚</span>
+                  <span style={{ fontSize: 12, color: '#e5e5e5', marginLeft: 4 }}>枚</span>
                 </div>
-                <button onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: 'rgba(242,230,200,0.75)', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
+                <button onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: '#e5e5e5', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
               </div>
 
               {/* Summary */}
@@ -1417,7 +1417,7 @@ export function AdminScreen() {
         {mainTab === 'issue' && phase === 'ticket-loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 80 }}>
             <div style={{ width: 48, height: 48, borderRadius: '50%', border: '2px solid rgba(201,162,74,0.14)', borderTop: '2px solid rgba(201,162,74,0.7)', animation: 'gj-spin 0.8s linear infinite', marginBottom: 20 }} />
-            <p style={{ fontSize: 14, color: 'rgba(242,230,200,0.4)', fontFamily: SERIF, letterSpacing: '0.14em' }}>チケット確認中...</p>
+            <p style={{ fontSize: 14, color: '#e5e5e5', fontFamily: SERIF, letterSpacing: '0.14em' }}>チケット確認中...</p>
           </div>
         )}
 
@@ -1426,14 +1426,14 @@ export function AdminScreen() {
           <div>
             {ticketQrExpired ? (
               <div style={{ borderRadius: 18, background: 'linear-gradient(135deg, rgba(70,15,15,0.6), rgba(50,8,8,0.8))', border: '1px solid rgba(200,80,60,0.3)', padding: '28px 22px', textAlign: 'center', marginBottom: 16 }}>
-                <p style={{ fontSize: 9, letterSpacing: '0.3em', color: 'rgba(200,100,80,0.7)', marginBottom: 12 }}>QR EXPIRED</p>
+                <p style={{ fontSize: 9, letterSpacing: '0.3em', color: 'rgba(200,100,80,1)', marginBottom: 12 }}>QR EXPIRED</p>
                 <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#E06040', marginBottom: 10 }}>QRコードの有効期限が切れています</p>
-                <p style={{ fontSize: 12, color: 'rgba(220,120,100,0.6)', lineHeight: 1.6 }}>お客様に再度「使用する」を押していただいてください。</p>
+                <p style={{ fontSize: 12, color: 'rgba(220,120,100,1)', lineHeight: 1.6 }}>お客様に再度「使用する」を押していただいてください。</p>
               </div>
             ) : ticketForUse === null ? (
               <div style={{ borderRadius: 18, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', padding: '28px 22px', textAlign: 'center', marginBottom: 16 }}>
-                <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: 'rgba(242,230,200,0.4)', marginBottom: 8 }}>チケットが見つかりません</p>
-                <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.3)', lineHeight: 1.6 }}>すでに使用済みか、存在しないチケットです。</p>
+                <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#e5e5e5', marginBottom: 8 }}>チケットが見つかりません</p>
+                <p style={{ fontSize: 12, color: '#e5e5e5', lineHeight: 1.6 }}>すでに使用済みか、存在しないチケットです。</p>
               </div>
             ) : ticketConfirmed ? (
               <div style={{ borderRadius: 18, background: 'linear-gradient(135deg, rgba(15,50,22,0.6), rgba(8,35,15,0.8))', border: '1px solid rgba(80,192,90,0.38)', padding: '28px 22px', textAlign: 'center', marginBottom: 16, boxShadow: '0 4px 36px rgba(80,192,80,0.14)' }}>
@@ -1443,9 +1443,9 @@ export function AdminScreen() {
                 {ticketForUse.amount > 0 && (
                   <p style={{ fontFamily: SERIF, fontSize: 22, color: '#C9A24A', marginBottom: 8 }}>¥{ticketForUse.amount.toLocaleString()}</p>
                 )}
-                <p style={{ fontSize: 12, color: 'rgba(128,224,96,0.65)', marginTop: 4, lineHeight: 1.6 }}>
+                <p style={{ fontSize: 12, color: 'rgba(128,224,96,1)', marginTop: 4, lineHeight: 1.6 }}>
                   来店チェックイン完了<br />
-                  <span style={{ fontSize: 10, color: 'rgba(128,224,96,0.45)' }}>メンテナンスカウントダウンをリセットしました</span>
+                  <span style={{ fontSize: 10, color: 'rgba(128,224,96,1)' }}>メンテナンスカウントダウンをリセットしました</span>
                 </p>
               </div>
             ) : (
@@ -1458,7 +1458,7 @@ export function AdminScreen() {
                     <div style={{ borderRadius: 16, marginBottom: 14, border: `1px solid ${tktTc.border}`, background: 'linear-gradient(160deg, #120A06 0%, #0A0504 100%)', overflow: 'hidden' }}>
                       <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${tktTc.border}, transparent)` }} />
                       <div style={{ padding: '16px 18px' }}>
-                        <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.52)', marginBottom: 8, fontFamily: SERIF }}>チケット確認</p>
+                        <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 8, fontFamily: SERIF }}>チケット確認</p>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                           <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tktTc.bg, border: `1px solid ${tktTc.border}`, color: tktTc.text, letterSpacing: '0.1em' }}>
                             {TICKET_TYPE_LABELS[ticketForUse.type]}
@@ -1471,7 +1471,7 @@ export function AdminScreen() {
                         {ticketForUse.amount > 0 && (
                           <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#C9A24A', marginBottom: 10, lineHeight: 1 }}>¥{ticketForUse.amount.toLocaleString()}</p>
                         )}
-                        <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)', marginTop: 4 }}>
+                        <p style={{ fontSize: 9, color: '#e5e5e5', marginTop: 4 }}>
                           QR有効期限 {new Date(ticketUseData.expiresAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} まで
                         </p>
                       </div>
@@ -1506,7 +1506,7 @@ export function AdminScreen() {
                         : 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
                       border: `1px solid ${(ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? 'rgba(255,255,255,0.08)' : 'rgba(100,200,100,0.44)'}`,
                       boxShadow: (ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
-                      color: (ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? 'rgba(242,230,200,0.22)' : '#D0F4D8',
+                      color: (ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? '#999999' : '#D0F4D8',
                       fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.18em',
                       cursor: (ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? 'default' : 'pointer',
                     }}
@@ -1530,11 +1530,11 @@ export function AdminScreen() {
             <div style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(160deg, #1c0e08 0%, #0e0604 100%)', border: '1px solid rgba(100,200,100,0.38)', boxShadow: '0 0 25px rgba(100,200,100,0.12), 0 14px 44px rgba(0,0,0,0.75)', marginBottom: 16, animation: 'gj-slot-in 0.52s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #0a3d1a 30%, #1a7a38 50%, #0a3d1a 70%, transparent)' }} />
               <div style={{ padding: '16px 20px' }}>
-                <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(100,200,100,0.5)', marginBottom: 4 }}>MAINTENANCE COUPON</p>
+                <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(100,200,100,1)', marginBottom: 4 }}>MAINTENANCE COUPON</p>
                 <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6, lineHeight: 1.1 }}>
-                  {maintCouponData.name}<span style={{ fontSize: 14, marginLeft: 4, color: 'rgba(242,230,200,0.42)' }}>様</span>
+                  {maintCouponData.name}<span style={{ fontSize: 14, marginLeft: 4, color: '#e5e5e5' }}>様</span>
                 </h2>
-                <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.28)', letterSpacing: '0.06em' }}>
+                <p style={{ fontSize: 9, color: '#e5e5e5', letterSpacing: '0.06em' }}>
                   ID: {maintCouponData.userId.slice(0, 22)}…
                 </p>
               </div>
@@ -1544,7 +1544,7 @@ export function AdminScreen() {
             <div style={{ borderRadius: 16, background: 'linear-gradient(155deg, #060e07 0%, #040a04 100%)', border: `1px solid ${maintCouponTodayUsed ? 'rgba(224,96,80,0.36)' : maintCouponConfirmed ? 'rgba(100,200,100,0.44)' : 'rgba(100,200,100,0.28)'}`, overflow: 'hidden', marginBottom: 14 }}>
               <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${maintCouponConfirmed ? 'rgba(100,200,100,0.7)' : 'rgba(100,200,100,0.3)'}, transparent)` }} />
               <div style={{ padding: '16px 18px' }}>
-                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(100,200,100,0.52)', marginBottom: 8, fontFamily: SERIF }}>メンテナンスクーポン確認</p>
+                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(100,200,100,1)', marginBottom: 8, fontFamily: SERIF }}>メンテナンスクーポン確認</p>
                 <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', marginBottom: 4 }}>メンテナンスカット</p>
                 <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#C9A24A', marginBottom: 8, lineHeight: 1 }}>¥3,000</p>
                 {maintCouponConfirmed ? (
@@ -1562,7 +1562,7 @@ export function AdminScreen() {
               <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '12px 16px', marginBottom: 14 }}>
                 <p style={{ fontSize: 13, color: '#E06060', lineHeight: 1.7, fontFamily: SERIF }}>
                   本日はすでにクーポンを利用済みです。<br />
-                  <span style={{ fontSize: 11, color: 'rgba(224,96,96,0.65)' }}>1日1枚制限（メンテ・漢トク券・割引券 共通）</span>
+                  <span style={{ fontSize: 11, color: 'rgba(224,96,96,1)' }}>1日1枚制限（メンテ・漢トク券・割引券 共通）</span>
                 </p>
               </div>
             )}
@@ -1572,13 +1572,13 @@ export function AdminScreen() {
               <div style={{ borderRadius: 16, background: 'linear-gradient(135deg, rgba(15,50,22,0.6), rgba(8,35,15,0.8))', border: '1px solid rgba(80,192,90,0.38)', padding: '22px', textAlign: 'center', marginBottom: 14, boxShadow: '0 4px 36px rgba(80,192,80,0.14)' }}>
                 <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(100,200,100,0.12)', border: '1px solid rgba(100,200,100,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>✓</div>
                 <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#80E060', marginBottom: 6 }}>使用確定しました</p>
-                <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.5)', lineHeight: 1.7 }}>
+                <p style={{ fontSize: 12, color: '#e5e5e5', lineHeight: 1.7 }}>
                   メンテナンスクーポン ¥3,000<br />
                   使用ログを記録しました。
                 </p>
-                <p style={{ fontSize: 12, color: 'rgba(128,224,96,0.65)', marginTop: 10, lineHeight: 1.6 }}>
+                <p style={{ fontSize: 12, color: 'rgba(128,224,96,1)', marginTop: 10, lineHeight: 1.6 }}>
                   来店チェックイン完了<br />
-                  <span style={{ fontSize: 10, color: 'rgba(128,224,96,0.45)' }}>メンテナンスカウントダウンをリセットしました</span>
+                  <span style={{ fontSize: 10, color: 'rgba(128,224,96,1)' }}>メンテナンスカウントダウンをリセットしました</span>
                 </p>
               </div>
             )}
@@ -1609,7 +1609,7 @@ export function AdminScreen() {
                     : 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
                   border: `1px solid ${(maintCouponConfirming || !staffId.trim()) ? 'rgba(255,255,255,0.08)' : 'rgba(100,200,100,0.44)'}`,
                   boxShadow: (maintCouponConfirming || !staffId.trim()) ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
-                  color: (maintCouponConfirming || !staffId.trim()) ? 'rgba(242,230,200,0.22)' : '#D0F4D8',
+                  color: (maintCouponConfirming || !staffId.trim()) ? '#999999' : '#D0F4D8',
                   fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.18em',
                   cursor: (maintCouponConfirming || !staffId.trim()) ? 'default' : 'pointer',
                 }}
@@ -1631,14 +1631,14 @@ export function AdminScreen() {
             {recoveryStep === 'search' && (
               <div>
                 <div style={{ marginBottom: 20, borderRadius: 18, background: 'linear-gradient(155deg, #0D0805 0%, #080403 100%)', border: '1px solid rgba(201,162,74,0.14)', padding: '16px 18px' }}>
-                  <p style={{ fontSize: 8, letterSpacing: '0.32em', color: 'rgba(201,162,74,0.48)', marginBottom: 8 }}>MEMBER RECOVERY</p>
+                  <p style={{ fontSize: 8, letterSpacing: '0.32em', color: '#e5e5e5', marginBottom: 8 }}>MEMBER RECOVERY</p>
                   <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8', marginBottom: 6, letterSpacing: '0.04em' }}>会員データ復旧</p>
-                  <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.34)', lineHeight: 1.7 }}>
+                  <p style={{ fontSize: 11, color: '#e5e5e5', lineHeight: 1.7 }}>
                     お客様の名前で旧会員データを検索し、<br />新端末へ移管します。
                   </p>
                 </div>
 
-                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(242,230,200,0.36)', marginBottom: 10 }}>お客様名で検索</p>
+                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 10 }}>お客様名で検索</p>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                   <input
                     type="text"
@@ -1659,7 +1659,7 @@ export function AdminScreen() {
                       padding: '14px 20px', borderRadius: 12, flexShrink: 0,
                       background: recoveryQuery.trim() ? 'rgba(201,162,74,0.12)' : 'rgba(255,255,255,0.04)',
                       border: `1px solid ${recoveryQuery.trim() ? 'rgba(201,162,74,0.4)' : 'rgba(255,255,255,0.09)'}`,
-                      color: recoveryQuery.trim() ? '#C9A24A' : 'rgba(242,230,200,0.24)',
+                      color: recoveryQuery.trim() ? '#C9A24A' : '#999999',
                       fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.1em',
                       cursor: recoveryQuery.trim() ? 'pointer' : 'default',
                     }}
@@ -1681,7 +1681,7 @@ export function AdminScreen() {
                         }}
                       >
                         <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8', marginBottom: 3 }}>{customer.name}</p>
-                        <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.3)', letterSpacing: '0.06em' }}>
+                        <p style={{ fontSize: 9, color: '#e5e5e5', letterSpacing: '0.06em' }}>
                           登録 {new Date(customer.created_at).toLocaleDateString('ja-JP')} ／ コード {customer.recovery_code}
                         </p>
                       </button>
@@ -1689,7 +1689,7 @@ export function AdminScreen() {
                   </div>
                 )}
                 {recoveryResults.length === 0 && recoveryQuery && !recoverySearching && (
-                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.28)', textAlign: 'center', padding: '20px 0', lineHeight: 1.7 }}>
+                  <p style={{ fontSize: 12, color: '#e5e5e5', textAlign: 'center', padding: '20px 0', lineHeight: 1.7 }}>
                     該当する会員が見つかりません<br />
                     <span style={{ fontSize: 10 }}>初回来店時にスタッフ端末でQRスキャンすると登録されます</span>
                   </p>
@@ -1702,7 +1702,7 @@ export function AdminScreen() {
               <div>
                 <button
                   onClick={() => { setRecoveryStep('search'); setSelectedCustomer(null) }}
-                  style={{ marginBottom: 16, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.4)', fontSize: 12, fontFamily: SERIF, cursor: 'pointer', letterSpacing: '0.1em' }}
+                  style={{ marginBottom: 16, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#e5e5e5', fontSize: 12, fontFamily: SERIF, cursor: 'pointer', letterSpacing: '0.1em' }}
                 >
                   ← 検索に戻る
                 </button>
@@ -1710,9 +1710,9 @@ export function AdminScreen() {
                 <div style={{ borderRadius: 18, background: 'linear-gradient(155deg, #130A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.32)', overflow: 'hidden', marginBottom: 18 }}>
                   <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
                   <div style={{ padding: '18px 20px' }}>
-                    <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.48)', marginBottom: 6 }}>CUSTOMER</p>
+                    <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#e5e5e5', marginBottom: 6 }}>CUSTOMER</p>
                     <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#F2E6C8', marginBottom: 16 }}>
-                      {selectedCustomer.name} <span style={{ fontSize: 14, color: 'rgba(242,230,200,0.42)' }}>様</span>
+                      {selectedCustomer.name} <span style={{ fontSize: 14, color: '#e5e5e5' }}>様</span>
                     </p>
                     {([
                       { label: '登録日',       value: new Date(selectedCustomer.created_at).toLocaleDateString('ja-JP') },
@@ -1721,11 +1721,11 @@ export function AdminScreen() {
                       { label: '保有チケット', value: customerTicketCount === null ? '読込中…' : `${customerTicketCount}枚` },
                     ] as { label: string; value: string; highlight?: boolean }[]).map(({ label, value, highlight }) => (
                       <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>{label}</span>
+                        <span style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em' }}>{label}</span>
                         <span style={{ fontFamily: SERIF, fontSize: highlight ? 17 : 14, fontWeight: 700, color: highlight ? '#C9A24A' : '#F2E6C8', letterSpacing: highlight ? '0.14em' : '0.04em' }}>{value}</span>
                       </div>
                     ))}
-                    <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.3)', lineHeight: 1.7, marginTop: 4 }}>
+                    <p style={{ fontSize: 10, color: '#e5e5e5', lineHeight: 1.7, marginTop: 4 }}>
                       ※ 復旧コードをお客様に口頭確認してください
                     </p>
                   </div>
@@ -1751,13 +1751,13 @@ export function AdminScreen() {
               <div>
                 <button
                   onClick={() => { setRecoveryStep('detail'); setRecoveryScanError(null) }}
-                  style={{ marginBottom: 16, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.4)', fontSize: 12, fontFamily: SERIF, cursor: 'pointer', letterSpacing: '0.1em' }}
+                  style={{ marginBottom: 16, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#e5e5e5', fontSize: 12, fontFamily: SERIF, cursor: 'pointer', letterSpacing: '0.1em' }}
                 >
                   ← 戻る
                 </button>
 
                 <div style={{ marginBottom: 14, padding: '12px 16px', borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.18)' }}>
-                  <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.55)', lineHeight: 1.7 }}>
+                  <p style={{ fontSize: 11, color: '#e5e5e5', lineHeight: 1.7 }}>
                     新しい端末でパスポートアプリを開き、<br />マイページのQRコードを読み取ってください。
                   </p>
                 </div>
@@ -1776,7 +1776,7 @@ export function AdminScreen() {
                   />
                 </div>
 
-                <p style={{ textAlign: 'center', fontSize: 10, color: 'rgba(242,230,200,0.22)', letterSpacing: '0.1em', marginBottom: 10 }}>または直接入力</p>
+                <p style={{ textAlign: 'center', fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em', marginBottom: 10 }}>または直接入力</p>
 
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
@@ -1803,7 +1803,7 @@ export function AdminScreen() {
                       padding: '12px 16px', borderRadius: 10, flexShrink: 0,
                       background: recoveryManualInput.trim() ? 'rgba(40,80,20,0.5)' : 'rgba(255,255,255,0.04)',
                       border: `1px solid ${recoveryManualInput.trim() ? 'rgba(120,180,80,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                      color: recoveryManualInput.trim() ? '#C8F0A0' : 'rgba(255,255,255,0.25)',
+                      color: recoveryManualInput.trim() ? '#C8F0A0' : '#999999',
                       fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.1em',
                       cursor: recoveryManualInput.trim() ? 'pointer' : 'default',
                     }}
@@ -1824,7 +1824,7 @@ export function AdminScreen() {
                 <p style={{ fontSize: 13, color: '#F2E6C8', lineHeight: 1.9, marginBottom: 8 }}>
                   {selectedCustomer?.name}様のデータを<br />新端末へ移管しました。
                 </p>
-                <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.38)', lineHeight: 1.7, marginBottom: 32 }}>
+                <p style={{ fontSize: 11, color: '#e5e5e5', lineHeight: 1.7, marginBottom: 32 }}>
                   新端末でアプリを再読み込みすると<br />チケット・来店履歴が復旧されます。
                 </p>
                 <button
@@ -1841,7 +1841,7 @@ export function AdminScreen() {
         {/* ===== LIVE STATUS管理 ===== */}
         {mainTab === 'live-status' && (
           <div>
-            <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.08em', marginBottom: 16, lineHeight: 1.7 }}>
+            <p style={{ fontSize: 12, color: '#e5e5e5', letterSpacing: '0.08em', marginBottom: 16, lineHeight: 1.7 }}>
               カードをタップすると<br />
               READY → LIMITED → FULL → CLOSED → READY の順で切り替わります。
             </p>
@@ -1888,10 +1888,10 @@ export function AdminScreen() {
                         <p style={{ fontFamily: 'ui-monospace, "SF Mono", "Fira Code", monospace', fontSize: 21, fontWeight: 700, color: t.codeColor, letterSpacing: '0.06em', lineHeight: 1.15 }}>
                           {LIVE_STATUS_CODES[row.status]}
                         </p>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: t.descColor, letterSpacing: '0.04em' }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: '#e5e5e5', letterSpacing: '0.04em' }}>
                           {liveStatusLabel(row.id, row.status)}
                         </p>
-                        <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.30)', letterSpacing: '0.06em', marginTop: 2 }}>
+                        <p style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.06em', marginTop: 2 }}>
                           更新 {fmtLogTime(row.updated_at)}
                         </p>
                       </div>
@@ -1902,7 +1902,7 @@ export function AdminScreen() {
                         background: 'rgba(255,255,255,0.04)',
                         border: '1px solid rgba(255,255,255,0.10)',
                         fontSize: 10, fontWeight: 700, letterSpacing: '0.10em',
-                        color: 'rgba(242,230,200,0.40)',
+                        color: '#e5e5e5',
                         fontFamily: SERIF, whiteSpace: 'nowrap',
                       }}>
                         タップで切替
@@ -1917,7 +1917,7 @@ export function AdminScreen() {
                         padding: '0 18px 16px',
                       }}
                     >
-                      <p style={{ fontSize: 9, letterSpacing: '0.12em', color: 'rgba(201,162,74,0.46)', marginBottom: 6 }}>
+                      <p style={{ fontSize: 9, letterSpacing: '0.12em', color: '#e5e5e5', marginBottom: 6 }}>
                         空き状況メッセージ（顧客画面に表示）
                       </p>
                       <input
@@ -1964,7 +1964,7 @@ export function AdminScreen() {
               boxShadow: canIssue
                 ? ['0 0 32px rgba(128,12,20,0.72)', '0 0 64px rgba(128,12,20,0.36)', 'inset 0 1px 0 rgba(230,202,101,0.28)', 'inset 0 -1px 0 rgba(230,202,101,0.1)', '0 6px 32px rgba(0,0,0,0.85)'].join(', ')
                 : 'none',
-              color: canIssue ? '#F2E6C8' : 'rgba(242,230,200,0.18)',
+              color: canIssue ? '#F2E6C8' : '#999999',
               fontFamily: SERIF, fontSize: 22, fontWeight: 700, letterSpacing: '0.26em',
               cursor: canIssue ? 'pointer' : 'default',
               animation: canIssue ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
@@ -1988,7 +1988,7 @@ export function AdminScreen() {
           >
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
             <div style={{ padding: '28px 26px 24px' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.5)', marginBottom: 10, textAlign: 'center' }}>CONFIRM RECOVERY</p>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#e5e5e5', marginBottom: 10, textAlign: 'center' }}>CONFIRM RECOVERY</p>
               <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', marginBottom: 22 }}>
                 会員データを復旧します
               </p>
@@ -2001,13 +2001,13 @@ export function AdminScreen() {
                   { label: '担当',   value: staffId || '未設定' },
                 ] as { label: string; value: string }[]).map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(201,162,74,0.08)' }}>
-                    <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>{label}</span>
+                    <span style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em' }}>{label}</span>
                     <span style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: '#F2E6C8', wordBreak: 'break-all', maxWidth: '65%', textAlign: 'right' }}>{value}</span>
                   </div>
                 ))}
 
                 <div style={{ marginTop: 10 }}>
-                  <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em', marginBottom: 8 }}>復旧理由</p>
+                  <p style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em', marginBottom: 8 }}>復旧理由</p>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {['機種変更', 'Safariデータ削除', 'その他'].map(reason => (
                       <button
@@ -2017,7 +2017,7 @@ export function AdminScreen() {
                           flex: 1, padding: '8px 4px', borderRadius: 8,
                           background: recoveryReason === reason ? 'rgba(201,162,74,0.15)' : 'rgba(255,255,255,0.03)',
                           border: `1px solid ${recoveryReason === reason ? 'rgba(201,162,74,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                          color: recoveryReason === reason ? '#C9A24A' : 'rgba(242,230,200,0.3)',
+                          color: recoveryReason === reason ? '#C9A24A' : '#e5e5e5',
                           fontSize: 10, fontFamily: SERIF, letterSpacing: '0.04em', cursor: 'pointer',
                         }}
                       >
@@ -2034,7 +2034,7 @@ export function AdminScreen() {
                 </div>
               )}
 
-              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.4)', textAlign: 'center', marginBottom: 20, lineHeight: 1.7 }}>
+              <p style={{ fontSize: 11, color: '#e5e5e5', textAlign: 'center', marginBottom: 20, lineHeight: 1.7 }}>
                 旧端末のチケット・来店履歴・使用ログが<br />すべて新端末に移管されます。
               </p>
 
@@ -2042,7 +2042,7 @@ export function AdminScreen() {
                 <button
                   onClick={() => { setRecoveryStep('scan'); setRecoveryError(null) }}
                   disabled={recoveryLoading}
-                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
+                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: '#e5e5e5', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
                 >
                   キャンセル
                 </button>
@@ -2055,7 +2055,7 @@ export function AdminScreen() {
                     border: `1px solid ${recoveryLoading ? 'rgba(100,200,100,0.12)' : 'rgba(100,200,100,0.44)'}`,
                     boxShadow: recoveryLoading ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
                     fontSize: 15, fontWeight: 700,
-                    color: recoveryLoading ? 'rgba(208,244,216,0.4)' : '#D0F4D8',
+                    color: recoveryLoading ? '#999999' : '#D0F4D8',
                     fontFamily: SERIF, letterSpacing: '0.18em',
                     cursor: recoveryLoading ? 'default' : 'pointer',
                   }}
@@ -2080,7 +2080,7 @@ export function AdminScreen() {
           >
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
             <div style={{ padding: '28px 26px 24px' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.5)', marginBottom: 10, textAlign: 'center' }}>CONFIRM ISSUE</p>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#e5e5e5', marginBottom: 10, textAlign: 'center' }}>CONFIRM ISSUE</p>
               <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', marginBottom: 22 }}>
                 {currentTab.autoTitle}を発行します
               </p>
@@ -2095,26 +2095,26 @@ export function AdminScreen() {
                   { label: '担当',   value: staffId },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(201,162,74,0.09)' }}>
-                    <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>{label}</span>
+                    <span style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em' }}>{label}</span>
                     <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8' }}>{value}</span>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>合計</span>
+                  <span style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em' }}>合計</span>
                   <span style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#C9A24A' }}>
                     ¥{(effectiveAmount * quantity).toLocaleString()}
                   </span>
                 </div>
               </div>
 
-              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.36)', textAlign: 'center', lineHeight: 1.75, marginBottom: 22, letterSpacing: '0.04em' }}>
+              <p style={{ fontSize: 11, color: '#e5e5e5', textAlign: 'center', lineHeight: 1.75, marginBottom: 22, letterSpacing: '0.04em' }}>
                 この操作は店舗端末に記録されます。{'\n'}内容を確認してから発行してください。
               </p>
 
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => setShowConfirm(false)}
-                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
+                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: '#e5e5e5', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
                 >
                   キャンセル
                 </button>
@@ -2142,7 +2142,7 @@ export function AdminScreen() {
           >
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #0a3d1a 30%, #1a7a38 50%, #0a3d1a 70%, transparent)' }} />
             <div style={{ padding: '28px 26px 24px' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(100,200,100,0.5)', marginBottom: 10, textAlign: 'center' }}>CONFIRM USE</p>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(100,200,100,1)', marginBottom: 10, textAlign: 'center' }}>CONFIRM USE</p>
               <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', marginBottom: 22 }}>
                 チケットを使用します
               </p>
@@ -2155,11 +2155,11 @@ export function AdminScreen() {
                   { label: '担当',   value: staffId },
                 ] as { label: string; value: string }[]).map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(100,200,100,0.08)' }}>
-                    <span style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', letterSpacing: '0.1em' }}>{label}</span>
+                    <span style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em' }}>{label}</span>
                     <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8' }}>{value}</span>
                   </div>
                 ))}
-                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.36)', lineHeight: 1.7, letterSpacing: '0.04em' }}>
+                <p style={{ fontSize: 10, color: '#e5e5e5', lineHeight: 1.7, letterSpacing: '0.04em' }}>
                   この操作は取り消せません。
                 </p>
               </div>
@@ -2170,7 +2170,7 @@ export function AdminScreen() {
                 </div>
               )}
 
-              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.36)', textAlign: 'center', marginBottom: 20, letterSpacing: '0.04em' }}>
+              <p style={{ fontSize: 11, color: '#e5e5e5', textAlign: 'center', marginBottom: 20, letterSpacing: '0.04em' }}>
                 本当に使用しますか？
               </p>
 
@@ -2178,7 +2178,7 @@ export function AdminScreen() {
                 <button
                   onClick={() => { setShowUseConfirm(false); setPendingUseTicket(null); setUseError(null) }}
                   disabled={useConfirmLoading}
-                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
+                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: '#e5e5e5', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
                 >
                   キャンセル
                 </button>
@@ -2191,7 +2191,7 @@ export function AdminScreen() {
                     border: `1px solid ${useConfirmLoading ? 'rgba(100,200,100,0.12)' : 'rgba(100,200,100,0.44)'}`,
                     boxShadow: useConfirmLoading ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
                     fontSize: 15, fontWeight: 700,
-                    color: useConfirmLoading ? 'rgba(208,244,216,0.4)' : '#D0F4D8',
+                    color: useConfirmLoading ? '#999999' : '#D0F4D8',
                     fontFamily: SERIF, letterSpacing: '0.18em',
                     cursor: useConfirmLoading ? 'default' : 'pointer',
                   }}
@@ -2213,7 +2213,7 @@ export function AdminScreen() {
             <div style={{ width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px', background: 'radial-gradient(circle, rgba(80,192,80,0.16) 0%, rgba(20,100,40,0.1) 60%, transparent 100%)', border: '1.5px solid rgba(100,200,100,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(80,192,80,0.28), 0 0 64px rgba(80,192,80,0.12)' }}>
               <span style={{ fontSize: 38, color: '#64D26E', lineHeight: 1 }}>✓</span>
             </div>
-            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: 'rgba(100,200,100,0.62)', marginBottom: 14 }}>USED</p>
+            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: 'rgba(100,200,100,1)', marginBottom: 14 }}>USED</p>
             <p style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 700, color: '#80E060', letterSpacing: '0.14em', marginBottom: 18, lineHeight: 1.1, textShadow: '0 0 40px rgba(80,192,80,0.4), 0 2px 6px rgba(0,0,0,0.95)' }}>
               使用完了
             </p>
@@ -2222,11 +2222,11 @@ export function AdminScreen() {
               {useCompleteInfo.label}{useCompleteInfo.amount > 0 ? ` ¥${useCompleteInfo.amount.toLocaleString()}` : ''} を<br />
               1枚使用しました。
             </p>
-            <p style={{ fontFamily: SERIF, fontSize: 14, color: 'rgba(242,230,200,0.45)', letterSpacing: '0.06em' }}>
+            <p style={{ fontFamily: SERIF, fontSize: 14, color: '#e5e5e5', letterSpacing: '0.06em' }}>
               残り：{useCompleteInfo.remaining}枚
             </p>
             {useCompleteInfo.checkedIn && (
-              <p style={{ fontFamily: SERIF, fontSize: 12, color: 'rgba(128,224,96,0.68)', marginTop: 14, letterSpacing: '0.08em' }}>
+              <p style={{ fontFamily: SERIF, fontSize: 12, color: 'rgba(128,224,96,1)', marginTop: 14, letterSpacing: '0.08em' }}>
                 来店チェックインも完了しました
               </p>
             )}
@@ -2243,7 +2243,7 @@ export function AdminScreen() {
             <div style={{ width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px', background: 'radial-gradient(circle, rgba(201,162,74,0.18) 0%, rgba(139,26,26,0.12) 60%, transparent 100%)', border: '1.5px solid rgba(201,162,74,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(201,162,74,0.38), 0 0 64px rgba(201,162,74,0.18)' }}>
               <span style={{ fontSize: 38, color: '#e6ca65', lineHeight: 1 }}>✓</span>
             </div>
-            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: 'rgba(201,162,74,0.62)', marginBottom: 14 }}>ISSUED</p>
+            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: '#e5e5e5', marginBottom: 14 }}>ISSUED</p>
             <p style={{ fontFamily: SERIF, fontSize: 40, fontWeight: 700, color: '#e6ca65', letterSpacing: '0.14em', marginBottom: 20, lineHeight: 1.1, textShadow: '0 0 40px rgba(201,162,74,0.55), 0 0 80px rgba(139,26,26,0.4), 0 2px 6px rgba(0,0,0,0.95)' }}>
               発行完了
             </p>
@@ -2253,7 +2253,7 @@ export function AdminScreen() {
               を付与しました。
             </p>
             <div style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(201,162,74,0.08)', border: '1px solid rgba(201,162,74,0.22)' }}>
-              <p style={{ fontSize: 10, color: 'rgba(201,162,74,0.65)', letterSpacing: '0.08em', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.08em', lineHeight: 1.6 }}>
                 割引券発行ログを店舗端末に通知しました
               </p>
             </div>
@@ -2267,7 +2267,7 @@ export function AdminScreen() {
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 500, background: 'linear-gradient(180deg, #0D0403 0%, #0A0302 100%)', border: '1px solid rgba(201,162,74,0.32)', borderRadius: 22, boxShadow: '0 32px 80px rgba(0,0,0,0.92)', overflow: 'hidden' }}>
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
             <div style={{ padding: '22px 24px 18px', textAlign: 'center', borderBottom: '1px solid rgba(201,162,74,0.1)' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.5)', marginBottom: 6 }}>STAFF SELECTION</p>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#e5e5e5', marginBottom: 6 }}>STAFF SELECTION</p>
               <h2 style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.08em' }}>担当者を選んでください</h2>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '18px 18px 14px' }}>
@@ -2282,19 +2282,19 @@ export function AdminScreen() {
                       background: selected ? 'linear-gradient(135deg, rgba(139,26,26,0.7) 0%, rgba(107,15,18,0.85) 100%)' : 'rgba(0,0,0,0.5)',
                       border: `1.5px solid ${selected ? 'rgba(201,162,74,0.80)' : 'rgba(201,162,74,0.20)'}`,
                       boxShadow: selected ? '0 0 20px rgba(201,162,74,0.18)' : 'none',
-                      color: selected ? '#F2E6C8' : 'rgba(242,230,200,0.7)',
+                      color: selected ? '#F2E6C8' : '#e5e5e5',
                       fontFamily: SERIF, fontSize: 22, fontWeight: 700, letterSpacing: '0.04em',
                       cursor: 'pointer', transition: 'all 0.15s', WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     {name}
-                    {selected && <span style={{ display: 'block', fontSize: 10, color: 'rgba(201,162,74,0.7)', letterSpacing: '0.16em', marginTop: 4, fontWeight: 400 }}>選択中</span>}
+                    {selected && <span style={{ display: 'block', fontSize: 10, color: '#e5e5e5', letterSpacing: '0.16em', marginTop: 4, fontWeight: 400 }}>選択中</span>}
                   </button>
                 )
               })}
             </div>
             <div style={{ padding: '0 18px 18px' }}>
-              <button onClick={() => setShowStaffPicker(false)} style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(242,230,200,0.36)', fontFamily: SERIF, fontSize: 14, cursor: 'pointer', letterSpacing: '0.12em' }}>
+              <button onClick={() => setShowStaffPicker(false)} style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#e5e5e5', fontFamily: SERIF, fontSize: 14, cursor: 'pointer', letterSpacing: '0.12em' }}>
                 キャンセル
               </button>
             </div>

@@ -127,7 +127,7 @@ export function StaffPinGate() {
 
           <p style={{
             fontSize: 9, letterSpacing: '0.34em',
-            color: 'rgba(201,162,74,0.52)',
+            color: '#e5e5e5',
             marginBottom: 6,
           }}>
             STAFF TERMINAL
@@ -142,7 +142,7 @@ export function StaffPinGate() {
           </h1>
           <p style={{
             fontSize: 8, letterSpacing: '0.24em',
-            color: 'rgba(201,162,74,0.36)',
+            color: '#e5e5e5',
           }}>
             OTOKOMAE PASSPORT SCANNER
           </p>
@@ -232,7 +232,7 @@ export function StaffPinGate() {
               padding: '18px 0', borderRadius: 14,
               background: 'transparent',
               border: '1px solid rgba(255,255,255,0.08)',
-              color: 'rgba(242,230,200,0.38)',
+              color: '#e5e5e5',
               fontSize: 20, cursor: 'pointer',
               WebkitTapHighlightColor: 'transparent',
             }}
