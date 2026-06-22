@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { getJapanDateString } from './dateUtils'
 
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // I, O, 0, 1 を除外
 
@@ -91,6 +92,52 @@ export async function searchCustomersByName(name: string): Promise<CustomerRow[]
     return data as CustomerRow[]
   } catch {
     return []
+  }
+}
+
+export interface CustomerStats {
+  total: number
+  today: number
+  thisMonth: number
+}
+
+/** JST基準の日付境界をISO文字列(UTC)で返す */
+function jstBoundaryISO(jstDateStr: string): string {
+  return new Date(`${jstDateStr}T00:00:00+09:00`).toISOString()
+}
+
+/**
+ * 登録者数ダッシュボード用の集計（スタッフ端末専用）。
+ * 現在の登録者数 / 本日登録数 / 今月登録数 を customers テーブルから count 取得する。
+ */
+export async function getCustomerStats(): Promise<CustomerStats> {
+  const todayStr = getJapanDateString()
+  const tomorrowStr = getJapanDateString(new Date(Date.now() + 24 * 60 * 60 * 1000))
+  const [yearStr, monthStr] = todayStr.split('-')
+  const year = Number(yearStr)
+  const month = Number(monthStr) // 1-indexed (1-12)
+  const monthStartStr = `${yearStr}-${monthStr}-01`
+  const nextMonthStr = month === 12
+    ? `${year + 1}-01-01`
+    : `${year}-${String(month + 1).padStart(2, '0')}-01`
+
+  try {
+    const [totalRes, todayRes, monthRes] = await Promise.all([
+      supabase.from('customers').select('*', { count: 'exact', head: true }),
+      supabase.from('customers').select('*', { count: 'exact', head: true })
+        .gte('created_at', jstBoundaryISO(todayStr))
+        .lt('created_at', jstBoundaryISO(tomorrowStr)),
+      supabase.from('customers').select('*', { count: 'exact', head: true })
+        .gte('created_at', jstBoundaryISO(monthStartStr))
+        .lt('created_at', jstBoundaryISO(nextMonthStr)),
+    ])
+    return {
+      total: totalRes.count ?? 0,
+      today: todayRes.count ?? 0,
+      thisMonth: monthRes.count ?? 0,
+    }
+  } catch {
+    return { total: 0, today: 0, thisMonth: 0 }
   }
 }
 

@@ -7,8 +7,8 @@ import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
 import { issueTicket, getUserTickets, markTicketUsed } from '../utils/ticketStore'
 import { getJapanDateString } from '../utils/dateUtils'
-import { upsertCustomer, searchCustomersByName, recoverMember } from '../utils/customerStore'
-import type { CustomerRow } from '../utils/customerStore'
+import { upsertCustomer, searchCustomersByName, recoverMember, getCustomerStats } from '../utils/customerStore'
+import type { CustomerRow, CustomerStats } from '../utils/customerStore'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 import { getLiveStatuses, setLiveStatus, setLiveStatusMessage, subscribeLiveStatuses } from '../utils/liveStatusStore'
@@ -377,6 +377,9 @@ export function AdminScreen() {
   // Live status tab state
   const [liveStatusRows, setLiveStatusRows] = useState<LiveStatusRow[]>([])
 
+  // 登録者数ダッシュボード（スタッフ端末専用）
+  const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null)
+
   // Recovery tab state
   const [recoveryStep, setRecoveryStep]               = useState<'search' | 'detail' | 'scan' | 'confirm' | 'done'>('search')
   const [recoveryQuery, setRecoveryQuery]             = useState('')
@@ -447,6 +450,12 @@ export function AdminScreen() {
   const handleCycleLiveStatus = useCallback(async (row: LiveStatusRow) => {
     const updated = await setLiveStatus(row.id, nextLiveStatus(row.status))
     if (updated) setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
+  }, [])
+
+  // ── 登録者数ダッシュボード ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    getCustomerStats().then(setCustomerStats)
   }, [])
 
   const handleSaveLiveStatusMessage = useCallback(async (id: string, message: string) => {
@@ -553,7 +562,7 @@ export function AdminScreen() {
     setScannedData(passportData)
     setPhase('loading')
     // Phase2: 会員テーブルへ初回登録（非致命的 — 失敗しても発行フローは継続）
-    void upsertCustomer(passportData.userId, passportData.name)
+    void upsertCustomer(passportData.userId, passportData.name).then(() => getCustomerStats().then(setCustomerStats))
     const prev = await fetchLastVisitDate(passportData.userId)
     setPrevLastVisitDate(prev)
     if (prev === null) { /* first visit — no sound */ }
@@ -933,6 +942,42 @@ export function AdminScreen() {
           </button>
         </div>
       </header>
+
+      {/* ── 登録者数ダッシュボード ── */}
+      {customerStats && (
+        <div style={{
+          display: 'flex', gap: 10,
+          padding: '14px 20px',
+          borderBottom: '1px solid rgba(201,162,74,0.12)',
+          background: '#000000',
+          flexShrink: 0,
+        }}>
+          {([
+            { label: '登録者数', value: customerStats.total, unit: '人' },
+            { label: '本日', value: customerStats.today, unit: '人' },
+            { label: '今月', value: customerStats.thisMonth, unit: '人' },
+          ] as const).map(stat => (
+            <div
+              key={stat.label}
+              style={{
+                flex: 1, borderRadius: 12,
+                background: '#0A0A0A',
+                border: '1px solid rgba(255,255,255,0.12)',
+                padding: '10px 4px',
+                textAlign: 'center',
+              }}
+            >
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#ffffff', letterSpacing: '0.06em', marginBottom: 4 }}>
+                {stat.label}
+              </p>
+              <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#ffffff', lineHeight: 1 }}>
+                {stat.value}
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{stat.unit}</span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Main tab switcher ── */}
       <div style={{ display: 'flex', borderBottom: '1px solid rgba(201,162,74,0.12)', background: 'rgba(0,0,0,0.25)', flexShrink: 0 }}>
