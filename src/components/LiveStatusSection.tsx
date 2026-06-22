@@ -26,10 +26,18 @@ type CardTheme = {
 }
 
 const CAROUSEL_THEME: Record<LiveStatusValue, CardTheme> = {
-  ready:   { statusColor: '#D4C29D', auraColor: 'rgba(212,194,157,0.40)', edgeColor: 'rgba(212,194,157,0.30)', dim: false },
-  limited: { statusColor: '#C23B3B', auraColor: 'rgba(163,29,29,0.42)',  edgeColor: 'rgba(163,29,29,0.32)',  dim: false },
+  ready:   { statusColor: '#D4C29D', auraColor: 'rgba(212,194,157,0.95)', edgeColor: 'rgba(212,194,157,0.30)', dim: false },
+  limited: { statusColor: '#C23B3B', auraColor: 'rgba(180,32,36,0.95)',   edgeColor: 'rgba(163,29,29,0.32)',  dim: false },
   full:    { statusColor: 'rgba(255,255,255,0.40)', auraColor: 'transparent', edgeColor: 'rgba(255,255,255,0.07)', dim: true },
   closed:  { statusColor: 'rgba(255,255,255,0.30)', auraColor: 'transparent', edgeColor: 'rgba(255,255,255,0.05)', dim: true },
+}
+
+// アウラ用の中間色（中心の強い発光から外周への滑らかな減衰のため）
+const AURA_MID: Record<LiveStatusValue, string> = {
+  ready: 'rgba(212,194,157,0.38)',
+  limited: 'rgba(180,32,36,0.40)',
+  full: 'transparent',
+  closed: 'transparent',
 }
 
 function fmtTime(iso: string): string {
@@ -167,7 +175,7 @@ export function LiveStatusSection() {
                 border: `1px solid ${theme.edgeColor}`,
                 boxShadow: [
                   '0 18px 40px rgba(0,0,0,0.75)',
-                  isActive && isGlowing ? `0 14px 32px ${theme.auraColor}` : '',
+                  isActive && isGlowing ? `0 22px 64px ${theme.auraColor}, 0 4px 28px ${AURA_MID[row.status]}` : '',
                 ].filter(Boolean).join(', '),
                 transform: isActive ? 'scale(1.07)' : 'scale(0.90)',
                 opacity: isActive ? 1 : (theme.dim ? 0.40 : 0.48),
@@ -175,16 +183,16 @@ export function LiveStatusSection() {
                 display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               }}
             >
-              {/* ── bottom aura (READY/LIMITED only) ── */}
+              {/* ── bottom aura (READY/LIMITED only) — テールランプ／時計広告のような下方からの発光 ── */}
               {isGlowing && (
                 <div
                   aria-hidden="true"
                   className={row.status === 'limited' ? 'gj-carousel-aura--limited' : undefined}
                   style={{
-                    position: 'absolute', left: '10%', right: '10%', bottom: -20, height: 46,
-                    background: `radial-gradient(ellipse at center, ${theme.auraColor} 0%, transparent 72%)`,
-                    filter: 'blur(10px)',
-                    opacity: isActive ? 1 : 0.4,
+                    position: 'absolute', left: '4%', right: '4%', bottom: -34, height: 92,
+                    background: `radial-gradient(ellipse at center, ${theme.auraColor} 0%, ${AURA_MID[row.status]} 42%, transparent 78%)`,
+                    filter: 'blur(15px)',
+                    opacity: isActive ? 1 : 0.45,
                     pointerEvents: 'none',
                   }}
                 />
@@ -217,7 +225,7 @@ export function LiveStatusSection() {
                 <p style={{
                   fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.5px',
                   color: theme.statusColor, margin: 0, marginBottom: 3,
-                  textShadow: isGlowing ? `0 0 14px ${theme.auraColor}` : 'none',
+                  textShadow: isGlowing ? `0 0 10px ${AURA_MID[row.status]}` : 'none',
                   whiteSpace: 'nowrap',
                 }}>
                   {liveStatusLabel(row.id, row.status)}
