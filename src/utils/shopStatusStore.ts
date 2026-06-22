@@ -12,6 +12,10 @@ export interface ShopStatusRow {
 
 const SHOP_STATUS_ID = 'main'
 
+/**
+ * 現在の営業状態を取得。id='main' の行が存在しない場合は
+ * status='closed' の初期レコードを作成して返す（テーブル自体が無い場合はnull）。
+ */
 export async function getShopStatus(): Promise<ShopStatusRow | null> {
   try {
     const { data, error } = await supabase
@@ -19,9 +23,25 @@ export async function getShopStatus(): Promise<ShopStatusRow | null> {
       .select('*')
       .eq('id', SHOP_STATUS_ID)
       .maybeSingle()
-    if (error || !data) return null
-    return data as ShopStatusRow
-  } catch {
+    if (error) {
+      console.error('[shopStatusStore] getShopStatus error:', error)
+      return null
+    }
+    if (data) return data as ShopStatusRow
+
+    // 行が存在しない場合は初期レコードを作成
+    const { data: created, error: insertError } = await supabase
+      .from('shop_status')
+      .insert({ id: SHOP_STATUS_ID, status: 'closed' })
+      .select()
+      .single()
+    if (insertError || !created) {
+      console.error('[shopStatusStore] initial insert error:', insertError)
+      return null
+    }
+    return created as ShopStatusRow
+  } catch (e) {
+    console.error('[shopStatusStore] getShopStatus exception:', e)
     return null
   }
 }
@@ -39,9 +59,13 @@ export async function setShopStatus(status: ShopStatusValue): Promise<ShopStatus
       .upsert(patch, { onConflict: 'id' })
       .select()
       .single()
-    if (error || !data) return null
+    if (error || !data) {
+      console.error('[shopStatusStore] setShopStatus error:', error)
+      return null
+    }
     return data as ShopStatusRow
-  } catch {
+  } catch (e) {
+    console.error('[shopStatusStore] setShopStatus exception:', e)
     return null
   }
 }

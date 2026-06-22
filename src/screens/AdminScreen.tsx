@@ -385,6 +385,9 @@ export function AdminScreen() {
   // 営業開始／営業終了（店舗ステータス）
   const [shopStatus, setShopStatusState] = useState<ShopStatusRow | null>(null)
   const [shopActionLoading, setShopActionLoading] = useState(false)
+  const [shopConfirmAction, setShopConfirmAction] = useState<'open' | 'closed' | null>(null)
+  const [shopActionError, setShopActionError] = useState<string | null>(null)
+  const [shopActionSuccess, setShopActionSuccess] = useState<string | null>(null)
 
   // 登録者数ダッシュボード（スタッフ端末専用）
   const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null)
@@ -478,11 +481,22 @@ export function AdminScreen() {
     getShopStatus().then(setShopStatusState)
   }, [])
 
+  const dismissShopMessageLater = useCallback(() => {
+    setTimeout(() => { setShopActionSuccess(null); setShopActionError(null) }, 4000)
+  }, [])
+
   const handleOpenShop = useCallback(async () => {
+    setShopConfirmAction(null)
     setShopActionLoading(true)
+    setShopActionError(null)
+    setShopActionSuccess(null)
     try {
       const shop = await updateShopStatus('open')
-      if (shop) setShopStatusState(shop)
+      if (!shop) {
+        setShopActionError('営業状態の更新に失敗しました。')
+        return
+      }
+      setShopStatusState(shop)
 
       const presets: { id: string; status: LiveStatusRow['status']; message: string }[] = [
         { id: 'teitei',  status: 'ready', message: '本日空きあり' },
@@ -492,27 +506,46 @@ export function AdminScreen() {
       const updatedRows = await Promise.all(
         presets.map(p => setLiveStatusFull(p.id, p.status, p.message)),
       )
+      if (updatedRows.some(r => !r)) {
+        setShopActionError('LIVE STATUSの更新に失敗しました。')
+        return
+      }
       setLiveStatusRows(prev => prev.map(r => updatedRows.find(u => u?.id === r.id) ?? r))
+      setShopActionSuccess('営業を開始しました。')
     } finally {
       setShopActionLoading(false)
+      dismissShopMessageLater()
     }
-  }, [])
+  }, [dismissShopMessageLater])
 
   const handleCloseShop = useCallback(async () => {
+    setShopConfirmAction(null)
     setShopActionLoading(true)
+    setShopActionError(null)
+    setShopActionSuccess(null)
     try {
       const shop = await updateShopStatus('closed')
-      if (shop) setShopStatusState(shop)
+      if (!shop) {
+        setShopActionError('営業状態の更新に失敗しました。')
+        return
+      }
+      setShopStatusState(shop)
 
       const ids = ['teitei', 'ginjiro', 'free']
       const updatedRows = await Promise.all(
         ids.map(id => setLiveStatusFull(id, 'closed', '本日の受付は終了しました')),
       )
+      if (updatedRows.some(r => !r)) {
+        setShopActionError('LIVE STATUSの更新に失敗しました。')
+        return
+      }
       setLiveStatusRows(prev => prev.map(r => updatedRows.find(u => u?.id === r.id) ?? r))
+      setShopActionSuccess('営業を終了しました。')
     } finally {
       setShopActionLoading(false)
+      dismissShopMessageLater()
     }
-  }, [])
+  }, [dismissShopMessageLater])
 
   // ── Log panel ─────────────────────────────────────────────────────────────
 
@@ -1004,12 +1037,12 @@ export function AdminScreen() {
         <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 10 }}>
           <span style={{ color: '#ffffff' }}>営業状態：</span>
           <span style={{ color: shopStatus?.status === 'open' ? '#80E060' : '#E06060' }}>
-            {shopStatus?.status === 'open' ? '営業中' : '営業終了'}
+            {shopActionLoading ? '更新中…' : (shopStatus?.status === 'open' ? '営業中' : '営業終了')}
           </span>
         </p>
         <div style={{ display: 'flex', gap: 10 }}>
           <button
-            onClick={() => void handleOpenShop()}
+            onClick={() => setShopConfirmAction('open')}
             disabled={shopActionLoading}
             style={{
               flex: 1, height: 60, borderRadius: 14,
@@ -1019,12 +1052,13 @@ export function AdminScreen() {
               border: `2px solid ${shopStatus?.status === 'open' ? '#80E060' : 'rgba(255,255,255,0.15)'}`,
               color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
               cursor: shopActionLoading ? 'default' : 'pointer',
+              opacity: shopActionLoading ? 0.6 : 1,
             }}
           >
             営業開始
           </button>
           <button
-            onClick={() => void handleCloseShop()}
+            onClick={() => setShopConfirmAction('closed')}
             disabled={shopActionLoading}
             style={{
               flex: 1, height: 60, borderRadius: 14,
@@ -1034,11 +1068,23 @@ export function AdminScreen() {
               border: `2px solid ${shopStatus?.status === 'closed' ? '#E06060' : 'rgba(255,255,255,0.15)'}`,
               color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
               cursor: shopActionLoading ? 'default' : 'pointer',
+              opacity: shopActionLoading ? 0.6 : 1,
             }}
           >
             営業終了
           </button>
         </div>
+
+        {shopActionError && (
+          <p style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#E06060', textAlign: 'center' }}>
+            {shopActionError}
+          </p>
+        )}
+        {shopActionSuccess && (
+          <p style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#80E060', textAlign: 'center' }}>
+            {shopActionSuccess}
+          </p>
+        )}
       </div>
 
       {/* ── 登録者数ダッシュボード ── */}
@@ -2445,6 +2491,58 @@ export function AdminScreen() {
             <div style={{ padding: '0 18px 18px' }}>
               <button onClick={() => setShowStaffPicker(false)} style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#e5e5e5', fontFamily: SERIF, fontSize: 14, cursor: 'pointer', letterSpacing: '0.12em' }}>
                 キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 営業開始／営業終了 確認モーダル ── */}
+      {shopConfirmAction && (
+        <div
+          onClick={() => setShopConfirmAction(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 320, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 420,
+              background: 'linear-gradient(180deg, #0D0403 0%, #0A0302 100%)',
+              border: `1.5px solid ${shopConfirmAction === 'open' ? 'rgba(128,224,96,0.5)' : 'rgba(224,96,96,0.5)'}`,
+              borderRadius: 22, boxShadow: '0 32px 80px rgba(0,0,0,0.92)', overflow: 'hidden',
+            }}
+          >
+            <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
+            <div style={{ padding: '32px 24px 28px', textAlign: 'center' }}>
+              <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#ffffff', letterSpacing: '0.06em', lineHeight: 1.5 }}>
+                {shopConfirmAction === 'open' ? '営業を開始しますか？' : '営業を終了しますか？'}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 12, padding: '0 20px 24px' }}>
+              <button
+                onClick={() => setShopConfirmAction(null)}
+                style={{
+                  flex: 1, height: 60, borderRadius: 14,
+                  background: 'rgba(255,255,255,0.05)', border: '2px solid rgba(255,255,255,0.15)',
+                  color: '#e5e5e5', fontFamily: SERIF, fontSize: 17, fontWeight: 700, letterSpacing: '0.1em',
+                  cursor: 'pointer',
+                }}
+              >
+                いいえ
+              </button>
+              <button
+                onClick={() => void (shopConfirmAction === 'open' ? handleOpenShop() : handleCloseShop())}
+                style={{
+                  flex: 1, height: 60, borderRadius: 14,
+                  background: shopConfirmAction === 'open'
+                    ? 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)'
+                    : 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
+                  border: `2px solid ${shopConfirmAction === 'open' ? '#80E060' : '#E06060'}`,
+                  color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
+                  cursor: 'pointer',
+                }}
+              >
+                はい
               </button>
             </div>
           </div>
