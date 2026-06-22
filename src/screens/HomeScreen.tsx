@@ -9,7 +9,6 @@ import { LiveStatusSection } from '../components/LiveStatusSection'
 import { HERO_SLIDE_IMAGES, resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
 import type { StyleCard } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
-import { MAINTENANCE_CUT_URL } from '../data/reserveLinks'
 import {
   getNextRecommendedDate,
   getDaysUntilRecommended,
@@ -239,71 +238,6 @@ function MaintenanceScheduleSection() {
   )
 }
 
-// ── ReservationCTASection（予約導線） ────────────────────────────────────────────
-
-function ReservationCTASection({ onTabChange }: { onTabChange: (tab: NavTab) => void }) {
-  return (
-    <div className="px-5">
-      <div
-        style={{
-          borderRadius: 24,
-          border: '1px solid rgba(201,162,74,0.28)',
-          background: 'linear-gradient(160deg, #120608 0%, #0A0404 60%, #080506 100%)',
-          boxShadow: '0 16px 48px rgba(0,0,0,0.65), inset 0 1px 0 rgba(242,230,200,0.03)',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ height: 2, background: 'linear-gradient(90deg, transparent 0%, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent 100%)' }} />
-        <div className="px-5 pt-5 pb-5">
-          <h3 style={{ fontSize: 20, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.06em', lineHeight: 1.3, marginBottom: 6 }}>
-            ご予約はこちらから
-          </h3>
-          <p style={{ fontSize: 13, lineHeight: 1.75, color: 'rgba(245,245,247,0.78)', marginBottom: 18 }}>
-            メニューを選んで来店日時を予約。{'\n'}
-            メンテナンスカット対象の方は専用クーポンからもご予約いただけます。
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => onTabChange('reserve')}
-              style={{
-                display: 'block', width: '100%', textAlign: 'center',
-                padding: '14px 0', borderRadius: 14,
-                background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-                border: '1px solid rgba(201,162,74,0.44)',
-                boxShadow: '0 4px 20px rgba(107,15,18,0.45)',
-                cursor: 'pointer',
-              }}
-            >
-              <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.14em', color: '#F2E6C8', fontFamily: SERIF }}>
-                メニューから予約する
-              </span>
-            </button>
-
-            <a
-              href={MAINTENANCE_CUT_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'block', textAlign: 'center',
-                padding: '13px 0', borderRadius: 14,
-                background: 'rgba(201,162,74,0.06)',
-                border: '1px solid rgba(201,162,74,0.24)',
-                textDecoration: 'none',
-              }}
-            >
-              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(212,180,100,0.92)', fontFamily: SERIF }}>
-                メンテナンスカットを予約する
-              </span>
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── HeroSlider ────────────────────────────────────────────────────────────────
 
 function HeroSlider() {
@@ -453,15 +387,6 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
               onStyleSelect={setSelectedStyle}
               onSeeAll={() => onTabChange('styles')}
             />
-          </motion.div>
-
-          {/* ④ 予約導線 */}
-          <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.27, duration: 0.44, ease: EASE_OUT }}
-          >
-            <ReservationCTASection onTabChange={onTabChange} />
           </motion.div>
         </div>
 

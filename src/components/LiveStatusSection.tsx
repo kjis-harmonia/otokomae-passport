@@ -37,7 +37,7 @@ function SectionHeader({ rows }: { rows: LiveStatusRow[] }) {
       </p>
       <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.30), transparent)' }} />
       {latest && (
-        <p style={{ fontSize: 9, letterSpacing: '0.10em', color: 'rgba(201,162,74,0.50)', flexShrink: 0, fontFamily: MONO, whiteSpace: 'nowrap' }}>
+        <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', color: '#E8C868', flexShrink: 0, fontFamily: MONO, whiteSpace: 'nowrap' }}>
           最終更新 {fmtTime(latest)}
         </p>
       )}
@@ -84,7 +84,7 @@ export function LiveStatusSection() {
               transition={{ delay: i * 0.08, duration: 0.4 }}
               style={{
                 flexShrink: 0,
-                width: 'min(78vw, 320px)',
+                width: 'min(67vw, 274px)',
                 height: isCenter ? 164 : 148,
                 borderRadius: 18,
                 background: 'linear-gradient(155deg, #130608 0%, #0A0404 55%, #080407 100%)',
@@ -138,12 +138,12 @@ export function LiveStatusSection() {
                   href={`tel:${LIVE_STATUS_TEL}`}
                   style={{
                     position: 'relative', zIndex: 1,
-                    flexShrink: 0, marginLeft: 12,
-                    padding: '11px 16px', borderRadius: 12,
+                    flexShrink: 0, marginLeft: 8,
+                    padding: '10px 12px', borderRadius: 12,
                     background: t.ctaBg,
                     border: `1px solid ${t.ctaBorder}`,
                     color: t.ctaColor,
-                    fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
+                    fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: '0.02em',
                     textAlign: 'center', textDecoration: 'none',
                     whiteSpace: 'nowrap',
                   }}
