@@ -446,6 +446,7 @@ create table if not exists public.accounting_sessions (
   user_id         text,
   customer_name   text,
   staff_name      text,
+  stylist_name    text,
   subtotal        integer     not null,
   discount_total  integer     not null default 0,
   total           integer     not null,
@@ -453,8 +454,14 @@ create table if not exists public.accounting_sessions (
   created_at      timestamptz default now() not null
 );
 
+-- ── MIGRATION: add stylist_name (施術担当。staff_nameは操作したスタッフのまま) ──
+-- 既存の accounting_sessions テーブルがある場合は、これを Supabase SQL Editor で
+-- 実行してください。新規作成時は上のCREATE TABLEに既に含まれています。
+alter table public.accounting_sessions add column if not exists stylist_name text;
+
 create index if not exists accounting_sessions_created_at_idx on public.accounting_sessions (created_at desc);
 create index if not exists accounting_sessions_user_id_idx    on public.accounting_sessions (user_id);
+create index if not exists accounting_sessions_stylist_idx    on public.accounting_sessions (stylist_name);
 
 alter table public.accounting_sessions enable row level security;
 

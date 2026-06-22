@@ -22,6 +22,9 @@ const CATEGORY_LABELS: Record<AccountingCategory, string> = {
   retail: '店販',
 }
 
+// 施術担当（売上集計の担当別フィルタ用。LIVE STATUSの座席名と揃える）
+const STYLISTS = ['テイテイ', '銀二郎', 'フリー'] as const
+
 interface AppliedDiscount {
   ticketId: string | null   // null = メンテナンスクーポン（ticket行を持たない）
   ticketType: string        // 'otoku' | 'discount' | 'coupon'
@@ -44,6 +47,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
 
   const [customer, setCustomer] = useState<AccountingCustomer | null>(null)
   const [discount, setDiscount] = useState<AppliedDiscount | null>(null)
+  const [stylistName, setStylistName] = useState<string | null>(null)
 
   const [showScanner, setShowScanner] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
@@ -75,7 +79,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const subtotal = selectedItems.reduce((sum, i) => sum + i.price, 0)
   const discountTotal = discount?.amount ?? 0
   const total = Math.max(0, subtotal - discountTotal)
-  const canComplete = staffId.trim() !== '' && selectedItems.length > 0 && !completing
+  const canComplete = staffId.trim() !== '' && stylistName !== null && selectedItems.length > 0 && !completing
 
   async function handleScan(text: string) {
     setScanLoading(true)
@@ -229,6 +233,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         user_id: customer?.userId ?? null,
         customer_name: customer?.name ?? null,
         staff_name: staffId,
+        stylist_name: stylistName ?? '',
         subtotal,
         discount_total: discountTotal,
         total,
@@ -250,6 +255,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         setSelectedIds(new Set())
         setCustomer(null)
         setDiscount(null)
+        setStylistName(null)
       }, 2200)
     } catch (err) {
       setCompleteError(`会計完了に失敗しました（${err instanceof Error ? err.message : String(err)}）`)
@@ -306,6 +312,36 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
             </button>
           </div>
         )}
+      </div>
+
+      {/* ── 施術スタイリスト選択 ── */}
+      <div style={{ marginBottom: 18 }}>
+        <p style={{ fontSize: 12, letterSpacing: '0.16em', color: '#ffffff', fontWeight: 700, marginBottom: 10 }}>
+          スタイリスト
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {STYLISTS.map(name => {
+            const selected = stylistName === name
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setStylistName(name)}
+                style={{
+                  flex: 1, borderRadius: 12, padding: '14px 6px', textAlign: 'center',
+                  background: selected ? 'rgba(201,162,74,0.16)' : '#0A0A0A',
+                  border: `1.5px solid ${selected ? '#C9A24A' : 'rgba(255,255,255,0.12)'}`,
+                  boxShadow: selected ? '0 0 18px rgba(201,162,74,0.30)' : 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: selected ? '#C9A24A' : '#ffffff' }}>
+                  {name}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* ── 商品選択 ── */}
@@ -397,6 +433,9 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         )}
         {!staffId.trim() && (
           <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8, textAlign: 'center' }}>先に担当者を選択してください</p>
+        )}
+        {staffId.trim() && stylistName === null && (
+          <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8, textAlign: 'center' }}>スタイリストを選択してください</p>
         )}
 
         <button
