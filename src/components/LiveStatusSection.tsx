@@ -84,8 +84,8 @@ export function LiveStatusSection() {
               transition={{ delay: i * 0.08, duration: 0.4 }}
               style={{
                 flexShrink: 0,
-                width: 'min(67vw, 274px)',
-                height: isCenter ? 164 : 148,
+                width: 'min(61vw, 246px)',
+                height: isCenter ? 150 : 140,
                 borderRadius: 18,
                 background: 'linear-gradient(155deg, #130608 0%, #0A0404 55%, #080407 100%)',
                 border: `1.5px solid ${t.border}`,
@@ -94,7 +94,7 @@ export function LiveStatusSection() {
                   t.glow,
                 ].filter(Boolean).join(', '),
                 opacity: t.dim ? 0.62 : 1,
-                transform: isCenter ? 'scale(1.10)' : 'scale(0.96)',
+                transform: isCenter ? 'scale(1.07)' : 'scale(0.96)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -138,12 +138,12 @@ export function LiveStatusSection() {
                   href={`tel:${LIVE_STATUS_TEL}`}
                   style={{
                     position: 'relative', zIndex: 1,
-                    flexShrink: 0, marginLeft: 8,
-                    padding: '10px 12px', borderRadius: 12,
+                    flexShrink: 0, marginLeft: 6,
+                    padding: '8px 9px', borderRadius: 11,
                     background: t.ctaBg,
                     border: `1px solid ${t.ctaBorder}`,
                     color: t.ctaColor,
-                    fontFamily: SERIF, fontSize: 12, fontWeight: 700, letterSpacing: '0.02em',
+                    fontFamily: SERIF, fontSize: 11, fontWeight: 700, letterSpacing: '0.01em',
                     textAlign: 'center', textDecoration: 'none',
                     whiteSpace: 'nowrap',
                   }}
