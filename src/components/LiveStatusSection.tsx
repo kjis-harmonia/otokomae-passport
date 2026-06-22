@@ -47,6 +47,7 @@ export function LiveStatusSection() {
   const [activeIndex, setActiveIndex] = useState(0)
   const trackRef = useRef<HTMLDivElement>(null)
   const cardRefs = useRef<(HTMLDivElement | null)[]>([])
+  const hasCenteredRef = useRef(false)
 
   useEffect(() => {
     getLiveStatuses().then((data) => {
@@ -85,6 +86,21 @@ export function LiveStatusSection() {
     track.addEventListener('scroll', onScroll, { passive: true })
     return () => track.removeEventListener('scroll', onScroll)
   }, [handleScroll, rows.length])
+
+  // 初回マウント時、activeカードを画面中央へ実際にスクロールして揃える
+  // （scroll-snap-alignだけではユーザーがスクロールするまで中央に揃わないため）
+  useEffect(() => {
+    if (rows.length === 0 || hasCenteredRef.current) return
+    const raf = requestAnimationFrame(() => {
+      const track = trackRef.current
+      const card = cardRefs.current[activeIndex]
+      if (track && card) {
+        track.scrollLeft = card.offsetLeft + card.offsetWidth / 2 - track.clientWidth / 2
+        hasCenteredRef.current = true
+      }
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [rows, activeIndex])
 
   if (rows.length === 0) return null
 
@@ -141,7 +157,7 @@ export function LiveStatusSection() {
               style={{
                 flexShrink: 0,
                 width: 'min(76vw, 320px)',
-                height: 160,
+                height: 198,
                 borderRadius: 20,
                 position: 'relative',
                 overflow: 'hidden',
@@ -155,7 +171,7 @@ export function LiveStatusSection() {
                 ].filter(Boolean).join(', '),
                 transform: isActive ? 'scale(1.07)' : 'scale(0.90)',
                 opacity: isActive ? 1 : (theme.dim ? 0.40 : 0.48),
-                padding: '18px 20px',
+                padding: '16px 18px',
                 display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
               }}
             >
@@ -177,25 +193,27 @@ export function LiveStatusSection() {
               <div style={{ position: 'relative', zIndex: 1, minWidth: 0 }}>
                 <p style={{
                   fontSize: 9, letterSpacing: '2px', color: 'rgba(255,255,255,0.30)',
-                  fontFamily: SANS, margin: 0, marginBottom: 6,
+                  fontFamily: SANS, margin: 0, marginBottom: 4,
                 }}>
                   {STATUS_WORD[row.status]}
                 </p>
                 <p style={{
-                  fontFamily: SERIF, fontWeight: 500, fontSize: 19, letterSpacing: '1.5px',
-                  color: '#ffffff', margin: 0, marginBottom: 6,
+                  fontFamily: SERIF, fontWeight: 800, fontSize: 30, letterSpacing: '1px',
+                  color: '#ffffff', margin: 0, marginBottom: 6, lineHeight: 1.15,
+                  textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 18px rgba(212,194,157,0.16)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {row.name}
                 </p>
                 <p style={{
-                  fontSize: 13, fontWeight: 600, letterSpacing: '0.5px',
-                  color: theme.statusColor, fontFamily: SANS, margin: 0, marginBottom: 4,
+                  fontSize: 22, fontWeight: 700, letterSpacing: '0.5px',
+                  color: theme.statusColor, fontFamily: SANS, margin: 0, marginBottom: 5,
+                  textShadow: isGlowing ? `0 0 14px ${theme.auraColor}` : 'none',
                 }}>
                   {liveStatusLabel(row.id, row.status)}
                 </p>
                 <p style={{
-                  fontSize: 11, letterSpacing: '0.5px', color: 'rgba(255,255,255,0.50)',
+                  fontSize: 16, fontWeight: 500, letterSpacing: '0.3px', color: 'rgba(255,255,255,0.62)',
                   fontFamily: SANS, margin: 0,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
@@ -209,12 +227,14 @@ export function LiveStatusSection() {
                   className="gj-carousel-tel"
                   style={{
                     position: 'relative', zIndex: 1, alignSelf: 'flex-start',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    height: 38, boxSizing: 'border-box',
                     background: 'rgba(0,0,0,0.45)',
                     border: '1px solid rgba(212,194,157,0.45)',
                     color: '#D4C29D',
-                    padding: '8px 16px',
+                    padding: '0 20px',
                     borderRadius: 3,
-                    fontSize: 11, fontWeight: 400, letterSpacing: '1.5px',
+                    fontSize: 14, fontWeight: 500, letterSpacing: '1.5px',
                     fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
                   }}
                 >
