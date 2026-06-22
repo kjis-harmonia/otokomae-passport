@@ -484,3 +484,28 @@ create policy "allow_all" on public.accounting_session_items
   for all
   using (true)
   with check (true);
+
+-- ── shop_status: 営業状態（営業開始／営業終了のワンタップ切替） ────────────────
+-- 単一行運用。id='main' 固定。LIVE STATUSの一括初期化／一括終了と合わせて
+-- スタッフ端末の「営業開始」「営業終了」ボタンから更新される。
+
+create table if not exists public.shop_status (
+  id          text        primary key,
+  status      text        not null default 'closed',
+  opened_at   timestamptz,
+  closed_at   timestamptz,
+  updated_at  timestamptz default now() not null,
+
+  constraint shop_status_status_check check (status in ('open', 'closed'))
+);
+
+alter table public.shop_status enable row level security;
+
+create policy "allow_all" on public.shop_status
+  for all
+  using (true)
+  with check (true);
+
+-- 初期データ（既存行があれば変更しない）
+insert into public.shop_status (id, status) values ('main', 'closed')
+on conflict (id) do nothing;

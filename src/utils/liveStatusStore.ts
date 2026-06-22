@@ -21,6 +21,22 @@ export async function setLiveStatus(id: string, status: LiveStatusValue): Promis
   return data as LiveStatusRow
 }
 
+/** status と availability_message を1回の更新でまとめて反映（営業開始／営業終了の一括初期化用） */
+export async function setLiveStatusFull(
+  id: string,
+  status: LiveStatusValue,
+  message: string,
+): Promise<LiveStatusRow | null> {
+  const { data, error } = await supabase
+    .from('live_statuses')
+    .update({ status, availability_message: message.trim() || null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error || !data) return null
+  return data as LiveStatusRow
+}
+
 export async function setLiveStatusMessage(id: string, message: string): Promise<LiveStatusRow | null> {
   const { data, error } = await supabase
     .from('live_statuses')

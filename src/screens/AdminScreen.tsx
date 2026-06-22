@@ -11,7 +11,9 @@ import { upsertCustomer, searchCustomersByName, recoverMember, getCustomerStats 
 import type { CustomerRow, CustomerStats } from '../utils/customerStore'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
-import { getLiveStatuses, setLiveStatus, setLiveStatusMessage, subscribeLiveStatuses } from '../utils/liveStatusStore'
+import {
+  getLiveStatuses, setLiveStatus, setLiveStatusMessage, setLiveStatusFull, subscribeLiveStatuses,
+} from '../utils/liveStatusStore'
 import {
   LIVE_STATUS_CODES, LIVE_STATUS_DEFAULT_MESSAGES, LIVE_STATUS_THEME,
   liveStatusLabel, liveStatusPulseClass, liveStatusSignpoleClass, nextLiveStatus,
@@ -19,6 +21,8 @@ import {
 import '../components/liveStatusSignpole.css'
 import type { LiveStatusRow } from '../data/liveStatus'
 import { AccountingAssistTab } from './AccountingAssistTab'
+import { getShopStatus, setShopStatus as updateShopStatus } from '../utils/shopStatusStore'
+import type { ShopStatusRow } from '../utils/shopStatusStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -378,6 +382,10 @@ export function AdminScreen() {
   // Live status tab state
   const [liveStatusRows, setLiveStatusRows] = useState<LiveStatusRow[]>([])
 
+  // 営業開始／営業終了（店舗ステータス）
+  const [shopStatus, setShopStatusState] = useState<ShopStatusRow | null>(null)
+  const [shopActionLoading, setShopActionLoading] = useState(false)
+
   // 登録者数ダッシュボード（スタッフ端末専用）
   const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null)
 
@@ -462,6 +470,48 @@ export function AdminScreen() {
   const handleSaveLiveStatusMessage = useCallback(async (id: string, message: string) => {
     const updated = await setLiveStatusMessage(id, message)
     if (updated) setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
+  }, [])
+
+  // ── 営業開始／営業終了 ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    getShopStatus().then(setShopStatusState)
+  }, [])
+
+  const handleOpenShop = useCallback(async () => {
+    setShopActionLoading(true)
+    try {
+      const shop = await updateShopStatus('open')
+      if (shop) setShopStatusState(shop)
+
+      const presets: { id: string; status: LiveStatusRow['status']; message: string }[] = [
+        { id: 'teitei',  status: 'ready', message: '本日空きあり' },
+        { id: 'ginjiro', status: 'ready', message: '本日空きあり' },
+        { id: 'free',    status: 'ready', message: '本日受付可能' },
+      ]
+      const updatedRows = await Promise.all(
+        presets.map(p => setLiveStatusFull(p.id, p.status, p.message)),
+      )
+      setLiveStatusRows(prev => prev.map(r => updatedRows.find(u => u?.id === r.id) ?? r))
+    } finally {
+      setShopActionLoading(false)
+    }
+  }, [])
+
+  const handleCloseShop = useCallback(async () => {
+    setShopActionLoading(true)
+    try {
+      const shop = await updateShopStatus('closed')
+      if (shop) setShopStatusState(shop)
+
+      const ids = ['teitei', 'ginjiro', 'free']
+      const updatedRows = await Promise.all(
+        ids.map(id => setLiveStatusFull(id, 'closed', '本日の受付は終了しました')),
+      )
+      setLiveStatusRows(prev => prev.map(r => updatedRows.find(u => u?.id === r.id) ?? r))
+    } finally {
+      setShopActionLoading(false)
+    }
   }, [])
 
   // ── Log panel ─────────────────────────────────────────────────────────────
@@ -943,6 +993,53 @@ export function AdminScreen() {
           </button>
         </div>
       </header>
+
+      {/* ── 営業開始／営業終了 ── */}
+      <div style={{
+        padding: '14px 20px',
+        borderBottom: '1px solid rgba(201,162,74,0.12)',
+        background: '#000000',
+        flexShrink: 0,
+      }}>
+        <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 10 }}>
+          <span style={{ color: '#ffffff' }}>営業状態：</span>
+          <span style={{ color: shopStatus?.status === 'open' ? '#80E060' : '#E06060' }}>
+            {shopStatus?.status === 'open' ? '営業中' : '営業終了'}
+          </span>
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => void handleOpenShop()}
+            disabled={shopActionLoading}
+            style={{
+              flex: 1, height: 60, borderRadius: 14,
+              background: shopStatus?.status === 'open'
+                ? 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)'
+                : 'rgba(255,255,255,0.05)',
+              border: `2px solid ${shopStatus?.status === 'open' ? '#80E060' : 'rgba(255,255,255,0.15)'}`,
+              color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
+              cursor: shopActionLoading ? 'default' : 'pointer',
+            }}
+          >
+            営業開始
+          </button>
+          <button
+            onClick={() => void handleCloseShop()}
+            disabled={shopActionLoading}
+            style={{
+              flex: 1, height: 60, borderRadius: 14,
+              background: shopStatus?.status === 'closed'
+                ? 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)'
+                : 'rgba(255,255,255,0.05)',
+              border: `2px solid ${shopStatus?.status === 'closed' ? '#E06060' : 'rgba(255,255,255,0.15)'}`,
+              color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
+              cursor: shopActionLoading ? 'default' : 'pointer',
+            }}
+          >
+            営業終了
+          </button>
+        </div>
+      </div>
 
       {/* ── 登録者数ダッシュボード ── */}
       {customerStats && (
