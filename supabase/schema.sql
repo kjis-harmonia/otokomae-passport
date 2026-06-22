@@ -360,14 +360,23 @@ grant execute on function public.recover_member(text, text, text, text) to anon,
 -- ready → limited → full → closed → ready の順で循環更新される。
 
 create table if not exists public.live_statuses (
-  id          text        primary key,
-  name        text        not null,
-  status      text        not null default 'ready',
-  sort_order  integer     not null default 0,
-  updated_at  timestamptz default now() not null,
+  id                   text        primary key,
+  name                 text        not null,
+  status               text        not null default 'ready',
+  sort_order           integer     not null default 0,
+  availability_message text,
+  updated_at           timestamptz default now() not null,
 
   constraint live_statuses_status_check check (status in ('ready', 'limited', 'full', 'closed'))
 );
+
+-- ── MIGRATION: add availability_message (空き状況の補足メッセージ) ──────────
+-- 既存の live_statuses テーブルがある場合は、これを Supabase SQL Editor で
+-- 実行してください。新規作成時は上のCREATE TABLEに既に含まれています。
+--
+--   ALTER TABLE public.live_statuses ADD COLUMN IF NOT EXISTS availability_message text;
+--
+alter table public.live_statuses add column if not exists availability_message text;
 
 alter table public.live_statuses enable row level security;
 

@@ -21,6 +21,17 @@ export async function setLiveStatus(id: string, status: LiveStatusValue): Promis
   return data as LiveStatusRow
 }
 
+export async function setLiveStatusMessage(id: string, message: string): Promise<LiveStatusRow | null> {
+  const { data, error } = await supabase
+    .from('live_statuses')
+    .update({ availability_message: message.trim() || null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error || !data) return null
+  return data as LiveStatusRow
+}
+
 export function subscribeLiveStatuses(onChange: (row: LiveStatusRow) => void) {
   const channel = supabase
     .channel('live-statuses-realtime')

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { getLiveStatuses, subscribeLiveStatuses } from '../utils/liveStatusStore'
 import {
   LIVE_STATUS_CODES, LIVE_STATUS_THEME, LIVE_STATUS_TEL,
-  liveStatusCtaLabel, liveStatusLabel, liveStatusPulseClass, liveStatusSignpoleClass,
+  liveStatusAvailabilityMessage, liveStatusCtaLabel, liveStatusLabel, liveStatusPulseClass, liveStatusSignpoleClass,
 } from '../data/liveStatus'
 import type { LiveStatusRow } from '../data/liveStatus'
 import './liveStatusSignpole.css'
@@ -85,7 +85,7 @@ export function LiveStatusSection() {
               style={{
                 flexShrink: 0,
                 width: 'min(78vw, 320px)',
-                height: isCenter ? 148 : 132,
+                height: isCenter ? 164 : 148,
                 borderRadius: 18,
                 background: 'linear-gradient(155deg, #130608 0%, #0A0404 55%, #080407 100%)',
                 border: `1.5px solid ${t.border}`,
@@ -124,6 +124,12 @@ export function LiveStatusSection() {
                   fontSize: 13, fontWeight: 600, color: t.descColor, letterSpacing: '0.04em',
                 }}>
                   {liveStatusLabel(row.id, row.status)}
+                </p>
+                <p style={{
+                  fontSize: 12, fontWeight: 700, color: t.availabilityColor, letterSpacing: '0.02em',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+                }}>
+                  {liveStatusAvailabilityMessage(row)}
                 </p>
               </div>
 

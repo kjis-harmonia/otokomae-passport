@@ -11,9 +11,9 @@ import { upsertCustomer, searchCustomersByName, recoverMember } from '../utils/c
 import type { CustomerRow } from '../utils/customerStore'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
-import { getLiveStatuses, setLiveStatus, subscribeLiveStatuses } from '../utils/liveStatusStore'
+import { getLiveStatuses, setLiveStatus, setLiveStatusMessage, subscribeLiveStatuses } from '../utils/liveStatusStore'
 import {
-  LIVE_STATUS_CODES, LIVE_STATUS_THEME,
+  LIVE_STATUS_CODES, LIVE_STATUS_DEFAULT_MESSAGES, LIVE_STATUS_THEME,
   liveStatusLabel, liveStatusPulseClass, liveStatusSignpoleClass, nextLiveStatus,
 } from '../data/liveStatus'
 import '../components/liveStatusSignpole.css'
@@ -446,6 +446,11 @@ export function AdminScreen() {
 
   const handleCycleLiveStatus = useCallback(async (row: LiveStatusRow) => {
     const updated = await setLiveStatus(row.id, nextLiveStatus(row.status))
+    if (updated) setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
+  }, [])
+
+  const handleSaveLiveStatusMessage = useCallback(async (id: string, message: string) => {
+    const updated = await setLiveStatusMessage(id, message)
     if (updated) setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
   }, [])
 
@@ -1844,13 +1849,11 @@ export function AdminScreen() {
               {liveStatusRows.map((row) => {
                 const t = LIVE_STATUS_THEME[row.status]
                 return (
-                  <button
+                  <div
                     key={row.id}
                     className={liveStatusPulseClass(row.status)}
-                    onClick={() => void handleCycleLiveStatus(row)}
                     style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      minHeight: 132, borderRadius: 18,
+                      borderRadius: 18,
                       background: 'linear-gradient(155deg, #130608 0%, #0A0404 55%, #080407 100%)',
                       border: `1.5px solid ${t.border}`,
                       boxShadow: [
@@ -1858,9 +1861,6 @@ export function AdminScreen() {
                         t.glow,
                       ].filter(Boolean).join(', '),
                       opacity: t.dim ? 0.62 : 1,
-                      padding: '16px 18px',
-                      cursor: 'pointer', textAlign: 'left',
-                      WebkitTapHighlightColor: 'transparent',
                       position: 'relative', overflow: 'hidden',
                     }}
                   >
@@ -1868,34 +1868,76 @@ export function AdminScreen() {
 
                     <div style={{ height: 2, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1, background: `linear-gradient(90deg, transparent, ${t.border} 50%, transparent)` }} />
 
-                    <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                      <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
-                        {row.name}
-                      </p>
-                      <p style={{ fontFamily: 'ui-monospace, "SF Mono", "Fira Code", monospace', fontSize: 21, fontWeight: 700, color: t.codeColor, letterSpacing: '0.06em', lineHeight: 1.15 }}>
-                        {LIVE_STATUS_CODES[row.status]}
-                      </p>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: t.descColor, letterSpacing: '0.04em' }}>
-                        {liveStatusLabel(row.id, row.status)}
-                      </p>
-                      <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.30)', letterSpacing: '0.06em', marginTop: 2 }}>
-                        更新 {fmtLogTime(row.updated_at)}
-                      </p>
-                    </div>
+                    {/* ── タップで状態を循環させるゾーン ── */}
+                    <button
+                      type="button"
+                      onClick={() => void handleCycleLiveStatus(row)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        width: '100%', minHeight: 132,
+                        background: 'transparent', border: 'none',
+                        padding: '16px 18px', cursor: 'pointer', textAlign: 'left',
+                        WebkitTapHighlightColor: 'transparent',
+                        position: 'relative', zIndex: 1,
+                      }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                        <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
+                          {row.name}
+                        </p>
+                        <p style={{ fontFamily: 'ui-monospace, "SF Mono", "Fira Code", monospace', fontSize: 21, fontWeight: 700, color: t.codeColor, letterSpacing: '0.06em', lineHeight: 1.15 }}>
+                          {LIVE_STATUS_CODES[row.status]}
+                        </p>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: t.descColor, letterSpacing: '0.04em' }}>
+                          {liveStatusLabel(row.id, row.status)}
+                        </p>
+                        <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.30)', letterSpacing: '0.06em', marginTop: 2 }}>
+                          更新 {fmtLogTime(row.updated_at)}
+                        </p>
+                      </div>
 
-                    <span style={{
-                      position: 'relative', zIndex: 1,
-                      flexShrink: 0, marginLeft: 12,
-                      padding: '6px 12px', borderRadius: 99,
-                      background: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.10)',
-                      fontSize: 10, fontWeight: 700, letterSpacing: '0.10em',
-                      color: 'rgba(242,230,200,0.40)',
-                      fontFamily: SERIF, whiteSpace: 'nowrap',
-                    }}>
-                      タップで切替
-                    </span>
-                  </button>
+                      <span style={{
+                        flexShrink: 0, marginLeft: 12,
+                        padding: '6px 12px', borderRadius: 99,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.10)',
+                        fontSize: 10, fontWeight: 700, letterSpacing: '0.10em',
+                        color: 'rgba(242,230,200,0.40)',
+                        fontFamily: SERIF, whiteSpace: 'nowrap',
+                      }}>
+                        タップで切替
+                      </span>
+                    </button>
+
+                    {/* ── 空き状況メッセージ編集（タップ循環とは独立） ── */}
+                    <div
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        position: 'relative', zIndex: 1,
+                        padding: '0 18px 16px',
+                      }}
+                    >
+                      <p style={{ fontSize: 9, letterSpacing: '0.12em', color: 'rgba(201,162,74,0.46)', marginBottom: 6 }}>
+                        空き状況メッセージ（顧客画面に表示）
+                      </p>
+                      <input
+                        type="text"
+                        defaultValue={row.availability_message ?? ''}
+                        placeholder={LIVE_STATUS_DEFAULT_MESSAGES[row.status]}
+                        maxLength={40}
+                        onBlur={e => void handleSaveLiveStatusMessage(row.id, e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                        style={{
+                          width: '100%', boxSizing: 'border-box',
+                          padding: '9px 12px', borderRadius: 10,
+                          background: 'rgba(0,0,0,0.28)',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          color: '#F2E6C8', fontSize: 13, fontFamily: SERIF,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
+                  </div>
                 )
               })}
             </div>

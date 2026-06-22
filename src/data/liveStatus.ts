@@ -4,6 +4,7 @@ export type LiveStatusRow = {
   id: string
   name: string
   status: LiveStatusValue
+  availability_message: string | null
   updated_at: string
 }
 
@@ -35,9 +36,24 @@ export function liveStatusLabel(seatId: string, status: LiveStatusValue): string
   return LIVE_STATUS_LABELS[status]
 }
 
+// availability_message が未設定（スタッフ未入力）の場合のフォールバック文言
+export const LIVE_STATUS_DEFAULT_MESSAGES: Record<LiveStatusValue, string> = {
+  ready:   '本日空きあり',
+  limited: '本日残り1枠',
+  full:    '本日満員',
+  closed:  '受付終了',
+}
+
+// スタッフが入力した availability_message（DB管理）。未入力ならステータス別の既定文言。
+export function liveStatusAvailabilityMessage(row: { status: LiveStatusValue; availability_message: string | null }): string {
+  const trimmed = row.availability_message?.trim()
+  return trimmed ? trimmed : LIVE_STATUS_DEFAULT_MESSAGES[row.status]
+}
+
 export type LiveStatusTheme = {
   codeColor: string
   descColor: string
+  availabilityColor: string
   border: string
   glow: string   // box-shadow value, '' for none
   ctaBg: string
@@ -51,6 +67,7 @@ export const LIVE_STATUS_THEME: Record<LiveStatusValue, LiveStatusTheme> = {
   ready: {
     codeColor: '#F6E27A',
     descColor: 'rgba(246,224,160,0.88)',
+    availabilityColor: '#FCF6E0',
     border: 'rgba(201,162,74,0.75)',
     glow: '0 0 32px rgba(201,162,74,0.46), 0 0 64px rgba(201,162,74,0.18)',
     ctaBg: 'linear-gradient(135deg, #8B6218 0%, #D4A030 50%, #8B6218 100%)',
@@ -61,6 +78,7 @@ export const LIVE_STATUS_THEME: Record<LiveStatusValue, LiveStatusTheme> = {
   limited: {
     codeColor: '#E2667A',
     descColor: 'rgba(232,180,170,0.82)',
+    availabilityColor: '#FBEAE6',
     border: 'rgba(139,20,42,0.72)',
     glow: '0 0 32px rgba(139,20,42,0.50), 0 0 60px rgba(139,20,42,0.22)',
     ctaBg: 'linear-gradient(135deg, #4A0A14 0%, #8B1A2E 55%, #4A0A14 100%)',
@@ -71,6 +89,7 @@ export const LIVE_STATUS_THEME: Record<LiveStatusValue, LiveStatusTheme> = {
   full: {
     codeColor: 'rgba(242,230,200,0.42)',
     descColor: 'rgba(242,230,200,0.34)',
+    availabilityColor: 'rgba(242,230,200,0.56)',
     border: 'rgba(255,255,255,0.08)',
     glow: '',
     ctaBg: '',
@@ -81,6 +100,7 @@ export const LIVE_STATUS_THEME: Record<LiveStatusValue, LiveStatusTheme> = {
   closed: {
     codeColor: 'rgba(242,230,200,0.30)',
     descColor: 'rgba(242,230,200,0.26)',
+    availabilityColor: 'rgba(242,230,200,0.46)',
     border: 'rgba(255,255,255,0.06)',
     glow: '',
     ctaBg: '',
