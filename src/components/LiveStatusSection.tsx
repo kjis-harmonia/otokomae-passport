@@ -157,8 +157,8 @@ export function LiveStatusSection() {
               style={{
                 flexShrink: 0,
                 width: 'min(76vw, 320px)',
-                height: 198,
-                borderRadius: 20,
+                height: 158,
+                borderRadius: 18,
                 position: 'relative',
                 overflow: 'hidden',
                 background: 'linear-gradient(165deg, rgba(22,15,11,0.94) 0%, rgba(6,4,3,0.98) 100%)',
@@ -171,7 +171,7 @@ export function LiveStatusSection() {
                 ].filter(Boolean).join(', '),
                 transform: isActive ? 'scale(1.07)' : 'scale(0.90)',
                 opacity: isActive ? 1 : (theme.dim ? 0.40 : 0.48),
-                padding: '16px 20px',
+                padding: '13px 18px',
                 display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               }}
             >
@@ -181,7 +181,7 @@ export function LiveStatusSection() {
                   aria-hidden="true"
                   className={row.status === 'limited' ? 'gj-carousel-aura--limited' : undefined}
                   style={{
-                    position: 'absolute', left: '10%', right: '10%', bottom: -26, height: 56,
+                    position: 'absolute', left: '10%', right: '10%', bottom: -20, height: 46,
                     background: `radial-gradient(ellipse at center, ${theme.auraColor} 0%, transparent 72%)`,
                     filter: 'blur(10px)',
                     opacity: isActive ? 1 : 0.4,
@@ -194,13 +194,13 @@ export function LiveStatusSection() {
               <div style={{ position: 'relative', zIndex: 1, minWidth: 0, flexShrink: 1 }}>
                 <p style={{
                   fontSize: 9, letterSpacing: '2px', color: 'rgba(255,255,255,0.30)',
-                  fontFamily: SANS, margin: 0, marginBottom: 6,
+                  fontFamily: SANS, margin: 0, marginBottom: 5,
                 }}>
                   {STATUS_WORD[row.status]}
                 </p>
                 <p style={{
-                  fontFamily: SERIF, fontWeight: 800, fontSize: 30, letterSpacing: '1px',
-                  color: '#ffffff', margin: 0, lineHeight: 1.15,
+                  fontFamily: SERIF, fontWeight: 800, fontSize: 28, letterSpacing: '1px',
+                  color: '#ffffff', margin: 0, lineHeight: 1.1,
                   textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 18px rgba(212,194,157,0.16)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
@@ -215,16 +215,16 @@ export function LiveStatusSection() {
                 marginLeft: 14, textAlign: 'right',
               }}>
                 <p style={{
-                  fontSize: 22, fontWeight: 700, letterSpacing: '0.5px',
-                  color: theme.statusColor, fontFamily: SANS, margin: 0, marginBottom: 5,
+                  fontSize: 21, fontWeight: 850, letterSpacing: '0.3px',
+                  color: theme.statusColor, fontFamily: SANS, margin: 0, marginBottom: 3,
                   textShadow: isGlowing ? `0 0 14px ${theme.auraColor}` : 'none',
                   whiteSpace: 'nowrap',
                 }}>
                   {liveStatusLabel(row.id, row.status)}
                 </p>
                 <p style={{
-                  fontSize: 16, fontWeight: 500, letterSpacing: '0.3px', color: 'rgba(255,255,255,0.62)',
-                  fontFamily: SANS, margin: 0, marginBottom: cta ? 10 : 0,
+                  fontSize: 15, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
+                  fontFamily: SANS, margin: 0, marginBottom: cta ? 7 : 0,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
                 }}>
                   {liveStatusAvailabilityMessage(row)}
@@ -236,13 +236,13 @@ export function LiveStatusSection() {
                     className="gj-carousel-tel"
                     style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      height: 38, boxSizing: 'border-box',
+                      height: 35, boxSizing: 'border-box',
                       background: 'rgba(0,0,0,0.45)',
                       border: '1px solid rgba(212,194,157,0.45)',
                       color: '#D4C29D',
-                      padding: '0 20px',
+                      padding: '0 14px',
                       borderRadius: 3,
-                      fontSize: 14, fontWeight: 500, letterSpacing: '1.5px',
+                      fontSize: 14, fontWeight: 500, letterSpacing: '1px',
                       fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
                     }}
                   >
