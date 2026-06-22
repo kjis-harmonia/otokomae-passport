@@ -198,11 +198,14 @@ export function LiveStatusSection() {
                 />
               )}
 
-              {/* ── 左カラム: スタイリスト名 ── */}
-              <div style={{ position: 'relative', zIndex: 1, minWidth: 0, flexShrink: 1 }}>
+              {/* ── 左カラム: スタイリスト名（最優先で表示領域を確保。縮小しない） ── */}
+              <div style={{
+                position: 'relative', zIndex: 1,
+                flex: '0 0 auto', minWidth: 96, maxWidth: 130,
+              }}>
                 <p style={{
                   fontSize: 9, letterSpacing: '2px', color: 'rgba(255,255,255,0.30)',
-                  fontFamily: SANS, margin: 0, marginBottom: 5,
+                  fontFamily: SANS, margin: 0, marginBottom: 5, whiteSpace: 'nowrap',
                 }}>
                   {STATUS_WORD[row.status]}
                 </p>
@@ -210,15 +213,15 @@ export function LiveStatusSection() {
                   fontFamily: SERIF, fontWeight: 800, fontSize: 28, letterSpacing: '1px',
                   color: '#ffffff', margin: 0, lineHeight: 1.1,
                   textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 18px rgba(212,194,157,0.16)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap', overflow: 'visible',
                 }}>
                   {row.name}
                 </p>
               </div>
 
-              {/* ── 右カラム: 日本語ステータス・空き状況・CTA（右揃え） ── */}
+              {/* ── 右カラム: 日本語ステータス・空き状況・CTA（右揃え。スペースが無い時はこちらが縮む） ── */}
               <div style={{
-                position: 'relative', zIndex: 1, flexShrink: 0,
+                position: 'relative', zIndex: 1, flex: '1 1 auto', minWidth: 0,
                 display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
                 marginLeft: 14, textAlign: 'right',
               }}>
@@ -226,14 +229,16 @@ export function LiveStatusSection() {
                   fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.5px',
                   color: theme.statusColor, margin: 0, marginBottom: 3,
                   textShadow: isGlowing ? `0 0 10px ${AURA_MID[row.status]}` : 'none',
-                  whiteSpace: 'nowrap',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
                 }}>
                   {liveStatusLabel(row.id, row.status)}
                 </p>
                 <p style={{
-                  fontSize: 15, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
+                  fontSize: 13, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
                   fontFamily: SANS, margin: 0, marginBottom: cta ? 7 : 0,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+                  whiteSpace: 'normal', overflow: 'hidden', maxWidth: '100%',
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                  lineHeight: 1.3,
                 }}>
                   {liveStatusAvailabilityMessage(row)}
                 </p>
