@@ -143,10 +143,10 @@ export function LiveStatusSection() {
         className="gj-carousel-track [&::-webkit-scrollbar]:hidden"
         style={{
           display: 'flex', alignItems: 'center',
-          gap: 14,
+          gap: 10,
           overflowX: 'scroll', scrollbarWidth: 'none',
-          paddingLeft: 'calc(50% - min(38vw, 160px))',
-          paddingRight: 'calc(50% - min(38vw, 160px))',
+          paddingLeft: 'calc(50% - min(37.5vw, 148px))',
+          paddingRight: 'calc(50% - min(37.5vw, 148px))',
           paddingTop: 14, paddingBottom: 14,
           WebkitOverflowScrolling: 'touch',
         } as React.CSSProperties}
@@ -164,7 +164,7 @@ export function LiveStatusSection() {
               className="gj-carousel-card"
               style={{
                 flexShrink: 0,
-                width: 'min(76vw, 320px)',
+                width: 'min(75vw, 295px)',
                 height: 158,
                 borderRadius: 18,
                 position: 'relative',
@@ -178,7 +178,7 @@ export function LiveStatusSection() {
                   isActive && isGlowing ? `0 22px 64px ${theme.auraColor}, 0 4px 28px ${AURA_MID[row.status]}` : '',
                 ].filter(Boolean).join(', '),
                 transform: isActive ? 'scale(1.07)' : 'scale(0.90)',
-                opacity: isActive ? 1 : (theme.dim ? 0.40 : 0.48),
+                opacity: isActive ? 1 : (theme.dim ? 0.28 : 0.35),
                 padding: '13px 18px',
                 display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               }}
@@ -262,6 +262,24 @@ export function LiveStatusSection() {
           )
         })}
       </div>
+
+      {/* ── ミニマル3本ラインインジケーター ── */}
+      {rows.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+          {rows.map((row, i) => (
+            <div
+              key={row.id}
+              style={{
+                width: i === activeIndex ? 22 : 16,
+                height: 2,
+                borderRadius: 1,
+                background: i === activeIndex ? '#D4C29D' : 'rgba(255,255,255,0.18)',
+                transition: 'background-color 0.3s ease, width 0.3s ease',
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
