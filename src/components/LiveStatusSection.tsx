@@ -215,8 +215,8 @@ export function LiveStatusSection() {
                 marginLeft: 14, textAlign: 'right',
               }}>
                 <p style={{
-                  fontSize: 21, fontWeight: 850, letterSpacing: '0.3px',
-                  color: theme.statusColor, fontFamily: SANS, margin: 0, marginBottom: 3,
+                  fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.5px',
+                  color: theme.statusColor, margin: 0, marginBottom: 3,
                   textShadow: isGlowing ? `0 0 14px ${theme.auraColor}` : 'none',
                   whiteSpace: 'nowrap',
                 }}>
