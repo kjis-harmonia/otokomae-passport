@@ -171,8 +171,8 @@ export function LiveStatusSection() {
                 ].filter(Boolean).join(', '),
                 transform: isActive ? 'scale(1.07)' : 'scale(0.90)',
                 opacity: isActive ? 1 : (theme.dim ? 0.40 : 0.48),
-                padding: '16px 18px',
-                display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                padding: '16px 20px',
+                display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               }}
             >
               {/* ── bottom aura (READY/LIMITED only) ── */}
@@ -190,57 +190,66 @@ export function LiveStatusSection() {
                 />
               )}
 
-              <div style={{ position: 'relative', zIndex: 1, minWidth: 0 }}>
+              {/* ── 左カラム: スタイリスト名 ── */}
+              <div style={{ position: 'relative', zIndex: 1, minWidth: 0, flexShrink: 1 }}>
                 <p style={{
                   fontSize: 9, letterSpacing: '2px', color: 'rgba(255,255,255,0.30)',
-                  fontFamily: SANS, margin: 0, marginBottom: 4,
+                  fontFamily: SANS, margin: 0, marginBottom: 6,
                 }}>
                   {STATUS_WORD[row.status]}
                 </p>
                 <p style={{
                   fontFamily: SERIF, fontWeight: 800, fontSize: 30, letterSpacing: '1px',
-                  color: '#ffffff', margin: 0, marginBottom: 6, lineHeight: 1.15,
+                  color: '#ffffff', margin: 0, lineHeight: 1.15,
                   textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 18px rgba(212,194,157,0.16)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {row.name}
                 </p>
+              </div>
+
+              {/* ── 右カラム: 日本語ステータス・空き状況・CTA（右揃え） ── */}
+              <div style={{
+                position: 'relative', zIndex: 1, flexShrink: 0,
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+                marginLeft: 14, textAlign: 'right',
+              }}>
                 <p style={{
                   fontSize: 22, fontWeight: 700, letterSpacing: '0.5px',
                   color: theme.statusColor, fontFamily: SANS, margin: 0, marginBottom: 5,
                   textShadow: isGlowing ? `0 0 14px ${theme.auraColor}` : 'none',
+                  whiteSpace: 'nowrap',
                 }}>
                   {liveStatusLabel(row.id, row.status)}
                 </p>
                 <p style={{
                   fontSize: 16, fontWeight: 500, letterSpacing: '0.3px', color: 'rgba(255,255,255,0.62)',
-                  fontFamily: SANS, margin: 0,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  fontFamily: SANS, margin: 0, marginBottom: cta ? 10 : 0,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
                 }}>
                   {liveStatusAvailabilityMessage(row)}
                 </p>
-              </div>
 
-              {cta && (
-                <a
-                  href={`tel:${LIVE_STATUS_TEL}`}
-                  className="gj-carousel-tel"
-                  style={{
-                    position: 'relative', zIndex: 1, alignSelf: 'flex-start',
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    height: 38, boxSizing: 'border-box',
-                    background: 'rgba(0,0,0,0.45)',
-                    border: '1px solid rgba(212,194,157,0.45)',
-                    color: '#D4C29D',
-                    padding: '0 20px',
-                    borderRadius: 3,
-                    fontSize: 14, fontWeight: 500, letterSpacing: '1.5px',
-                    fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
-                  }}
-                >
-                  {cta}
-                </a>
-              )}
+                {cta && (
+                  <a
+                    href={`tel:${LIVE_STATUS_TEL}`}
+                    className="gj-carousel-tel"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      height: 38, boxSizing: 'border-box',
+                      background: 'rgba(0,0,0,0.45)',
+                      border: '1px solid rgba(212,194,157,0.45)',
+                      color: '#D4C29D',
+                      padding: '0 20px',
+                      borderRadius: 3,
+                      fontSize: 14, fontWeight: 500, letterSpacing: '1.5px',
+                      fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {cta}
+                  </a>
+                )}
+              </div>
             </div>
           )
         })}
