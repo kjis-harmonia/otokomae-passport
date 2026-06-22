@@ -1,0 +1,68 @@
+/* GINJIRO LIVE STATUS: animated diagonal "digital signpole" backdrop layer. */
+
+.gj-signpole {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  background-size: 280% 280%;
+}
+
+.gj-signpole--ready {
+  opacity: 0.12;
+  background-image: repeating-linear-gradient(
+    125deg,
+    rgba(252, 246, 186, 0.08) 0px, rgba(252, 246, 186, 0.08) 10px,
+    rgba(212, 175, 55, 0.14) 10px, rgba(212, 175, 55, 0.14) 20px,
+    transparent 20px, transparent 36px
+  );
+  animation: gjSignpoleDrift 16s linear infinite;
+}
+
+.gj-signpole--limited {
+  opacity: 0.14;
+  background-image: repeating-linear-gradient(
+    125deg,
+    rgba(185, 28, 45, 0.14) 0px, rgba(185, 28, 45, 0.14) 10px,
+    rgba(128, 12, 20, 0.18) 10px, rgba(128, 12, 20, 0.18) 20px,
+    transparent 20px, transparent 36px
+  );
+  animation: gjSignpoleDrift 9s linear infinite;
+}
+
+.gj-signpole--dim {
+  opacity: 0.04;
+  background-image: repeating-linear-gradient(
+    125deg,
+    rgba(80, 12, 16, 0.5) 0px, rgba(80, 12, 16, 0.5) 10px,
+    rgba(20, 16, 14, 0.5) 10px, rgba(20, 16, 14, 0.5) 20px,
+    transparent 20px, transparent 36px
+  );
+  animation: none;
+}
+
+@keyframes gjSignpoleDrift {
+  from { background-position: 0% 0%; }
+  to   { background-position: 100% 100%; }
+}
+
+/* LIMITED only: a controlled crimson pulse layered on top of the card's static glow. */
+.gj-card-pulse-limited {
+  animation: gjCrimsonPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes gjCrimsonPulse {
+  0%, 100% {
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65), 0 0 32px rgba(139, 20, 42, 0.50), 0 0 60px rgba(139, 20, 42, 0.22);
+  }
+  50% {
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65), 0 0 46px rgba(185, 28, 45, 0.62), 0 0 80px rgba(139, 20, 42, 0.30);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gj-signpole, .gj-card-pulse-limited {
+    animation: none !important;
+  }
+}

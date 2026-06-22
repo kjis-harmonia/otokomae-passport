@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { getLiveStatuses, subscribeLiveStatuses } from '../utils/liveStatusStore'
-import { LIVE_STATUS_CODES, LIVE_STATUS_THEME, LIVE_STATUS_TEL, liveStatusCtaLabel, liveStatusLabel } from '../data/liveStatus'
+import {
+  LIVE_STATUS_CODES, LIVE_STATUS_THEME, LIVE_STATUS_TEL,
+  liveStatusCtaLabel, liveStatusLabel, liveStatusPulseClass, liveStatusSignpoleClass,
+} from '../data/liveStatus'
 import type { LiveStatusRow } from '../data/liveStatus'
+import './liveStatusSignpole.css'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'
@@ -74,6 +78,7 @@ export function LiveStatusSection() {
           return (
             <motion.div
               key={row.id}
+              className={liveStatusPulseClass(row.status)}
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08, duration: 0.4 }}
@@ -98,9 +103,11 @@ export function LiveStatusSection() {
                 overflow: 'hidden',
               }}
             >
-              <div style={{ height: 2, position: 'absolute', top: 0, left: 0, right: 0, background: `linear-gradient(90deg, transparent, ${t.border} 50%, transparent)` }} />
+              <div className={liveStatusSignpoleClass(row.status)} aria-hidden="true" />
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
+              <div style={{ height: 2, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1, background: `linear-gradient(90deg, transparent, ${t.border} 50%, transparent)` }} />
+
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
                 <p style={{
                   fontFamily: SERIF, fontSize: isCenter ? 21 : 19, fontWeight: 700,
                   color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15,
@@ -124,6 +131,7 @@ export function LiveStatusSection() {
                 <a
                   href={`tel:${LIVE_STATUS_TEL}`}
                   style={{
+                    position: 'relative', zIndex: 1,
                     flexShrink: 0, marginLeft: 12,
                     padding: '11px 16px', borderRadius: 12,
                     background: t.ctaBg,

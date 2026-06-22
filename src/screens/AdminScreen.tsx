@@ -12,7 +12,11 @@ import type { CustomerRow } from '../utils/customerStore'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 import { getLiveStatuses, setLiveStatus, subscribeLiveStatuses } from '../utils/liveStatusStore'
-import { LIVE_STATUS_CODES, LIVE_STATUS_THEME, liveStatusLabel, nextLiveStatus } from '../data/liveStatus'
+import {
+  LIVE_STATUS_CODES, LIVE_STATUS_THEME,
+  liveStatusLabel, liveStatusPulseClass, liveStatusSignpoleClass, nextLiveStatus,
+} from '../data/liveStatus'
+import '../components/liveStatusSignpole.css'
 import type { LiveStatusRow } from '../data/liveStatus'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -1842,6 +1846,7 @@ export function AdminScreen() {
                 return (
                   <button
                     key={row.id}
+                    className={liveStatusPulseClass(row.status)}
                     onClick={() => void handleCycleLiveStatus(row)}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1859,9 +1864,11 @@ export function AdminScreen() {
                       position: 'relative', overflow: 'hidden',
                     }}
                   >
-                    <div style={{ height: 2, position: 'absolute', top: 0, left: 0, right: 0, background: `linear-gradient(90deg, transparent, ${t.border} 50%, transparent)` }} />
+                    <div className={liveStatusSignpoleClass(row.status)} aria-hidden="true" />
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                    <div style={{ height: 2, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1, background: `linear-gradient(90deg, transparent, ${t.border} 50%, transparent)` }} />
+
+                    <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
                       <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
                         {row.name}
                       </p>
@@ -1877,6 +1884,7 @@ export function AdminScreen() {
                     </div>
 
                     <span style={{
+                      position: 'relative', zIndex: 1,
                       flexShrink: 0, marginLeft: 12,
                       padding: '6px 12px', borderRadius: 99,
                       background: 'rgba(255,255,255,0.04)',

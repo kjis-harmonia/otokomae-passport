@@ -98,3 +98,15 @@ export function liveStatusCtaLabel(status: LiveStatusValue): string | null {
   if (status === 'limited') return '空きを確認'
   return null
 }
+
+// カード背面の「Cyber Digital Signpole」ストライプ演出（見た目のみ。liveStatusSignpole.css参照）
+export function liveStatusSignpoleClass(status: LiveStatusValue): string {
+  if (status === 'ready') return 'gj-signpole--ready'
+  if (status === 'limited') return 'gj-signpole--limited'
+  return 'gj-signpole--dim'
+}
+
+// LIMITEDのみ、枠グローにクリムゾンパルスを重ねる
+export function liveStatusPulseClass(status: LiveStatusValue): string {
+  return status === 'limited' ? 'gj-card-pulse-limited' : ''
+}
