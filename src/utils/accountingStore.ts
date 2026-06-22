@@ -76,6 +76,8 @@ export interface AccountingSessionItemInput {
   quantity?: number
 }
 
+export type AccountingSessionStatus = 'pending' | 'completed' | 'failed'
+
 export interface CreateAccountingSessionInput {
   user_id: string | null
   customer_name: string | null
@@ -88,8 +90,19 @@ export interface CreateAccountingSessionInput {
   items: AccountingSessionItemInput[]
 }
 
-/** 会計履歴を保存（会計完了ボタン押下時のみ呼ばれる） */
-export async function createAccountingSession(input: CreateAccountingSessionInput): Promise<string | null> {
+export interface CreateAccountingSessionResult {
+  sessionId: string | null
+  ok: boolean
+}
+
+/**
+ * 会計履歴を保存（status='pending' で作成）。
+ * チケットused化等より必ず先に呼ぶこと —
+ * 「チケットだけ使用済みになり会計履歴が残らない」事故を防ぐための順序。
+ * accounting_session_items の保存に失敗した場合は status='failed' にして ok:false を返す
+ * （sessionId 自体は返すので、呼び出し側は会計IDを案内できる）。
+ */
+export async function createAccountingSession(input: CreateAccountingSessionInput): Promise<CreateAccountingSessionResult> {
   try {
     const { data, error } = await supabase
       .from('accounting_sessions')
@@ -98,6 +111,7 @@ export async function createAccountingSession(input: CreateAccountingSessionInpu
         customer_name: input.customer_name,
         staff_name: input.staff_name,
         stylist_name: input.stylist_name,
+        status: 'pending',
         subtotal: input.subtotal,
         discount_total: input.discount_total,
         total: input.total,
@@ -105,11 +119,11 @@ export async function createAccountingSession(input: CreateAccountingSessionInpu
       })
       .select()
       .single()
-    if (error || !data) return null
+    if (error || !data) return { sessionId: null, ok: false }
     const sessionId = (data as { id: string }).id
 
     if (input.items.length > 0) {
-      await supabase.from('accounting_session_items').insert(
+      const { error: itemsError } = await supabase.from('accounting_session_items').insert(
         input.items.map(it => ({
           session_id: sessionId,
           item_id: it.item_id,
@@ -119,9 +133,26 @@ export async function createAccountingSession(input: CreateAccountingSessionInpu
           quantity: it.quantity ?? 1,
         })),
       )
+      if (itemsError) {
+        await setAccountingSessionStatus(sessionId, 'failed')
+        return { sessionId, ok: false }
+      }
     }
-    return sessionId
+    return { sessionId, ok: true }
   } catch {
-    return null
+    return { sessionId: null, ok: false }
+  }
+}
+
+/** 会計完了処理の各段階で pending → completed / failed を反映する */
+export async function setAccountingSessionStatus(sessionId: string, status: AccountingSessionStatus): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('accounting_sessions')
+      .update({ status })
+      .eq('id', sessionId)
+    return !error
+  } catch {
+    return false
   }
 }

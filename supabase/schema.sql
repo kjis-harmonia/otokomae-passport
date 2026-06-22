@@ -447,12 +447,25 @@ create table if not exists public.accounting_sessions (
   customer_name   text,
   staff_name      text,
   stylist_name    text,
+  status          text        not null default 'pending',
   subtotal        integer     not null,
   discount_total  integer     not null default 0,
   total           integer     not null,
   used_ticket_ids text[],
-  created_at      timestamptz default now() not null
+  created_at      timestamptz default now() not null,
+
+  constraint accounting_sessions_status_check check (status in ('pending', 'completed', 'failed'))
 );
+
+-- ── MIGRATION: add status (pending/completed/failed — 会計完了処理の安全な順序管理用) ──
+-- 既存の accounting_sessions テーブルがある場合は、これを Supabase SQL Editor で
+-- 実行してください。新規作成時は上のCREATE TABLEに既に含まれています。
+-- 既存行は会計履歴保存より前にチケットused化等が完了していたため、すべて 'completed' とする。
+alter table public.accounting_sessions add column if not exists status text not null default 'pending';
+update public.accounting_sessions set status = 'completed' where status = 'pending' and created_at < now();
+alter table public.accounting_sessions drop constraint if exists accounting_sessions_status_check;
+alter table public.accounting_sessions add constraint accounting_sessions_status_check
+  check (status in ('pending', 'completed', 'failed'));
 
 -- ── MIGRATION: add stylist_name (施術担当。staff_nameは操作したスタッフのまま) ──
 -- 既存の accounting_sessions テーブルがある場合は、これを Supabase SQL Editor で

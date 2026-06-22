@@ -5,7 +5,7 @@ import { getUserTickets, markTicketUsed } from '../utils/ticketStore'
 import { getCustomerByUserId } from '../utils/customerStore'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
 import {
-  getAccountingItems, createAccountingItem, updateAccountingItem, createAccountingSession,
+  getAccountingItems, createAccountingItem, updateAccountingItem, createAccountingSession, setAccountingSessionStatus,
 } from '../utils/accountingStore'
 import type { AccountingItem, AccountingCategory } from '../utils/accountingStore'
 import {
@@ -194,42 +194,10 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         }
       }
 
-      // ── 2. チケットused化 / メンテナンス使用ログ保存 ──
-      if (discount?.ticketId) {
-        await markTicketUsed(discount.ticketId, staffId)
-        await saveUsageLog({
-          usage_date: today,
-          staff_name: staffId,
-          customer_name: customer?.name ?? '',
-          user_id: customer?.userId ?? '',
-          ticket_id: discount.ticketId,
-          ticket_type: discount.ticketType,
-          amount: discount.amount,
-          terminal: 'staff-terminal',
-          status: 'used',
-        })
-      } else if (discount && customer) {
-        // メンテナンスクーポン（ticket行を持たない）も使用ログに残す
-        await saveUsageLog({
-          usage_date: today,
-          staff_name: staffId,
-          customer_name: customer.name,
-          user_id: customer.userId,
-          ticket_id: null,
-          ticket_type: 'coupon',
-          amount: 0,
-          terminal: 'staff-terminal',
-          status: 'used',
-        })
-      }
-
-      // ── 3. 来店日更新 ──
-      if (customer) {
-        await upsertLastVisitDate(customer.userId, today)
-      }
-
-      // ── 4. 会計履歴保存 ──
-      const sessionId = await createAccountingSession({
+      // ── 2. 会計履歴を先に保存（status='pending'） ──
+      // チケットused化より必ず先に行う。これにより「チケットだけ使用済みになり
+      // 会計履歴が残らない」事故を防ぐ（会計履歴が無ければチケットには一切触れない）。
+      const { sessionId, ok: sessionOk } = await createAccountingSession({
         user_id: customer?.userId ?? null,
         customer_name: customer?.name ?? null,
         staff_name: staffId,
@@ -242,11 +210,61 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           item_id: i.id, item_name: i.name, category: i.category, price: i.price, quantity: 1,
         })),
       })
-      if (!sessionId) {
-        setCompleteError('会計履歴の保存に失敗しました。通信環境を確認してください。')
+      if (!sessionOk || !sessionId) {
+        setCompleteError('会計履歴の保存に失敗しました。通信環境を確認してから再度お試しください。')
         setCompleting(false)
         return
       }
+
+      // ── 3. チケットused化 / メンテナンス使用ログ保存・来店日更新 ──
+      // 会計履歴は既に保存済みなので、ここで失敗してもチケットは未使用のまま残り、
+      // 「チケットused化だけ成功して会計履歴が残らない」状態には絶対にならない。
+      try {
+        if (discount?.ticketId) {
+          await markTicketUsed(discount.ticketId, staffId)
+          await saveUsageLog({
+            usage_date: today,
+            staff_name: staffId,
+            customer_name: customer?.name ?? '',
+            user_id: customer?.userId ?? '',
+            ticket_id: discount.ticketId,
+            ticket_type: discount.ticketType,
+            amount: discount.amount,
+            terminal: 'staff-terminal',
+            status: 'used',
+          })
+        } else if (discount && customer) {
+          // メンテナンスクーポン（ticket行を持たない）も使用ログに残す
+          await saveUsageLog({
+            usage_date: today,
+            staff_name: staffId,
+            customer_name: customer.name,
+            user_id: customer.userId,
+            ticket_id: null,
+            ticket_type: 'coupon',
+            amount: 0,
+            terminal: 'staff-terminal',
+            status: 'used',
+          })
+        }
+
+        // ── 4. 来店日更新 ──
+        if (customer) {
+          await upsertLastVisitDate(customer.userId, today)
+        }
+      } catch (innerErr) {
+        await setAccountingSessionStatus(sessionId, 'failed')
+        setCompleteError(
+          `会計履歴は保存されましたが、チケット処理に失敗しました（会計ID: ${sessionId.slice(0, 8)}）。` +
+          `スタッフへご連絡のうえ、手動でチケットを使用済みにしてください。` +
+          `（${innerErr instanceof Error ? innerErr.message : 'ネットワークエラー'}）`,
+        )
+        setCompleting(false)
+        return
+      }
+
+      // ── 5. 完了 ──
+      await setAccountingSessionStatus(sessionId, 'completed')
 
       playSuccessSound()
       setShowCompleteSuccess(true)
