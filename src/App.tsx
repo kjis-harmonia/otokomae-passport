@@ -6,6 +6,7 @@ import { HomeScreen } from './screens/HomeScreen'
 import { GachaScreen } from './screens/GachaScreen'
 import { TryOnScreen } from './screens/TryOnScreen'
 import { ReserveScreen } from './screens/ReserveScreen'
+import { TicketWalletScreen } from './screens/TicketWalletScreen'
 import { MyPageScreen } from './screens/MyPageScreen'
 import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
 import { DiagnosisScreen } from './screens/DiagnosisScreen'
@@ -211,7 +212,7 @@ function App() {
   })
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
-    const valid: NavTab[] = ['home', 'styles', 'diagnosis', 'tryon', 'reserve', 'mypage']
+    const valid: NavTab[] = ['home', 'styles', 'diagnosis', 'tryon', 'reserve', 'mypage', 'tickets']
     return valid.includes(tab as NavTab) ? (tab as NavTab) : 'home'
   })
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
@@ -221,7 +222,7 @@ function App() {
   // navHighlight drives the bottom nav visual indicator independently from activeTab
   const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
-    const navTabs: NavTab[] = ['home', 'styles', 'diagnosis']
+    const navTabs: NavTab[] = ['home', 'styles', 'diagnosis', 'tickets']
     return navTabs.includes(tab as NavTab) ? (tab as NavTab) : 'home'
   })
 
@@ -305,19 +306,7 @@ function App() {
   }
 
   const handleTabChange = useCallback((tab: NavTab) => {
-    if (tab === 'tickets') {
-      setNavHighlight('tickets')
-      // Ensure home screen is visible, then scroll to the wallet section
-      setActiveTab(prev => {
-        const delay = prev !== 'home' ? 200 : 50
-        setTimeout(() => {
-          document.getElementById('gj-ticket-wallet')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, delay)
-        return 'home'
-      })
-      return
-    }
-    const navTabs: NavTab[] = ['home', 'styles', 'diagnosis']
+    const navTabs: NavTab[] = ['home', 'styles', 'diagnosis', 'tickets']
     if (navTabs.includes(tab)) setNavHighlight(tab)
     setActiveTab(tab)
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
@@ -386,6 +375,7 @@ function App() {
                   {activeTab === 'gacha'     && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                   {activeTab === 'tryon'     && <TryOnScreen />}
                   {activeTab === 'reserve'   && <ReserveScreen />}
+                  {activeTab === 'tickets'   && <TicketWalletScreen />}
                   {activeTab === 'styles'    && <StyleLibraryScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'diagnosis' && <DiagnosisScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'mypage'    && <MyPageScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}

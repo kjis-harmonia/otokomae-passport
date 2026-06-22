@@ -3,6 +3,8 @@ import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '../lib/supabase'
 import { getUserId } from '../utils/userId'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
+import { getCustomerByUserId } from '../utils/customerStore'
+import type { CustomerRow } from '../utils/customerStore'
 
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -42,6 +44,7 @@ export function PassportCard() {
 
   const [lastVisitDate, setLastVisitDate] = useState<string | null>(null)
   const [qrEnlarged, setQrEnlarged] = useState(false)
+  const [customerData, setCustomerData] = useState<CustomerRow | null | undefined>(undefined)
 
   useEffect(() => {
     supabase
@@ -57,6 +60,10 @@ export function PassportCard() {
           if (local[userId]) setLastVisitDate(local[userId])
         }
       })
+  }, [userId])
+
+  useEffect(() => {
+    getCustomerByUserId(userId).then(d => setCustomerData(d ?? null))
   }, [userId])
 
   // QR には完全 userId を保持。カード表示は先頭 8 文字のみ。
@@ -333,6 +340,33 @@ export function PassportCard() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* ── Recovery Code（会員復旧コード） ── */}
+      <div style={{ marginTop: 16 }}>
+        <p style={{ fontSize: 8, letterSpacing: '0.34em', color: 'rgba(201,162,74,0.36)', textTransform: 'uppercase', marginBottom: 10 }}>
+          端末変更・データ削除時の復旧
+        </p>
+        {customerData === undefined ? null : customerData === null ? (
+          <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.07)', padding: '18px 20px', textAlign: 'center' }}>
+            <p style={{ fontFamily: SERIF, fontSize: 13, color: 'rgba(242,230,200,0.28)', marginBottom: 6 }}>復旧コード未発行</p>
+            <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.18)', lineHeight: 1.7 }}>
+              初回ご来店時にスタッフが登録します
+            </p>
+          </div>
+        ) : (
+          <div style={{ borderRadius: 16, background: 'linear-gradient(155deg, #0D0805 0%, #080403 100%)', border: '1px solid rgba(201,162,74,0.2)', padding: '18px 20px' }}>
+            <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.38)', letterSpacing: '0.06em', marginBottom: 10, lineHeight: 1.7 }}>
+              端末変更・データ削除時はスタッフに<br />こちらのコードをお伝えください
+            </p>
+            <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#C9A24A', letterSpacing: '0.22em', textAlign: 'center', marginBottom: 8 }}>
+              {customerData.recovery_code}
+            </p>
+            <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.22)', textAlign: 'center', letterSpacing: '0.1em' }}>
+              ※ このコードはスクリーンショットで保存してください
+            </p>
+          </div>
+        )}
       </div>
     </div>
 
