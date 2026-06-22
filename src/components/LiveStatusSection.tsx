@@ -1,16 +1,31 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
 import { getLiveStatuses, subscribeLiveStatuses } from '../utils/liveStatusStore'
 import {
   LIVE_STATUS_TEL,
-  liveStatusAvailabilityMessage, liveStatusCtaLabel, liveStatusLabel, liveStatusPulseClass, liveStatusSignpoleClass,
+  liveStatusAvailabilityMessage, liveStatusCtaLabel,
 } from '../data/liveStatus'
-import { LIVE_STATUS_THEME } from '../data/liveStatus'
-import type { LiveStatusRow } from '../data/liveStatus'
-import './liveStatusSignpole.css'
+import type { LiveStatusRow, LiveStatusValue } from '../data/liveStatus'
+import './liveStatusLuxury.css'
 
+const SANS = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", sans-serif'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
-const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'
+
+const CHAMPAGNE = '#D4C29D'
+const OXBLOOD = '#A31D1D'
+
+// 右側に表示する控えめなステータスワード（英字・小さくトラッキング）
+const STATUS_WORD: Record<LiveStatusValue, string> = {
+  ready: 'READY',
+  limited: 'LIMITED',
+  full: 'FULL',
+  closed: 'CLOSED',
+}
+
+function statusWordColor(status: LiveStatusValue): string {
+  if (status === 'ready') return CHAMPAGNE
+  if (status === 'limited') return OXBLOOD
+  return 'rgba(255,255,255,0.32)'
+}
 
 function fmtTime(iso: string): string {
   const d = new Date(iso)
@@ -20,30 +35,6 @@ function fmtTime(iso: string): string {
 function latestUpdatedAt(rows: LiveStatusRow[]): string | null {
   if (rows.length === 0) return null
   return rows.reduce((latest, r) => (r.updated_at > latest ? r.updated_at : latest), rows[0].updated_at)
-}
-
-function SectionHeader({ rows }: { rows: LiveStatusRow[] }) {
-  const latest = latestUpdatedAt(rows)
-  return (
-    <div style={{
-      marginBottom: 10,
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '0 20px',
-    }}>
-      <p style={{
-        fontSize: 17, fontWeight: 700, lineHeight: 1, flexShrink: 0,
-        color: '#F2E6C8', fontFamily: SERIF,
-      }}>
-        GINJIRO LIVE STATUS
-      </p>
-      <div style={{ height: 1, flex: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.30), transparent)' }} />
-      {latest && (
-        <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', color: '#E8C868', flexShrink: 0, fontFamily: MONO, whiteSpace: 'nowrap' }}>
-          最終更新 {fmtTime(latest)}
-        </p>
-      )}
-    </div>
-  )
 }
 
 export function LiveStatusSection() {
@@ -59,133 +50,100 @@ export function LiveStatusSection() {
 
   if (rows.length === 0) return null
 
+  const latest = latestUpdatedAt(rows)
+
   return (
-    <div>
-      <SectionHeader rows={rows} />
+    <div style={{ background: '#000000', padding: '32px 24px' }}>
+      {/* ── Header ── */}
+      <div style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        marginBottom: 18,
+      }}>
+        <p style={{
+          fontFamily: SANS, fontSize: 20, fontWeight: 500, letterSpacing: '2.5px',
+          color: '#F5F1E8', margin: 0,
+        }}>
+          GINJIRO LIVE STATUS
+        </p>
+        {latest && (
+          <p style={{
+            fontSize: 11, letterSpacing: '2px', color: 'rgba(212,194,157,0.75)',
+            fontFamily: SANS, margin: 0, flexShrink: 0,
+          }}>
+            最終更新 {fmtTime(latest)}
+          </p>
+        )}
+      </div>
 
-      {/* ── モノリシック・メタルパネル ── */}
-      <div style={{ padding: '0 20px' }}>
-        <div
-          style={{
-            borderRadius: 20,
-            background: 'linear-gradient(165deg, #0E0B09 0%, #070504 55%, #050403 100%)',
-            border: '1px solid rgba(201,162,74,0.16)',
-            boxShadow: [
-              '0 18px 44px rgba(0,0,0,0.70)',
-              'inset 0 1px 0 rgba(255,255,255,0.025)',
-              'inset 0 0 0 0.5px rgba(201,162,74,0.06)',
-            ].join(', '),
-            padding: 8,
-            position: 'relative',
-            overflow: 'hidden',
-          }}
-        >
-          {/* hairline metal texture */}
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
-              backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.012) 2px, rgba(255,255,255,0.012) 3px)',
-              mixBlendMode: 'overlay',
-            }}
-          />
-          {/* top ambient edge light */}
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0, height: 1, zIndex: 1,
-              background: 'linear-gradient(90deg, transparent 0%, rgba(139,26,26,0.5) 18%, rgba(201,162,74,0.85) 50%, rgba(139,26,26,0.5) 82%, transparent 100%)',
-            }}
-          />
+      {/* ── Status rows ── */}
+      <div>
+        {rows.map((row, i) => {
+          const cta = liveStatusCtaLabel(row.status)
+          const isLast = i === rows.length - 1
+          const wordColor = statusWordColor(row.status)
 
-          <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {rows.map((row, i) => {
-              const t = LIVE_STATUS_THEME[row.status]
-              const cta = liveStatusCtaLabel(row.status)
-              const isGlowing = row.status === 'ready' || row.status === 'limited'
+          return (
+            <div
+              key={row.id}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 18,
+                padding: '24px 0',
+                borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.03)',
+                background: 'transparent',
+              }}
+            >
+              {/* ── Left: name + subcopy ── */}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p style={{
+                  fontFamily: SERIF, fontWeight: 500, fontSize: 18, letterSpacing: '2px',
+                  color: '#ffffff', margin: 0, marginBottom: 8,
+                }}>
+                  {row.name}
+                </p>
+                <p style={{
+                  fontSize: 12, letterSpacing: '1.2px', color: 'rgba(255,255,255,0.58)',
+                  fontFamily: SANS, margin: 0,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}>
+                  {liveStatusAvailabilityMessage(row)}
+                </p>
+              </div>
 
-              return (
-                <motion.div
-                  key={row.id}
-                  className={liveStatusPulseClass(row.status)}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.06, duration: 0.32 }}
+              {/* ── Right: status word + ghost CTA ── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <span
+                  className={row.status === 'limited' ? 'gj-luxury-status--limited' : undefined}
                   style={{
-                    position: 'relative',
-                    height: 64,
-                    borderRadius: 16,
-                    overflow: 'hidden',
-                    background: 'linear-gradient(155deg, #130608 0%, #0A0404 60%, #08040A 100%)',
-                    border: `1px solid ${t.border}`,
-                    boxShadow: isGlowing ? t.glow : 'none',
-                    opacity: t.dim ? 0.58 : 1,
+                    fontSize: 10, letterSpacing: '2px', fontWeight: 600,
+                    color: wordColor, fontFamily: SANS, whiteSpace: 'nowrap',
+                    textShadow: row.status === 'ready' ? '0 0 4px rgba(212,194,157,0.2)' : 'none',
                   }}
                 >
-                  {/* digital signpole stripe layer */}
-                  <div className={liveStatusSignpoleClass(row.status)} aria-hidden="true" />
+                  {STATUS_WORD[row.status]}
+                </span>
 
-                  {/* left edge light slit */}
-                  <div
-                    aria-hidden="true"
+                {cta && (
+                  <a
+                    href={`tel:${LIVE_STATUS_TEL}`}
+                    className="gj-luxury-tel"
                     style={{
-                      position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, zIndex: 1,
-                      background: t.border,
-                      boxShadow: isGlowing ? `0 0 10px ${t.border}` : 'none',
+                      background: 'transparent',
+                      border: '1px solid rgba(212,194,157,0.3)',
+                      color: CHAMPAGNE,
+                      padding: '8px 12px',
+                      borderRadius: 2,
+                      fontSize: 11, fontWeight: 400, letterSpacing: '1px',
+                      fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
                     }}
-                  />
-
-                  <div style={{
-                    position: 'relative', zIndex: 1,
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    height: '100%', padding: '0 14px 0 16px', gap: 10,
-                  }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-                        <span style={{
-                          fontFamily: SERIF, fontSize: 16, fontWeight: 700,
-                          color: '#F2E6C8', letterSpacing: '0.04em', flexShrink: 0,
-                        }}>
-                          {row.name}
-                        </span>
-                        <span style={{
-                          fontSize: 12, fontWeight: 700, color: t.codeColor, letterSpacing: '0.02em',
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
-                        }}>
-                          {liveStatusLabel(row.id, row.status)}
-                        </span>
-                      </div>
-                      <p style={{
-                        fontSize: 11, fontWeight: 600, color: t.availabilityColor, letterSpacing: '0.01em',
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
-                      }}>
-                        {liveStatusAvailabilityMessage(row)}
-                      </p>
-                    </div>
-
-                    {cta && (
-                      <a
-                        href={`tel:${LIVE_STATUS_TEL}`}
-                        style={{
-                          flexShrink: 0,
-                          padding: '9px 12px', borderRadius: 10,
-                          background: t.ctaBg,
-                          border: `1px solid ${t.ctaBorder}`,
-                          color: t.ctaColor,
-                          fontFamily: SERIF, fontSize: 11, fontWeight: 700, letterSpacing: '0.01em',
-                          textAlign: 'center', textDecoration: 'none',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {cta}
-                      </a>
-                    )}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </div>
-        </div>
+                  >
+                    {cta}
+                  </a>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

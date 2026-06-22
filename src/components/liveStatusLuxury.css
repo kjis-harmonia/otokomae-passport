@@ -1,0 +1,35 @@
+/* GINJIRO LIVE STATUS — luxury black-dial module (customer Home only). */
+
+.gj-luxury-tel {
+  transition: background-color 0.3s cubic-bezier(0.25, 1, 0.5, 1),
+              color 0.3s cubic-bezier(0.25, 1, 0.5, 1),
+              border-color 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.gj-luxury-tel:hover,
+.gj-luxury-tel:active {
+  background-color: #D4C29D;
+  color: #000000;
+  border-color: #D4C29D;
+}
+
+.gj-luxury-status--limited {
+  animation: gjRolexPulse 3s infinite ease-in-out;
+}
+
+@keyframes gjRolexPulse {
+  0%, 100% {
+    opacity: 0.8;
+    text-shadow: 0 0 4px rgba(163, 29, 29, 0.2);
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 10px rgba(163, 29, 29, 0.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gj-luxury-status--limited {
+    animation: none !important;
+  }
+}
