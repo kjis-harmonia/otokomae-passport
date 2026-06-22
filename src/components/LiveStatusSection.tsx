@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getLiveStatuses, subscribeLiveStatuses } from '../utils/liveStatusStore'
 import {
   LIVE_STATUS_TEL,
-  liveStatusAvailabilityMessage, liveStatusCtaLabel,
+  liveStatusAvailabilityMessage, liveStatusCtaLabel, liveStatusLabel,
 } from '../data/liveStatus'
 import type { LiveStatusRow, LiveStatusValue } from '../data/liveStatus'
 import './liveStatusLuxury.css'
@@ -10,10 +10,7 @@ import './liveStatusLuxury.css'
 const SANS = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", sans-serif'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
-const CHAMPAGNE = '#D4C29D'
-const OXBLOOD = '#A31D1D'
-
-// 右側に表示する控えめなステータスワード（英字・小さくトラッキング）
+// 控えめな装飾用の英字コード（顧客向けの主要情報ではない）
 const STATUS_WORD: Record<LiveStatusValue, string> = {
   ready: 'READY',
   limited: 'LIMITED',
@@ -21,10 +18,18 @@ const STATUS_WORD: Record<LiveStatusValue, string> = {
   closed: 'CLOSED',
 }
 
-function statusWordColor(status: LiveStatusValue): string {
-  if (status === 'ready') return CHAMPAGNE
-  if (status === 'limited') return OXBLOOD
-  return 'rgba(255,255,255,0.32)'
+type CardTheme = {
+  statusColor: string
+  auraColor: string
+  edgeColor: string
+  dim: boolean
+}
+
+const CAROUSEL_THEME: Record<LiveStatusValue, CardTheme> = {
+  ready:   { statusColor: '#D4C29D', auraColor: 'rgba(212,194,157,0.40)', edgeColor: 'rgba(212,194,157,0.30)', dim: false },
+  limited: { statusColor: '#C23B3B', auraColor: 'rgba(163,29,29,0.42)',  edgeColor: 'rgba(163,29,29,0.32)',  dim: false },
+  full:    { statusColor: 'rgba(255,255,255,0.40)', auraColor: 'transparent', edgeColor: 'rgba(255,255,255,0.07)', dim: true },
+  closed:  { statusColor: 'rgba(255,255,255,0.30)', auraColor: 'transparent', edgeColor: 'rgba(255,255,255,0.05)', dim: true },
 }
 
 function fmtTime(iso: string): string {
@@ -39,25 +44,58 @@ function latestUpdatedAt(rows: LiveStatusRow[]): string | null {
 
 export function LiveStatusSection() {
   const [rows, setRows] = useState<LiveStatusRow[]>([])
+  const [activeIndex, setActiveIndex] = useState(0)
+  const trackRef = useRef<HTMLDivElement>(null)
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([])
 
   useEffect(() => {
-    getLiveStatuses().then(setRows)
+    getLiveStatuses().then((data) => {
+      setRows(data)
+      setActiveIndex(Math.floor((data.length - 1) / 2))
+    })
     const unsubscribe = subscribeLiveStatuses((updated) => {
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
     })
     return unsubscribe
   }, [])
 
+  const handleScroll = useCallback(() => {
+    const track = trackRef.current
+    if (!track) return
+    const trackCenter = track.scrollLeft + track.clientWidth / 2
+    let closest = 0
+    let closestDist = Infinity
+    cardRefs.current.forEach((card, idx) => {
+      if (!card) return
+      const cardCenter = card.offsetLeft + card.offsetWidth / 2
+      const dist = Math.abs(cardCenter - trackCenter)
+      if (dist < closestDist) { closestDist = dist; closest = idx }
+    })
+    setActiveIndex(closest)
+  }, [])
+
+  useEffect(() => {
+    const track = trackRef.current
+    if (!track) return
+    let raf = 0
+    const onScroll = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => { raf = 0; handleScroll() })
+    }
+    track.addEventListener('scroll', onScroll, { passive: true })
+    return () => track.removeEventListener('scroll', onScroll)
+  }, [handleScroll, rows.length])
+
   if (rows.length === 0) return null
 
   const latest = latestUpdatedAt(rows)
 
   return (
-    <div style={{ background: '#000000', padding: '32px 24px' }}>
+    <div style={{ background: '#000000', padding: '28px 0' }}>
       {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        marginBottom: 18,
+        marginBottom: 16, padding: '0 24px',
       }}>
         <p style={{
           fontFamily: SANS, fontSize: 20, fontWeight: 500, letterSpacing: '2.5px',
@@ -75,34 +113,89 @@ export function LiveStatusSection() {
         )}
       </div>
 
-      {/* ── Status rows ── */}
-      <div>
+      {/* ── Cinematic carousel ── */}
+      <div
+        ref={trackRef}
+        className="gj-carousel-track [&::-webkit-scrollbar]:hidden"
+        style={{
+          display: 'flex', alignItems: 'center',
+          gap: 14,
+          overflowX: 'scroll', scrollbarWidth: 'none',
+          paddingLeft: 'calc(50% - min(38vw, 160px))',
+          paddingRight: 'calc(50% - min(38vw, 160px))',
+          paddingTop: 14, paddingBottom: 14,
+          WebkitOverflowScrolling: 'touch',
+        } as React.CSSProperties}
+      >
         {rows.map((row, i) => {
+          const theme = CAROUSEL_THEME[row.status]
           const cta = liveStatusCtaLabel(row.status)
-          const isLast = i === rows.length - 1
-          const wordColor = statusWordColor(row.status)
+          const isActive = i === activeIndex
+          const isGlowing = !theme.dim
 
           return (
             <div
               key={row.id}
+              ref={(el) => { cardRefs.current[i] = el }}
+              className="gj-carousel-card"
               style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: 18,
-                padding: '24px 0',
-                borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.03)',
-                background: 'transparent',
+                flexShrink: 0,
+                width: 'min(76vw, 320px)',
+                height: 160,
+                borderRadius: 20,
+                position: 'relative',
+                overflow: 'hidden',
+                background: 'linear-gradient(165deg, rgba(22,15,11,0.94) 0%, rgba(6,4,3,0.98) 100%)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
+                border: `1px solid ${theme.edgeColor}`,
+                boxShadow: [
+                  '0 18px 40px rgba(0,0,0,0.75)',
+                  isActive && isGlowing ? `0 14px 32px ${theme.auraColor}` : '',
+                ].filter(Boolean).join(', '),
+                transform: isActive ? 'scale(1.07)' : 'scale(0.90)',
+                opacity: isActive ? 1 : (theme.dim ? 0.40 : 0.48),
+                padding: '18px 20px',
+                display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
               }}
             >
-              {/* ── Left: name + subcopy ── */}
-              <div style={{ minWidth: 0, flex: 1 }}>
+              {/* ── bottom aura (READY/LIMITED only) ── */}
+              {isGlowing && (
+                <div
+                  aria-hidden="true"
+                  className={row.status === 'limited' ? 'gj-carousel-aura--limited' : undefined}
+                  style={{
+                    position: 'absolute', left: '10%', right: '10%', bottom: -26, height: 56,
+                    background: `radial-gradient(ellipse at center, ${theme.auraColor} 0%, transparent 72%)`,
+                    filter: 'blur(10px)',
+                    opacity: isActive ? 1 : 0.4,
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+
+              <div style={{ position: 'relative', zIndex: 1, minWidth: 0 }}>
                 <p style={{
-                  fontFamily: SERIF, fontWeight: 500, fontSize: 18, letterSpacing: '2px',
-                  color: '#ffffff', margin: 0, marginBottom: 8,
+                  fontSize: 9, letterSpacing: '2px', color: 'rgba(255,255,255,0.30)',
+                  fontFamily: SANS, margin: 0, marginBottom: 6,
+                }}>
+                  {STATUS_WORD[row.status]}
+                </p>
+                <p style={{
+                  fontFamily: SERIF, fontWeight: 500, fontSize: 19, letterSpacing: '1.5px',
+                  color: '#ffffff', margin: 0, marginBottom: 6,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
                   {row.name}
                 </p>
                 <p style={{
-                  fontSize: 12, letterSpacing: '1.2px', color: 'rgba(255,255,255,0.58)',
+                  fontSize: 13, fontWeight: 600, letterSpacing: '0.5px',
+                  color: theme.statusColor, fontFamily: SANS, margin: 0, marginBottom: 4,
+                }}>
+                  {liveStatusLabel(row.id, row.status)}
+                </p>
+                <p style={{
+                  fontSize: 11, letterSpacing: '0.5px', color: 'rgba(255,255,255,0.50)',
                   fontFamily: SANS, margin: 0,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
@@ -110,37 +203,24 @@ export function LiveStatusSection() {
                 </p>
               </div>
 
-              {/* ── Right: status word + ghost CTA ── */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                <span
-                  className={row.status === 'limited' ? 'gj-luxury-status--limited' : undefined}
+              {cta && (
+                <a
+                  href={`tel:${LIVE_STATUS_TEL}`}
+                  className="gj-carousel-tel"
                   style={{
-                    fontSize: 10, letterSpacing: '2px', fontWeight: 600,
-                    color: wordColor, fontFamily: SANS, whiteSpace: 'nowrap',
-                    textShadow: row.status === 'ready' ? '0 0 4px rgba(212,194,157,0.2)' : 'none',
+                    position: 'relative', zIndex: 1, alignSelf: 'flex-start',
+                    background: 'rgba(0,0,0,0.45)',
+                    border: '1px solid rgba(212,194,157,0.45)',
+                    color: '#D4C29D',
+                    padding: '8px 16px',
+                    borderRadius: 3,
+                    fontSize: 11, fontWeight: 400, letterSpacing: '1.5px',
+                    fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
                   }}
                 >
-                  {STATUS_WORD[row.status]}
-                </span>
-
-                {cta && (
-                  <a
-                    href={`tel:${LIVE_STATUS_TEL}`}
-                    className="gj-luxury-tel"
-                    style={{
-                      background: 'transparent',
-                      border: '1px solid rgba(212,194,157,0.3)',
-                      color: CHAMPAGNE,
-                      padding: '8px 12px',
-                      borderRadius: 2,
-                      fontSize: 11, fontWeight: 400, letterSpacing: '1px',
-                      fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {cta}
-                  </a>
-                )}
-              </div>
+                  {cta}
+                </a>
+              )}
             </div>
           )
         })}
