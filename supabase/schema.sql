@@ -395,3 +395,92 @@ insert into public.live_statuses (id, name, status, sort_order) values
   ('ginjiro', '銀二郎',   'ready', 2),
   ('free',    'フリー',   'ready', 3)
 on conflict (id) do nothing;
+
+-- ── accounting_items: 会計アシスト 商品マスタ（menu / option / retail） ──────
+-- スタッフ端末の「会計アシスト」タブから追加・編集する。
+
+create table if not exists public.accounting_items (
+  id          uuid        default gen_random_uuid() primary key,
+  name        text        not null unique,
+  category    text        not null,
+  price       integer     not null,
+  is_active   boolean     not null default true,
+  sort_order  integer     not null default 0,
+  created_at  timestamptz default now() not null,
+  updated_at  timestamptz default now() not null,
+
+  constraint accounting_items_category_check check (category in ('menu', 'option', 'retail'))
+);
+
+create index if not exists accounting_items_category_idx on public.accounting_items (category, sort_order);
+
+alter table public.accounting_items enable row level security;
+
+create policy "allow_all" on public.accounting_items
+  for all
+  using (true)
+  with check (true);
+
+-- 初期商品マスタ（既存行があれば変更しない）
+insert into public.accounting_items (name, category, price, sort_order) values
+  ('カット',               'menu',   3300,  1),
+  ('カット＋シェービング',  'menu',   5500,  2),
+  ('濡れパン',              'menu',   8000,  3),
+  ('カールアイパー',        'menu',   8000,  4),
+  ('パンチパーマ',          'menu',   8000,  5),
+  ('テイテイ刈り',          'menu',   8000,  6),
+  ('銀パラ',                'menu',   15000, 7),
+  ('海軍御用達',            'menu',   5000,  8),
+  ('ライン入れ（一本）',    'option', 300,   1),
+  ('ゴッソ',                'option', 300,   2),
+  ('眉手入れ',              'option', 500,   3),
+  ('ポマード',              'retail', 2000,  1),
+  ('グリース',              'retail', 1500,  2),
+  ('シャンプー',            'retail', 2000,  3)
+on conflict (name) do nothing;
+
+-- ── accounting_sessions: 会計アシスト 会計履歴（会計完了ボタン押下時のみ保存） ──
+
+create table if not exists public.accounting_sessions (
+  id              uuid        default gen_random_uuid() primary key,
+  user_id         text,
+  customer_name   text,
+  staff_name      text,
+  subtotal        integer     not null,
+  discount_total  integer     not null default 0,
+  total           integer     not null,
+  used_ticket_ids text[],
+  created_at      timestamptz default now() not null
+);
+
+create index if not exists accounting_sessions_created_at_idx on public.accounting_sessions (created_at desc);
+create index if not exists accounting_sessions_user_id_idx    on public.accounting_sessions (user_id);
+
+alter table public.accounting_sessions enable row level security;
+
+create policy "allow_all" on public.accounting_sessions
+  for all
+  using (true)
+  with check (true);
+
+-- ── accounting_session_items: 会計アシスト 会計明細 ──────────────────────────
+
+create table if not exists public.accounting_session_items (
+  id          uuid        default gen_random_uuid() primary key,
+  session_id  uuid        references public.accounting_sessions(id),
+  item_id     uuid,
+  item_name   text        not null,
+  category    text        not null,
+  price       integer     not null,
+  quantity    integer     default 1,
+  created_at  timestamptz default now() not null
+);
+
+create index if not exists accounting_session_items_session_idx on public.accounting_session_items (session_id);
+
+alter table public.accounting_session_items enable row level security;
+
+create policy "allow_all" on public.accounting_session_items
+  for all
+  using (true)
+  with check (true);

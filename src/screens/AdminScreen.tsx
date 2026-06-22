@@ -18,6 +18,7 @@ import {
 } from '../data/liveStatus'
 import '../components/liveStatusSignpole.css'
 import type { LiveStatusRow } from '../data/liveStatus'
+import { AccountingAssistTab } from './AccountingAssistTab'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -47,7 +48,7 @@ interface UsageLogEntry {
   status: string
 }
 
-async function saveUsageLog(entry: Omit<UsageLogEntry, 'id' | 'used_at'>): Promise<void> {
+export async function saveUsageLog(entry: Omit<UsageLogEntry, 'id' | 'used_at'>): Promise<void> {
   try {
     await supabase.from('ticket_usage_logs').insert({
       ...entry,
@@ -57,7 +58,7 @@ async function saveUsageLog(entry: Omit<UsageLogEntry, 'id' | 'used_at'>): Promi
 }
 
 /** JST 当日に userId が1件でも使用済みなら true（種別を問わず） */
-async function fetchTodayUsed(userId: string, today: string): Promise<boolean> {
+export async function fetchTodayUsed(userId: string, today: string): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from('ticket_usage_logs')
@@ -114,7 +115,7 @@ function fmtLogTime(iso: string): string {
 
 // ── Sound ─────────────────────────────────────────────────────────────────────
 
-function playSuccessSound() {
+export function playSuccessSound() {
   try {
     const ctx = new AudioContext()
     const osc = ctx.createOscillator(); const gain = ctx.createGain()
@@ -157,7 +158,7 @@ async function fetchLastVisitDate(userId: string): Promise<string | null> {
   return local[userId] ?? null
 }
 
-async function upsertLastVisitDate(userId: string, date: string): Promise<void> {
+export async function upsertLastVisitDate(userId: string, date: string): Promise<void> {
   try {
     await supabase
       .from('maintenance_visits')
@@ -192,13 +193,13 @@ function fmtCreatedAt(iso: string): string {
 
 // ── QR payload ────────────────────────────────────────────────────────────────
 
-interface PassportQRData {
+export interface PassportQRData {
   type: string
   userId: string
   name: string
 }
 
-interface TicketUseQRData {
+export interface TicketUseQRData {
   type: 'ginjiro-ticket-use'
   userId: string
   selectedTicketId: string
@@ -206,17 +207,17 @@ interface TicketUseQRData {
   expiresAt: string
 }
 
-interface MaintenanceCouponQRData {
+export interface MaintenanceCouponQRData {
   type: 'ginjiro-maintenance-coupon'
   userId: string
   name: string
 }
 
-type AnyQRData = PassportQRData | TicketUseQRData | MaintenanceCouponQRData
+export type AnyQRData = PassportQRData | TicketUseQRData | MaintenanceCouponQRData
 
 const STORE_CHECKIN_QR_VALUE = JSON.stringify({ type: 'ginjiro-store-checkin' })
 
-function parseQR(text: string): AnyQRData | null {
+export function parseQR(text: string): AnyQRData | null {
   try {
     const d = JSON.parse(text)
     if (d.type === 'ginjiro-ticket-use' && d.userId && d.selectedTicketId) return d as TicketUseQRData
@@ -241,7 +242,7 @@ async function haltScanner(scanner: Html5Qrcode): Promise<void> {
   try { if (scanner.isScanning) await scanner.stop(); scanner.clear() } catch { /* ignore */ }
 }
 
-function QrCameraScanner({
+export function QrCameraScanner({
   onScan,
   onCameraError,
   elId = QR_EL_ID,
@@ -371,8 +372,8 @@ export function AdminScreen() {
   // Store QR
   const [showStoreQr, setShowStoreQr] = useState(false)
 
-  // ── Main tab (issue / recovery / live-status) ─────────────────────────────
-  const [mainTab, setMainTab] = useState<'issue' | 'recovery' | 'live-status'>('issue')
+  // ── Main tab (issue / recovery / live-status / accounting) ────────────────
+  const [mainTab, setMainTab] = useState<'issue' | 'recovery' | 'live-status' | 'accounting'>('issue')
 
   // Live status tab state
   const [liveStatusRows, setLiveStatusRows] = useState<LiveStatusRow[]>([])
@@ -982,10 +983,11 @@ export function AdminScreen() {
       {/* ── Main tab switcher ── */}
       <div style={{ display: 'flex', borderBottom: '1px solid rgba(201,162,74,0.12)', background: 'rgba(0,0,0,0.25)', flexShrink: 0 }}>
         {([
+          { id: 'accounting',  label: '会計アシスト' },
           { id: 'issue',       label: 'チケット発行' },
-          { id: 'recovery',    label: '会員復旧' },
           { id: 'live-status', label: 'LIVE STATUS' },
-        ] as { id: 'issue' | 'recovery' | 'live-status'; label: string }[]).map(tab => {
+          { id: 'recovery',    label: '会員復旧' },
+        ] as { id: 'issue' | 'recovery' | 'live-status' | 'accounting'; label: string }[]).map(tab => {
           const isActive = mainTab === tab.id
           return (
             <button
@@ -1987,6 +1989,11 @@ export function AdminScreen() {
               })}
             </div>
           </div>
+        )}
+
+        {/* ===== 会計アシスト ===== */}
+        {mainTab === 'accounting' && (
+          <AccountingAssistTab staffId={staffId} />
         )}
       </main>
 
