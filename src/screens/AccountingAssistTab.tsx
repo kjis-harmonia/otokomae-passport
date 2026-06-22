@@ -164,26 +164,33 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
     if (!canComplete) return
     setCompleting(true)
     setCompleteError(null)
+    const today = getJapanDateString()
+
     try {
-      const sessionId = await createAccountingSession({
-        user_id: customer?.userId ?? null,
-        customer_name: customer?.name ?? null,
-        staff_name: staffId,
-        subtotal,
-        discount_total: discountTotal,
-        total,
-        used_ticket_ids: discount?.ticketId ? [discount.ticketId] : [],
-        items: selectedItems.map(i => ({
-          item_id: i.id, item_name: i.name, category: i.category, price: i.price, quantity: 1,
-        })),
-      })
-      if (!sessionId) {
-        setCompleteError('会計履歴の保存に失敗しました。通信環境を確認してください。')
-        setCompleting(false)
-        return
+      // ── 1. 直前再検証（QR読み込み時から状態が変わっていないか） ──
+      if (discount?.ticketId) {
+        const tickets = await getUserTickets(customer?.userId ?? '')
+        const ticket = tickets.find(t => t.id === discount.ticketId)
+        if (!ticket) {
+          setCompleteError('チケットが見つかりません。会計を中止しました。')
+          setCompleting(false)
+          return
+        }
+        if (ticket.used) {
+          setCompleteError('このチケットはすでに使用済みです。')
+          setCompleting(false)
+          return
+        }
+      } else if (discount && customer) {
+        const usedToday = await fetchTodayUsed(customer.userId, today)
+        if (usedToday) {
+          setCompleteError('本日のメンテナンスクーポンはすでに使用済みです。')
+          setCompleting(false)
+          return
+        }
       }
 
-      const today = getJapanDateString()
+      // ── 2. チケットused化 / メンテナンス使用ログ保存 ──
       if (discount?.ticketId) {
         await markTicketUsed(discount.ticketId, staffId)
         await saveUsageLog({
@@ -211,8 +218,29 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           status: 'used',
         })
       }
+
+      // ── 3. 来店日更新 ──
       if (customer) {
         await upsertLastVisitDate(customer.userId, today)
+      }
+
+      // ── 4. 会計履歴保存 ──
+      const sessionId = await createAccountingSession({
+        user_id: customer?.userId ?? null,
+        customer_name: customer?.name ?? null,
+        staff_name: staffId,
+        subtotal,
+        discount_total: discountTotal,
+        total,
+        used_ticket_ids: discount?.ticketId ? [discount.ticketId] : [],
+        items: selectedItems.map(i => ({
+          item_id: i.id, item_name: i.name, category: i.category, price: i.price, quantity: 1,
+        })),
+      })
+      if (!sessionId) {
+        setCompleteError('会計履歴の保存に失敗しました。通信環境を確認してください。')
+        setCompleting(false)
+        return
       }
 
       playSuccessSound()
