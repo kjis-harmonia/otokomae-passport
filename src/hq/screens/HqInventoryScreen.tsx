@@ -279,7 +279,9 @@ export function HqInventoryScreen() {
                     }}>
                       {cat}
                     </p>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: HQ_SANS }}>
+                    {/* 列数が多いため横スクロールでラップ（狭い画面でも列が潰れない） */}
+                    <div style={{ width: '100%', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', fontFamily: HQ_SANS }}>
                       <thead>
                         <tr>
                           {['商品名', 'カテゴリー', '現在庫', '最低在庫', '価格', 'サブカテゴリー', '状態', '在庫操作', ''].map((label) => (
@@ -287,6 +289,7 @@ export function HqInventoryScreen() {
                               textAlign: 'left', fontSize: 10, letterSpacing: '0.08em',
                               color: HQ_COLORS.textMute, fontWeight: 500, padding: '0 8px 10px 0',
                               borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
+                              whiteSpace: 'nowrap',
                             }}>
                               {label}
                             </th>
@@ -419,6 +422,7 @@ export function HqInventoryScreen() {
                         })}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 )
               })}

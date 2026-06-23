@@ -6,22 +6,26 @@ export function HqTable({ columns, children }: {
   children: ReactNode
 }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: HQ_SANS }}>
-      <thead>
-        <tr>
-          {columns.map((c) => (
-            <th key={c.label} style={{
-              textAlign: c.align ?? 'left', fontSize: 10, letterSpacing: '0.08em',
-              color: HQ_COLORS.textMute, fontWeight: 500, padding: '0 8px 10px 0',
-              borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
-            }}>
-              {c.label}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>{children}</tbody>
-    </table>
+    // 横スクロールでラップ：狭い画面でも列が潰れず、スワイプで全列を確認できる。
+    <div style={{ width: '100%', overflowX: 'auto' }}>
+      <table style={{ width: '100%', minWidth: 420, borderCollapse: 'collapse', fontFamily: HQ_SANS }}>
+        <thead>
+          <tr>
+            {columns.map((c) => (
+              <th key={c.label} style={{
+                textAlign: c.align ?? 'left', fontSize: 10, letterSpacing: '0.08em',
+                color: HQ_COLORS.textMute, fontWeight: 500, padding: '0 8px 10px 0',
+                borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
+                whiteSpace: 'nowrap',
+              }}>
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
   )
 }
 

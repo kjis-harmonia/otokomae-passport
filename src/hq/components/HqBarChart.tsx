@@ -8,11 +8,14 @@ export function HqBarChart({ data, valueFormatter }: {
   const fmt = valueFormatter ?? ((v: number) => `¥${v.toLocaleString()}`)
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 140 }}>
+    // 横スクロールでラップ：データ点数が多い（年間=12本など）場合でもバーが潰れて
+    // 値ラベルが重なるのを防ぎ、各列に最低幅（48px）を確保する。
+    <div style={{ width: '100%', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 140, minWidth: data.length * 48 }}>
       {data.map((d) => {
         const h = Math.max((d.value / max) * 100, 4)
         return (
-          <div key={d.day} style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+          <div key={d.day} style={{ flex: '1 1 38px', minWidth: 38, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
             <p style={{
               fontFamily: HQ_MONO, fontSize: 9, color: HQ_COLORS.textSecondary,
               margin: 0, marginBottom: 6, whiteSpace: 'nowrap',
@@ -34,6 +37,7 @@ export function HqBarChart({ data, valueFormatter }: {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

@@ -150,7 +150,7 @@ export function HqDashboardScreen() {
         <HqStatTile label="今月売上" value={yen(data.monthSales)} />
 
         <div style={{
-          flex: '1 1 0', minWidth: 0,
+          flex: '1 1 150px', minWidth: 0,
           background: HQ_COLORS.panel,
           border: `1px solid ${isOpen ? 'rgba(123,201,123,0.35)' : HQ_COLORS.panelBorder}`,
           borderRadius: 4, padding: '14px 16px',
@@ -210,8 +210,8 @@ export function HqDashboardScreen() {
         </div>
       </HqPanel>
 
-      <div style={{ display: 'flex', gap: 18, alignItems: 'stretch' }}>
-        <HqPanel title="人気メニュー（本日）" code="TOP5" style={{ flex: '1 1 0' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'stretch' }}>
+        <HqPanel title="人気メニュー（本日）" code="TOP5" style={{ flex: '1 1 280px', minWidth: 0 }}>
           {data.menuRanking.length === 0 ? (
             <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textMute, margin: 0 }}>
               本日のデータなし
@@ -231,7 +231,7 @@ export function HqDashboardScreen() {
           )}
         </HqPanel>
 
-        <HqPanel title="店販（本日）" code="RETAIL" style={{ flex: '1 1 0' }}>
+        <HqPanel title="店販（本日）" code="RETAIL" style={{ flex: '1 1 280px', minWidth: 0 }}>
           {data.retailRanking.length === 0 ? (
             <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textMute, margin: 0 }}>
               本日のデータなし

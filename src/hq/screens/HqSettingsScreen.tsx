@@ -51,11 +51,11 @@ export function HqSettingsScreen() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', gap: 18, alignItems: 'stretch' }}>
-        <HqPanel title="店舗情報" code="STORE" style={{ flex: '1 1 0' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'stretch' }}>
+        <HqPanel title="店舗情報" code="STORE" style={{ flex: '1 1 260px', minWidth: 0 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {STORE_INFO.map((f) => (
-              <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <div key={f.label} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 12px' }}>
                 <span style={{ fontFamily: HQ_SANS, fontSize: 11.5, color: HQ_COLORS.textSecondary, whiteSpace: 'nowrap' }}>{f.label}</span>
                 <span style={{ fontFamily: HQ_MONO, fontSize: 12, color: HQ_COLORS.textPrimary, textAlign: 'right' }}>{f.value}</span>
               </div>
@@ -63,7 +63,7 @@ export function HqSettingsScreen() {
           </div>
         </HqPanel>
 
-        <HqPanel title="通知設定" code="NOTIFY" style={{ flex: '1 1 0' }}>
+        <HqPanel title="通知設定" code="NOTIFY" style={{ flex: '1 1 260px', minWidth: 0 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {NOTIFICATIONS.map((n) => (
               <div key={n.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

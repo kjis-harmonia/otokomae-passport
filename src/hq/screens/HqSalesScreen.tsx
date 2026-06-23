@@ -42,8 +42,8 @@ export function HqSalesScreen() {
         <HqBarChart data={PERIOD_DATA[period]} />
       </HqPanel>
 
-      <div style={{ display: 'flex', gap: 18, alignItems: 'stretch' }}>
-        <HqPanel title="メニュー別ランキング" code="MENU" style={{ flex: '2 1 0' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'stretch' }}>
+        <HqPanel title="メニュー別ランキング" code="MENU" style={{ flex: '2 1 320px', minWidth: 0 }}>
           <HqTable columns={[
             { label: '順位' }, { label: 'メニュー' }, { label: '件数', align: 'right' }, { label: '売上', align: 'right' },
           ]}>
@@ -58,7 +58,7 @@ export function HqSalesScreen() {
           </HqTable>
         </HqPanel>
 
-        <HqPanel title="支払い方法比率" code="PAYMENT" style={{ flex: '1 1 0' }}>
+        <HqPanel title="支払い方法比率" code="PAYMENT" style={{ flex: '1 1 240px', minWidth: 0 }}>
           <HqRatioBars data={HQ_PAYMENT_MIX} />
         </HqPanel>
       </div>

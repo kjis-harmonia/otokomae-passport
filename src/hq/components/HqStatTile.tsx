@@ -13,7 +13,7 @@ export function HqStatTile({ label, value, delta, positive, sub }: {
       border: `1px solid ${HQ_COLORS.panelBorder}`,
       borderRadius: 4,
       padding: '14px 16px',
-      flex: '1 1 0',
+      flex: '1 1 150px',
       minWidth: 0,
     }}>
       <p style={{

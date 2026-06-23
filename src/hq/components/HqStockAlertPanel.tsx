@@ -19,11 +19,11 @@ export function HqStockAlertPanel({ products }: { products: Product[] }) {
           {[...reorder, ...low].map((p) => {
             const isReorder = reorder.includes(p)
             return (
-              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textPrimary }}>
+              <div key={p.id} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '2px 10px' }}>
+                <span style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textPrimary, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {isReorder ? '🔴' : '🟡'} {p.name}
                 </span>
-                <span style={{ fontFamily: HQ_MONO, fontSize: 12, color: isReorder ? HQ_COLORS.negative : '#E0B84A' }}>
+                <span style={{ fontFamily: HQ_MONO, fontSize: 12, color: isReorder ? HQ_COLORS.negative : '#E0B84A', whiteSpace: 'nowrap' }}>
                   現在庫 {p.current_stock} / 最低在庫 {p.min_stock}
                 </span>
               </div>
@@ -42,7 +42,7 @@ export function HqStockAlertSummaryTile({ products }: { products: Product[] }) {
 
   return (
     <div style={{
-      flex: '1 1 0', minWidth: 0,
+      flex: '1 1 150px', minWidth: 0,
       background: HQ_COLORS.panel,
       border: `1px solid ${hasAlert ? 'rgba(216,107,92,0.35)' : HQ_COLORS.panelBorder}`,
       borderRadius: 4, padding: '14px 16px',

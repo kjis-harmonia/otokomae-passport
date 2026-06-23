@@ -10,30 +10,32 @@ export function HqMembersScreen() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', gap: 18, alignItems: 'stretch' }}>
-        <HqPanel title="会員ランク分布" code={`TOTAL ${total}`} style={{ flex: '1 1 0' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'stretch' }}>
+        <HqPanel title="会員ランク分布" code={`TOTAL ${total}`} style={{ flex: '1 1 260px', minWidth: 0 }}>
           <HqRatioBars unit="名" data={HQ_MEMBER_RANKS.map(r => ({ label: r.label, ratio: r.count, color: r.color }))} />
         </HqPanel>
 
-        <HqPanel title="新規 / 離脱トレンド" code="6M" style={{ flex: '2 1 0' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 130 }}>
-            {HQ_MEMBER_TREND.map((m) => (
-              <div key={m.month} style={{ flex: '1 1 0', display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: '100%' }}>
-                  <div style={{
-                    width: 14, height: `${(m.newCount / maxTrend) * 100}%`,
-                    background: `linear-gradient(180deg, ${HQ_COLORS.goldHi}, ${HQ_COLORS.gold})`,
-                    borderRadius: '2px 2px 0 0',
-                  }} />
-                  <div style={{
-                    width: 14, height: `${(m.churnCount / maxTrend) * 100}%`,
-                    background: `linear-gradient(180deg, ${HQ_COLORS.negative}, ${HQ_COLORS.red})`,
-                    borderRadius: '2px 2px 0 0',
-                  }} />
+        <HqPanel title="新規 / 離脱トレンド" code="6M" style={{ flex: '2 1 320px', minWidth: 0 }}>
+          <div style={{ width: '100%', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 130, minWidth: HQ_MEMBER_TREND.length * 48 }}>
+              {HQ_MEMBER_TREND.map((m) => (
+                <div key={m.month} style={{ flex: '1 1 36px', minWidth: 36, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: '100%' }}>
+                    <div style={{
+                      width: 14, height: `${(m.newCount / maxTrend) * 100}%`,
+                      background: `linear-gradient(180deg, ${HQ_COLORS.goldHi}, ${HQ_COLORS.gold})`,
+                      borderRadius: '2px 2px 0 0',
+                    }} />
+                    <div style={{
+                      width: 14, height: `${(m.churnCount / maxTrend) * 100}%`,
+                      background: `linear-gradient(180deg, ${HQ_COLORS.negative}, ${HQ_COLORS.red})`,
+                      borderRadius: '2px 2px 0 0',
+                    }} />
+                  </div>
+                  <p style={{ fontFamily: HQ_SANS, fontSize: 10, color: HQ_COLORS.textSecondary, margin: 0, marginTop: 8, whiteSpace: 'nowrap' }}>{m.month}</p>
                 </div>
-                <p style={{ fontFamily: HQ_SANS, fontSize: 10, color: HQ_COLORS.textSecondary, margin: 0, marginTop: 8 }}>{m.month}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 14, fontFamily: HQ_SANS, fontSize: 10.5, color: HQ_COLORS.textSecondary }}>
             <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: HQ_COLORS.goldHi, marginRight: 6 }} />新規</span>
