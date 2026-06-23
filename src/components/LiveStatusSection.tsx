@@ -29,7 +29,15 @@ const CAROUSEL_THEME: Record<LiveStatusValue, CardTheme> = {
   ready:   { statusColor: '#D4C29D', auraColor: 'rgba(212,194,157,0.95)', edgeColor: 'rgba(212,194,157,0.30)', dim: false },
   limited: { statusColor: '#C23B3B', auraColor: 'rgba(180,32,36,0.95)',   edgeColor: 'rgba(163,29,29,0.32)',  dim: false },
   full:    { statusColor: 'rgba(255,255,255,0.40)', auraColor: 'transparent', edgeColor: 'rgba(255,255,255,0.07)', dim: true },
-  closed:  { statusColor: 'rgba(255,255,255,0.30)', auraColor: 'transparent', edgeColor: 'rgba(255,255,255,0.05)', dim: true },
+  closed:  { statusColor: '#BFB8A8', auraColor: 'transparent', edgeColor: 'rgba(255,255,255,0.05)', dim: true },
+}
+
+// 左上の英字コード（CLOSEDのみ muted silver / warm gray で少し明るく）
+const STATUS_WORD_COLOR: Record<LiveStatusValue, string> = {
+  ready: 'rgba(255,255,255,0.30)',
+  limited: 'rgba(255,255,255,0.30)',
+  full: 'rgba(255,255,255,0.30)',
+  closed: 'rgba(191,184,168,0.55)',
 }
 
 // アウラ用の中間色（中心の強い発光から外周への滑らかな減衰のため）
@@ -204,7 +212,7 @@ export function LiveStatusSection() {
                 flex: '0 0 auto', minWidth: 96, maxWidth: 130,
               }}>
                 <p style={{
-                  fontSize: 9, letterSpacing: '2px', color: 'rgba(255,255,255,0.30)',
+                  fontSize: 9, letterSpacing: '2px', color: STATUS_WORD_COLOR[row.status],
                   fontFamily: SANS, margin: 0, marginBottom: 5, whiteSpace: 'nowrap',
                 }}>
                   {STATUS_WORD[row.status]}
@@ -227,19 +235,21 @@ export function LiveStatusSection() {
               }}>
                 <p style={{
                   fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.5px',
-                  color: theme.statusColor, margin: 0, marginBottom: 3,
+                  color: theme.statusColor, margin: 0, marginBottom: row.status === 'closed' ? 0 : 3,
                   textShadow: isGlowing ? `0 0 10px ${AURA_MID[row.status]}` : 'none',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
                 }}>
                   {liveStatusLabel(row.id, row.status)}
                 </p>
-                <p style={{
-                  fontSize: 15, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
-                  fontFamily: SANS, margin: 0, marginBottom: cta ? 7 : 0,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
-                }}>
-                  {row.status === 'closed' ? '本日終了' : liveStatusAvailabilityMessage(row)}
-                </p>
+                {row.status !== 'closed' && (
+                  <p style={{
+                    fontSize: 15, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
+                    fontFamily: SANS, margin: 0, marginBottom: cta ? 7 : 0,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+                  }}>
+                    {liveStatusAvailabilityMessage(row)}
+                  </p>
+                )}
 
                 {cta && (
                   <a
