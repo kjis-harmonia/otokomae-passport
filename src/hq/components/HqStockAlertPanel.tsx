@@ -1,19 +1,7 @@
-import { getStockStatus } from '../hqInventoryStore'
+import { splitStockAlerts } from '../hqInventoryStore'
 import type { Product } from '../hqInventoryStore'
 import { HQ_COLORS, HQ_MONO, HQ_SANS, HQ_SERIF } from '../hqTheme'
 import { HqPanel } from './HqPanel'
-
-/** products から 要発注(reorder) / 少ない(low) 商品を抜き出す共通ロジック。 */
-export function splitStockAlerts(products: Product[]): { reorder: Product[]; low: Product[] } {
-  const reorder: Product[] = []
-  const low: Product[] = []
-  for (const p of products) {
-    const status = getStockStatus(p.current_stock, p.min_stock)
-    if (status === 'reorder') reorder.push(p)
-    else if (status === 'low') low.push(p)
-  }
-  return { reorder, low }
-}
 
 /** 在庫管理タブ用：要発注／少ない商品の詳細リスト。両方0件なら「在庫アラートなし」。 */
 export function HqStockAlertPanel({ products }: { products: Product[] }) {

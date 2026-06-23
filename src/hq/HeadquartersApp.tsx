@@ -7,6 +7,7 @@ import { HqSalesScreen } from './screens/HqSalesScreen'
 import { HqStylistScreen } from './screens/HqStylistScreen'
 import { HqMembersScreen } from './screens/HqMembersScreen'
 import { HqInventoryScreen } from './screens/HqInventoryScreen'
+import { HqDailyReportScreen } from './screens/HqDailyReportScreen'
 import { HqSettingsScreen } from './screens/HqSettingsScreen'
 
 function fmtClock(d: Date): string {
@@ -124,6 +125,7 @@ export function HeadquartersApp() {
           {tab === 'stylist' && <HqStylistScreen />}
           {tab === 'members' && <HqMembersScreen />}
           {tab === 'inventory' && <HqInventoryScreen />}
+          {tab === 'reports' && <HqDailyReportScreen />}
           {tab === 'settings' && <HqSettingsScreen />}
         </main>
       </div>

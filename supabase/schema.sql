@@ -588,3 +588,30 @@ begin
     null; -- すでに追加済み
   end;
 end $$;
+
+-- ── daily_reports: 日報（銀二郎本部 Phase7-A）───────────────────────────────
+-- 営業終了ボタン押下時に、その日の completed 会計を集計して自動保存される（Phase7-B）。
+-- report_date は1日1件（unique制約）。同じ日に複数回営業終了しても upsert で上書きされる。
+-- 日報一覧はRealtime不要（表示時に取得するだけ）。
+
+create table if not exists public.daily_reports (
+  id                uuid        default gen_random_uuid() primary key,
+  report_date       date        not null unique,
+  total_sales       integer     not null default 0,
+  customer_count    integer     not null default 0,
+  average_spend     integer     not null default 0,
+  stylist_summary   jsonb       not null default '[]'::jsonb,
+  menu_summary      jsonb       not null default '[]'::jsonb,
+  retail_summary    jsonb       not null default '[]'::jsonb,
+  inventory_alerts  jsonb       not null default '[]'::jsonb,
+  created_at        timestamptz default now() not null
+);
+
+create index if not exists daily_reports_report_date_idx on public.daily_reports (report_date desc);
+
+alter table public.daily_reports enable row level security;
+
+create policy "allow_all" on public.daily_reports
+  for all
+  using (true)
+  with check (true);

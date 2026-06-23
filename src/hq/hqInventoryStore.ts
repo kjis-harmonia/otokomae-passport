@@ -22,6 +22,18 @@ export function getStockStatus(currentStock: number, minStock: number): StockSta
   return 'ok'
 }
 
+/** products から 要発注(reorder) / 少ない(low) 商品を抜き出す共通ロジック。 */
+export function splitStockAlerts(products: Product[]): { reorder: Product[]; low: Product[] } {
+  const reorder: Product[] = []
+  const low: Product[] = []
+  for (const p of products) {
+    const status = getStockStatus(p.current_stock, p.min_stock)
+    if (status === 'reorder') reorder.push(p)
+    else if (status === 'low') low.push(p)
+  }
+  return { reorder, low }
+}
+
 export async function getProducts(): Promise<Product[]> {
   try {
     const { data, error } = await supabase

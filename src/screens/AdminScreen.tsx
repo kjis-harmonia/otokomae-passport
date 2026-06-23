@@ -23,6 +23,7 @@ import type { LiveStatusRow } from '../data/liveStatus'
 import { AccountingAssistTab } from './AccountingAssistTab'
 import { getShopStatus, setShopStatus as updateShopStatus } from '../utils/shopStatusStore'
 import type { ShopStatusRow } from '../utils/shopStatusStore'
+import { generateAndSaveDailyReport } from '../hq/hqDailyReportStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -541,6 +542,16 @@ export function AdminScreen() {
       }
       setLiveStatusRows(prev => prev.map(r => updatedRows.find(u => u?.id === r.id) ?? r))
       setShopActionSuccess('営業を終了しました。')
+
+      // ── 銀二郎本部 日報自動生成（Phase7-B） ──
+      // 営業終了は既に確定済みなので、ここで何が起きても営業終了処理自体は成功扱いのまま。
+      // 失敗時もスタッフ向けの表示は変えず、コンソールログのみ残す。
+      try {
+        const report = await generateAndSaveDailyReport()
+        if (!report) console.error('[AdminScreen] 日報の自動生成に失敗しました。')
+      } catch (reportErr) {
+        console.error('[AdminScreen] 日報の自動生成中に例外が発生しました:', reportErr)
+      }
     } finally {
       setShopActionLoading(false)
       dismissShopMessageLater()
