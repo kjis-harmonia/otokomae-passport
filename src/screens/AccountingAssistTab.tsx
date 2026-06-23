@@ -317,7 +317,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const byCategory = (cat: AccountingCategory) => items.filter(i => i.category === cat)
 
   return (
-    <div style={{ paddingBottom: 140 }}>
+    <div style={{ paddingBottom: 280 }}>
       {/* ── 顧客 / QR読み込み ── */}
       <div style={{
         borderRadius: 16, border: '1px solid rgba(201,162,74,0.22)',
