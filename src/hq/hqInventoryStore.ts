@@ -39,16 +39,25 @@ export function splitStockAlerts(products: Product[]): { reorder: Product[]; low
   return { reorder, low }
 }
 
-/** 在庫一覧取得。is_active=true の商品のみ（論理削除済みの商品は除外）。 */
+/**
+ * 在庫一覧取得。is_active=false の商品のみ除外する（論理削除済み）。
+ * is_active が null/未設定の行（想定外データ）は非表示にせず表示する側に倒す。
+ * category が未設定/不明な値の行も、不明カテゴリーのまま落とさず「店販」にフォールバックする
+ * （PRODUCT_CATEGORIES のタブ分けに乗らない値だと、どのタブにも出ず一覧から消えてしまうため）。
+ */
 export async function getProducts(): Promise<Product[]> {
   try {
     const { data, error } = await supabase
       .from('products')
       .select('*')
-      .eq('is_active', true)
       .order('name', { ascending: true })
     if (error || !data) return []
-    return data as Product[]
+    return (data as Product[])
+      .filter((p) => p.is_active !== false)
+      .map((p) => ({
+        ...p,
+        category: (PRODUCT_CATEGORIES as readonly string[]).includes(p.category) ? p.category : '店販',
+      }))
   } catch {
     return []
   }

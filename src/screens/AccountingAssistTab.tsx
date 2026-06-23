@@ -577,7 +577,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
                       {item.name}
                     </p>
                     <p style={{ fontSize: 13, fontWeight: 700, color: selected ? '#C9A24A' : '#e5e5e5' }}>
-                      ¥{item.price.toLocaleString()}
+                      ¥{(item.price ?? 0).toLocaleString()}
                     </p>
                   </button>
                 )
@@ -663,7 +663,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
                             {item.name}
                           </p>
                           <p style={{ fontSize: 13, fontWeight: 700, color: selected ? '#C9A24A' : '#e5e5e5' }}>
-                            ¥{item.price.toLocaleString()}
+                            ¥{(item.price ?? 0).toLocaleString()}
                           </p>
                         </button>
                       )
@@ -686,7 +686,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
             {selectedItems.map(i => (
               <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#ffffff', marginBottom: 4 }}>
                 <span>{i.name}</span>
-                <span>¥{i.price.toLocaleString()}</span>
+                <span>¥{(i.price ?? 0).toLocaleString()}</span>
               </div>
             ))}
             {discount && (
@@ -991,7 +991,7 @@ function ItemManagerModal({
                     />
                   )}
                   <input
-                    type="text" inputMode="numeric" defaultValue={String(item.price)}
+                    type="text" inputMode="numeric" defaultValue={String(item.price ?? 0)}
                     onBlur={e => void handleUpdatePrice(item, e.target.value)}
                     style={{ width: 84, boxSizing: 'border-box', padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', color: '#ffffff', fontSize: 13, textAlign: 'right', outline: 'none' }}
                   />

@@ -17,14 +17,18 @@ export interface AccountingItem {
   updated_at: string
 }
 
-/** 商品マスタ取得。activeOnly=true で有効商品のみ（会計選択UI用） */
+/**
+ * 商品マスタ取得。activeOnly=true で有効商品のみ（会計選択UI用）。
+ * is_active が null/未設定の行は非表示にせず表示する側に倒す
+ * （retail_group・price が null/未設定の行も対象外にはしない —
+ * それぞれUI側で「その他」「¥0」にフォールバックする）。
+ */
 export async function getAccountingItems(opts: { activeOnly?: boolean } = {}): Promise<AccountingItem[]> {
   try {
-    let query = supabase.from('accounting_items').select('*')
-    if (opts.activeOnly) query = query.eq('is_active', true)
-    const { data, error } = await query.order('category').order('sort_order')
+    const { data, error } = await supabase.from('accounting_items').select('*').order('category').order('sort_order')
     if (error || !data) return []
-    return data as AccountingItem[]
+    const items = data as AccountingItem[]
+    return opts.activeOnly ? items.filter((i) => i.is_active !== false) : items
   } catch {
     return []
   }
