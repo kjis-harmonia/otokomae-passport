@@ -247,23 +247,9 @@ async function haltScanner(scanner: Html5Qrcode): Promise<void> {
   try { if (scanner.isScanning) await scanner.stop(); scanner.clear() } catch { /* ignore */ }
 }
 
-// 読み取り中、カメラ映像の上に重ねる白い四隅のスキャンガイド（装飾のみ、操作はブロックしない）
-function ScanGuideOverlay() {
-  return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-      <div style={{ width: 180, height: 180, position: 'relative' }}>
-        {[
-          { top: 0,    left: 0,    borderTop: '3px solid',    borderLeft: '3px solid',   borderRadius: '6px 0 0 0' },
-          { top: 0,    right: 0,   borderTop: '3px solid',    borderRight: '3px solid',  borderRadius: '0 6px 0 0' },
-          { bottom: 0, left: 0,    borderBottom: '3px solid', borderLeft: '3px solid',   borderRadius: '0 0 0 6px' },
-          { bottom: 0, right: 0,   borderBottom: '3px solid', borderRight: '3px solid',  borderRadius: '0 0 6px 0' },
-        ].map((s, i) => (
-          <div key={i} style={{ position: 'absolute', width: 32, height: 32, borderColor: 'rgba(255,255,255,0.85)', ...s }} />
-        ))}
-      </div>
-    </div>
-  )
-}
+// 読み取り中の白い四隅ガイドは html5-qrcode が qrbox 設定に合わせて自前で描画する
+// （Constants.BORDER_SHADER_DEFAULT_COLOR = "#ffffff"）。自前のオーバーレイを重ねると
+// 二重表示になるため、ここでは追加しない。
 
 export function QrCameraScanner({
   onScan,
@@ -346,7 +332,6 @@ export function QrCameraScanner({
             {placeholder}
           </div>
         )}
-        {placeholder && active && <ScanGuideOverlay />}
       </div>
       {!active ? (
         <button onClick={() => { void start() }} style={{ width: '100%', padding: '20px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 20px rgba(107,15,18,0.45)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 20, fontWeight: 700, letterSpacing: '0.2em', cursor: 'pointer' }}>
