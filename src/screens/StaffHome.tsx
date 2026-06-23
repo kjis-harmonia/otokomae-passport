@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AdminScreen } from './AdminScreen'
 import { StaffInventoryScreen } from './StaffInventoryScreen'
+import type { PendingChangeSummary, StaffInventoryHandle } from './StaffInventoryScreen'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -14,6 +15,30 @@ type StaffMode = 'menu' | 'shop' | 'inventory'
  */
 export function StaffHome() {
   const [mode, setMode] = useState<StaffMode>('menu')
+  const inventoryRef = useRef<StaffInventoryHandle>(null)
+  const [pendingSummary, setPendingSummary] = useState<PendingChangeSummary[] | null>(null)
+  const [confirmingBack, setConfirmingBack] = useState(false)
+
+  function handleBackClick() {
+    if (mode === 'inventory' && inventoryRef.current?.hasPendingChanges()) {
+      setPendingSummary(inventoryRef.current.getPendingSummary())
+      return
+    }
+    setMode('menu')
+  }
+
+  async function handleConfirmAndBack() {
+    setConfirmingBack(true)
+    const ok = await inventoryRef.current?.confirmChanges()
+    setConfirmingBack(false)
+    setPendingSummary(null)
+    if (ok) setMode('menu')
+  }
+
+  function handleDiscardAndBack() {
+    setPendingSummary(null)
+    setMode('menu')
+  }
 
   if (mode === 'menu') {
     return (
@@ -81,7 +106,7 @@ export function StaffHome() {
       }}>
         <button
           type="button"
-          onClick={() => setMode('menu')}
+          onClick={handleBackClick}
           style={{
             padding: '8px 16px', borderRadius: 10,
             background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.16)',
@@ -94,8 +119,48 @@ export function StaffHome() {
       </div>
 
       <div style={{ flex: '1 1 auto' }}>
-        {mode === 'shop' ? <AdminScreen /> : <StaffInventoryScreen />}
+        {mode === 'shop' ? <AdminScreen /> : <StaffInventoryScreen ref={inventoryRef} />}
       </div>
+
+      {pendingSummary && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{ width: '100%', maxWidth: 360, borderRadius: 16, background: '#0A0A0A', border: '1px solid rgba(201,162,74,0.3)', padding: 20 }}>
+            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#ffffff', marginBottom: 6 }}>
+              未確定の在庫変更があります。
+            </p>
+            <p style={{ fontSize: 13, color: '#e5e5e5', marginBottom: 14 }}>
+              変更内容を確定して戻りますか？
+            </p>
+            <div style={{
+              borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+              padding: '10px 12px', marginBottom: 18,
+            }}>
+              {pendingSummary.map((c) => (
+                <p key={c.productId} style={{ fontSize: 13, color: '#C9A24A', margin: '2px 0' }}>
+                  ・{c.name} {c.delta > 0 ? '+' : ''}{c.delta}
+                </p>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button" onClick={handleDiscardAndBack} disabled={confirmingBack}
+                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5', fontFamily: SERIF, fontSize: 14, cursor: 'pointer' }}
+              >
+                いいえ
+              </button>
+              <button
+                type="button" onClick={() => void handleConfirmAndBack()} disabled={confirmingBack}
+                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(201,162,74,0.18)', border: '1px solid #C9A24A', color: '#C9A24A', fontFamily: SERIF, fontSize: 14, fontWeight: 700, cursor: confirmingBack ? 'default' : 'pointer' }}
+              >
+                {confirmingBack ? '保存中…' : 'はい'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,
+} from 'react'
 import {
   adjustProductStock, createProduct, deleteProduct, getProducts, getStockStatus,
   PRODUCT_CATEGORIES, subscribeProductsRealtime, updateProduct,
@@ -10,6 +12,10 @@ import type { Product, ProductCategory, StockStatus } from '../hq/hqInventorySto
 // products テーブルを共有する（重複実装なし）。
 // UIは「かっこよさ」より検索性・管理効率を優先したコンパクトな行リスト
 // （100商品以上でも一覧性が落ちないこと）を優先している。
+//
+// 入庫・出庫は即DB保存せず、未確定の差分（pendingChanges）としてローカル保持し、
+// 「変更を確定」を押した時点でまとめてSupabaseへ反映する。親（StaffHome）の
+// 戻るボタンが未確定変更の有無を確認できるよう、ref経由でハンドルを公開する。
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -32,6 +38,19 @@ type LoadState =
 
 type CategoryFilter = 'すべて' | ProductCategory
 
+export interface PendingChangeSummary {
+  productId: string
+  name: string
+  delta: number
+}
+
+export interface StaffInventoryHandle {
+  hasPendingChanges: () => boolean
+  getPendingSummary: () => PendingChangeSummary[]
+  /** 未確定変更をまとめて保存する。全件成功なら true、1件でも失敗したら false（失敗分のみ残す）。 */
+  confirmChanges: () => Promise<boolean>
+}
+
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10,
   background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)',
@@ -43,7 +62,7 @@ const smallBtnStyle: React.CSSProperties = {
   whiteSpace: 'nowrap', flexShrink: 0,
 }
 
-export function StaffInventoryScreen() {
+export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function StaffInventoryScreen(_props, ref) {
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -64,10 +83,13 @@ export function StaffInventoryScreen() {
   const [editMinStock, setEditMinStock] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
-  const [adjustingId, setAdjustingId] = useState<string | null>(null)
-
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // ── 未確定の入庫・出庫差分（productId → 合算delta）。0になったキーは削除する。 ──
+  const [pendingChanges, setPendingChanges] = useState<Record<string, number>>({})
+  const [confirming, setConfirming] = useState(false)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
 
   const load = useCallback((opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setState({ phase: 'loading' })
@@ -130,12 +152,37 @@ export function StaffInventoryScreen() {
     load()
   }
 
-  async function handleAdjust(id: string, delta: number) {
-    setAdjustingId(id)
-    await adjustProductStock(id, delta)
-    setAdjustingId(null)
-    load({ silent: true })
+  /** 入庫・出庫はDB保存せず、ローカルの未確定差分に合算するだけ（画面上の現在庫は仮反映）。 */
+  function handleAdjust(id: string, delta: number) {
+    setConfirmError(null)
+    setPendingChanges((prev) => {
+      const next = { ...prev }
+      const merged = (next[id] ?? 0) + delta
+      if (merged === 0) delete next[id]
+      else next[id] = merged
+      return next
+    })
   }
+
+  const confirmChanges = useCallback(async (): Promise<boolean> => {
+    const entries = Object.entries(pendingChanges)
+    if (entries.length === 0) return true
+    setConfirming(true)
+    setConfirmError(null)
+    const failed: Record<string, number> = {}
+    for (const [id, delta] of entries) {
+      const updated = await adjustProductStock(id, delta)
+      if (!updated) failed[id] = delta
+    }
+    setConfirming(false)
+    setPendingChanges(failed)
+    load({ silent: true })
+    if (Object.keys(failed).length > 0) {
+      setConfirmError('在庫変更の保存に失敗しました')
+      return false
+    }
+    return true
+  }, [pendingChanges, load])
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return
@@ -146,6 +193,19 @@ export function StaffInventoryScreen() {
     load()
   }
 
+  useImperativeHandle(ref, () => ({
+    hasPendingChanges: () => Object.keys(pendingChanges).length > 0,
+    getPendingSummary: () => {
+      const products = state.phase === 'ready' ? state.products : []
+      return Object.entries(pendingChanges).map(([productId, delta]) => ({
+        productId,
+        delta,
+        name: products.find((p) => p.id === productId)?.name ?? '商品',
+      }))
+    },
+    confirmChanges,
+  }), [pendingChanges, state, confirmChanges])
+
   const filteredProducts = useMemo(() => {
     if (state.phase !== 'ready') return []
     const q = searchQuery.trim().toLowerCase()
@@ -155,6 +215,8 @@ export function StaffInventoryScreen() {
       return true
     })
   }, [state, searchQuery, categoryFilter])
+
+  const pendingCount = Object.keys(pendingChanges).length
 
   return (
     <div style={{ padding: '12px 12px 40px' }}>
@@ -239,6 +301,27 @@ export function StaffInventoryScreen() {
         ))}
       </div>
 
+      {/* ── 変更を確定 ── */}
+      <button
+        type="button"
+        onClick={() => void confirmChanges()}
+        disabled={pendingCount === 0 || confirming}
+        style={{
+          width: '100%', padding: '13px 0', borderRadius: 12, marginBottom: 10,
+          background: pendingCount > 0 ? 'linear-gradient(90deg, #C9A24A 0%, #E6CA65 100%)' : 'rgba(255,255,255,0.04)',
+          border: `1.5px solid ${pendingCount > 0 ? '#E6CA65' : 'rgba(255,255,255,0.1)'}`,
+          color: pendingCount > 0 ? '#1a1206' : '#666666',
+          fontFamily: SERIF, fontSize: 14, fontWeight: 800, letterSpacing: '0.06em',
+          cursor: pendingCount > 0 && !confirming ? 'pointer' : 'default',
+        }}
+      >
+        {confirming ? '保存中…' : pendingCount > 0 ? `変更を確定（${pendingCount}件）` : '変更を確定'}
+      </button>
+
+      {confirmError && (
+        <p style={{ fontSize: 12, color: '#E06060', marginBottom: 10, textAlign: 'center' }}>{confirmError}</p>
+      )}
+
       {state.phase === 'loading' && (
         <p style={{ textAlign: 'center', color: '#e5e5e5', fontSize: 13, padding: '24px 0' }}>読み込み中…</p>
       )}
@@ -273,14 +356,18 @@ export function StaffInventoryScreen() {
             </div>
 
             {filteredProducts.map((p, idx) => {
-              const status = getStockStatus(p.current_stock, p.min_stock)
+              const pendingDelta = pendingChanges[p.id] ?? 0
+              const displayStock = Math.max(0, p.current_stock + pendingDelta)
+              const status = getStockStatus(displayStock, p.min_stock)
               const isEditing = editingId === p.id
               return (
                 <div
                   key={p.id}
                   style={{
                     padding: '6px 8px',
-                    background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+                    background: pendingDelta !== 0
+                      ? 'rgba(201,162,74,0.06)'
+                      : idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
                     borderBottom: '1px solid rgba(255,255,255,0.05)',
                   }}
                 >
@@ -325,10 +412,13 @@ export function StaffInventoryScreen() {
                         <p style={{ fontSize: 13, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
                           {p.name}
                         </p>
-                        <p style={{ fontSize: 10, color: '#777777', margin: 0 }}>{p.category}</p>
+                        <p style={{ fontSize: 10, color: pendingDelta !== 0 ? '#C9A24A' : '#777777', margin: 0, fontWeight: pendingDelta !== 0 ? 700 : 400 }}>
+                          {p.category}
+                          {pendingDelta !== 0 && ` ・未確定 ${pendingDelta > 0 ? '+' : ''}${pendingDelta}`}
+                        </p>
                       </div>
-                      <span style={{ flexShrink: 0, width: 36, fontSize: 13, fontWeight: 700, color: '#ffffff', textAlign: 'right' }}>
-                        {p.current_stock}
+                      <span style={{ flexShrink: 0, width: 36, fontSize: 13, fontWeight: 700, color: pendingDelta !== 0 ? '#C9A24A' : '#ffffff', textAlign: 'right' }}>
+                        {displayStock}
                       </span>
                       <span style={{ flexShrink: 0, width: 32, fontSize: 12, color: '#999999', textAlign: 'right' }}>
                         {p.min_stock}
@@ -342,13 +432,13 @@ export function StaffInventoryScreen() {
                   {!isEditing && (
                     <div style={{ display: 'flex', gap: 5, marginTop: 6, overflowX: 'auto' }}>
                       <button
-                        type="button" onClick={() => void handleAdjust(p.id, 1)} disabled={adjustingId === p.id}
+                        type="button" onClick={() => handleAdjust(p.id, 1)}
                         style={{ ...smallBtnStyle, background: 'rgba(201,162,74,0.16)', border: '1px solid #C9A24A', color: '#C9A24A' }}
                       >
                         ＋入庫
                       </button>
                       <button
-                        type="button" onClick={() => void handleAdjust(p.id, -1)} disabled={adjustingId === p.id}
+                        type="button" onClick={() => handleAdjust(p.id, -1)}
                         style={{ ...smallBtnStyle, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5' }}
                       >
                         −出庫
@@ -405,4 +495,4 @@ export function StaffInventoryScreen() {
       )}
     </div>
   )
-}
+})
