@@ -3,7 +3,7 @@ import { HqPanel } from '../components/HqPanel'
 import { HqTable, HqTr, HqTd } from '../components/HqTable'
 import { getHqStylistAnalysis } from '../hqDataStore'
 import type { HqStylistAnalysisData, HqStylistPeriod, StylistAnalysis } from '../hqDataStore'
-import { HQ_COLORS, HQ_MONO, HQ_SANS, HQ_SERIF } from '../hqTheme'
+import { HQ_COLORS, HQ_SANS } from '../hqTheme'
 
 type LoadState =
   | { phase: 'loading' }
@@ -11,7 +11,6 @@ type LoadState =
   | { phase: 'ready'; data: HqStylistAnalysisData }
 
 const PERIOD_LABEL: Record<HqStylistPeriod, string> = { today: '今日', month: '今月' }
-const MEDALS = ['🥇', '🥈', '🥉']
 
 function yen(v: number): string {
   return `¥${v.toLocaleString()}`
@@ -76,70 +75,25 @@ export function HqStylistScreen() {
       )}
 
       {state.phase === 'ready' && (
-        <>
-          <HqPanel title={period === 'today' ? '本日のMVP' : '今月のMVP'} code="MVP">
-            {state.data.mvp ? (
-              <div>
-                <p style={{ fontFamily: HQ_SERIF, fontSize: 26, fontWeight: 700, color: '#fff', margin: 0, marginBottom: 10 }}>
-                  {state.data.mvp.name}
-                </p>
-                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-                  <span style={{ fontFamily: HQ_MONO, fontSize: 14, color: HQ_COLORS.goldHi }}>
-                    売上 {yen(state.data.mvp.sales)}
-                  </span>
-                  <span style={{ fontFamily: HQ_MONO, fontSize: 14, color: HQ_COLORS.textSecondary }}>
-                    来客 {state.data.mvp.visitors}名
-                  </span>
-                  <span style={{ fontFamily: HQ_MONO, fontSize: 14, color: HQ_COLORS.textSecondary }}>
-                    客単価 {yen(state.data.mvp.unitPrice)}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textMute, margin: 0 }}>
-                データなし
-              </p>
-            )}
-          </HqPanel>
-
-          <HqPanel title="ランキング" code="RANKING">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {state.data.ranking.map((s, i) => (
-                <div key={s.name} style={{
-                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                  padding: '8px 0',
-                }}>
-                  <span style={{ fontFamily: HQ_SERIF, fontSize: 16, fontWeight: 700, color: '#fff' }}>
-                    {MEDALS[i] ? `${MEDALS[i]} ` : `${i + 1}. `}{s.name}
-                  </span>
-                  <span style={{ fontFamily: HQ_MONO, fontSize: 16, color: HQ_COLORS.goldHi }}>
-                    {yen(s.sales)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </HqPanel>
-
-          <HqPanel title="スタイリスト一覧" code="ALL STAFF">
-            <HqTable columns={[
-              { label: '名前' },
-              { label: '売上', align: 'right' },
-              { label: '来客数', align: 'right' },
-              { label: '客単価', align: 'right' },
-              { label: '売上シェア', align: 'right' },
-            ]}>
-              {state.data.stylists.map((s: StylistAnalysis) => (
-                <HqTr key={s.name}>
-                  <HqTd>{s.name}</HqTd>
-                  <HqTd align="right" mono color={HQ_COLORS.goldHi}>{yen(s.sales)}</HqTd>
-                  <HqTd align="right" mono>{s.visitors}名</HqTd>
-                  <HqTd align="right" mono>{yen(s.unitPrice)}</HqTd>
-                  <HqTd align="right" mono>{s.share}%</HqTd>
-                </HqTr>
-              ))}
-            </HqTable>
-          </HqPanel>
-        </>
+        <HqPanel title="スタイリスト一覧" code="ALL STAFF">
+          <HqTable columns={[
+            { label: '名前' },
+            { label: '売上', align: 'right' },
+            { label: '来客数', align: 'right' },
+            { label: '客単価', align: 'right' },
+            { label: '売上シェア', align: 'right' },
+          ]}>
+            {state.data.stylists.map((s: StylistAnalysis) => (
+              <HqTr key={s.name}>
+                <HqTd>{s.name}</HqTd>
+                <HqTd align="right" mono color={HQ_COLORS.goldHi}>{yen(s.sales)}</HqTd>
+                <HqTd align="right" mono>{s.visitors}名</HqTd>
+                <HqTd align="right" mono>{yen(s.unitPrice)}</HqTd>
+                <HqTd align="right" mono>{s.share}%</HqTd>
+              </HqTr>
+            ))}
+          </HqTable>
+        </HqPanel>
       )}
     </div>
   )

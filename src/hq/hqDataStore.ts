@@ -70,8 +70,6 @@ export interface HqStylistAnalysisData {
   period: HqStylistPeriod
   totalSales: number
   stylists: StylistAnalysis[]
-  ranking: StylistAnalysis[]
-  mvp: StylistAnalysis | null
 }
 
 /**
@@ -116,10 +114,7 @@ export async function getHqStylistAnalysis(period: HqStylistPeriod): Promise<HqS
     }
   })
 
-  const ranking = [...stylists].sort((a, b) => b.sales - a.sales)
-  const mvp = ranking[0] && ranking[0].sales > 0 ? ranking[0] : null
-
-  return { period, totalSales, stylists, ranking, mvp }
+  return { period, totalSales, stylists }
 }
 
 /**
