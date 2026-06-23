@@ -71,6 +71,8 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
   const [newCategory, setNewCategory] = useState<ProductCategory>('店販')
   const [newStock, setNewStock] = useState('')
   const [newMinStock, setNewMinStock] = useState('')
+  const [newPrice, setNewPrice] = useState('')
+  const [newAccountingGroup, setNewAccountingGroup] = useState('')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
 
@@ -81,6 +83,8 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
   const [editName, setEditName] = useState('')
   const [editCategory, setEditCategory] = useState<ProductCategory>('店販')
   const [editMinStock, setEditMinStock] = useState('')
+  const [editPrice, setEditPrice] = useState('')
+  const [editAccountingGroup, setEditAccountingGroup] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
@@ -126,10 +130,14 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
 
     setAdding(true)
     setAddError(null)
-    const created = await createProduct({ name, category: newCategory, currentStock, minStock })
+    const price = parseInt(newPrice.replace(/[^\d]/g, ''), 10) || 0
+    const created = await createProduct({
+      name, category: newCategory, currentStock, minStock, price,
+      accountingGroup: newCategory === '店販' ? newAccountingGroup : null,
+    })
     setAdding(false)
     if (!created) { setAddError('商品の追加に失敗しました'); return }
-    setNewName(''); setNewStock(''); setNewMinStock(''); setNewCategory('店販'); setShowAddForm(false)
+    setNewName(''); setNewStock(''); setNewMinStock(''); setNewCategory('店販'); setNewPrice(''); setNewAccountingGroup(''); setShowAddForm(false)
     load()
   }
 
@@ -138,6 +146,8 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
     setEditName(p.name)
     setEditCategory(p.category)
     setEditMinStock(String(p.min_stock))
+    setEditPrice(String(p.price ?? 0))
+    setEditAccountingGroup(p.accounting_group ?? '')
   }
 
   async function handleSaveEdit() {
@@ -145,8 +155,12 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
     const minStock = Number(editMinStock)
     const name = editName.trim()
     if (!name || !Number.isFinite(minStock) || minStock < 0) return
+    const price = parseInt(editPrice.replace(/[^\d]/g, ''), 10) || 0
     setSavingEdit(true)
-    await updateProduct(editingId, { name, category: editCategory, minStock })
+    await updateProduct(editingId, {
+      name, category: editCategory, minStock, price,
+      accountingGroup: editCategory === '店販' ? editAccountingGroup : null,
+    })
     setSavingEdit(false)
     setEditingId(null)
     load()
@@ -257,6 +271,23 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
             <input placeholder="現在庫" type="number" inputMode="numeric" value={newStock} onChange={(e) => setNewStock(e.target.value)} style={inputStyle} />
             <input placeholder="最低在庫" type="number" inputMode="numeric" value={newMinStock} onChange={(e) => setNewMinStock(e.target.value)} style={inputStyle} />
           </div>
+          <input
+            placeholder="価格（円・店販を会計アシストで販売する場合）" type="number" inputMode="numeric"
+            value={newPrice} onChange={(e) => setNewPrice(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }}
+          />
+          {newCategory === '店販' && (
+            <input
+              placeholder="会計サブカテゴリー（例：スタイリング剤）未入力なら「その他」"
+              value={newAccountingGroup} onChange={(e) => setNewAccountingGroup(e.target.value)}
+              list="staff-accounting-group-options"
+              style={{ ...inputStyle, marginBottom: 8 }}
+            />
+          )}
+          <datalist id="staff-accounting-group-options">
+            <option value="スタイリング剤" />
+            <option value="シャンプー・ケア" />
+            <option value="その他" />
+          </datalist>
           {addError && <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8 }}>{addError}</p>}
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -392,6 +423,20 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
                         />
                       </div>
                       <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          type="number" inputMode="numeric" placeholder="価格（円）"
+                          value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
+                          style={{ ...inputStyle, flex: 1, padding: '7px 8px', fontSize: 13 }}
+                        />
+                        {editCategory === '店販' && (
+                          <input
+                            placeholder="サブカテゴリー" value={editAccountingGroup} onChange={(e) => setEditAccountingGroup(e.target.value)}
+                            list="staff-accounting-group-options"
+                            style={{ ...inputStyle, flex: 1, padding: '7px 8px', fontSize: 12 }}
+                          />
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           type="button" onClick={() => void handleSaveEdit()} disabled={savingEdit}
                           style={{ ...smallBtnStyle, flex: 1, padding: '7px 0', background: 'rgba(100,200,100,0.14)', border: '1px solid rgba(100,200,100,0.4)', color: '#80E060' }}
@@ -414,6 +459,7 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
                         </p>
                         <p style={{ fontSize: 10, color: pendingDelta !== 0 ? '#C9A24A' : '#777777', margin: 0, fontWeight: pendingDelta !== 0 ? 700 : 400 }}>
                           {p.category}
+                          {p.category === '店販' && ` ・¥${(p.price ?? 0).toLocaleString()}（${p.accounting_group?.trim() || 'その他'}）`}
                           {pendingDelta !== 0 && ` ・未確定 ${pendingDelta > 0 ? '+' : ''}${pendingDelta}`}
                         </p>
                       </div>

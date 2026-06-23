@@ -2,14 +2,13 @@ import { supabase } from '../lib/supabase'
 
 export type AccountingCategory = 'menu' | 'option' | 'retail'
 
+// 店販(retail)は銀二郎本部 products（category='店販'）を正として扱うようになったため、
+// accounting_items は menu / option 専用。既存の retail 行・retail_group 列はDBに残るが
+// （既存データは削除しない方針）、このストア／会計アシストUIからは読み書きしない。
 export interface AccountingItem {
   id: string
   name: string
   category: AccountingCategory
-  // retail_group: 店販(retail)商品の選択UI用サブカテゴリー（例：スタイリング剤、シャンプー・ケア）。
-  // menu/optionでは使用しない。固定enumではなく自由入力 — 新カテゴリーは商品マスタ管理で
-  // 文字列を入力するだけで増やせる（コード変更不要）。
-  retail_group: string | null
   price: number
   is_active: boolean
   sort_order: number
@@ -17,12 +16,7 @@ export interface AccountingItem {
   updated_at: string
 }
 
-/**
- * 商品マスタ取得。activeOnly=true で有効商品のみ（会計選択UI用）。
- * is_active が null/未設定の行は非表示にせず表示する側に倒す
- * （retail_group・price が null/未設定の行も対象外にはしない —
- * それぞれUI側で「その他」「¥0」にフォールバックする）。
- */
+/** 商品マスタ取得。activeOnly=true で有効商品のみ（会計選択UI用）。is_active が null/未設定の行は非表示にしない。 */
 export async function getAccountingItems(opts: { activeOnly?: boolean } = {}): Promise<AccountingItem[]> {
   try {
     const { data, error } = await supabase.from('accounting_items').select('*').order('category').order('sort_order')
@@ -34,43 +28,25 @@ export async function getAccountingItems(opts: { activeOnly?: boolean } = {}): P
   }
 }
 
-// accounting_items.retail_group は追加マイグレーション（schema.sql参照）が必要な列。
-// 未適用環境でも商品マスタの追加・編集が壊れないよう、列が無いと分かった時点でこの
-// プロセス内では以後 retail_group を送らないようにフォールバックする
-// （customerStore.ts の normalized_name と同じ防御パターン）。
-let retailGroupColumnAvailable = true
-
-function isUndefinedColumnError(error: unknown): boolean {
-  const e = error as { code?: string; message?: string } | null
-  return e?.code === '42703' || e?.code === 'PGRST204' || (e?.message ?? '').includes('retail_group')
-}
-
 export async function createAccountingItem(input: {
   name: string
   category: AccountingCategory
   price: number
-  retailGroup?: string | null
   sort_order?: number
 }): Promise<AccountingItem | null> {
   try {
-    const retailGroup = input.category === 'retail' ? (input.retailGroup?.trim() || null) : null
-    const basePayload = {
-      name: input.name,
-      category: input.category,
-      price: input.price,
-      sort_order: input.sort_order ?? 0,
-    }
-    const payload = retailGroupColumnAvailable ? { ...basePayload, retail_group: retailGroup } : basePayload
-    const { data, error } = await supabase.from('accounting_items').insert(payload).select().single()
-    if (!error && data) return data as AccountingItem
-    if (error && retailGroupColumnAvailable && isUndefinedColumnError(error)) {
-      retailGroupColumnAvailable = false
-      const { data: retryData, error: retryError } = await supabase
-        .from('accounting_items').insert(basePayload).select().single()
-      if (retryError || !retryData) return null
-      return retryData as AccountingItem
-    }
-    return null
+    const { data, error } = await supabase
+      .from('accounting_items')
+      .insert({
+        name: input.name,
+        category: input.category,
+        price: input.price,
+        sort_order: input.sort_order ?? 0,
+      })
+      .select()
+      .single()
+    if (error || !data) return null
+    return data as AccountingItem
   } catch {
     return null
   }
@@ -78,79 +54,19 @@ export async function createAccountingItem(input: {
 
 export async function updateAccountingItem(
   id: string,
-  patch: Partial<Pick<AccountingItem, 'name' | 'price' | 'category' | 'is_active' | 'sort_order' | 'retail_group'>>,
+  patch: Partial<Pick<AccountingItem, 'name' | 'price' | 'category' | 'is_active' | 'sort_order'>>,
 ): Promise<AccountingItem | null> {
   try {
-    const { retail_group, ...rest } = patch
-    const fullPatch = { ...rest, updated_at: new Date().toISOString() }
-    const payload = retailGroupColumnAvailable && retail_group !== undefined
-      ? { ...fullPatch, retail_group }
-      : fullPatch
-
-    const { data, error } = await supabase.from('accounting_items').update(payload).eq('id', id).select().single()
-    if (!error && data) return data as AccountingItem
-    if (error && retailGroupColumnAvailable && isUndefinedColumnError(error)) {
-      retailGroupColumnAvailable = false
-      const { data: retryData, error: retryError } = await supabase
-        .from('accounting_items').update(fullPatch).eq('id', id).select().single()
-      if (retryError || !retryData) return null
-      return retryData as AccountingItem
-    }
-    return null
+    const { data, error } = await supabase
+      .from('accounting_items')
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error || !data) return null
+    return data as AccountingItem
   } catch {
     return null
-  }
-}
-
-// ── 店販商品名→retail_group 自動分類 ────────────────────────────────────────
-// 手入力での「商品マスタを編集」が大変なので、商品名にキーワードが含まれるかどうかで
-// retail_group を推定する。スタイリング剤を先に判定（キーワード重複は無いが、念のため
-// この順序で判定する）。
-const STYLING_KEYWORDS = [
-  'BROSH', 'DOORS', 'グリース', 'ポマード', 'ジェル', 'ワックス', 'スプレー', 'ムース',
-  'ヘアクリーム', 'ハード', 'NWDY', 'VO5', 'クックグリース', 'ワコマリア',
-]
-const CARE_KEYWORDS = [
-  'シャンプー', 'トリートメント', 'ヘアオイル', 'セラム', 'モイスト', 'シャイン', '紫シャンプー', 'ミュナス',
-]
-const OTHER_GROUP = 'その他'
-
-export function classifyRetailGroup(name: string): string {
-  if (STYLING_KEYWORDS.some((k) => name.includes(k))) return 'スタイリング剤'
-  if (CARE_KEYWORDS.some((k) => name.includes(k))) return 'シャンプー・ケア'
-  return OTHER_GROUP
-}
-
-export interface AutoClassifyResult {
-  updated: number
-  total: number
-}
-
-/**
- * category='店販'・有効(is_active!==false)・retail_group が未設定（null/空文字）の商品だけを
- * 対象に、商品名ルールで retail_group を一括設定する。すでに人が設定したグループは上書きしない。
- */
-export async function autoClassifyRetailGroups(): Promise<AutoClassifyResult> {
-  try {
-    const { data, error } = await supabase.from('accounting_items').select('*').eq('category', 'retail')
-    if (error || !data) return { updated: 0, total: 0 }
-
-    const targets = (data as AccountingItem[]).filter(
-      (i) => i.is_active !== false && (!i.retail_group || i.retail_group.trim() === ''),
-    )
-
-    let updated = 0
-    for (const item of targets) {
-      const group = classifyRetailGroup(item.name)
-      const result = await updateAccountingItem(item.id, { retail_group: group })
-      if (result) updated++
-    }
-
-    console.log(`[accountingStore] 店販自動分類: ${updated}/${targets.length}件 更新`)
-    return { updated, total: targets.length }
-  } catch (e) {
-    console.error('[accountingStore] autoClassifyRetailGroups error:', e)
-    return { updated: 0, total: 0 }
   }
 }
 

@@ -632,6 +632,21 @@ update public.products
 set is_active = true
 where is_active is null;
 
+-- ── 会計アシスト店販マスタ統合（Phase9）───────────────────────────────────────
+-- products(category='店販') を会計アシストの店販マスタの正とする。
+-- price: 販売価格。accounting_group: 会計アシスト店販選択UI用サブカテゴリー
+-- （スタイリング剤／シャンプー・ケア／その他。null/空文字は「その他」表示にフォールバック）。
+-- 店販以外のカテゴリーでは price=0・accounting_group=null のままで構わない。
+
+alter table public.products
+  add column if not exists price integer not null default 0;
+
+alter table public.products
+  add column if not exists accounting_group text;
+
+create index if not exists products_accounting_group_idx
+  on public.products (accounting_group);
+
 alter table public.products enable row level security;
 
 create policy "allow_all" on public.products

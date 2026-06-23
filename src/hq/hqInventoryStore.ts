@@ -14,6 +14,11 @@ export interface Product {
   is_active: boolean
   current_stock: number
   min_stock: number
+  // price / accounting_group: category='店販'の商品を会計アシストで販売するための価格と
+  // サブカテゴリー（スタイリング剤／シャンプー・ケア／その他）。店販以外のカテゴリーでは
+  // 使用しない。products を会計アシストの店販マスタの正として統合したため、ここに持つ。
+  price: number
+  accounting_group: string | null
   created_at: string
   updated_at: string
 }
@@ -63,25 +68,45 @@ export async function getProducts(): Promise<Product[]> {
   }
 }
 
+// products.price / accounting_group は追加マイグレーション（schema.sql参照）が必要な列。
+// 未適用環境でも商品追加・編集が壊れないよう、列が無いと分かった時点でこのプロセス内では
+// 以後 price/accounting_group を送らないようにフォールバックする
+// （customerStore.ts の normalized_name と同じ防御パターン）。
+let priceColumnsAvailable = true
+
+function isUndefinedColumnError(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null
+  return e?.code === '42703' || e?.code === 'PGRST204'
+    || (e?.message ?? '').includes('price') || (e?.message ?? '').includes('accounting_group')
+}
+
 export async function createProduct(input: {
   name: string
   category: ProductCategory
   currentStock: number
   minStock: number
+  price?: number
+  accountingGroup?: string | null
 }): Promise<Product | null> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .insert({
-        name: input.name,
-        category: input.category,
-        current_stock: input.currentStock,
-        min_stock: input.minStock,
-      })
-      .select()
-      .single()
-    if (error || !data) return null
-    return data as Product
+    const basePayload = {
+      name: input.name,
+      category: input.category,
+      current_stock: input.currentStock,
+      min_stock: input.minStock,
+    }
+    const extra = { price: input.price ?? 0, accounting_group: input.accountingGroup?.trim() || null }
+    const payload = priceColumnsAvailable ? { ...basePayload, ...extra } : basePayload
+
+    const { data, error } = await supabase.from('products').insert(payload).select().single()
+    if (!error && data) return data as Product
+    if (error && priceColumnsAvailable && isUndefinedColumnError(error)) {
+      priceColumnsAvailable = false
+      const { data: retryData, error: retryError } = await supabase.from('products').insert(basePayload).select().single()
+      if (retryError || !retryData) return null
+      return retryData as Product
+    }
+    return null
   } catch {
     return null
   }
@@ -89,7 +114,7 @@ export async function createProduct(input: {
 
 export async function updateProduct(
   id: string,
-  patch: { name?: string; category?: ProductCategory; minStock?: number },
+  patch: { name?: string; category?: ProductCategory; minStock?: number; price?: number; accountingGroup?: string | null },
 ): Promise<Product | null> {
   try {
     const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -97,14 +122,20 @@ export async function updateProduct(
     if (patch.category !== undefined) dbPatch.category = patch.category
     if (patch.minStock !== undefined) dbPatch.min_stock = patch.minStock
 
-    const { data, error } = await supabase
-      .from('products')
-      .update(dbPatch)
-      .eq('id', id)
-      .select()
-      .single()
-    if (error || !data) return null
-    return data as Product
+    const extraPatch: Record<string, unknown> = {}
+    if (patch.price !== undefined) extraPatch.price = patch.price
+    if (patch.accountingGroup !== undefined) extraPatch.accounting_group = patch.accountingGroup?.trim() || null
+    const payload = priceColumnsAvailable ? { ...dbPatch, ...extraPatch } : dbPatch
+
+    const { data, error } = await supabase.from('products').update(payload).eq('id', id).select().single()
+    if (!error && data) return data as Product
+    if (error && priceColumnsAvailable && isUndefinedColumnError(error)) {
+      priceColumnsAvailable = false
+      const { data: retryData, error: retryError } = await supabase.from('products').update(dbPatch).eq('id', id).select().single()
+      if (retryError || !retryData) return null
+      return retryData as Product
+    }
+    return null
   } catch {
     return null
   }

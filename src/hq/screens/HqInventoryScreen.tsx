@@ -64,6 +64,8 @@ export function HqInventoryScreen() {
   const [newCategory, setNewCategory] = useState<ProductCategory>('店販')
   const [newStock, setNewStock] = useState('')
   const [newMinStock, setNewMinStock] = useState('')
+  const [newPrice, setNewPrice] = useState('')
+  const [newAccountingGroup, setNewAccountingGroup] = useState('')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
 
@@ -71,6 +73,8 @@ export function HqInventoryScreen() {
   const [editName, setEditName] = useState('')
   const [editCategory, setEditCategory] = useState<ProductCategory>('店販')
   const [editMinStock, setEditMinStock] = useState('')
+  const [editPrice, setEditPrice] = useState('')
+  const [editAccountingGroup, setEditAccountingGroup] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
   const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({})
@@ -116,10 +120,14 @@ export function HqInventoryScreen() {
 
     setAdding(true)
     setAddError(null)
-    const created = await createProduct({ name, category: newCategory, currentStock, minStock })
+    const price = parseInt(newPrice.replace(/[^\d]/g, ''), 10) || 0
+    const created = await createProduct({
+      name, category: newCategory, currentStock, minStock, price,
+      accountingGroup: newCategory === '店販' ? newAccountingGroup : null,
+    })
     setAdding(false)
     if (!created) { setAddError('商品の追加に失敗しました'); return }
-    setNewName(''); setNewStock(''); setNewMinStock(''); setNewCategory('店販')
+    setNewName(''); setNewStock(''); setNewMinStock(''); setNewCategory('店販'); setNewPrice(''); setNewAccountingGroup('')
     load()
   }
 
@@ -128,6 +136,8 @@ export function HqInventoryScreen() {
     setEditName(p.name)
     setEditCategory(p.category)
     setEditMinStock(String(p.min_stock))
+    setEditPrice(String(p.price ?? 0))
+    setEditAccountingGroup(p.accounting_group ?? '')
   }
 
   async function handleSaveEdit() {
@@ -135,8 +145,12 @@ export function HqInventoryScreen() {
     const minStock = Number(editMinStock)
     const name = editName.trim()
     if (!name || !Number.isFinite(minStock) || minStock < 0) return
+    const price = parseInt(editPrice.replace(/[^\d]/g, ''), 10) || 0
     setSavingEdit(true)
-    await updateProduct(editingId, { name, category: editCategory, minStock })
+    await updateProduct(editingId, {
+      name, category: editCategory, minStock, price,
+      accountingGroup: editCategory === '店販' ? editAccountingGroup : null,
+    })
     setSavingEdit(false)
     setEditingId(null)
     load()
@@ -196,6 +210,28 @@ export function HqInventoryScreen() {
             onChange={(e) => setNewMinStock(e.target.value)}
             style={{ ...inputStyle, flex: '1 1 90px' }}
           />
+          <input
+            placeholder="価格（円）"
+            type="number"
+            inputMode="numeric"
+            value={newPrice}
+            onChange={(e) => setNewPrice(e.target.value)}
+            style={{ ...inputStyle, flex: '1 1 100px' }}
+          />
+          {newCategory === '店販' && (
+            <input
+              placeholder="会計サブカテゴリー（例：スタイリング剤）"
+              value={newAccountingGroup}
+              onChange={(e) => setNewAccountingGroup(e.target.value)}
+              list="hq-accounting-group-options"
+              style={{ ...inputStyle, flex: '1 1 160px' }}
+            />
+          )}
+          <datalist id="hq-accounting-group-options">
+            <option value="スタイリング剤" />
+            <option value="シャンプー・ケア" />
+            <option value="その他" />
+          </datalist>
           <button type="button" onClick={handleAdd} disabled={adding} style={{ ...buttonStyle, opacity: adding ? 0.6 : 1 }}>
             {adding ? '追加中…' : '追加'}
           </button>
@@ -246,7 +282,7 @@ export function HqInventoryScreen() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: HQ_SANS }}>
                       <thead>
                         <tr>
-                          {['商品名', 'カテゴリー', '現在庫', '最低在庫', '状態', '在庫操作', ''].map((label) => (
+                          {['商品名', 'カテゴリー', '現在庫', '最低在庫', '価格', 'サブカテゴリー', '状態', '在庫操作', ''].map((label) => (
                             <th key={label} style={{
                               textAlign: 'left', fontSize: 10, letterSpacing: '0.08em',
                               color: HQ_COLORS.textMute, fontWeight: 500, padding: '0 8px 10px 0',
@@ -295,6 +331,35 @@ export function HqInventoryScreen() {
                                   />
                                 ) : (
                                   <span style={{ fontFamily: HQ_MONO, color: HQ_COLORS.textSecondary }}>{p.min_stock}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5 }}>
+                                {isEditing ? (
+                                  <input
+                                    type="number" inputMode="numeric"
+                                    value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
+                                    style={{ ...inputStyle, width: 80 }}
+                                  />
+                                ) : (
+                                  <span style={{ fontFamily: HQ_MONO, color: HQ_COLORS.textSecondary }}>¥{(p.price ?? 0).toLocaleString()}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5 }}>
+                                {isEditing ? (
+                                  editCategory === '店販' ? (
+                                    <input
+                                      value={editAccountingGroup} onChange={(e) => setEditAccountingGroup(e.target.value)}
+                                      list="hq-accounting-group-options"
+                                      placeholder="その他"
+                                      style={{ ...inputStyle, width: 130 }}
+                                    />
+                                  ) : (
+                                    <span style={{ color: HQ_COLORS.textMute }}>—</span>
+                                  )
+                                ) : (
+                                  <span style={{ color: HQ_COLORS.textSecondary }}>
+                                    {p.category === '店販' ? (p.accounting_group?.trim() || 'その他') : '—'}
+                                  </span>
                                 )}
                               </td>
                               <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5, whiteSpace: 'nowrap', color: STATUS_COLOR[status] }}>

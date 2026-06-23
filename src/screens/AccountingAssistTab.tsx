@@ -9,14 +9,14 @@ import type { CustomerRow } from '../utils/customerStore'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
 import {
   getAccountingItems, createAccountingItem, updateAccountingItem, createAccountingSession, setAccountingSessionStatus,
-  autoClassifyRetailGroups,
 } from '../utils/accountingStore'
 import type { AccountingItem, AccountingCategory, PaymentMethod } from '../utils/accountingStore'
 import {
   QrCameraScanner, parseQR, saveUsageLog, fetchTodayUsed, upsertLastVisitDate, playSuccessSound,
 } from './AdminScreen'
 import type { TicketUseQRData, MaintenanceCouponQRData, PassportQRData } from './AdminScreen'
-import { deductStockForRetailSale } from '../hq/hqInventoryStore'
+import { deductStockForRetailSale, getProducts } from '../hq/hqInventoryStore'
+import type { Product } from '../hq/hqInventoryStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const QR_EL_ID_ACCOUNTING = 'gj-qr-reader-accounting'
@@ -38,13 +38,20 @@ const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
 
 const RETAIL_GROUP_FALLBACK = 'その他'
 
-/** 店販商品をretail_group（未設定は「その他」）でグルーピングし、出現順（sort_order順）を保つ。 */
-function getRetailGroups(retailItems: AccountingItem[]): string[] {
+/** 会計の選択カート用に共通化した行アイテム形（menu/option は accounting_items、retail は products由来）。 */
+interface SelectableLineItem {
+  id: string
+  name: string
+  price: number
+  category: AccountingCategory
+}
+
+/** 店販商品を accounting_group（未設定は「その他」）でグルーピングし、出現順を保つ。 */
+function getAccountingGroups(retailLineItems: { accountingGroup: string }[]): string[] {
   const seen = new Set<string>()
   const groups: string[] = []
-  for (const item of retailItems) {
-    const g = item.retail_group?.trim() || RETAIL_GROUP_FALLBACK
-    if (!seen.has(g)) { seen.add(g); groups.push(g) }
+  for (const item of retailLineItems) {
+    if (!seen.has(item.accountingGroup)) { seen.add(item.accountingGroup); groups.push(item.accountingGroup) }
   }
   return groups
 }
@@ -66,6 +73,7 @@ interface AccountingCustomer {
 
 export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const [items, setItems] = useState<AccountingItem[]>([])
+  const [retailProducts, setRetailProducts] = useState<Product[]>([])
   const [itemsLoading, setItemsLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -96,7 +104,14 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
 
   const loadItems = useCallback(async () => {
     setItemsLoading(true)
-    setItems(await getAccountingItems({ activeOnly: true }))
+    const [accItems, products] = await Promise.all([
+      getAccountingItems({ activeOnly: true }),
+      getProducts(),
+    ])
+    // 店販(retail)は products(category='店販') を正として使うため、accounting_items 側の
+    // retail行（既存データ）はここでは menu/option 用の一覧から除外する。
+    setItems(accItems.filter(i => i.category !== 'retail'))
+    setRetailProducts(products.filter(p => p.category === '店販'))
     setItemsLoading(false)
   }, [])
 
@@ -163,7 +178,11 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
     })
   }
 
-  const selectedItems = items.filter(i => selectedIds.has(i.id))
+  const allLineItems: SelectableLineItem[] = [
+    ...items.map(i => ({ id: i.id, name: i.name, price: i.price ?? 0, category: i.category })),
+    ...retailProducts.map(p => ({ id: p.id, name: p.name, price: p.price ?? 0, category: 'retail' as const })),
+  ]
+  const selectedItems = allLineItems.filter(i => selectedIds.has(i.id))
   const subtotal = selectedItems.reduce((sum, i) => sum + i.price, 0)
   const discountTotal = discount?.amount ?? 0
   const total = Math.max(0, subtotal - discountTotal)
@@ -591,10 +610,13 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         ))
       )}
 
-      {/* ── 商品選択：店販（カテゴリータップ→該当商品のみ表示） ── */}
+      {/* ── 商品選択：店販（products由来。カテゴリータップ→該当商品のみ表示） ── */}
       {!itemsLoading && (() => {
-        const retailItems = byCategory('retail')
-        const retailGroups = getRetailGroups(retailItems)
+        const retailLineItems = retailProducts.map(p => ({
+          id: p.id, name: p.name, price: p.price ?? 0,
+          accountingGroup: p.accounting_group?.trim() || RETAIL_GROUP_FALLBACK,
+        }))
+        const retailGroups = getAccountingGroups(retailLineItems)
         return (
           <div style={{ marginBottom: 22 }}>
             <p style={{ fontSize: 12, letterSpacing: '0.16em', color: '#ffffff', fontWeight: 700, marginBottom: 10 }}>
@@ -604,7 +626,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
             {retailGroupView === null ? (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {retailGroups.map(group => {
-                  const count = retailItems.filter(i => (i.retail_group?.trim() || RETAIL_GROUP_FALLBACK) === group).length
+                  const count = retailLineItems.filter(i => i.accountingGroup === group).length
                   return (
                     <button
                       key={group}
@@ -643,8 +665,8 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
                   {retailGroupView}
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  {retailItems
-                    .filter(i => (i.retail_group?.trim() || RETAIL_GROUP_FALLBACK) === retailGroupView)
+                  {retailLineItems
+                    .filter(i => i.accountingGroup === retailGroupView)
                     .map(item => {
                       const selected = selectedIds.has(item.id)
                       return (
@@ -664,7 +686,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
                             {item.name}
                           </p>
                           <p style={{ fontSize: 13, fontWeight: 700, color: selected ? '#C9A24A' : '#e5e5e5' }}>
-                            ¥{(item.price ?? 0).toLocaleString()}
+                            ¥{item.price.toLocaleString()}
                           </p>
                         </button>
                       )
@@ -866,12 +888,8 @@ function ItemManagerModal({
   const [newName, setNewName] = useState('')
   const [newCategory, setNewCategory] = useState<AccountingCategory>('menu')
   const [newPrice, setNewPrice] = useState('')
-  const [newRetailGroup, setNewRetailGroup] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const [autoClassifying, setAutoClassifying] = useState(false)
-  const [autoClassifyResult, setAutoClassifyResult] = useState<string | null>(null)
 
   const loadAll = useCallback(async () => {
     setAllItems(await getAccountingItems())
@@ -884,13 +902,10 @@ function ItemManagerModal({
     if (!newName.trim() || price <= 0) { setError('商品名と価格を入力してください。'); return }
     setSaving(true)
     setError(null)
-    const created = await createAccountingItem({
-      name: newName.trim(), category: newCategory, price,
-      retailGroup: newCategory === 'retail' ? newRetailGroup : null,
-    })
+    const created = await createAccountingItem({ name: newName.trim(), category: newCategory, price })
     setSaving(false)
     if (!created) { setError('追加に失敗しました。'); return }
-    setNewName(''); setNewPrice(''); setNewRetailGroup('')
+    setNewName(''); setNewPrice('')
     await loadAll()
     onChanged()
   }
@@ -902,30 +917,9 @@ function ItemManagerModal({
     if (updated) { await loadAll(); onChanged() }
   }
 
-  async function handleUpdateRetailGroup(item: AccountingItem, groupStr: string) {
-    const retail_group = groupStr.trim() || null
-    if (retail_group === (item.retail_group ?? null)) return
-    const updated = await updateAccountingItem(item.id, { retail_group })
-    if (updated) { await loadAll(); onChanged() }
-  }
-
   async function handleToggleActive(item: AccountingItem) {
     const updated = await updateAccountingItem(item.id, { is_active: !item.is_active })
     if (updated) { await loadAll(); onChanged() }
-  }
-
-  async function handleAutoClassify() {
-    setAutoClassifying(true)
-    setAutoClassifyResult(null)
-    const { updated, total } = await autoClassifyRetailGroups()
-    setAutoClassifying(false)
-    setAutoClassifyResult(
-      total === 0
-        ? '対象商品はありませんでした（店販商品はすべて分類済みです）'
-        : `${updated}/${total}件の店販商品にサブカテゴリーを自動設定しました`,
-    )
-    await loadAll()
-    onChanged()
   }
 
   void items // 親の有効商品一覧は再読込トリガーとしてのみ使用
@@ -936,27 +930,12 @@ function ItemManagerModal({
         initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
         style={{ width: '100%', maxWidth: 480, maxHeight: '88vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', background: '#0A0A0A', border: '1px solid rgba(201,162,74,0.28)', padding: 20 }}
       >
-        <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#ffffff', marginBottom: 16 }}>
-          商品マスタ管理
+        <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
+          商品マスタ管理（メニュー・オプション）
         </p>
-
-        {/* 店販カテゴリ自動分類 */}
-        <button
-          type="button"
-          onClick={() => void handleAutoClassify()}
-          disabled={autoClassifying}
-          style={{
-            width: '100%', padding: '12px 0', borderRadius: 12, marginBottom: 8,
-            background: 'rgba(201,162,74,0.12)', border: '1px solid rgba(201,162,74,0.4)',
-            color: '#C9A24A', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.06em',
-            cursor: autoClassifying ? 'default' : 'pointer',
-          }}
-        >
-          {autoClassifying ? '分類中…' : '店販カテゴリを自動分類'}
-        </button>
-        {autoClassifyResult && (
-          <p style={{ fontSize: 12, color: '#e5e5e5', marginBottom: 18, textAlign: 'center' }}>{autoClassifyResult}</p>
-        )}
+        <p style={{ fontSize: 11, color: '#999999', marginBottom: 16 }}>
+          店販商品は銀二郎本部／スタッフ端末の「在庫管理」から追加・編集してください。
+        </p>
 
         {/* 新規追加 */}
         <div style={{ borderRadius: 14, background: '#000000', border: '1px solid rgba(201,162,74,0.2)', padding: 14, marginBottom: 18 }}>
@@ -966,7 +945,7 @@ function ItemManagerModal({
             style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', color: '#ffffff', fontSize: 14, marginBottom: 8, outline: 'none' }}
           />
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            {(['menu', 'option', 'retail'] as AccountingCategory[]).map(cat => (
+            {(['menu', 'option'] as AccountingCategory[]).map(cat => (
               <button
                 key={cat} type="button" onClick={() => setNewCategory(cat)}
                 style={{
@@ -982,21 +961,8 @@ function ItemManagerModal({
           </div>
           <input
             type="text" inputMode="numeric" value={newPrice} onChange={e => setNewPrice(e.target.value)} placeholder="価格（円）"
-            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', color: '#ffffff', fontSize: 14, marginBottom: newCategory === 'retail' ? 8 : 10, outline: 'none' }}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', color: '#ffffff', fontSize: 14, marginBottom: 10, outline: 'none' }}
           />
-          {newCategory === 'retail' && (
-            <input
-              type="text" value={newRetailGroup} onChange={e => setNewRetailGroup(e.target.value)}
-              placeholder="店販サブカテゴリー（例：スタイリング剤）未入力なら「その他」"
-              list="retail-group-options"
-              style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', color: '#ffffff', fontSize: 13, marginBottom: 10, outline: 'none' }}
-            />
-          )}
-          <datalist id="retail-group-options">
-            {Array.from(new Set((allItems ?? []).filter(i => i.category === 'retail' && i.retail_group?.trim()).map(i => i.retail_group as string))).map(g => (
-              <option key={g} value={g} />
-            ))}
-          </datalist>
           {error && <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8 }}>{error}</p>}
           <button
             type="button" onClick={() => void handleAdd()} disabled={saving}
@@ -1010,7 +976,7 @@ function ItemManagerModal({
         {allItems === null ? (
           <p style={{ color: '#e5e5e5', fontSize: 13, textAlign: 'center' }}>読み込み中…</p>
         ) : (
-          (['menu', 'option', 'retail'] as AccountingCategory[]).map(cat => (
+          (['menu', 'option'] as AccountingCategory[]).map(cat => (
             <div key={cat} style={{ marginBottom: 16 }}>
               <p style={{ fontSize: 11, letterSpacing: '0.1em', color: '#ffffff', fontWeight: 700, marginBottom: 8 }}>{CATEGORY_LABELS[cat]}</p>
               {allItems.filter(i => i.category === cat).map(item => (
@@ -1018,14 +984,6 @@ function ItemManagerModal({
                   <p style={{ flex: '1 1 auto', minWidth: 0, fontSize: 13, color: item.is_active ? '#ffffff' : '#999999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {item.name}
                   </p>
-                  {cat === 'retail' && (
-                    <input
-                      type="text" defaultValue={item.retail_group ?? ''} placeholder="その他"
-                      list="retail-group-options"
-                      onBlur={e => void handleUpdateRetailGroup(item, e.target.value)}
-                      style={{ width: 110, boxSizing: 'border-box', padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', color: '#C9A24A', fontSize: 12, outline: 'none' }}
-                    />
-                  )}
                   <input
                     type="text" inputMode="numeric" defaultValue={String(item.price ?? 0)}
                     onBlur={e => void handleUpdatePrice(item, e.target.value)}
