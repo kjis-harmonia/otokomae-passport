@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { getJapanDateString } from '../utils/dateUtils'
 import { getHqDashboardData } from './hqDataStore'
-import type { RankingItem, StylistSummary } from './hqDataStore'
+import type { PaymentBreakdownEntry, RankingItem, StylistSummary } from './hqDataStore'
 import { getProducts, splitStockAlerts } from './hqInventoryStore'
 
 // 銀二郎本部 — 日報（Phase7）
@@ -24,6 +24,7 @@ export interface DailyReport {
   menu_summary: RankingItem[]
   retail_summary: { name: string; count: number }[]
   inventory_alerts: InventoryAlertEntry[]
+  payment_summary: PaymentBreakdownEntry[]
   created_at: string
 }
 
@@ -60,6 +61,7 @@ export async function generateAndSaveDailyReport(): Promise<GenerateDailyReportR
       menu_summary: dashboard.menuRanking,
       retail_summary: dashboard.retailRanking.map((r) => ({ name: r.name, count: r.count })),
       inventory_alerts: inventoryAlerts,
+      payment_summary: dashboard.paymentBreakdown,
     }
 
     // 会計データはあるはずなのに日報が空になる、といった原因追跡用に集計結果を必ずログ出力する。

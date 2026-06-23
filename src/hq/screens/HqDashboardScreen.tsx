@@ -195,6 +195,21 @@ export function HqDashboardScreen() {
         </div>
       </HqPanel>
 
+      <HqPanel title="支払い方法別売上（本日）" code="PAYMENT">
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+          {data.paymentBreakdown.map((p) => (
+            <div key={p.method} style={{ flex: '1 1 0', minWidth: 100 }}>
+              <p style={{ fontFamily: HQ_SANS, fontSize: 10, letterSpacing: '0.1em', color: HQ_COLORS.textSecondary, margin: 0, marginBottom: 4 }}>
+                {p.label}
+              </p>
+              <p style={{ fontFamily: HQ_MONO, fontSize: 16, fontWeight: 700, color: HQ_COLORS.goldHi, margin: 0 }}>
+                {yen(p.total)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </HqPanel>
+
       <div style={{ display: 'flex', gap: 18, alignItems: 'stretch' }}>
         <HqPanel title="人気メニュー（本日）" code="TOP5" style={{ flex: '1 1 0' }}>
           {data.menuRanking.length === 0 ? (

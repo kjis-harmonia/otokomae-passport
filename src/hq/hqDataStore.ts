@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { getJapanDateString } from '../utils/dateUtils'
 import { getShopStatus } from '../utils/shopStatusStore'
 import type { ShopStatusValue } from '../utils/shopStatusStore'
+import type { PaymentMethod } from '../utils/accountingStore'
 
 // 銀二郎本部 — 経営ダッシュボード実データ集計
 // accounting_sessions / accounting_session_items の status='completed' のみを集計対象とする。
@@ -24,6 +25,30 @@ export interface RankingItem {
   count: number
 }
 
+export interface PaymentBreakdownEntry {
+  method: PaymentMethod
+  label: string
+  total: number
+}
+
+const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: '現金',
+  credit: 'クレジット',
+  qr: 'QR',
+}
+
+const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'credit', 'qr']
+
+function buildPaymentBreakdown(sessions: { payment_method?: string | null; total: number | null }[]): PaymentBreakdownEntry[] {
+  return PAYMENT_METHODS.map((method) => ({
+    method,
+    label: PAYMENT_METHOD_LABELS[method],
+    total: sessions
+      .filter((s) => s.payment_method === method)
+      .reduce((sum, s) => sum + (s.total ?? 0), 0),
+  }))
+}
+
 export interface HqDashboardData {
   todaySales: number
   todayVisitors: number
@@ -33,6 +58,7 @@ export interface HqDashboardData {
   stylists: StylistSummary[]
   menuRanking: RankingItem[]
   retailRanking: RankingItem[]
+  paymentBreakdown: PaymentBreakdownEntry[]
 }
 
 function jstBoundaryISO(jstDateStr: string): string {
@@ -130,7 +156,7 @@ export async function getHqDashboardData(): Promise<HqDashboardData> {
   const [todayRes, monthRes, shopStatusRow] = await Promise.all([
     supabase
       .from('accounting_sessions')
-      .select('id, total, stylist_name')
+      .select('id, total, stylist_name, payment_method')
       .eq('status', 'completed')
       .gte('created_at', jstBoundaryISO(todayStr))
       .lt('created_at', jstBoundaryISO(tomorrowStr)),
@@ -193,6 +219,7 @@ export async function getHqDashboardData(): Promise<HqDashboardData> {
     stylists,
     menuRanking,
     retailRanking,
+    paymentBreakdown: buildPaymentBreakdown(todaySessions),
   }
 }
 

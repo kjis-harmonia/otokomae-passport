@@ -174,6 +174,22 @@ function DailyReportDetail({ report }: { report: DailyReport }) {
       </div>
 
       <div>
+        <ReportSectionTitle>支払い方法別売上</ReportSectionTitle>
+        {report.payment_summary.length === 0 ? (
+          <ReportEmpty />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {report.payment_summary.map((p) => (
+              <div key={p.method} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textPrimary }}>{p.label}</span>
+                <span style={{ fontFamily: HQ_MONO, fontSize: 12.5, color: HQ_COLORS.goldHi }}>{yen(p.total)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
         <ReportSectionTitle>スタイリスト</ReportSectionTitle>
         {report.stylist_summary.length === 0 ? (
           <ReportEmpty />

@@ -78,11 +78,14 @@ export interface AccountingSessionItemInput {
 
 export type AccountingSessionStatus = 'pending' | 'completed' | 'failed'
 
+export type PaymentMethod = 'cash' | 'credit' | 'qr'
+
 export interface CreateAccountingSessionInput {
   user_id: string | null
   customer_name: string | null
   staff_name: string
   stylist_name: string
+  payment_method: PaymentMethod
   subtotal: number
   discount_total: number
   total: number
@@ -111,6 +114,7 @@ export async function createAccountingSession(input: CreateAccountingSessionInpu
         customer_name: input.customer_name,
         staff_name: input.staff_name,
         stylist_name: input.stylist_name,
+        payment_method: input.payment_method,
         status: 'pending',
         subtotal: input.subtotal,
         discount_total: input.discount_total,

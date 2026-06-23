@@ -7,7 +7,7 @@ import { TICKET_TYPE_LABELS } from '../data/ticket'
 import {
   getAccountingItems, createAccountingItem, updateAccountingItem, createAccountingSession, setAccountingSessionStatus,
 } from '../utils/accountingStore'
-import type { AccountingItem, AccountingCategory } from '../utils/accountingStore'
+import type { AccountingItem, AccountingCategory, PaymentMethod } from '../utils/accountingStore'
 import {
   QrCameraScanner, parseQR, saveUsageLog, fetchTodayUsed, upsertLastVisitDate, playSuccessSound,
 } from './AdminScreen'
@@ -25,6 +25,12 @@ const CATEGORY_LABELS: Record<AccountingCategory, string> = {
 
 // 施術担当（売上集計の担当別フィルタ用。LIVE STATUSの座席名と揃える）
 const STYLISTS = ['テイテイ', '銀二郎', 'フリー'] as const
+
+const PAYMENT_METHODS: { id: PaymentMethod; label: string }[] = [
+  { id: 'cash',   label: '現金' },
+  { id: 'credit', label: 'クレジット' },
+  { id: 'qr',     label: 'QR' },
+]
 
 interface AppliedDiscount {
   ticketId: string | null   // null = メンテナンスクーポン（ticket行を持たない）
@@ -49,6 +55,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const [customer, setCustomer] = useState<AccountingCustomer | null>(null)
   const [discount, setDiscount] = useState<AppliedDiscount | null>(null)
   const [stylistName, setStylistName] = useState<string | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null)
 
   const [showScanner, setShowScanner] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
@@ -81,7 +88,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const subtotal = selectedItems.reduce((sum, i) => sum + i.price, 0)
   const discountTotal = discount?.amount ?? 0
   const total = Math.max(0, subtotal - discountTotal)
-  const canComplete = staffId.trim() !== '' && stylistName !== null && selectedItems.length > 0 && !completing
+  const canComplete = staffId.trim() !== '' && stylistName !== null && paymentMethod !== null && selectedItems.length > 0 && !completing
 
   async function handleScan(text: string) {
     setScanLoading(true)
@@ -168,6 +175,10 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
 
   async function handleComplete() {
     if (!canComplete) return
+    if (!paymentMethod) {
+      setCompleteError('支払い方法を選択してください')
+      return
+    }
     setCompleting(true)
     setCompleteError(null)
     const today = getJapanDateString()
@@ -204,6 +215,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         customer_name: customer?.name ?? null,
         staff_name: staffId,
         stylist_name: stylistName ?? '',
+        payment_method: paymentMethod,
         subtotal,
         discount_total: discountTotal,
         total,
@@ -293,6 +305,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         setCustomer(null)
         setDiscount(null)
         setStylistName(null)
+        setPaymentMethod(null)
       }, 2200)
     } catch (err) {
       setCompleteError(`会計完了に失敗しました（${err instanceof Error ? err.message : String(err)}）`)
@@ -458,6 +471,30 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           </div>
         )}
 
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          {PAYMENT_METHODS.map(m => {
+            const selected = paymentMethod === m.id
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setPaymentMethod(m.id)}
+                style={{
+                  flex: 1, padding: '10px 4px', borderRadius: 10, textAlign: 'center',
+                  background: selected ? 'rgba(201,162,74,0.18)' : 'rgba(255,255,255,0.04)',
+                  border: `1.5px solid ${selected ? '#C9A24A' : 'rgba(255,255,255,0.12)'}`,
+                  boxShadow: selected ? '0 0 14px rgba(201,162,74,0.30)' : 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, color: selected ? '#C9A24A' : '#e5e5e5' }}>
+                  {m.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
           <span style={{ fontSize: 13, color: '#ffffff', letterSpacing: '0.1em' }}>合計</span>
           <span style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 700, color: '#ffffff' }}>
@@ -473,6 +510,9 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         )}
         {staffId.trim() && stylistName === null && (
           <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8, textAlign: 'center' }}>スタイリストを選択してください</p>
+        )}
+        {staffId.trim() && stylistName !== null && paymentMethod === null && (
+          <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8, textAlign: 'center' }}>支払い方法を選択してください</p>
         )}
 
         <button

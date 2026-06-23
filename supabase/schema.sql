@@ -447,6 +447,7 @@ create table if not exists public.accounting_sessions (
   customer_name   text,
   staff_name      text,
   stylist_name    text,
+  payment_method  text,
   status          text        not null default 'pending',
   subtotal        integer     not null,
   discount_total  integer     not null default 0,
@@ -454,7 +455,8 @@ create table if not exists public.accounting_sessions (
   used_ticket_ids text[],
   created_at      timestamptz default now() not null,
 
-  constraint accounting_sessions_status_check check (status in ('pending', 'completed', 'failed'))
+  constraint accounting_sessions_status_check check (status in ('pending', 'completed', 'failed')),
+  constraint accounting_sessions_payment_method_check check (payment_method in ('cash', 'credit', 'qr'))
 );
 
 -- ── MIGRATION: add status (pending/completed/failed — 会計完了処理の安全な順序管理用) ──
@@ -471,6 +473,15 @@ alter table public.accounting_sessions add constraint accounting_sessions_status
 -- 既存の accounting_sessions テーブルがある場合は、これを Supabase SQL Editor で
 -- 実行してください。新規作成時は上のCREATE TABLEに既に含まれています。
 alter table public.accounting_sessions add column if not exists stylist_name text;
+
+-- ── MIGRATION: add payment_method (cash / credit / qr。会計アシストの支払い方法選択) ──
+-- 既存の accounting_sessions テーブルがある場合は、これを Supabase SQL Editor で
+-- 実行してください。新規作成時は上のCREATE TABLEに既に含まれています。既存データは
+-- null のままでOK（CHECK制約はNULLを許容する）。
+alter table public.accounting_sessions add column if not exists payment_method text;
+alter table public.accounting_sessions drop constraint if exists accounting_sessions_payment_method_check;
+alter table public.accounting_sessions add constraint accounting_sessions_payment_method_check
+  check (payment_method in ('cash', 'credit', 'qr'));
 
 create index if not exists accounting_sessions_created_at_idx on public.accounting_sessions (created_at desc);
 create index if not exists accounting_sessions_user_id_idx    on public.accounting_sessions (user_id);
@@ -606,6 +617,11 @@ create table if not exists public.daily_reports (
   inventory_alerts  jsonb       not null default '[]'::jsonb,
   created_at        timestamptz default now() not null
 );
+
+-- ── MIGRATION: add payment_summary (支払い方法別売上。会計アシストの支払い方法選択と連動) ──
+-- 既存の daily_reports テーブルがある場合は、これを Supabase SQL Editor で実行してください。
+-- 新規作成時は上のCREATE TABLEに追加するか、このALTERをそのまま実行してください。
+alter table public.daily_reports add column if not exists payment_summary jsonb not null default '[]'::jsonb;
 
 create index if not exists daily_reports_report_date_idx on public.daily_reports (report_date desc);
 
