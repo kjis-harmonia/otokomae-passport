@@ -554,3 +554,24 @@ begin
     null;
   end;
 end $$;
+
+-- ── products: 在庫管理（銀二郎本部 Phase5-A）────────────────────────────────
+-- 会計アシストとの連携（在庫の自動引き落とし等）はまだ実装しない。単純なCRUD用テーブル。
+
+create table if not exists public.products (
+  id             uuid        default gen_random_uuid() primary key,
+  name           text        not null,
+  current_stock  integer     not null default 0,
+  min_stock      integer     not null default 0,
+  created_at     timestamptz default now() not null,
+  updated_at     timestamptz default now() not null
+);
+
+create index if not exists products_name_idx on public.products (name);
+
+alter table public.products enable row level security;
+
+create policy "allow_all" on public.products
+  for all
+  using (true)
+  with check (true);
