@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { HqPanel } from '../components/HqPanel'
-import { getDailyReports } from '../hqDailyReportStore'
+import { generateAndSaveDailyReport, getDailyReports } from '../hqDailyReportStore'
 import type { DailyReport } from '../hqDailyReportStore'
 import { HQ_COLORS, HQ_MONO, HQ_SANS, HQ_SERIF } from '../hqTheme'
 
@@ -20,8 +20,10 @@ function fmtReportDate(dateStr: string): string {
 export function HqDailyReportScreen() {
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
+  const [regenerating, setRegenerating] = useState(false)
+  const [regenerateMessage, setRegenerateMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getDailyReports(30)
       .then((reports) => setState({ phase: 'ready', reports }))
       .catch((e) => {
@@ -30,74 +32,132 @@ export function HqDailyReportScreen() {
       })
   }, [])
 
+  useEffect(() => { load() }, [load])
+
+  async function handleRegenerate() {
+    setRegenerating(true)
+    setRegenerateMessage(null)
+    const result = await generateAndSaveDailyReport()
+    setRegenerating(false)
+    if (result.ok) {
+      setRegenerateMessage({ ok: true, text: '本日の日報を再生成しました。' })
+      load()
+    } else {
+      setRegenerateMessage({ ok: false, text: `日報生成に失敗しました: ${result.errorMessage ?? '不明なエラー'}` })
+    }
+  }
+
+  // テスト・復旧用の手動再生成ボタン（営業終了の自動生成が失敗した場合のリカバリ用）
+  const regenerateBlock = (
+    <HqPanel title="日報を再生成" code="MANUAL">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => void handleRegenerate()}
+          disabled={regenerating}
+          style={{
+            padding: '8px 16px', borderRadius: 3,
+            border: `1px solid ${HQ_COLORS.panelBorderStrong}`,
+            background: 'rgba(201,162,74,0.12)', color: HQ_COLORS.goldHi,
+            fontFamily: HQ_SANS, fontSize: 12, cursor: regenerating ? 'default' : 'pointer',
+            opacity: regenerating ? 0.6 : 1,
+          }}
+        >
+          {regenerating ? '生成中…' : '本日の日報を再生成'}
+        </button>
+        {regenerateMessage && (
+          <span style={{
+            fontFamily: HQ_SANS, fontSize: 12,
+            color: regenerateMessage.ok ? HQ_COLORS.positive : HQ_COLORS.negative,
+          }}>
+            {regenerateMessage.text}
+          </span>
+        )}
+      </div>
+    </HqPanel>
+  )
+
   if (state.phase === 'loading') {
     return (
-      <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textSecondary }}>
-        読み込み中…
-      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {regenerateBlock}
+        <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textSecondary }}>
+          読み込み中…
+        </p>
+      </div>
     )
   }
 
   if (state.phase === 'error') {
     return (
-      <div style={{
-        background: 'rgba(140,31,26,0.10)', border: `1px solid ${HQ_COLORS.red}`,
-        borderRadius: 4, padding: '16px 18px',
-      }}>
-        <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.negative, margin: 0 }}>
-          {state.message}
-        </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {regenerateBlock}
+        <div style={{
+          background: 'rgba(140,31,26,0.10)', border: `1px solid ${HQ_COLORS.red}`,
+          borderRadius: 4, padding: '16px 18px',
+        }}>
+          <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.negative, margin: 0 }}>
+            {state.message}
+          </p>
+        </div>
       </div>
     )
   }
 
   if (state.reports.length === 0) {
     return (
-      <HqPanel title="日報一覧" code="0件">
-        <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textMute, margin: 0 }}>
-          日報がまだありません（営業終了時に自動生成されます）
-        </p>
-      </HqPanel>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {regenerateBlock}
+        <HqPanel title="日報一覧" code="0件">
+          <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textMute, margin: 0 }}>
+            日報がまだありません（営業終了時に自動生成されます）
+          </p>
+        </HqPanel>
+      </div>
     )
   }
 
   return (
-    <HqPanel title="日報一覧" code={`${state.reports.length}件`}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {state.reports.map((r) => {
-          const expanded = expandedDate === r.report_date
-          return (
-            <div
-              key={r.report_date}
-              style={{
-                border: `1px solid ${expanded ? HQ_COLORS.panelBorderStrong : HQ_COLORS.panelBorder}`,
-                borderRadius: 4, background: 'rgba(0,0,0,0.25)', overflow: 'hidden',
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setExpandedDate(expanded ? null : r.report_date)}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {regenerateBlock}
+
+      <HqPanel title="日報一覧" code={`${state.reports.length}件`}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {state.reports.map((r) => {
+            const expanded = expandedDate === r.report_date
+            return (
+              <div
+                key={r.report_date}
                 style={{
-                  width: '100%', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                  gap: 12, padding: '12px 14px', background: 'transparent', border: 'none', cursor: 'pointer',
-                  textAlign: 'left',
+                  border: `1px solid ${expanded ? HQ_COLORS.panelBorderStrong : HQ_COLORS.panelBorder}`,
+                  borderRadius: 4, background: 'rgba(0,0,0,0.25)', overflow: 'hidden',
                 }}
               >
-                <span style={{ fontFamily: HQ_SERIF, fontSize: 15, fontWeight: 700, color: HQ_COLORS.textPrimary }}>
-                  {fmtReportDate(r.report_date)}
-                </span>
-                <span style={{ display: 'flex', gap: 16, fontFamily: HQ_MONO, fontSize: 12.5, color: HQ_COLORS.textSecondary, flexShrink: 0 }}>
-                  <span style={{ color: HQ_COLORS.goldHi }}>{yen(r.total_sales)}</span>
-                  <span>{r.customer_count}名</span>
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setExpandedDate(expanded ? null : r.report_date)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                    gap: 12, padding: '12px 14px', background: 'transparent', border: 'none', cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <span style={{ fontFamily: HQ_SERIF, fontSize: 15, fontWeight: 700, color: HQ_COLORS.textPrimary }}>
+                    {fmtReportDate(r.report_date)}
+                  </span>
+                  <span style={{ display: 'flex', gap: 16, fontFamily: HQ_MONO, fontSize: 12.5, color: HQ_COLORS.textSecondary, flexShrink: 0 }}>
+                    <span style={{ color: HQ_COLORS.goldHi }}>{yen(r.total_sales)}</span>
+                    <span>{r.customer_count}名</span>
+                  </span>
+                </button>
 
-              {expanded && <DailyReportDetail report={r} />}
-            </div>
-          )
-        })}
-      </div>
-    </HqPanel>
+                {expanded && <DailyReportDetail report={r} />}
+              </div>
+            )
+          })}
+        </div>
+      </HqPanel>
+    </div>
   )
 }
 

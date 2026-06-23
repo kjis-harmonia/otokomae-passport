@@ -27,12 +27,19 @@ export interface DailyReport {
   created_at: string
 }
 
+export interface GenerateDailyReportResult {
+  ok: boolean
+  report: DailyReport | null
+  /** スタッフ端末に表示してよい程度に短い、人間向けの失敗理由（ok=falseの場合のみ）。 */
+  errorMessage?: string
+}
+
 /**
  * その日のcompleted会計・在庫アラートを集計し、daily_reportsへupsertする（report_date一意）。
- * 既存の営業終了フロー（handleCloseShop）から呼ばれる想定。失敗してもnullを返すだけで、
- * 呼び出し側の営業終了処理自体はブロックしない。
+ * 既存の営業終了フロー（handleCloseShop）から呼ばれる想定。失敗してもこの関数自体は例外を
+ * 投げず ok:false を返すだけなので、呼び出し側の営業終了処理自体はブロックしない。
  */
-export async function generateAndSaveDailyReport(): Promise<DailyReport | null> {
+export async function generateAndSaveDailyReport(): Promise<GenerateDailyReportResult> {
   try {
     const reportDate = getJapanDateString()
     const dashboard = await getHqDashboardData()
@@ -55,19 +62,43 @@ export async function generateAndSaveDailyReport(): Promise<DailyReport | null> 
       inventory_alerts: inventoryAlerts,
     }
 
+    // 会計データはあるはずなのに日報が空になる、といった原因追跡用に集計結果を必ずログ出力する。
+    console.log('[hqDailyReportStore] generateAndSaveDailyReport: 集計結果', {
+      reportDate,
+      dashboard,
+      productsCount: products.length,
+      inventoryAlertsCount: inventoryAlerts.length,
+    })
+
     const { data, error } = await supabase
       .from('daily_reports')
       .upsert(row, { onConflict: 'report_date' })
       .select()
       .single()
+
     if (error || !data) {
-      console.error('[hqDailyReportStore] generateAndSaveDailyReport upsert error:', error)
-      return null
+      console.error('[hqDailyReportStore] generateAndSaveDailyReport upsert error:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        row,
+      })
+      return {
+        ok: false,
+        report: null,
+        errorMessage: error?.message ?? 'daily_reports への保存に失敗しました（不明なエラー）。',
+      }
     }
-    return data as DailyReport
+
+    return { ok: true, report: data as DailyReport }
   } catch (e) {
     console.error('[hqDailyReportStore] generateAndSaveDailyReport exception:', e)
-    return null
+    return {
+      ok: false,
+      report: null,
+      errorMessage: e instanceof Error ? e.message : '日報生成中に予期しないエラーが発生しました。',
+    }
   }
 }
 

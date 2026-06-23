@@ -544,13 +544,19 @@ export function AdminScreen() {
       setShopActionSuccess('営業を終了しました。')
 
       // ── 銀二郎本部 日報自動生成（Phase7-B） ──
-      // 営業終了は既に確定済みなので、ここで何が起きても営業終了処理自体は成功扱いのまま。
-      // 失敗時もスタッフ向けの表示は変えず、コンソールログのみ残す。
+      // 営業終了は既に確定済みなので、ここで何が起きても営業終了処理自体は成功扱いのまま
+      // （setShopActionErrorは別枠として併記するだけで、営業終了の成功表示は消さない）。
       try {
-        const report = await generateAndSaveDailyReport()
-        if (!report) console.error('[AdminScreen] 日報の自動生成に失敗しました。')
+        const result = await generateAndSaveDailyReport()
+        if (result.ok) {
+          setShopActionSuccess('営業を終了しました。日報を生成しました。')
+        } else {
+          console.error('[AdminScreen] 日報の自動生成に失敗しました:', result.errorMessage)
+          setShopActionError('営業終了は完了しましたが、日報生成に失敗しました。')
+        }
       } catch (reportErr) {
         console.error('[AdminScreen] 日報の自動生成中に例外が発生しました:', reportErr)
+        setShopActionError('営業終了は完了しましたが、日報生成に失敗しました。')
       }
     } finally {
       setShopActionLoading(false)
