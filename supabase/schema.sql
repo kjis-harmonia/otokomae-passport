@@ -429,6 +429,15 @@ create table if not exists public.accounting_items (
 
 create index if not exists accounting_items_category_idx on public.accounting_items (category, sort_order);
 
+-- retail_group: 店販(retail)商品の選択UI用サブカテゴリー（例：スタイリング剤、シャンプー・ケア）。
+-- 固定enumにせず自由入力のtextとする — 新カテゴリーは商品マスタ管理で文字列を
+-- 入力するだけで増やせる（コード変更・マイグレーション不要）。
+alter table public.accounting_items
+  add column if not exists retail_group text;
+
+create index if not exists accounting_items_retail_group_idx
+  on public.accounting_items (retail_group);
+
 alter table public.accounting_items enable row level security;
 
 create policy "allow_all" on public.accounting_items

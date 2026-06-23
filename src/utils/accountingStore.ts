@@ -6,6 +6,10 @@ export interface AccountingItem {
   id: string
   name: string
   category: AccountingCategory
+  // retail_group: 店販(retail)商品の選択UI用サブカテゴリー（例：スタイリング剤、シャンプー・ケア）。
+  // menu/optionでは使用しない。固定enumではなく自由入力 — 新カテゴリーは商品マスタ管理で
+  // 文字列を入力するだけで増やせる（コード変更不要）。
+  retail_group: string | null
   price: number
   is_active: boolean
   sort_order: number
@@ -26,25 +30,43 @@ export async function getAccountingItems(opts: { activeOnly?: boolean } = {}): P
   }
 }
 
+// accounting_items.retail_group は追加マイグレーション（schema.sql参照）が必要な列。
+// 未適用環境でも商品マスタの追加・編集が壊れないよう、列が無いと分かった時点でこの
+// プロセス内では以後 retail_group を送らないようにフォールバックする
+// （customerStore.ts の normalized_name と同じ防御パターン）。
+let retailGroupColumnAvailable = true
+
+function isUndefinedColumnError(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null
+  return e?.code === '42703' || e?.code === 'PGRST204' || (e?.message ?? '').includes('retail_group')
+}
+
 export async function createAccountingItem(input: {
   name: string
   category: AccountingCategory
   price: number
+  retailGroup?: string | null
   sort_order?: number
 }): Promise<AccountingItem | null> {
   try {
-    const { data, error } = await supabase
-      .from('accounting_items')
-      .insert({
-        name: input.name,
-        category: input.category,
-        price: input.price,
-        sort_order: input.sort_order ?? 0,
-      })
-      .select()
-      .single()
-    if (error || !data) return null
-    return data as AccountingItem
+    const retailGroup = input.category === 'retail' ? (input.retailGroup?.trim() || null) : null
+    const basePayload = {
+      name: input.name,
+      category: input.category,
+      price: input.price,
+      sort_order: input.sort_order ?? 0,
+    }
+    const payload = retailGroupColumnAvailable ? { ...basePayload, retail_group: retailGroup } : basePayload
+    const { data, error } = await supabase.from('accounting_items').insert(payload).select().single()
+    if (!error && data) return data as AccountingItem
+    if (error && retailGroupColumnAvailable && isUndefinedColumnError(error)) {
+      retailGroupColumnAvailable = false
+      const { data: retryData, error: retryError } = await supabase
+        .from('accounting_items').insert(basePayload).select().single()
+      if (retryError || !retryData) return null
+      return retryData as AccountingItem
+    }
+    return null
   } catch {
     return null
   }
@@ -52,17 +74,25 @@ export async function createAccountingItem(input: {
 
 export async function updateAccountingItem(
   id: string,
-  patch: Partial<Pick<AccountingItem, 'name' | 'price' | 'category' | 'is_active' | 'sort_order'>>,
+  patch: Partial<Pick<AccountingItem, 'name' | 'price' | 'category' | 'is_active' | 'sort_order' | 'retail_group'>>,
 ): Promise<AccountingItem | null> {
   try {
-    const { data, error } = await supabase
-      .from('accounting_items')
-      .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single()
-    if (error || !data) return null
-    return data as AccountingItem
+    const { retail_group, ...rest } = patch
+    const fullPatch = { ...rest, updated_at: new Date().toISOString() }
+    const payload = retailGroupColumnAvailable && retail_group !== undefined
+      ? { ...fullPatch, retail_group }
+      : fullPatch
+
+    const { data, error } = await supabase.from('accounting_items').update(payload).eq('id', id).select().single()
+    if (!error && data) return data as AccountingItem
+    if (error && retailGroupColumnAvailable && isUndefinedColumnError(error)) {
+      retailGroupColumnAvailable = false
+      const { data: retryData, error: retryError } = await supabase
+        .from('accounting_items').update(fullPatch).eq('id', id).select().single()
+      if (retryError || !retryData) return null
+      return retryData as AccountingItem
+    }
+    return null
   } catch {
     return null
   }
