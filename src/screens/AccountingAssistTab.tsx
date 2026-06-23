@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getJapanDateString } from '../utils/dateUtils'
 import { getUserTickets, markTicketUsed } from '../utils/ticketStore'
-import { getCustomerByUserId } from '../utils/customerStore'
+import {
+  getCustomerByUserId, findCustomersByNormalizedName, createGuestCustomer, getLastVisitDateForUser,
+} from '../utils/customerStore'
+import type { CustomerRow } from '../utils/customerStore'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
 import {
   getAccountingItems, createAccountingItem, updateAccountingItem, createAccountingSession, setAccountingSessionStatus,
@@ -63,6 +66,14 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
 
   const [showManager, setShowManager] = useState(false)
 
+  // ── QRなし会計：名前入力 / 既存顧客候補 / 新規ゲスト登録 ──
+  const [guestNameInput, setGuestNameInput] = useState('')
+  const [guestCandidates, setGuestCandidates] = useState<CustomerRow[] | null>(null)
+  const [guestSearchLoading, setGuestSearchLoading] = useState(false)
+  const [guestLastVisit, setGuestLastVisit] = useState<Record<string, string | null>>({})
+  const [guestCreating, setGuestCreating] = useState(false)
+  const [guestError, setGuestError] = useState<string | null>(null)
+
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)
   const [showCompleteSuccess, setShowCompleteSuccess] = useState(false)
@@ -75,6 +86,59 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   }, [])
 
   useEffect(() => { void loadItems() }, [loadItems])
+
+  // ── 名前入力時、既存顧客候補を検索（正規化名一致） ──
+  useEffect(() => {
+    if (customer) return
+    const trimmed = guestNameInput.trim()
+    if (!trimmed) {
+      setGuestCandidates(null)
+      setGuestLastVisit({})
+      setGuestSearchLoading(false)
+      return
+    }
+    let cancelled = false
+    setGuestSearchLoading(true)
+    const timer = setTimeout(() => {
+      void (async () => {
+        const results = await findCustomersByNormalizedName(trimmed)
+        if (cancelled) return
+        setGuestCandidates(results)
+        const visits = await Promise.all(results.map(c => getLastVisitDateForUser(c.user_id)))
+        if (cancelled) return
+        const map: Record<string, string | null> = {}
+        results.forEach((c, i) => { map[c.user_id] = visits[i] })
+        setGuestLastVisit(map)
+        setGuestSearchLoading(false)
+      })()
+    }, 400)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [guestNameInput, customer])
+
+  function handleSelectCandidate(c: CustomerRow) {
+    setCustomer({ userId: c.user_id, name: c.name })
+    setGuestNameInput('')
+    setGuestCandidates(null)
+    setGuestLastVisit({})
+    setGuestError(null)
+  }
+
+  async function handleCreateGuest() {
+    const trimmed = guestNameInput.trim()
+    if (!trimmed || guestCreating) return
+    setGuestCreating(true)
+    setGuestError(null)
+    const created = await createGuestCustomer(trimmed)
+    setGuestCreating(false)
+    if (!created) {
+      setGuestError('ゲスト登録に失敗しました。通信環境を確認してから再度お試しください。')
+      return
+    }
+    setCustomer({ userId: created.user_id, name: created.name })
+    setGuestNameInput('')
+    setGuestCandidates(null)
+    setGuestLastVisit({})
+  }
 
   function toggleItem(id: string) {
     setSelectedIds(prev => {
@@ -306,6 +370,10 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         setDiscount(null)
         setStylistName(null)
         setPaymentMethod(null)
+        setGuestNameInput('')
+        setGuestCandidates(null)
+        setGuestLastVisit({})
+        setGuestError(null)
       }, 2200)
     } catch (err) {
       setCompleteError(`会計完了に失敗しました（${err instanceof Error ? err.message : String(err)}）`)
@@ -343,6 +411,77 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
             QRを読み込む
           </button>
         </div>
+
+        {/* ── QR未読み込み時：名前入力で既存顧客に紐付け／新規ゲスト登録 ── */}
+        {!customer && (
+          <div style={{ marginTop: 12 }}>
+            <input
+              type="text"
+              value={guestNameInput}
+              onChange={e => setGuestNameInput(e.target.value)}
+              placeholder="お名前を入力"
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12,
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.16)',
+                color: '#ffffff', fontSize: 15, fontFamily: SERIF, outline: 'none',
+              }}
+            />
+
+            {guestSearchLoading && (
+              <p style={{ fontSize: 11, color: '#999999', marginTop: 6 }}>候補を検索中…</p>
+            )}
+
+            {!guestSearchLoading && guestCandidates && guestCandidates.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <p style={{ fontSize: 11, letterSpacing: '0.08em', color: '#C9A24A', marginBottom: 6 }}>既存のお客様候補</p>
+                {guestCandidates.map(c => (
+                  <div key={c.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                    borderRadius: 10, background: 'rgba(201,162,74,0.08)', border: '1px solid rgba(201,162,74,0.3)',
+                    padding: '10px 12px', marginBottom: 6,
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: '#ffffff' }}>{c.name}</p>
+                      <p style={{ fontSize: 11, color: '#999999', marginTop: 2 }}>
+                        前回来店：{guestLastVisit[c.user_id] ? guestLastVisit[c.user_id]!.replace(/-/g, '/') : 'なし'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectCandidate(c)}
+                      style={{
+                        flexShrink: 0, padding: '8px 12px', borderRadius: 8, background: 'rgba(201,162,74,0.18)',
+                        border: '1px solid #C9A24A', color: '#C9A24A', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      このお客様に紐付け
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {guestNameInput.trim() !== '' && (
+              <button
+                type="button"
+                onClick={() => void handleCreateGuest()}
+                disabled={guestCreating}
+                style={{
+                  width: '100%', marginTop: 8, padding: '11px 0', borderRadius: 10,
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.16)',
+                  color: '#e5e5e5', fontSize: 13, fontFamily: SERIF, letterSpacing: '0.06em',
+                  cursor: guestCreating ? 'default' : 'pointer',
+                }}
+              >
+                {guestCreating ? '登録中…' : '新規ゲストとして登録'}
+              </button>
+            )}
+
+            {guestError && (
+              <p style={{ fontSize: 12, color: '#E06060', marginTop: 8 }}>{guestError}</p>
+            )}
+          </div>
+        )}
 
         {discount && (
           <div style={{

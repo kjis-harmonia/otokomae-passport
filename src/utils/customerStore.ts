@@ -13,10 +13,37 @@ export interface CustomerRow {
   id: string
   user_id: string
   name: string
+  normalized_name?: string | null
   phone_last4: string | null
   recovery_code: string
   created_at: string
   updated_at: string
+}
+
+/**
+ * 顧客名の照合用正規化（前後/半角/全角スペース除去・連続スペース除去・大文字小文字吸収）。
+ * 「山田太郎」「山田 太郎」「山田　太郎」を同一人物候補として扱うための内部キー。
+ */
+export function normalizeCustomerName(name: string): string {
+  return name.trim().replace(/[ 　]+/g, '').toLowerCase()
+}
+
+function generateGuestUserId(): string {
+  return `guest-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+// customers.normalized_name は追加マイグレーション（schema.sql参照）が必要な列。
+// 未適用環境でQR会員登録・編集が壊れないよう、列が無いと分かった時点でこのプロセス内では
+// 以後 normalized_name を送らないようにフォールバックする。
+let normalizedNameColumnAvailable = true
+
+function isUndefinedColumnError(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null
+  return e?.code === '42703' || e?.code === 'PGRST204' || (e?.message ?? '').includes('normalized_name')
+}
+
+function withNormalizedName(name: string): Record<string, unknown> {
+  return normalizedNameColumnAvailable ? { normalized_name: normalizeCustomerName(name) } : {}
 }
 
 /** スタッフがQRスキャンしたとき、会員テーブルへ初回登録または名前更新 */
@@ -30,10 +57,17 @@ export async function upsertCustomer(userId: string, name: string): Promise<Cust
 
     if (existing) {
       if ((existing as CustomerRow).name !== name) {
-        await supabase
+        const { error } = await supabase
           .from('customers')
-          .update({ name, updated_at: new Date().toISOString() })
+          .update({ name, updated_at: new Date().toISOString(), ...withNormalizedName(name) })
           .eq('user_id', userId)
+        if (error && isUndefinedColumnError(error)) {
+          normalizedNameColumnAvailable = false
+          await supabase
+            .from('customers')
+            .update({ name, updated_at: new Date().toISOString() })
+            .eq('user_id', userId)
+        }
       }
       return existing as CustomerRow
     }
@@ -43,7 +77,7 @@ export async function upsertCustomer(userId: string, name: string): Promise<Cust
       const recoveryCode = generateRecoveryCode()
       const { data, error } = await supabase
         .from('customers')
-        .insert({ user_id: userId, name, recovery_code: recoveryCode })
+        .insert({ user_id: userId, name, recovery_code: recoveryCode, ...withNormalizedName(name) })
         .select()
         .single()
       if (!error && data) {
@@ -56,9 +90,109 @@ export async function upsertCustomer(userId: string, name: string): Promise<Cust
         })
         return customer
       }
+      if (error && isUndefinedColumnError(error)) {
+        normalizedNameColumnAvailable = false
+        continue // 同じattemptを normalized_name なしで再試行
+      }
       if ((error as { code?: string })?.code !== '23505') break // 一意制約以外のエラーはリトライしない
     }
     return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * ゲスト顧客（QR未読み込み）を新規登録する。user_id は "guest-" prefix で自動生成。
+ * 同姓同名の自動統合は行わない —
+ * 呼び出し側（会計アシストUI）が既存候補を表示し、スタッフが選択した場合のみ既存顧客を使う。
+ */
+export async function createGuestCustomer(name: string): Promise<CustomerRow | null> {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+  try {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const userId = generateGuestUserId()
+      const recoveryCode = generateRecoveryCode()
+      const { data, error } = await supabase
+        .from('customers')
+        .insert({ user_id: userId, name: trimmed, recovery_code: recoveryCode, ...withNormalizedName(trimmed) })
+        .select()
+        .single()
+      if (!error && data) {
+        const customer = data as CustomerRow
+        void supabase.from('customer_user_aliases').insert({
+          customer_id: customer.id,
+          user_id: userId,
+          is_current: true,
+        })
+        return customer
+      }
+      if (error && isUndefinedColumnError(error)) {
+        normalizedNameColumnAvailable = false
+        continue
+      }
+      if ((error as { code?: string })?.code !== '23505') break
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 正規化名が一致する既存顧客候補を検索する（会計アシストの「名前で紐付け」用）。
+ * normalized_name 列が未適用の環境でも、name のあいまい検索＋クライアント側の
+ * normalizeCustomerName 比較にフォールバックして動作する。
+ */
+export async function findCustomersByNormalizedName(name: string): Promise<CustomerRow[]> {
+  const normalized = normalizeCustomerName(name)
+  if (!normalized) return []
+
+  if (normalizedNameColumnAvailable) {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('normalized_name', normalized)
+        .order('updated_at', { ascending: false })
+        .limit(10)
+      if (!error) return (data ?? []) as CustomerRow[]
+      if (isUndefinedColumnError(error)) {
+        normalizedNameColumnAvailable = false
+      } else {
+        return []
+      }
+    } catch {
+      return []
+    }
+  }
+
+  // フォールバック：name のあいまい検索結果をクライアント側で正規化一致のみに絞る
+  try {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .ilike('name', `%${name.trim()}%`)
+      .order('updated_at', { ascending: false })
+      .limit(30)
+    if (error || !data) return []
+    return (data as CustomerRow[]).filter(c => normalizeCustomerName(c.name) === normalized)
+  } catch {
+    return []
+  }
+}
+
+/** maintenance_visits から最終来店日を取得（候補カードの「前回来店」表示用） */
+export async function getLastVisitDateForUser(userId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('maintenance_visits')
+      .select('last_visit_date')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (error || !data) return null
+    return (data as { last_visit_date: string }).last_visit_date
   } catch {
     return null
   }

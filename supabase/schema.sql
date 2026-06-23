@@ -238,6 +238,21 @@ create table if not exists public.customers (
 create index if not exists customers_user_id_idx       on public.customers (user_id);
 create index if not exists customers_recovery_code_idx on public.customers (recovery_code);
 
+-- normalized_name: QRなし会計（名前入力）での既存顧客候補検索用の照合キー。
+-- 前後/半角/全角スペース除去・大文字小文字吸収済みの名前を保持する
+-- （アプリ側 normalizeCustomerName() と同じルールで生成）。
+alter table public.customers
+  add column if not exists normalized_name text;
+
+create index if not exists customers_normalized_name_idx
+  on public.customers (normalized_name);
+
+-- 既存顧客への backfill（実行は任意・既存データに対して一度だけでよい）。
+-- regexp_replace の \s は半角スペースのみを対象にするため、全角スペース(　)は別途 replace で除去する。
+update public.customers
+set normalized_name = lower(regexp_replace(replace(name, '　', ''), '\s+', '', 'g'))
+where normalized_name is null;
+
 alter table public.customers enable row level security;
 
 create policy "allow_all" on public.customers
