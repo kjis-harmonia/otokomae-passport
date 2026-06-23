@@ -317,7 +317,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const byCategory = (cat: AccountingCategory) => items.filter(i => i.category === cat)
 
   return (
-    <div style={{ paddingBottom: 340 }}>
+    <div style={{ paddingBottom: 400 }}>
       {/* ── 顧客 / QR読み込み ── */}
       <div style={{
         borderRadius: 16, border: '1px solid rgba(201,162,74,0.22)',
@@ -472,14 +472,16 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         商品マスタを編集
       </button>
 
-      {/* ── 固定フッター: 支払い方法・合計・会計完了 ── */}
+      {/* ── 固定フッター: 支払い方法・合計・会計完了（1つの会計エリアにまとめる） ── */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
+        display: 'flex', flexDirection: 'column', gap: 10,
         background: '#070707', borderTop: '1px solid rgba(201,162,74,0.28)',
         boxShadow: '0 -10px 28px rgba(0,0,0,0.7)',
         padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))',
       }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        {/* 支払い方法 */}
+        <div style={{ display: 'flex', gap: 8 }}>
           {PAYMENT_METHODS.map(m => {
             const selected = paymentMethod === m.id
             return (
@@ -503,26 +505,33 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           })}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        {/* 合計 */}
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 13, color: '#ffffff', letterSpacing: '0.1em' }}>合計</span>
           <span style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 700, color: '#ffffff' }}>
             ¥{total.toLocaleString()}
           </span>
         </div>
 
-        {completeError && (
-          <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8, textAlign: 'center' }}>{completeError}</p>
-        )}
-        {!staffId.trim() && (
-          <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8, textAlign: 'center' }}>先に担当者を選択してください</p>
-        )}
-        {staffId.trim() && stylistName === null && (
-          <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8, textAlign: 'center' }}>スタイリストを選択してください</p>
-        )}
-        {staffId.trim() && stylistName !== null && paymentMethod === null && (
-          <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8, textAlign: 'center' }}>支払い方法を選択してください</p>
+        {/* エラーメッセージ */}
+        {(completeError || !staffId.trim() || stylistName === null || paymentMethod === null) && (
+          <div>
+            {completeError && (
+              <p style={{ fontSize: 12, color: '#E06060', textAlign: 'center' }}>{completeError}</p>
+            )}
+            {!staffId.trim() && (
+              <p style={{ fontSize: 12, color: '#E06060', textAlign: 'center' }}>先に担当者を選択してください</p>
+            )}
+            {staffId.trim() && stylistName === null && (
+              <p style={{ fontSize: 12, color: '#E06060', textAlign: 'center' }}>スタイリストを選択してください</p>
+            )}
+            {staffId.trim() && stylistName !== null && paymentMethod === null && (
+              <p style={{ fontSize: 12, color: '#E06060', textAlign: 'center' }}>支払い方法を選択してください</p>
+            )}
+          </div>
         )}
 
+        {/* 会計完了ボタン */}
         <button
           onClick={() => void handleComplete()}
           disabled={!canComplete}
