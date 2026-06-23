@@ -247,14 +247,43 @@ async function haltScanner(scanner: Html5Qrcode): Promise<void> {
   try { if (scanner.isScanning) await scanner.stop(); scanner.clear() } catch { /* ignore */ }
 }
 
+// 読み取り中、カメラ映像の上に重ねる白い四隅のスキャンガイド（装飾のみ、操作はブロックしない）
+function ScanGuideOverlay() {
+  return (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+      <div style={{ width: 180, height: 180, position: 'relative' }}>
+        {[
+          { top: 0,    left: 0,    borderTop: '3px solid',    borderLeft: '3px solid',   borderRadius: '6px 0 0 0' },
+          { top: 0,    right: 0,   borderTop: '3px solid',    borderRight: '3px solid',  borderRadius: '0 6px 0 0' },
+          { bottom: 0, left: 0,    borderBottom: '3px solid', borderLeft: '3px solid',   borderRadius: '0 0 0 6px' },
+          { bottom: 0, right: 0,   borderBottom: '3px solid', borderRight: '3px solid',  borderRadius: '0 0 6px 0' },
+        ].map((s, i) => (
+          <div key={i} style={{ position: 'absolute', width: 32, height: 32, borderColor: 'rgba(255,255,255,0.85)', ...s }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function QrCameraScanner({
   onScan,
   onCameraError,
   elId = QR_EL_ID,
+  placeholder,
+  boxHeight = 280,
+  onActiveChange,
 }: {
   onScan: (t: string) => void
   onCameraError: (m: string) => void
   elId?: string
+  /**
+   * 指定すると、読み取り前はこの内容をカメラ枠と同じボックス内に表示し、読み取り中は
+   * 白い四隅のスキャンガイドをカメラ映像に重ねて表示する（枠を1つに統合するモード）。
+   * 未指定の場合は従来通り、非アクティブ時は高さ0（カメラ枠を表示しない）。
+   */
+  placeholder?: React.ReactNode
+  boxHeight?: number
+  onActiveChange?: (active: boolean) => void
 }) {
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const [active, setActive] = useState(false)
@@ -263,10 +292,15 @@ export function QrCameraScanner({
     const s = scannerRef.current; scannerRef.current = null; return s
   }
 
+  const setActiveState = useCallback((next: boolean) => {
+    setActive(next)
+    onActiveChange?.(next)
+  }, [onActiveChange])
+
   const stop = useCallback(() => {
     const s = claimScanner(); if (!s) return
-    setActive(false); void haltScanner(s)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    setActiveState(false); void haltScanner(s)
+  }, [setActiveState]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = useCallback(async () => {
     if (scannerRef.current) return
@@ -280,22 +314,40 @@ export function QrCameraScanner({
         { fps: 10, qrbox: { width: 220, height: 220 } },
         (decoded) => {
           const s = claimScanner(); if (!s) return
-          setActive(false); void haltScanner(s).then(() => onScan(decoded))
+          setActiveState(false); void haltScanner(s).then(() => onScan(decoded))
         },
         undefined,
       )
-      setActive(true)
+      setActiveState(true)
     } catch {
       const s = claimScanner(); if (s) void haltScanner(s)
       onCameraError('カメラにアクセスできません。手動入力をご利用ください。')
     }
-  }, [onScan, onCameraError, elId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onScan, onCameraError, elId, setActiveState]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { const s = claimScanner(); if (s) void haltScanner(s) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const showBox = placeholder ? true : active
+
   return (
     <div>
-      <div id={elId} style={{ width: '100%', minHeight: active ? 280 : 0, borderRadius: active ? 16 : 0, overflow: 'hidden', marginBottom: active ? 12 : 0 }} />
+      <div style={{
+        position: 'relative', width: '100%',
+        minHeight: showBox ? boxHeight : 0,
+        borderRadius: showBox ? 16 : 0,
+        overflow: 'hidden',
+        marginBottom: showBox ? 12 : 0,
+        background: placeholder ? '#0A0504' : 'transparent',
+        border: placeholder ? '1px solid rgba(201,162,74,0.16)' : 'none',
+      }}>
+        <div id={elId} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+        {placeholder && !active && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {placeholder}
+          </div>
+        )}
+        {placeholder && active && <ScanGuideOverlay />}
+      </div>
       {!active ? (
         <button onClick={() => { void start() }} style={{ width: '100%', padding: '20px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 20px rgba(107,15,18,0.45)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 20, fontWeight: 700, letterSpacing: '0.2em', cursor: 'pointer' }}>
           QRを読み取る
@@ -1179,42 +1231,61 @@ export function AdminScreen() {
         {/* ===== SCAN ===== */}
         {mainTab === 'issue' && phase === 'scan' && (
           <div>
-            {/* Waiting card */}
-            <div style={{ borderRadius: 20, border: '1px solid rgba(201,162,74,0.16)', background: '#0A0504', overflow: 'hidden', marginBottom: 20 }}>
-              <div style={{ padding: '36px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 68, height: 68, position: 'relative' }}>
-                  {[
-                    { top: 0,    left: 0,    borderTop: '3px solid',    borderLeft: '3px solid',   borderRadius: '4px 0 0 0' },
-                    { top: 0,    right: 0,   borderTop: '3px solid',    borderRight: '3px solid',  borderRadius: '0 4px 0 0' },
-                    { bottom: 0, left: 0,    borderBottom: '3px solid', borderLeft: '3px solid',   borderRadius: '0 0 0 4px' },
-                    { bottom: 0, right: 0,   borderBottom: '3px solid', borderRight: '3px solid',  borderRadius: '0 0 4px 0' },
-                  ].map((s, i) => (
-                    <div key={i} style={{ position: 'absolute', width: 22, height: 22, borderColor: 'rgba(201,162,74,0.40)', ...s }} />
-                  ))}
-                </div>
-                <p style={{ fontSize: 15, color: '#ffffff', fontFamily: SERIF, letterSpacing: '0.08em', textAlign: 'center', lineHeight: 1.7 }}>
-                  次の男前パスポートをスキャンしてください
-                </p>
-              </div>
-            </div>
-
             {!staffId.trim() ? (
-              <div style={{ padding: '28px 20px', borderRadius: 16, background: 'rgba(139,26,26,0.1)', border: '1px solid rgba(201,162,74,0.22)', textAlign: 'center', marginBottom: 16 }}>
-                <p style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 700, color: '#ffffff', letterSpacing: '0.06em', marginBottom: 18, lineHeight: 1.6 }}>
-                  先に担当者を選択してください
-                </p>
-                <button
-                  onClick={() => setShowStaffPicker(true)}
-                  style={{ padding: '16px 32px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.5)', boxShadow: '0 4px 20px rgba(107,15,18,0.4)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 17, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer' }}
-                >
-                  担当者を選択する
-                </button>
-              </div>
+              <>
+                {/* Waiting card（担当者未選択時は静的表示。スキャン枠とカメラ映像の統合はQrCameraScanner側のplaceholderモードで行う） */}
+                <div style={{ borderRadius: 20, border: '1px solid rgba(201,162,74,0.16)', background: '#0A0504', overflow: 'hidden', marginBottom: 20 }}>
+                  <div style={{ padding: '36px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+                    <div style={{ width: 68, height: 68, position: 'relative' }}>
+                      {[
+                        { top: 0,    left: 0,    borderTop: '3px solid',    borderLeft: '3px solid',   borderRadius: '4px 0 0 0' },
+                        { top: 0,    right: 0,   borderTop: '3px solid',    borderRight: '3px solid',  borderRadius: '0 4px 0 0' },
+                        { bottom: 0, left: 0,    borderBottom: '3px solid', borderLeft: '3px solid',   borderRadius: '0 0 0 4px' },
+                        { bottom: 0, right: 0,   borderBottom: '3px solid', borderRight: '3px solid',  borderRadius: '0 0 4px 0' },
+                      ].map((s, i) => (
+                        <div key={i} style={{ position: 'absolute', width: 22, height: 22, borderColor: 'rgba(201,162,74,0.40)', ...s }} />
+                      ))}
+                    </div>
+                    <p style={{ fontSize: 15, color: '#ffffff', fontFamily: SERIF, letterSpacing: '0.08em', textAlign: 'center', lineHeight: 1.7 }}>
+                      次の男前パスポートをスキャンしてください
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ padding: '28px 20px', borderRadius: 16, background: 'rgba(139,26,26,0.1)', border: '1px solid rgba(201,162,74,0.22)', textAlign: 'center', marginBottom: 16 }}>
+                  <p style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 700, color: '#ffffff', letterSpacing: '0.06em', marginBottom: 18, lineHeight: 1.6 }}>
+                    先に担当者を選択してください
+                  </p>
+                  <button
+                    onClick={() => setShowStaffPicker(true)}
+                    style={{ padding: '16px 32px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.5)', boxShadow: '0 4px 20px rgba(107,15,18,0.4)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 17, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer' }}
+                  >
+                    担当者を選択する
+                  </button>
+                </div>
+              </>
             ) : (
               <div style={{ marginBottom: 14 }}>
                 <QrCameraScanner
                   onScan={text => { void handleScanned(text) }}
                   onCameraError={msg => { setCameraError(msg); setShowManual(true) }}
+                  placeholder={
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '20px' }}>
+                      <div style={{ width: 68, height: 68, position: 'relative' }}>
+                        {[
+                          { top: 0,    left: 0,    borderTop: '3px solid',    borderLeft: '3px solid',   borderRadius: '4px 0 0 0' },
+                          { top: 0,    right: 0,   borderTop: '3px solid',    borderRight: '3px solid',  borderRadius: '0 4px 0 0' },
+                          { bottom: 0, left: 0,    borderBottom: '3px solid', borderLeft: '3px solid',   borderRadius: '0 0 0 4px' },
+                          { bottom: 0, right: 0,   borderBottom: '3px solid', borderRight: '3px solid',  borderRadius: '0 0 4px 0' },
+                        ].map((s, i) => (
+                          <div key={i} style={{ position: 'absolute', width: 22, height: 22, borderColor: 'rgba(201,162,74,0.40)', ...s }} />
+                        ))}
+                      </div>
+                      <p style={{ fontSize: 15, color: '#ffffff', fontFamily: SERIF, letterSpacing: '0.08em', textAlign: 'center', lineHeight: 1.7 }}>
+                        次の男前パスポートをスキャンしてください
+                      </p>
+                    </div>
+                  }
                 />
               </div>
             )}
