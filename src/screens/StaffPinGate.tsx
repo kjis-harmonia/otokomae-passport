@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AdminScreen } from './AdminScreen'
+import { StaffHome } from './StaffHome'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 
@@ -66,7 +66,7 @@ export function StaffPinGate() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleDigit, handleBack])
 
-  if (authed) return <AdminScreen />
+  if (authed) return <StaffHome />
 
   return (
     <AnimatePresence mode="wait">
