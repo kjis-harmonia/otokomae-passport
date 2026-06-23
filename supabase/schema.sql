@@ -555,8 +555,9 @@ begin
   end;
 end $$;
 
--- ── products: 在庫管理（銀二郎本部 Phase5-A）────────────────────────────────
--- 会計アシストとの連携（在庫の自動引き落とし等）はまだ実装しない。単純なCRUD用テーブル。
+-- ── products: 在庫管理（銀二郎本部 Phase5-A／会計アシスト連携 Phase5-B）──────────
+-- Phase5-Bで会計アシストの店販販売時に current_stock を自動減算するようになった
+-- （item_name と products.name の完全一致でのみ照合。アプリ側のロジック）。
 
 create table if not exists public.products (
   id             uuid        default gen_random_uuid() primary key,
@@ -575,3 +576,15 @@ create policy "allow_all" on public.products
   for all
   using (true)
   with check (true);
+
+-- ── 銀二郎本部 Phase5-B: products のRealtime購読を有効化 ──────────────────────
+-- 在庫管理タブが会計アシストの店販販売による在庫減算をリアルタイム反映するために必要。
+-- Supabase SQL Editor で実行してください（再実行しても安全）。
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.products;
+  exception when duplicate_object then
+    null; -- すでに追加済み
+  end;
+end $$;

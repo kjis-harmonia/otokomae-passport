@@ -12,6 +12,7 @@ import {
   QrCameraScanner, parseQR, saveUsageLog, fetchTodayUsed, upsertLastVisitDate, playSuccessSound,
 } from './AdminScreen'
 import type { TicketUseQRData, MaintenanceCouponQRData, PassportQRData } from './AdminScreen'
+import { deductStockForRetailSale } from '../hq/hqInventoryStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const QR_EL_ID_ACCOUNTING = 'gj-qr-reader-accounting'
@@ -58,6 +59,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)
   const [showCompleteSuccess, setShowCompleteSuccess] = useState(false)
+  const [stockWarning, setStockWarning] = useState<string | null>(null)
 
   const loadItems = useCallback(async () => {
     setItemsLoading(true)
@@ -266,10 +268,27 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
       // ── 5. 完了 ──
       await setAccountingSessionStatus(sessionId, 'completed')
 
+      // ── 6. 店販在庫の自動減算（銀二郎本部 products 連携） ──
+      // 会計履歴は既にcompletedで確定済みなので、ここで何が起きても会計完了自体は
+      // 成功扱いのまま変えない。失敗時はスタッフに控えめな注意だけ表示する。
+      const retailItems = selectedItems
+        .filter(i => i.category === 'retail')
+        .map(i => ({ itemName: i.name, quantity: 1 }))
+      if (retailItems.length > 0) {
+        try {
+          const { anyFailure } = await deductStockForRetailSale(retailItems)
+          if (anyFailure) setStockWarning('会計は完了しましたが、在庫更新に失敗しました。')
+        } catch (stockErr) {
+          console.error('[AccountingAssistTab] 在庫連携エラー:', stockErr)
+          setStockWarning('会計は完了しましたが、在庫更新に失敗しました。')
+        }
+      }
+
       playSuccessSound()
       setShowCompleteSuccess(true)
       setTimeout(() => {
         setShowCompleteSuccess(false)
+        setStockWarning(null)
         setSelectedIds(new Set())
         setCustomer(null)
         setDiscount(null)
@@ -526,6 +545,9 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
               </div>
               <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#ffffff' }}>会計完了しました</p>
               <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#C9A24A', marginTop: 8 }}>¥{total.toLocaleString()}</p>
+              {stockWarning && (
+                <p style={{ fontSize: 12, color: '#E0B84A', marginTop: 12, maxWidth: 280 }}>{stockWarning}</p>
+              )}
             </motion.div>
           </div>
         )}

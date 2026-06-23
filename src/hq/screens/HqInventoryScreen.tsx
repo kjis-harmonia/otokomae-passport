@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { HqPanel } from '../components/HqPanel'
 import {
-  adjustProductStock, createProduct, getProducts, getStockStatus, updateProduct,
+  adjustProductStock, createProduct, getProducts, getStockStatus, subscribeProductsRealtime, updateProduct,
 } from '../hqInventoryStore'
 import type { Product, StockStatus } from '../hqInventoryStore'
 import { HQ_COLORS, HQ_MONO, HQ_SANS } from '../hqTheme'
@@ -71,18 +71,33 @@ export function HqInventoryScreen() {
 
   const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({})
   const [adjustingId, setAdjustingId] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function load() {
-    setState({ phase: 'loading' })
+  // silent=true: リアルタイム購読による再読み込み時は「読み込み中…」表示で
+  // 編集中のフォームを潰さない。失敗しても直前の表示データを維持する。
+  const load = useCallback((opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setState({ phase: 'loading' })
     getProducts()
       .then((products) => setState({ phase: 'ready', products }))
       .catch((e) => {
         console.error('[HqInventoryScreen] getProducts error:', e)
-        setState({ phase: 'error', message: '在庫データの取得に失敗しました。' })
+        setState((prev) => (opts.silent && prev.phase === 'ready' ? prev : { phase: 'error', message: '在庫データの取得に失敗しました。' }))
       })
-  }
+  }, [])
 
-  useEffect(load, [])
+  useEffect(() => { load() }, [load])
+
+  // 会計アシストの店販販売による自動減算や、本部からのCRUDをリアルタイム反映する
+  useEffect(() => {
+    const unsubscribe = subscribeProductsRealtime(() => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => load({ silent: true }), 400)
+    })
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      unsubscribe()
+    }
+  }, [load])
 
   async function handleAdd() {
     const name = newName.trim()
