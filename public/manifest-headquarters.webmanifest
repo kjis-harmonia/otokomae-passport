@@ -1,0 +1,20 @@
+{
+  "name": "銀二郎本部",
+  "short_name": "銀二郎本部",
+  "description": "銀二郎本部 管理画面（売上・在庫・顧客カルテ・日報）",
+  "start_url": "/headquarters",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050403",
+  "theme_color": "#050403",
+  "lang": "ja",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/app-icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
