@@ -60,6 +60,68 @@ function groupAndCount(items: { item_name: string; quantity: number | null }[]):
     .map(([name, count], i) => ({ rank: i + 1, name, count }))
 }
 
+export type HqStylistPeriod = 'today' | 'month'
+
+export interface StylistAnalysis extends StylistSummary {
+  share: number // 全体売上に対する割合（%）。全体売上0の場合は0。
+}
+
+export interface HqStylistAnalysisData {
+  period: HqStylistPeriod
+  totalSales: number
+  stylists: StylistAnalysis[]
+  ranking: StylistAnalysis[]
+  mvp: StylistAnalysis | null
+}
+
+/**
+ * スタイリスト分析タブ用の集計データを取得する（期間: 本日 / 今月）。
+ * Supabase エラー時は throw し、呼び出し側がエラーメッセージを表示する。
+ */
+export async function getHqStylistAnalysis(period: HqStylistPeriod): Promise<HqStylistAnalysisData> {
+  const todayStr = getJapanDateString()
+  let startStr: string
+  let endStr: string
+  if (period === 'today') {
+    startStr = todayStr
+    endStr = getJapanDateString(new Date(Date.now() + 24 * 60 * 60 * 1000))
+  } else {
+    const range = monthRangeFromToday(todayStr)
+    startStr = range.start
+    endStr = range.end
+  }
+
+  const { data, error } = await supabase
+    .from('accounting_sessions')
+    .select('total, stylist_name')
+    .eq('status', 'completed')
+    .gte('created_at', jstBoundaryISO(startStr))
+    .lt('created_at', jstBoundaryISO(endStr))
+
+  if (error) throw error
+
+  const sessions = data ?? []
+  const totalSales = sessions.reduce((sum, s) => sum + (s.total ?? 0), 0)
+
+  const stylists: StylistAnalysis[] = STYLISTS.map((name) => {
+    const rows = sessions.filter((s) => (s.stylist_name || '未設定') === name)
+    const sales = rows.reduce((sum, s) => sum + (s.total ?? 0), 0)
+    const visitors = rows.length
+    return {
+      name,
+      sales,
+      visitors,
+      unitPrice: visitors > 0 ? Math.round(sales / visitors) : 0,
+      share: totalSales > 0 ? Math.round((sales / totalSales) * 100) : 0,
+    }
+  })
+
+  const ranking = [...stylists].sort((a, b) => b.sales - a.sales)
+  const mvp = ranking[0] && ranking[0].sales > 0 ? ranking[0] : null
+
+  return { period, totalSales, stylists, ranking, mvp }
+}
+
 /**
  * 経営ダッシュボード用の集計データを取得する。
  * Supabase エラー時は throw せず、呼び出し側がエラーメッセージを表示できるよう例外を投げる。
