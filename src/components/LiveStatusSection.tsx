@@ -127,18 +127,18 @@ export function LiveStatusSection() {
       {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        marginBottom: 16, padding: '0 24px',
+        flexWrap: 'nowrap', marginBottom: 16, padding: '0 24px',
       }}>
         <p style={{
-          fontFamily: SANS, fontSize: 20, fontWeight: 500, letterSpacing: '2.5px',
-          color: '#F5F1E8', margin: 0,
+          fontFamily: SANS, fontSize: 20, fontWeight: 500, letterSpacing: '2px',
+          color: '#F5F1E8', margin: 0, whiteSpace: 'nowrap', flexShrink: 0,
         }}>
-          GINJIRO LIVE STATUS
+          LIVE STATUS
         </p>
         {latest && (
           <p style={{
             fontSize: 11, letterSpacing: '2px', color: 'rgba(212,194,157,0.75)',
-            fontFamily: SANS, margin: 0, flexShrink: 0,
+            fontFamily: SANS, margin: 0, marginLeft: 12, flexShrink: 0, whiteSpace: 'nowrap',
           }}>
             最終更新 {fmtTime(latest)}
           </p>
@@ -206,71 +206,108 @@ export function LiveStatusSection() {
                 />
               )}
 
-              {/* ── 左カラム: スタイリスト名（最優先で表示領域を確保。縮小しない） ── */}
-              <div style={{
-                position: 'relative', zIndex: 1,
-                flex: '0 0 auto', minWidth: 96, maxWidth: 130,
-              }}>
-                <p style={{
-                  fontSize: 9, letterSpacing: '2px', color: STATUS_WORD_COLOR[row.status],
-                  fontFamily: SANS, margin: 0, marginBottom: 5, whiteSpace: 'nowrap',
-                }}>
-                  {STATUS_WORD[row.status]}
-                </p>
-                <p style={{
-                  fontFamily: SERIF, fontWeight: 800, fontSize: 28, letterSpacing: '1px',
-                  color: '#ffffff', margin: 0, lineHeight: 1.1,
-                  textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 18px rgba(212,194,157,0.16)',
-                  whiteSpace: 'nowrap', overflow: 'visible',
-                }}>
-                  {row.name}
-                </p>
-              </div>
-
-              {/* ── 右カラム: 日本語ステータス・空き状況・CTA（右揃え。スペースが無い時はこちらが縮む） ── */}
-              <div style={{
-                position: 'relative', zIndex: 1, flex: '1 1 auto', minWidth: 0,
-                display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
-                marginLeft: 14, textAlign: 'right',
-              }}>
-                <p style={{
-                  fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.5px',
-                  color: theme.statusColor, margin: 0, marginBottom: row.status === 'closed' ? 0 : 3,
-                  textShadow: isGlowing ? `0 0 10px ${AURA_MID[row.status]}` : 'none',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
-                }}>
-                  {liveStatusLabel(row.id, row.status)}
-                </p>
-                {row.status !== 'closed' && (
+              {row.status === 'closed' ? (
+                <>
+                  {/* ── CLOSEDラベル: 行揃えに影響しない位置に固定 ── */}
                   <p style={{
-                    fontSize: 15, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
-                    fontFamily: SANS, margin: 0, marginBottom: cta ? 7 : 0,
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+                    position: 'absolute', top: 13, left: 18, zIndex: 1,
+                    fontSize: 9, letterSpacing: '2px', color: STATUS_WORD_COLOR.closed,
+                    fontFamily: SANS, margin: 0, whiteSpace: 'nowrap',
                   }}>
-                    {liveStatusAvailabilityMessage(row)}
+                    {STATUS_WORD.closed}
                   </p>
-                )}
 
-                {cta && (
-                  <a
-                    href={`tel:${LIVE_STATUS_TEL}`}
-                    className="gj-carousel-tel"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      height: 35, boxSizing: 'border-box',
-                      background: 'rgba(0,0,0,0.45)',
-                      border: '1px solid rgba(212,194,157,0.45)',
-                      color: '#D4C29D',
-                      padding: '0 14px',
-                      borderRadius: 3,
-                      fontSize: 14, fontWeight: 500, letterSpacing: '1px',
-                      fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {cta}
-                  </a>
-                )}
-              </div>
+                  {/* ── スタイリスト名 ⇔ 受付終了: 同一行でベースラインを揃える ── */}
+                  <div style={{
+                    position: 'relative', zIndex: 1, width: '100%',
+                    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                  }}>
+                    <p style={{
+                      fontFamily: SERIF, fontWeight: 800, fontSize: 28, letterSpacing: '1px',
+                      color: '#ffffff', margin: 0, lineHeight: 1,
+                      textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 18px rgba(212,194,157,0.16)',
+                      whiteSpace: 'nowrap', overflow: 'visible',
+                      flex: '0 0 auto', minWidth: 96, maxWidth: 130,
+                    }}>
+                      {row.name}
+                    </p>
+                    <p style={{
+                      fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.5px',
+                      color: theme.statusColor, margin: 0, lineHeight: 1,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      flex: '1 1 auto', minWidth: 0, marginLeft: 14, textAlign: 'right',
+                    }}>
+                      {liveStatusLabel(row.id, row.status)}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* ── 左カラム: スタイリスト名（最優先で表示領域を確保。縮小しない） ── */}
+                  <div style={{
+                    position: 'relative', zIndex: 1,
+                    flex: '0 0 auto', minWidth: 96, maxWidth: 130,
+                  }}>
+                    <p style={{
+                      fontSize: 9, letterSpacing: '2px', color: STATUS_WORD_COLOR[row.status],
+                      fontFamily: SANS, margin: 0, marginBottom: 5, whiteSpace: 'nowrap',
+                    }}>
+                      {STATUS_WORD[row.status]}
+                    </p>
+                    <p style={{
+                      fontFamily: SERIF, fontWeight: 800, fontSize: 28, letterSpacing: '1px',
+                      color: '#ffffff', margin: 0, lineHeight: 1.1,
+                      textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 18px rgba(212,194,157,0.16)',
+                      whiteSpace: 'nowrap', overflow: 'visible',
+                    }}>
+                      {row.name}
+                    </p>
+                  </div>
+
+                  {/* ── 右カラム: 日本語ステータス・空き状況・CTA（右揃え。スペースが無い時はこちらが縮む） ── */}
+                  <div style={{
+                    position: 'relative', zIndex: 1, flex: '1 1 auto', minWidth: 0,
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+                    marginLeft: 14, textAlign: 'right',
+                  }}>
+                    <p style={{
+                      fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.5px',
+                      color: theme.statusColor, margin: 0, marginBottom: 3,
+                      textShadow: isGlowing ? `0 0 10px ${AURA_MID[row.status]}` : 'none',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+                    }}>
+                      {liveStatusLabel(row.id, row.status)}
+                    </p>
+                    <p style={{
+                      fontSize: 15, fontWeight: 600, letterSpacing: '0.2px', color: '#EDE3D0',
+                      fontFamily: SANS, margin: 0, marginBottom: cta ? 7 : 0,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+                    }}>
+                      {liveStatusAvailabilityMessage(row)}
+                    </p>
+
+                    {cta && (
+                      <a
+                        href={`tel:${LIVE_STATUS_TEL}`}
+                        className="gj-carousel-tel"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          height: 35, boxSizing: 'border-box',
+                          background: 'rgba(0,0,0,0.45)',
+                          border: '1px solid rgba(212,194,157,0.45)',
+                          color: '#D4C29D',
+                          padding: '0 14px',
+                          borderRadius: 3,
+                          fontSize: 14, fontWeight: 500, letterSpacing: '1px',
+                          fontFamily: SANS, textDecoration: 'none', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {cta}
+                      </a>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )
         })}
