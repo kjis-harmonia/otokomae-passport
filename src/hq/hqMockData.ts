@@ -1,12 +1,13 @@
 // 銀二郎本部 — ダミーデータ（UIプロトタイプ段階。実データ未接続）
 
-export type HqTab = 'dashboard' | 'sales' | 'stylist' | 'members' | 'inventory' | 'reports' | 'settings'
+export type HqTab = 'dashboard' | 'sales' | 'stylist' | 'members' | 'customers' | 'inventory' | 'reports' | 'settings'
 
 export const HQ_TABS: { id: HqTab; label: string; code: string }[] = [
   { id: 'dashboard', label: 'ダッシュボード', code: 'DASH' },
   { id: 'sales',     label: '売上分析',       code: 'SALES' },
   { id: 'stylist',   label: 'スタイリスト分析', code: 'STAFF' },
   { id: 'members',   label: '会員分析',       code: 'MBRS' },
+  { id: 'customers', label: '顧客カルテ',      code: 'CUSTOMERS' },
   { id: 'inventory', label: '在庫管理',       code: 'STOCK' },
   { id: 'reports',   label: '日報',           code: 'REPORT' },
   { id: 'settings',  label: '設定',           code: 'CFG' },

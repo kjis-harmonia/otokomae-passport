@@ -6,6 +6,7 @@ import { HqDashboardScreen } from './screens/HqDashboardScreen'
 import { HqSalesScreen } from './screens/HqSalesScreen'
 import { HqStylistScreen } from './screens/HqStylistScreen'
 import { HqMembersScreen } from './screens/HqMembersScreen'
+import { HqCustomerKarteScreen } from './screens/HqCustomerKarteScreen'
 import { HqInventoryScreen } from './screens/HqInventoryScreen'
 import { HqDailyReportScreen } from './screens/HqDailyReportScreen'
 import { HqSettingsScreen } from './screens/HqSettingsScreen'
@@ -124,6 +125,7 @@ export function HeadquartersApp() {
           {tab === 'sales' && <HqSalesScreen />}
           {tab === 'stylist' && <HqStylistScreen />}
           {tab === 'members' && <HqMembersScreen />}
+          {tab === 'customers' && <HqCustomerKarteScreen />}
           {tab === 'inventory' && <HqInventoryScreen />}
           {tab === 'reports' && <HqDailyReportScreen />}
           {tab === 'settings' && <HqSettingsScreen />}
