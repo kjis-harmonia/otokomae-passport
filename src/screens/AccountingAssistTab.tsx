@@ -317,7 +317,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const byCategory = (cat: AccountingCategory) => items.filter(i => i.category === cat)
 
   return (
-    <div style={{ paddingBottom: 280 }}>
+    <div style={{ paddingBottom: 340 }}>
       {/* ── 顧客 / QR読み込み ── */}
       <div style={{
         borderRadius: 16, border: '1px solid rgba(201,162,74,0.22)',
@@ -436,6 +436,30 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         ))
       )}
 
+      {/* ── 選択中の商品（注文内容サマリー） ── */}
+      {selectedItems.length > 0 && (
+        <div style={{
+          borderRadius: 14, border: '1px solid rgba(201,162,74,0.2)',
+          background: '#0A0A0A', padding: '12px 14px', marginBottom: 14,
+        }}>
+          <p style={{ fontSize: 11, letterSpacing: '0.1em', color: '#e5e5e5', marginBottom: 8 }}>選択中の商品</p>
+          <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+            {selectedItems.map(i => (
+              <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#ffffff', marginBottom: 4 }}>
+                <span>{i.name}</span>
+                <span>¥{i.price.toLocaleString()}</span>
+              </div>
+            ))}
+            {discount && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#C9A24A', marginBottom: 4 }}>
+                <span>{discount.label}</span>
+                <span>-¥{discount.amount.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={() => setShowManager(true)}
@@ -448,29 +472,13 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         商品マスタを編集
       </button>
 
-      {/* ── 固定フッター: 合計・会計完了 ── */}
+      {/* ── 固定フッター: 支払い方法・合計・会計完了 ── */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-        background: 'linear-gradient(0deg, rgba(0,0,0,0.99) 0%, rgba(0,0,0,0.96) 70%, transparent 100%)',
-        padding: '14px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
+        background: '#070707', borderTop: '1px solid rgba(201,162,74,0.28)',
+        boxShadow: '0 -10px 28px rgba(0,0,0,0.7)',
+        padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))',
       }}>
-        {selectedItems.length > 0 && (
-          <div style={{ marginBottom: 8, maxHeight: 92, overflowY: 'auto' }}>
-            {selectedItems.map(i => (
-              <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#e5e5e5', marginBottom: 2 }}>
-                <span>{i.name}</span>
-                <span>¥{i.price.toLocaleString()}</span>
-              </div>
-            ))}
-            {discount && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#C9A24A', marginBottom: 2 }}>
-                <span>{discount.label}</span>
-                <span>-¥{discount.amount.toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-        )}
-
         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
           {PAYMENT_METHODS.map(m => {
             const selected = paymentMethod === m.id
