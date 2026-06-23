@@ -9,6 +9,7 @@ import type { CustomerRow } from '../utils/customerStore'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
 import {
   getAccountingItems, createAccountingItem, updateAccountingItem, createAccountingSession, setAccountingSessionStatus,
+  autoClassifyRetailGroups,
 } from '../utils/accountingStore'
 import type { AccountingItem, AccountingCategory, PaymentMethod } from '../utils/accountingStore'
 import {
@@ -869,6 +870,9 @@ function ItemManagerModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [autoClassifying, setAutoClassifying] = useState(false)
+  const [autoClassifyResult, setAutoClassifyResult] = useState<string | null>(null)
+
   const loadAll = useCallback(async () => {
     setAllItems(await getAccountingItems())
   }, [])
@@ -910,6 +914,20 @@ function ItemManagerModal({
     if (updated) { await loadAll(); onChanged() }
   }
 
+  async function handleAutoClassify() {
+    setAutoClassifying(true)
+    setAutoClassifyResult(null)
+    const { updated, total } = await autoClassifyRetailGroups()
+    setAutoClassifying(false)
+    setAutoClassifyResult(
+      total === 0
+        ? '対象商品はありませんでした（店販商品はすべて分類済みです）'
+        : `${updated}/${total}件の店販商品にサブカテゴリーを自動設定しました`,
+    )
+    await loadAll()
+    onChanged()
+  }
+
   void items // 親の有効商品一覧は再読込トリガーとしてのみ使用
 
   return (
@@ -921,6 +939,24 @@ function ItemManagerModal({
         <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: '#ffffff', marginBottom: 16 }}>
           商品マスタ管理
         </p>
+
+        {/* 店販カテゴリ自動分類 */}
+        <button
+          type="button"
+          onClick={() => void handleAutoClassify()}
+          disabled={autoClassifying}
+          style={{
+            width: '100%', padding: '12px 0', borderRadius: 12, marginBottom: 8,
+            background: 'rgba(201,162,74,0.12)', border: '1px solid rgba(201,162,74,0.4)',
+            color: '#C9A24A', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.06em',
+            cursor: autoClassifying ? 'default' : 'pointer',
+          }}
+        >
+          {autoClassifying ? '分類中…' : '店販カテゴリを自動分類'}
+        </button>
+        {autoClassifyResult && (
+          <p style={{ fontSize: 12, color: '#e5e5e5', marginBottom: 18, textAlign: 'center' }}>{autoClassifyResult}</p>
+        )}
 
         {/* 新規追加 */}
         <div style={{ borderRadius: 14, background: '#000000', border: '1px solid rgba(201,162,74,0.2)', padding: 14, marginBottom: 18 }}>

@@ -102,6 +102,58 @@ export async function updateAccountingItem(
   }
 }
 
+// ── 店販商品名→retail_group 自動分類 ────────────────────────────────────────
+// 手入力での「商品マスタを編集」が大変なので、商品名にキーワードが含まれるかどうかで
+// retail_group を推定する。スタイリング剤を先に判定（キーワード重複は無いが、念のため
+// この順序で判定する）。
+const STYLING_KEYWORDS = [
+  'BROSH', 'DOORS', 'グリース', 'ポマード', 'ジェル', 'ワックス', 'スプレー', 'ムース',
+  'ヘアクリーム', 'ハード', 'NWDY', 'VO5', 'クックグリース', 'ワコマリア',
+]
+const CARE_KEYWORDS = [
+  'シャンプー', 'トリートメント', 'ヘアオイル', 'セラム', 'モイスト', 'シャイン', '紫シャンプー', 'ミュナス',
+]
+const OTHER_GROUP = 'その他'
+
+export function classifyRetailGroup(name: string): string {
+  if (STYLING_KEYWORDS.some((k) => name.includes(k))) return 'スタイリング剤'
+  if (CARE_KEYWORDS.some((k) => name.includes(k))) return 'シャンプー・ケア'
+  return OTHER_GROUP
+}
+
+export interface AutoClassifyResult {
+  updated: number
+  total: number
+}
+
+/**
+ * category='店販'・有効(is_active!==false)・retail_group が未設定（null/空文字）の商品だけを
+ * 対象に、商品名ルールで retail_group を一括設定する。すでに人が設定したグループは上書きしない。
+ */
+export async function autoClassifyRetailGroups(): Promise<AutoClassifyResult> {
+  try {
+    const { data, error } = await supabase.from('accounting_items').select('*').eq('category', 'retail')
+    if (error || !data) return { updated: 0, total: 0 }
+
+    const targets = (data as AccountingItem[]).filter(
+      (i) => i.is_active !== false && (!i.retail_group || i.retail_group.trim() === ''),
+    )
+
+    let updated = 0
+    for (const item of targets) {
+      const group = classifyRetailGroup(item.name)
+      const result = await updateAccountingItem(item.id, { retail_group: group })
+      if (result) updated++
+    }
+
+    console.log(`[accountingStore] 店販自動分類: ${updated}/${targets.length}件 更新`)
+    return { updated, total: targets.length }
+  } catch (e) {
+    console.error('[accountingStore] autoClassifyRetailGroups error:', e)
+    return { updated: 0, total: 0 }
+  }
+}
+
 export interface AccountingSessionItemInput {
   item_id: string | null
   item_name: string
