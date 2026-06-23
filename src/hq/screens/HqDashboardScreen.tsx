@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { HqPanel } from '../components/HqPanel'
 import { HqStatTile } from '../components/HqStatTile'
-import { getHqDashboardData } from '../hqDataStore'
-import type { HqDashboardData } from '../hqDataStore'
+import { getHqDashboardData, subscribeHqRealtime } from '../hqDataStore'
+import type { HqDashboardData, HqRealtimeStatus } from '../hqDataStore'
 import { HQ_COLORS, HQ_MONO, HQ_SANS, HQ_SERIF } from '../hqTheme'
 
 type LoadState =
@@ -14,20 +14,80 @@ function yen(v: number): string {
   return `¥${v.toLocaleString()}`
 }
 
+function fmtClock(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function LiveSyncBadge({ status, lastUpdated }: { status: HqRealtimeStatus; lastUpdated: Date | null }) {
+  const live = status === 'live'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+      <span
+        aria-hidden="true"
+        style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: live ? HQ_COLORS.positive : HQ_COLORS.textMute,
+          boxShadow: live ? `0 0 6px ${HQ_COLORS.positive}` : 'none',
+          animation: live ? 'hqLiveSyncPulse 1.8s ease-in-out infinite' : 'none',
+        }}
+      />
+      <span style={{ fontFamily: HQ_MONO, fontSize: 10, letterSpacing: '0.1em', color: live ? HQ_COLORS.textSecondary : HQ_COLORS.textMute }}>
+        {live ? 'LIVE SYNC' : 'LIVE SYNC待機中'}
+      </span>
+      {lastUpdated && (
+        <span style={{ fontFamily: HQ_MONO, fontSize: 10, color: HQ_COLORS.textMute }}>
+          最終更新 {fmtClock(lastUpdated)}
+        </span>
+      )}
+      <style>{`
+        @keyframes hqLiveSyncPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 export function HqDashboardScreen() {
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
+  const [realtimeStatus, setRealtimeStatus] = useState<HqRealtimeStatus>('connecting')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    setState({ phase: 'loading' })
+  const load = useCallback(() => {
     getHqDashboardData()
-      .then((data) => { if (!cancelled) setState({ phase: 'ready', data }) })
+      .then((data) => {
+        setState({ phase: 'ready', data })
+        setLastUpdated(new Date())
+      })
       .catch((e) => {
         console.error('[HqDashboardScreen] getHqDashboardData error:', e)
-        if (!cancelled) setState({ phase: 'error', message: '売上データの取得に失敗しました。' })
+        setState((prev) => (prev.phase === 'ready' ? prev : { phase: 'error', message: '売上データの取得に失敗しました。' }))
       })
-    return () => { cancelled = true }
   }, [])
+
+  // 初回fetch（リアルタイム購読の成否に関わらず必ず実行）
+  useEffect(() => {
+    setState({ phase: 'loading' })
+    load()
+  }, [load])
+
+  // accounting_sessions / accounting_session_items / shop_status の変更を購読し、再集計する
+  useEffect(() => {
+    setRealtimeStatus('connecting')
+    const unsubscribe = subscribeHqRealtime(
+      () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+        debounceRef.current = setTimeout(load, 400)
+      },
+      setRealtimeStatus,
+    )
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      unsubscribe()
+    }
+  }, [load])
 
   if (state.phase === 'loading') {
     return (
@@ -55,6 +115,8 @@ export function HqDashboardScreen() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <LiveSyncBadge status={realtimeStatus} lastUpdated={lastUpdated} />
+
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <HqStatTile label="本日売上" value={yen(data.todaySales)} />
         <HqStatTile label="本日来客" value={`${data.todayVisitors}名`} />

@@ -529,3 +529,28 @@ create policy "allow_all" on public.shop_status
 -- 初期データ（既存行があれば変更しない）
 insert into public.shop_status (id, status) values ('main', 'closed')
 on conflict (id) do nothing;
+
+-- ── 銀二郎本部 Phase4: Realtime購読の有効化 ──────────────────────────────────
+-- accounting_sessions / accounting_session_items / shop_status の変更を
+-- /headquarters ダッシュボードがリアルタイム反映するために必要。
+-- Supabase SQL Editor で実行してください（すでに supabase_realtime publication に
+-- 追加済みのテーブルに対して再実行しても "already member of publication" エラーで
+-- 落ちないよう、DOブロックで安全に無視します）。
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.accounting_sessions;
+  exception when duplicate_object then
+    null; -- すでに追加済み
+  end;
+  begin
+    alter publication supabase_realtime add table public.accounting_session_items;
+  exception when duplicate_object then
+    null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.shop_status;
+  exception when duplicate_object then
+    null;
+  end;
+end $$;

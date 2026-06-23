@@ -1,3 +1,4 @@
+import { REALTIME_SUBSCRIBE_STATES } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { getJapanDateString } from '../utils/dateUtils'
 import { getShopStatus } from '../utils/shopStatusStore'
@@ -192,5 +193,44 @@ export async function getHqDashboardData(): Promise<HqDashboardData> {
     stylists,
     menuRanking,
     retailRanking,
+  }
+}
+
+export type HqRealtimeStatus = 'connecting' | 'live' | 'error'
+
+/**
+ * 経営ダッシュボードの集計元テーブル（accounting_sessions / accounting_session_items /
+ * shop_status）の変更をリアルタイム購読する。変更を検知するごとに onChange を呼ぶだけで、
+ * 再集計は呼び出し側（onChange内でgetHqDashboardData等を再実行）に委ねる。
+ *
+ * 購読確立・切断時は onStatus でUIに伝える。購読自体が例外を投げても画面を壊さないよう
+ * try/catchで吸収し、'error' を通知するだけに留める。
+ */
+export function subscribeHqRealtime(
+  onChange: () => void,
+  onStatus?: (status: HqRealtimeStatus) => void,
+): () => void {
+  try {
+    const channel = supabase
+      .channel('hq-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'accounting_sessions' }, () => onChange())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'accounting_session_items' }, () => onChange())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shop_status' }, () => onChange())
+      .subscribe((status) => {
+        if (status === REALTIME_SUBSCRIBE_STATES.SUBSCRIBED) {
+          onStatus?.('live')
+        } else if (
+          status === REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR ||
+          status === REALTIME_SUBSCRIBE_STATES.TIMED_OUT ||
+          status === REALTIME_SUBSCRIBE_STATES.CLOSED
+        ) {
+          onStatus?.('error')
+        }
+      })
+    return () => { void supabase.removeChannel(channel) }
+  } catch (e) {
+    console.error('[hqDataStore] subscribeHqRealtime exception:', e)
+    onStatus?.('error')
+    return () => {}
   }
 }
