@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HqPanel } from '../components/HqPanel'
+import { HqStockAlertPanel } from '../components/HqStockAlertPanel'
 import {
   adjustProductStock, createProduct, getProducts, getStockStatus, subscribeProductsRealtime, updateProduct,
 } from '../hqInventoryStore'
@@ -146,6 +147,8 @@ export function HqInventoryScreen() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {state.phase === 'ready' && <HqStockAlertPanel products={state.products} />}
+
       <HqPanel title="商品追加" code="NEW">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <input

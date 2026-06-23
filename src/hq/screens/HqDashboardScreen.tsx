@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HqPanel } from '../components/HqPanel'
 import { HqStatTile } from '../components/HqStatTile'
+import { HqStockAlertSummaryTile } from '../components/HqStockAlertPanel'
 import { getHqDashboardData, subscribeHqRealtime } from '../hqDataStore'
 import type { HqDashboardData, HqRealtimeStatus } from '../hqDataStore'
+import { getProducts, subscribeProductsRealtime } from '../hqInventoryStore'
+import type { Product } from '../hqInventoryStore'
 import { HQ_COLORS, HQ_MONO, HQ_SANS, HQ_SERIF } from '../hqTheme'
 
 type LoadState =
@@ -55,6 +58,9 @@ export function HqDashboardScreen() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [products, setProducts] = useState<Product[]>([])
+  const productsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const load = useCallback(() => {
     getHqDashboardData()
       .then((data) => {
@@ -88,6 +94,26 @@ export function HqDashboardScreen() {
       unsubscribe()
     }
   }, [load])
+
+  // 在庫アラート用に products も独立して取得・購読する（失敗してもダッシュボード本体は壊さない）
+  const loadProducts = useCallback(() => {
+    getProducts().then(setProducts).catch((e) => {
+      console.error('[HqDashboardScreen] getProducts error:', e)
+    })
+  }, [])
+
+  useEffect(() => { loadProducts() }, [loadProducts])
+
+  useEffect(() => {
+    const unsubscribe = subscribeProductsRealtime(() => {
+      if (productsDebounceRef.current) clearTimeout(productsDebounceRef.current)
+      productsDebounceRef.current = setTimeout(loadProducts, 400)
+    })
+    return () => {
+      if (productsDebounceRef.current) clearTimeout(productsDebounceRef.current)
+      unsubscribe()
+    }
+  }, [loadProducts])
 
   if (state.phase === 'loading') {
     return (
@@ -140,6 +166,8 @@ export function HqDashboardScreen() {
             {data.shopStatus === null ? '不明' : isOpen ? '営業中' : '営業終了'}
           </p>
         </div>
+
+        <HqStockAlertSummaryTile products={products} />
       </div>
 
       <HqPanel title="スタイリスト別集計（本日）" code="STAFF">
