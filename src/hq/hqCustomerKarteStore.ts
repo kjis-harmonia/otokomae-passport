@@ -38,6 +38,7 @@ export interface ItemUsageEntry {
 }
 
 export interface CustomerKarteDetail {
+  customerId: string // customers.id（customer_notes.customer_idの参照先）
   userId: string
   name: string
   phoneLast4: string | null
@@ -138,7 +139,7 @@ export async function getCustomerKarteList(): Promise<CustomerKarteSummary[]> {
 /** 顧客詳細（顧客カルテ詳細画面）。該当顧客が見つからない場合は null。 */
 export async function getCustomerKarteDetail(userId: string): Promise<CustomerKarteDetail | null> {
   const [customerRes, sessionsRes] = await Promise.all([
-    supabase.from('customers').select('user_id, name, phone_last4, created_at').eq('user_id', userId).maybeSingle(),
+    supabase.from('customers').select('id, user_id, name, phone_last4, created_at').eq('user_id', userId).maybeSingle(),
     supabase
       .from('accounting_sessions')
       .select('id, user_id, total, stylist_name, staff_name, created_at')
@@ -204,6 +205,7 @@ export async function getCustomerKarteDetail(userId: string): Promise<CustomerKa
   }))
 
   return {
+    customerId: customer.id,
     userId: customer.user_id,
     name: customer.name,
     phoneLast4: customer.phone_last4,

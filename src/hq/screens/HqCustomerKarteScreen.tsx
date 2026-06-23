@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { HqPanel } from '../components/HqPanel'
 import { getCustomerKarteDetail, getCustomerKarteList } from '../hqCustomerKarteStore'
 import type { CustomerKarteDetail, CustomerKarteSummary } from '../hqCustomerKarteStore'
+import { createCustomerNote, getCustomerNotes } from '../hqCustomerNotesStore'
+import type { CustomerNote } from '../hqCustomerNotesStore'
 import { HQ_COLORS, HQ_MONO, HQ_SANS, HQ_SERIF } from '../hqTheme'
+
+const NOTE_STAFF_OPTIONS = ['テイテイ', '銀二郎', 'フリー'] as const
 
 type ListState =
   | { phase: 'loading' }
@@ -249,7 +253,144 @@ function CustomerKarteDetailView({ detail }: { detail: CustomerKarteDetail }) {
           </div>
         )}
       </HqPanel>
+
+      <CustomerNotesSection customerId={detail.customerId} />
     </div>
+  )
+}
+
+function CustomerNotesSection({ customerId }: { customerId: string }) {
+  const [notes, setNotes] = useState<CustomerNote[] | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [noteText, setNoteText] = useState('')
+  const [createdBy, setCreatedBy] = useState<typeof NOTE_STAFF_OPTIONS[number]>(NOTE_STAFF_OPTIONS[0])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(() => {
+    getCustomerNotes(customerId, 50).then(setNotes)
+  }, [customerId])
+
+  useEffect(() => { load() }, [load])
+
+  async function handleSave() {
+    const trimmed = noteText.trim()
+    if (!trimmed) { setError('メモ内容を入力してください'); return }
+    setSaving(true)
+    setError(null)
+    const created = await createCustomerNote({ customerId, note: trimmed, createdBy })
+    setSaving(false)
+    if (!created) { setError('メモの保存に失敗しました'); return }
+    setNoteText('')
+    setShowForm(false)
+    load()
+  }
+
+  return (
+    <HqPanel title="接客メモ" code={notes ? `${notes.length}件` : undefined}>
+      <div style={{ marginBottom: 14 }}>
+        {!showForm ? (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            style={{
+              padding: '8px 16px', borderRadius: 3,
+              border: `1px solid ${HQ_COLORS.panelBorderStrong}`,
+              background: 'rgba(201,162,74,0.12)', color: HQ_COLORS.goldHi,
+              fontFamily: HQ_SANS, fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            メモ追加
+          </button>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <textarea
+              placeholder="例：息子が野球部入部 / 次回は濡れパン弱め希望"
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              rows={3}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: HQ_SANS }}
+            />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {NOTE_STAFF_OPTIONS.map((name) => {
+                const active = createdBy === name
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setCreatedBy(name)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 3,
+                      border: `1px solid ${active ? HQ_COLORS.panelBorderStrong : HQ_COLORS.panelBorder}`,
+                      background: active ? 'rgba(201,162,74,0.16)' : 'transparent',
+                      color: active ? HQ_COLORS.goldHi : HQ_COLORS.textSecondary,
+                      fontFamily: HQ_SANS, fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    {name}
+                  </button>
+                )
+              })}
+            </div>
+            {error && (
+              <p style={{ fontFamily: HQ_SANS, fontSize: 11.5, color: HQ_COLORS.negative, margin: 0 }}>{error}</p>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => void handleSave()}
+                disabled={saving}
+                style={{
+                  padding: '8px 16px', borderRadius: 3,
+                  border: `1px solid ${HQ_COLORS.panelBorderStrong}`,
+                  background: 'rgba(201,162,74,0.12)', color: HQ_COLORS.goldHi,
+                  fontFamily: HQ_SANS, fontSize: 12, cursor: saving ? 'default' : 'pointer',
+                  opacity: saving ? 0.6 : 1,
+                }}
+              >
+                {saving ? '保存中…' : '保存'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowForm(false); setNoteText(''); setError(null) }}
+                style={{
+                  padding: '8px 16px', borderRadius: 3,
+                  border: `1px solid ${HQ_COLORS.panelBorder}`,
+                  background: 'transparent', color: HQ_COLORS.textSecondary,
+                  fontFamily: HQ_SANS, fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {notes === null ? (
+        <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textSecondary, margin: 0 }}>読み込み中…</p>
+      ) : notes.length === 0 ? (
+        <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textMute, margin: 0 }}>
+          接客メモはまだありません
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {notes.map((n) => (
+            <div key={n.id} style={{ borderTop: `1px solid ${HQ_COLORS.panelBorder}`, paddingTop: 10 }}>
+              <p style={{ fontFamily: HQ_MONO, fontSize: 11, color: HQ_COLORS.textMute, margin: 0, marginBottom: 4 }}>
+                {fmtDate(n.created_at.slice(0, 10))}
+              </p>
+              <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textPrimary, margin: 0, marginBottom: 4, whiteSpace: 'pre-wrap' }}>
+                {n.note}
+              </p>
+              <p style={{ fontFamily: HQ_SANS, fontSize: 11, color: HQ_COLORS.textSecondary, margin: 0 }}>
+                担当：{n.created_by}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </HqPanel>
   )
 }
 

@@ -615,3 +615,25 @@ create policy "allow_all" on public.daily_reports
   for all
   using (true)
   with check (true);
+
+-- ── customer_notes: 接客メモ（銀二郎本部 顧客カルテ Phase6-B）────────────────
+-- 「覚えてくれている接客」をシステム化するための自由記述メモ。MVPは追加のみ
+-- （編集・削除は今回実装しない）。customer_id は customers.id を参照。
+
+create table if not exists public.customer_notes (
+  id           uuid        default gen_random_uuid() primary key,
+  customer_id  uuid        not null references public.customers(id) on delete cascade,
+  note         text        not null,
+  created_by   text        not null,
+  created_at   timestamptz default now() not null
+);
+
+create index if not exists customer_notes_customer_id_idx on public.customer_notes (customer_id);
+create index if not exists customer_notes_created_at_idx  on public.customer_notes (created_at desc);
+
+alter table public.customer_notes enable row level security;
+
+create policy "allow_all" on public.customer_notes
+  for all
+  using (true)
+  with check (true);
