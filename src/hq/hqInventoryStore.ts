@@ -4,9 +4,14 @@ import { supabase } from '../lib/supabase'
 // 銀二郎本部 — 在庫管理（Phase5-A）
 // Phase5-Bで会計アシストとの連携（店販販売による在庫の自動引き落とし）を追加。
 
+export const PRODUCT_CATEGORIES = ['店販', 'パーマ液', 'カラー剤', '消耗品', '備品'] as const
+export type ProductCategory = typeof PRODUCT_CATEGORIES[number]
+
 export interface Product {
   id: string
   name: string
+  category: ProductCategory
+  is_active: boolean
   current_stock: number
   min_stock: number
   created_at: string
@@ -34,11 +39,13 @@ export function splitStockAlerts(products: Product[]): { reorder: Product[]; low
   return { reorder, low }
 }
 
+/** 在庫一覧取得。is_active=true の商品のみ（論理削除済みの商品は除外）。 */
 export async function getProducts(): Promise<Product[]> {
   try {
     const { data, error } = await supabase
       .from('products')
       .select('*')
+      .eq('is_active', true)
       .order('name', { ascending: true })
     if (error || !data) return []
     return data as Product[]
@@ -49,6 +56,7 @@ export async function getProducts(): Promise<Product[]> {
 
 export async function createProduct(input: {
   name: string
+  category: ProductCategory
   currentStock: number
   minStock: number
 }): Promise<Product | null> {
@@ -57,6 +65,7 @@ export async function createProduct(input: {
       .from('products')
       .insert({
         name: input.name,
+        category: input.category,
         current_stock: input.currentStock,
         min_stock: input.minStock,
       })
@@ -71,11 +80,12 @@ export async function createProduct(input: {
 
 export async function updateProduct(
   id: string,
-  patch: { name?: string; minStock?: number },
+  patch: { name?: string; category?: ProductCategory; minStock?: number },
 ): Promise<Product | null> {
   try {
     const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (patch.name !== undefined) dbPatch.name = patch.name
+    if (patch.category !== undefined) dbPatch.category = patch.category
     if (patch.minStock !== undefined) dbPatch.min_stock = patch.minStock
 
     const { data, error } = await supabase
@@ -88,6 +98,19 @@ export async function updateProduct(
     return data as Product
   } catch {
     return null
+  }
+}
+
+/** 論理削除（is_active=false）。過去の会計履歴・日報との整合性のため物理削除はしない。 */
+export async function deleteProduct(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    return !error
+  } catch {
+    return false
   }
 }
 

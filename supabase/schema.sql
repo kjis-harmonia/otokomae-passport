@@ -596,6 +596,33 @@ create table if not exists public.products (
 
 create index if not exists products_name_idx on public.products (name);
 
+-- ── 在庫カテゴリー分け・論理削除（Phase8）─────────────────────────────────────
+-- category: 固定5カテゴリーのみ許可。is_active: 論理削除フラグ
+-- （過去の会計履歴・日報との整合性を壊さないため、商品の物理削除は行わない）。
+
+alter table public.products
+  add column if not exists category text not null default '店販';
+
+alter table public.products
+  drop constraint if exists products_category_check;
+
+alter table public.products
+  add constraint products_category_check
+  check (category in ('店販', 'パーマ液', 'カラー剤', '消耗品', '備品'));
+
+alter table public.products
+  add column if not exists is_active boolean not null default true;
+
+-- 既存データの backfill（列追加時の default で新規行は満たされるが、
+-- 念のため明示的に既存 NULL 行を補完する）。
+update public.products
+set category = '店販'
+where category is null;
+
+update public.products
+set is_active = true
+where is_active is null;
+
 alter table public.products enable row level security;
 
 create policy "allow_all" on public.products

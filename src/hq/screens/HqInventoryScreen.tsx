@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { HqPanel } from '../components/HqPanel'
 import { HqStockAlertPanel } from '../components/HqStockAlertPanel'
 import {
-  adjustProductStock, createProduct, getProducts, getStockStatus, subscribeProductsRealtime, updateProduct,
+  adjustProductStock, createProduct, deleteProduct, getProducts, getStockStatus,
+  PRODUCT_CATEGORIES, subscribeProductsRealtime, updateProduct,
 } from '../hqInventoryStore'
-import type { Product, StockStatus } from '../hqInventoryStore'
+import type { Product, ProductCategory, StockStatus } from '../hqInventoryStore'
 import { HQ_COLORS, HQ_MONO, HQ_SANS } from '../hqTheme'
 
 type LoadState =
@@ -60,6 +61,7 @@ export function HqInventoryScreen() {
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
 
   const [newName, setNewName] = useState('')
+  const [newCategory, setNewCategory] = useState<ProductCategory>('店販')
   const [newStock, setNewStock] = useState('')
   const [newMinStock, setNewMinStock] = useState('')
   const [adding, setAdding] = useState(false)
@@ -67,12 +69,16 @@ export function HqInventoryScreen() {
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editCategory, setEditCategory] = useState<ProductCategory>('店販')
   const [editMinStock, setEditMinStock] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
   const [qtyInputs, setQtyInputs] = useState<Record<string, string>>({})
   const [adjustingId, setAdjustingId] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // silent=true: リアルタイム購読による再読み込み時は「読み込み中…」表示で
   // 編集中のフォームを潰さない。失敗しても直前の表示データを維持する。
@@ -110,16 +116,17 @@ export function HqInventoryScreen() {
 
     setAdding(true)
     setAddError(null)
-    const created = await createProduct({ name, currentStock, minStock })
+    const created = await createProduct({ name, category: newCategory, currentStock, minStock })
     setAdding(false)
     if (!created) { setAddError('商品の追加に失敗しました'); return }
-    setNewName(''); setNewStock(''); setNewMinStock('')
+    setNewName(''); setNewStock(''); setNewMinStock(''); setNewCategory('店販')
     load()
   }
 
   function startEdit(p: Product) {
     setEditingId(p.id)
     setEditName(p.name)
+    setEditCategory(p.category)
     setEditMinStock(String(p.min_stock))
   }
 
@@ -129,7 +136,7 @@ export function HqInventoryScreen() {
     const name = editName.trim()
     if (!name || !Number.isFinite(minStock) || minStock < 0) return
     setSavingEdit(true)
-    await updateProduct(editingId, { name, minStock })
+    await updateProduct(editingId, { name, category: editCategory, minStock })
     setSavingEdit(false)
     setEditingId(null)
     load()
@@ -145,6 +152,15 @@ export function HqInventoryScreen() {
     load()
   }
 
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    await deleteProduct(deleteTarget.id)
+    setDeleting(false)
+    setDeleteTarget(null)
+    load()
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {state.phase === 'ready' && <HqStockAlertPanel products={state.products} />}
@@ -157,6 +173,13 @@ export function HqInventoryScreen() {
             onChange={(e) => setNewName(e.target.value)}
             style={{ ...inputStyle, flex: '2 1 160px' }}
           />
+          <select
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value as ProductCategory)}
+            style={{ ...inputStyle, flex: '1 1 110px' }}
+          >
+            {PRODUCT_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
           <input
             placeholder="現在庫"
             type="number"
@@ -208,98 +231,165 @@ export function HqInventoryScreen() {
               商品が登録されていません
             </p>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: HQ_SANS }}>
-              <thead>
-                <tr>
-                  {['商品名', '現在庫', '最低在庫', '状態', '在庫操作', ''].map((label) => (
-                    <th key={label} style={{
-                      textAlign: 'left', fontSize: 10, letterSpacing: '0.08em',
-                      color: HQ_COLORS.textMute, fontWeight: 500, padding: '0 8px 10px 0',
-                      borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              {PRODUCT_CATEGORIES.map((cat) => {
+                const products = state.products.filter((p) => p.category === cat)
+                if (products.length === 0) return null
+                return (
+                  <div key={cat}>
+                    <p style={{
+                      fontFamily: HQ_SANS, fontSize: 12, letterSpacing: '0.1em', fontWeight: 700,
+                      color: HQ_COLORS.goldHi, margin: '0 0 8px',
                     }}>
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {state.products.map((p) => {
-                  const status = getStockStatus(p.current_stock, p.min_stock)
-                  const isEditing = editingId === p.id
-                  return (
-                    <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5 }}>
-                        {isEditing ? (
-                          <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ ...inputStyle, width: 140 }} />
-                        ) : (
-                          <span style={{ color: HQ_COLORS.textPrimary }}>{p.name}</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 8px 10px 0', fontSize: 13, fontFamily: HQ_MONO, color: HQ_COLORS.textPrimary }}>
-                        {p.current_stock}
-                      </td>
-                      <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5 }}>
-                        {isEditing ? (
-                          <input
-                            type="number" inputMode="numeric"
-                            value={editMinStock} onChange={(e) => setEditMinStock(e.target.value)}
-                            style={{ ...inputStyle, width: 70 }}
-                          />
-                        ) : (
-                          <span style={{ fontFamily: HQ_MONO, color: HQ_COLORS.textSecondary }}>{p.min_stock}</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5, whiteSpace: 'nowrap', color: STATUS_COLOR[status] }}>
-                        {STATUS_LABEL[status]}
-                      </td>
-                      <td style={{ padding: '10px 8px 10px 0', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <input
-                            placeholder="1"
-                            type="number" inputMode="numeric"
-                            value={qtyInputs[p.id] ?? ''}
-                            onChange={(e) => setQtyInputs((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                            style={{ ...inputStyle, width: 56 }}
-                          />
-                          <button
-                            type="button" onClick={() => handleAdjust(p.id, -1)}
-                            disabled={adjustingId === p.id}
-                            style={{ ...ghostButtonStyle, padding: '4px 10px' }}
-                          >
-                            − 出庫
-                          </button>
-                          <button
-                            type="button" onClick={() => handleAdjust(p.id, 1)}
-                            disabled={adjustingId === p.id}
-                            style={{ ...buttonStyle, padding: '4px 10px' }}
-                          >
-                            ＋ 入庫
-                          </button>
-                        </div>
-                      </td>
-                      <td style={{ padding: '10px 0 10px 0', whiteSpace: 'nowrap' }}>
-                        {isEditing ? (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button type="button" onClick={handleSaveEdit} disabled={savingEdit} style={{ ...buttonStyle, padding: '4px 10px' }}>
-                              保存
-                            </button>
-                            <button type="button" onClick={() => setEditingId(null)} style={{ ...ghostButtonStyle, padding: '4px 10px' }}>
-                              キャンセル
-                            </button>
-                          </div>
-                        ) : (
-                          <button type="button" onClick={() => startEdit(p)} style={{ ...ghostButtonStyle, padding: '4px 10px' }}>
-                            編集
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                      {cat}
+                    </p>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: HQ_SANS }}>
+                      <thead>
+                        <tr>
+                          {['商品名', 'カテゴリー', '現在庫', '最低在庫', '状態', '在庫操作', ''].map((label) => (
+                            <th key={label} style={{
+                              textAlign: 'left', fontSize: 10, letterSpacing: '0.08em',
+                              color: HQ_COLORS.textMute, fontWeight: 500, padding: '0 8px 10px 0',
+                              borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
+                            }}>
+                              {label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {products.map((p) => {
+                          const status = getStockStatus(p.current_stock, p.min_stock)
+                          const isEditing = editingId === p.id
+                          return (
+                            <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5 }}>
+                                {isEditing ? (
+                                  <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ ...inputStyle, width: 140 }} />
+                                ) : (
+                                  <span style={{ color: HQ_COLORS.textPrimary }}>{p.name}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5 }}>
+                                {isEditing ? (
+                                  <select
+                                    value={editCategory}
+                                    onChange={(e) => setEditCategory(e.target.value as ProductCategory)}
+                                    style={{ ...inputStyle, width: 100 }}
+                                  >
+                                    {PRODUCT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                                  </select>
+                                ) : (
+                                  <span style={{ color: HQ_COLORS.textSecondary }}>{p.category}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '10px 8px 10px 0', fontSize: 13, fontFamily: HQ_MONO, color: HQ_COLORS.textPrimary }}>
+                                {p.current_stock}
+                              </td>
+                              <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5 }}>
+                                {isEditing ? (
+                                  <input
+                                    type="number" inputMode="numeric"
+                                    value={editMinStock} onChange={(e) => setEditMinStock(e.target.value)}
+                                    style={{ ...inputStyle, width: 70 }}
+                                  />
+                                ) : (
+                                  <span style={{ fontFamily: HQ_MONO, color: HQ_COLORS.textSecondary }}>{p.min_stock}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '10px 8px 10px 0', fontSize: 12.5, whiteSpace: 'nowrap', color: STATUS_COLOR[status] }}>
+                                {STATUS_LABEL[status]}
+                              </td>
+                              <td style={{ padding: '10px 8px 10px 0', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                  <input
+                                    placeholder="1"
+                                    type="number" inputMode="numeric"
+                                    value={qtyInputs[p.id] ?? ''}
+                                    onChange={(e) => setQtyInputs((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                                    style={{ ...inputStyle, width: 56 }}
+                                  />
+                                  <button
+                                    type="button" onClick={() => handleAdjust(p.id, -1)}
+                                    disabled={adjustingId === p.id}
+                                    style={{ ...ghostButtonStyle, padding: '4px 10px' }}
+                                  >
+                                    − 出庫
+                                  </button>
+                                  <button
+                                    type="button" onClick={() => handleAdjust(p.id, 1)}
+                                    disabled={adjustingId === p.id}
+                                    style={{ ...buttonStyle, padding: '4px 10px' }}
+                                  >
+                                    ＋ 入庫
+                                  </button>
+                                </div>
+                              </td>
+                              <td style={{ padding: '10px 0 10px 0', whiteSpace: 'nowrap' }}>
+                                {isEditing ? (
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button type="button" onClick={handleSaveEdit} disabled={savingEdit} style={{ ...buttonStyle, padding: '4px 10px' }}>
+                                      保存
+                                    </button>
+                                    <button type="button" onClick={() => setEditingId(null)} style={{ ...ghostButtonStyle, padding: '4px 10px' }}>
+                                      キャンセル
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button type="button" onClick={() => startEdit(p)} style={{ ...ghostButtonStyle, padding: '4px 10px' }}>
+                                      編集
+                                    </button>
+                                    <button
+                                      type="button" onClick={() => setDeleteTarget(p)}
+                                      style={{ ...ghostButtonStyle, padding: '4px 10px', color: HQ_COLORS.negative, borderColor: 'rgba(216,107,92,0.4)' }}
+                                    >
+                                      削除
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </HqPanel>
+      )}
+
+      {deleteTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{
+            width: '100%', maxWidth: 360, borderRadius: 6, background: HQ_COLORS.panel,
+            border: `1px solid ${HQ_COLORS.panelBorderStrong}`, padding: 22,
+          }}>
+            <p style={{ fontFamily: HQ_SANS, fontSize: 14, fontWeight: 700, color: HQ_COLORS.textPrimary, margin: 0, marginBottom: 6 }}>
+              商品を削除しますか？
+            </p>
+            <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textSecondary, margin: 0, marginBottom: 18 }}>
+              「{deleteTarget.name}」を削除します。この操作は元に戻せません。
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={deleting} style={ghostButtonStyle}>
+                いいえ
+              </button>
+              <button
+                type="button" onClick={() => void handleConfirmDelete()} disabled={deleting}
+                style={{ ...buttonStyle, background: 'rgba(216,107,92,0.16)', borderColor: HQ_COLORS.negative, color: HQ_COLORS.negative }}
+              >
+                {deleting ? '削除中…' : 'はい'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
