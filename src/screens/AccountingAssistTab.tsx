@@ -20,6 +20,7 @@ import type { Product } from '../hq/hqInventoryStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const QR_EL_ID_ACCOUNTING = 'gj-qr-reader-accounting'
+const MAINTENANCE_COUPON_ITEM_ID = '__maintenance_coupon__'
 
 const CATEGORY_LABELS: Record<AccountingCategory, string> = {
   menu: 'メニュー',
@@ -182,9 +183,19 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
     ...items.map(i => ({ id: i.id, name: i.name, price: i.price ?? 0, category: i.category })),
     ...retailProducts.map(p => ({ id: p.id, name: p.name, price: p.price ?? 0, category: 'retail' as const })),
   ]
-  const selectedItems = allLineItems.filter(i => selectedIds.has(i.id))
+  // メンテナンスクーポンは「3,000円割引」ではなく「メンテナンスカットを3,000円で受けられる券」
+  // ──割引ではなく、¥3,000のメニュー1点として会計に入れる（会計履歴・日報・本部売上にも
+  // 通常の売上として正しく記録されるようにするため）。
+  const isMaintenanceCoupon = discount?.ticketType === 'coupon'
+  const maintenanceCouponItem: SelectableLineItem | null = isMaintenanceCoupon
+    ? { id: MAINTENANCE_COUPON_ITEM_ID, name: 'メンテナンスカット', price: discount!.amount, category: 'menu' }
+    : null
+  const selectedItems = [
+    ...allLineItems.filter(i => selectedIds.has(i.id)),
+    ...(maintenanceCouponItem ? [maintenanceCouponItem] : []),
+  ]
   const subtotal = selectedItems.reduce((sum, i) => sum + i.price, 0)
-  const discountTotal = discount?.amount ?? 0
+  const discountTotal = isMaintenanceCoupon ? 0 : (discount?.amount ?? 0)
   const total = Math.max(0, subtotal - discountTotal)
   const canComplete = staffId.trim() !== '' && stylistName !== null && paymentMethod !== null && selectedItems.length > 0 && !completing
 
@@ -525,7 +536,9 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
             padding: '8px 12px',
           }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: '#C9A24A', fontFamily: SERIF }}>
-              {discount.label} 適用中 -¥{discount.amount.toLocaleString()}
+              {isMaintenanceCoupon
+                ? `メンテナンスカット ¥${discount.amount.toLocaleString()} 適用中`
+                : `${discount.label} 適用中 -¥${discount.amount.toLocaleString()}`}
             </p>
             <button
               type="button"
@@ -707,12 +720,18 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           <p style={{ fontSize: 11, letterSpacing: '0.1em', color: '#e5e5e5', marginBottom: 8 }}>選択中の商品</p>
           <div style={{ maxHeight: 160, overflowY: 'auto' }}>
             {selectedItems.map(i => (
-              <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#ffffff', marginBottom: 4 }}>
+              <div
+                key={i.id}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', fontSize: 13,
+                  color: i.id === MAINTENANCE_COUPON_ITEM_ID ? '#C9A24A' : '#ffffff', marginBottom: 4,
+                }}
+              >
                 <span>{i.name}</span>
                 <span>¥{(i.price ?? 0).toLocaleString()}</span>
               </div>
             ))}
-            {discount && (
+            {discount && !isMaintenanceCoupon && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#C9A24A', marginBottom: 4 }}>
                 <span>{discount.label}</span>
                 <span>-¥{discount.amount.toLocaleString()}</span>
