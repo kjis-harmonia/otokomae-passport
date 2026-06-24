@@ -64,9 +64,9 @@ export async function saveUsageLog(entry: Omit<UsageLogEntry, 'id' | 'used_at'>)
 
 /**
  * JST当日にuserIdが使用済みの割引種別（ticket_type）を1つ返す。未使用ならnull。
- * 銀二郎新ルール（使用枚数制限の解除）：
- * - 漢トク券(otoku)・割引券(discount)は同種であれば1日に何枚でも使用可
- * - メンテナンスクーポン(coupon)は引き続き1日1回まで
+ * 銀二郎新ルール：
+ * - 漢トク券(otoku)は1日に何枚でも使用可（使用枚数制限の解除）
+ * - 割引券(discount)・メンテナンスクーポン(coupon)は1日1回まで
  * - ただし3種の併用（異なる割引種別を同日に使うこと）は不可
  * 実際の許可判定は canUseDiscountType() で行う。
  */
@@ -91,7 +91,7 @@ export async function fetchTodayUsedType(userId: string, today: string): Promise
 export function canUseDiscountType(usedType: string | null, attemptedType: string): boolean {
   if (usedType === null) return true
   if (usedType !== attemptedType) return false // 異なる割引種別の併用は不可（1日どれか一つ）
-  return attemptedType !== 'coupon' // メンテナンスクーポンのみ1日1回。漢トク券・割引券は同種なら複数枚可
+  return attemptedType === 'otoku' // 漢トク券のみ同種で複数枚可。割引券・メンテナンスクーポンは1日1回
 }
 
 const DISCOUNT_TYPE_LABEL: Record<string, string> = {
@@ -1577,7 +1577,7 @@ export function AdminScreen() {
                           {isBlockedToday && (
                             <p style={{ fontSize: 9, color: 'rgba(224,96,80,1)', marginTop: 8, lineHeight: 1.5 }}>
                               本日は{todayUsedType ? DISCOUNT_TYPE_LABEL[todayUsedType] ?? todayUsedType : '他の割引'}をご利用済みのため使用できません。<br />
-                              割引の併用は1日1種類までです（同じ種別は複数枚使用できます）。
+                              割引の併用は1日1種類までです（漢トク券のみ複数枚使用可、割引券は1日1枚）。
                             </p>
                           )}
                           {noStaff && !isBlockedToday && (

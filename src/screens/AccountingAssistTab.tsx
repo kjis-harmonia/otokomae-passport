@@ -288,9 +288,11 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         const cust = await getCustomerByUserId(tu.userId)
         setCustomer({ userId: tu.userId, name: cust?.name ?? 'お客様' })
 
-        // 同種別の未使用チケット一覧を取得し、スタッフが複数枚まとめて選択できるようにする
-        // （銀二郎新ルール：漢トク券・割引券は同種なら1日に何枚でも使用可）。
-        const sameTypeUnused = tickets.filter(t => !t.used && t.type === ticket.type)
+        // 漢トク券は1日に何枚でも使用可なので、同種別の未使用チケットをまとめて選択できるようにする。
+        // 割引券は1日1枚のまま — 複数選択させずスキャンした1枚のみ適用する。
+        const sameTypeUnused = ticket.type === 'otoku'
+          ? tickets.filter(t => !t.used && t.type === ticket.type)
+          : [ticket]
         setAvailableTickets(sameTypeUnused)
         setSelectedTicketIds(prev => existingType === ticket.type ? new Set([...prev, ticket.id]) : new Set([ticket.id]))
         setShowScanner(false)
