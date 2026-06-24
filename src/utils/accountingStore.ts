@@ -107,6 +107,19 @@ export interface CreateAccountingSessionResult {
  * accounting_session_items の保存に失敗した場合は status='failed' にして ok:false を返す
  * （sessionId 自体は返すので、呼び出し側は会計IDを案内できる）。
  */
+/** Supabaseのエラーオブジェクトをconsole.errorへ詳細出力する（調査用。挙動は変えない）。 */
+function logSupabaseError(step: string, error: unknown, context?: Record<string, unknown>): void {
+  const e = error as { message?: string; details?: string; hint?: string; code?: string } | null
+  console.error(`[accountingStore] ${step} failed`, {
+    message: e?.message,
+    details: e?.details,
+    hint: e?.hint,
+    code: e?.code,
+    raw: error,
+    context,
+  })
+}
+
 export async function createAccountingSession(input: CreateAccountingSessionInput): Promise<CreateAccountingSessionResult> {
   try {
     const { data, error } = await supabase
@@ -125,27 +138,39 @@ export async function createAccountingSession(input: CreateAccountingSessionInpu
       })
       .select()
       .single()
-    if (error || !data) return { sessionId: null, ok: false }
+    if (error || !data) {
+      logSupabaseError('createAccountingSession: accounting_sessions insert', error, {
+        payment_method: input.payment_method,
+        subtotal: input.subtotal,
+        discount_total: input.discount_total,
+        total: input.total,
+        user_id: input.user_id,
+      })
+      return { sessionId: null, ok: false }
+    }
     const sessionId = (data as { id: string }).id
 
     if (input.items.length > 0) {
-      const { error: itemsError } = await supabase.from('accounting_session_items').insert(
-        input.items.map(it => ({
-          session_id: sessionId,
-          item_id: it.item_id,
-          item_name: it.item_name,
-          category: it.category,
-          price: it.price,
-          quantity: it.quantity ?? 1,
-        })),
-      )
+      const itemRows = input.items.map(it => ({
+        session_id: sessionId,
+        item_id: it.item_id,
+        item_name: it.item_name,
+        category: it.category,
+        price: it.price,
+        quantity: it.quantity ?? 1,
+      }))
+      const { error: itemsError } = await supabase.from('accounting_session_items').insert(itemRows)
       if (itemsError) {
+        logSupabaseError('createAccountingSession: accounting_session_items insert', itemsError, {
+          sessionId, itemRows,
+        })
         await setAccountingSessionStatus(sessionId, 'failed')
         return { sessionId, ok: false }
       }
     }
     return { sessionId, ok: true }
-  } catch {
+  } catch (e) {
+    logSupabaseError('createAccountingSession: unexpected exception', e, { input })
     return { sessionId: null, ok: false }
   }
 }
@@ -157,8 +182,13 @@ export async function setAccountingSessionStatus(sessionId: string, status: Acco
       .from('accounting_sessions')
       .update({ status })
       .eq('id', sessionId)
-    return !error
-  } catch {
+    if (error) {
+      logSupabaseError('setAccountingSessionStatus: accounting_sessions update', error, { sessionId, status })
+      return false
+    }
+    return true
+  } catch (e) {
+    logSupabaseError('setAccountingSessionStatus: unexpected exception', e, { sessionId, status })
     return false
   }
 }
