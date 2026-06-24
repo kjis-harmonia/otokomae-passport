@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getJapanDateString } from '../utils/dateUtils'
 import { getUserTickets, markTicketUsed } from '../utils/ticketStore'
+import type { TicketRow } from '../data/ticket'
 import {
   getCustomerByUserId, findCustomersByNormalizedName, createGuestCustomer, getLastVisitDateForUser,
 } from '../utils/customerStore'
@@ -63,9 +64,9 @@ function getAccountingGroups(retailLineItems: { accountingGroup: string }[]): st
   return groups
 }
 
-interface AppliedDiscount {
-  ticketId: string | null   // null = メンテナンスクーポン（ticket行を持たない）
-  ticketType: string        // 'otoku' | 'discount' | 'coupon'
+interface AppliedTicket {
+  ticketId: string
+  ticketType: string  // 'otoku' | 'discount'
   label: string
   amount: number
 }
@@ -85,7 +86,13 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const [customer, setCustomer] = useState<AccountingCustomer | null>(null)
-  const [discount, setDiscount] = useState<AppliedDiscount | null>(null)
+  // 漢トク券・割引券は同種なら複数枚まとめて適用できる（銀二郎新ルール）。
+  // availableTickets: スキャンで判明した同種別の未使用チケット一覧（候補）。
+  // selectedTicketIds: そのうちスタッフが実際に適用するものとして選んだID。
+  const [availableTickets, setAvailableTickets] = useState<TicketRow[]>([])
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set())
+  // メンテナンスクーポンは1枚のみ（ticket行を持たない）。チケットとの併用は不可。
+  const [appliedCoupon, setAppliedCoupon] = useState<{ amount: number } | null>(null)
   const [stylistName, setStylistName] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null)
 
@@ -185,23 +192,40 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
     })
   }
 
+  function toggleTicket(ticketId: string) {
+    setSelectedTicketIds(prev => {
+      const next = new Set(prev)
+      if (next.has(ticketId)) next.delete(ticketId); else next.add(ticketId)
+      return next
+    })
+  }
+
+  function handleClearDiscount() {
+    setAvailableTickets([])
+    setSelectedTicketIds(new Set())
+    setAppliedCoupon(null)
+  }
+
   const allLineItems: SelectableLineItem[] = [
     ...items.map(i => ({ id: i.id, name: i.name, price: i.price ?? 0, category: i.category })),
     ...retailProducts.map(p => ({ id: p.id, name: p.name, price: p.price ?? 0, category: 'retail' as const })),
   ]
+  const appliedTickets: AppliedTicket[] = availableTickets
+    .filter(t => selectedTicketIds.has(t.id))
+    .map(t => ({ ticketId: t.id, ticketType: t.type, label: TICKET_TYPE_LABELS[t.type] ?? t.title, amount: t.amount }))
   // メンテナンスクーポンは「3,000円割引」ではなく「メンテナンスカットを3,000円で受けられる券」
   // ──割引ではなく、¥3,000のメニュー1点として会計に入れる（会計履歴・日報・本部売上にも
   // 通常の売上として正しく記録されるようにするため）。
-  const isMaintenanceCoupon = discount?.ticketType === 'coupon'
+  const isMaintenanceCoupon = appliedCoupon !== null
   const maintenanceCouponItem: SelectableLineItem | null = isMaintenanceCoupon
-    ? { id: MAINTENANCE_COUPON_ITEM_ID, name: 'メンテナンスカット', price: discount!.amount, category: 'menu' }
+    ? { id: MAINTENANCE_COUPON_ITEM_ID, name: 'メンテナンスカット', price: appliedCoupon.amount, category: 'menu' }
     : null
   const selectedItems = [
     ...allLineItems.filter(i => selectedIds.has(i.id)),
     ...(maintenanceCouponItem ? [maintenanceCouponItem] : []),
   ]
   const subtotal = selectedItems.reduce((sum, i) => sum + i.price, 0)
-  const discountTotal = isMaintenanceCoupon ? 0 : (discount?.amount ?? 0)
+  const discountTotal = appliedTickets.reduce((sum, t) => sum + t.amount, 0)
   const total = Math.max(0, subtotal - discountTotal)
   const canComplete = staffId.trim() !== '' && stylistName !== null && paymentMethod !== null && selectedItems.length > 0 && !completing
 
@@ -220,6 +244,11 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
     // ── 漢トク券・割引券（チケット使用QR） ──
     if (parsed.type === 'ginjiro-ticket-use') {
       const tu = parsed as TicketUseQRData
+      if (isMaintenanceCoupon) {
+        setScanError('メンテナンスクーポン適用中は割引チケットを併用できません。先にクーポンを解除してください。')
+        setScanLoading(false)
+        return
+      }
       if (new Date() > new Date(tu.expiresAt)) {
         setScanError('このチケットQRは期限切れです。')
         setScanLoading(false)
@@ -238,6 +267,15 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           setScanLoading(false)
           return
         }
+        const existingType = availableTickets[0]?.type ?? null
+        if (existingType && existingType !== ticket.type) {
+          setScanError(
+            `現在「${DISCOUNT_TYPE_LABEL[existingType] ?? existingType}」を選択中です。`
+            + '異なる種別の割引チケットを併用することはできません。',
+          )
+          setScanLoading(false)
+          return
+        }
         const usedType = await fetchTodayUsedType(tu.userId, today)
         if (!canUseDiscountType(usedType, ticket.type)) {
           setScanError(
@@ -249,12 +287,12 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         }
         const cust = await getCustomerByUserId(tu.userId)
         setCustomer({ userId: tu.userId, name: cust?.name ?? 'お客様' })
-        setDiscount({
-          ticketId: ticket.id,
-          ticketType: ticket.type,
-          label: TICKET_TYPE_LABELS[ticket.type] ?? ticket.title,
-          amount: ticket.amount,
-        })
+
+        // 同種別の未使用チケット一覧を取得し、スタッフが複数枚まとめて選択できるようにする
+        // （銀二郎新ルール：漢トク券・割引券は同種なら1日に何枚でも使用可）。
+        const sameTypeUnused = tickets.filter(t => !t.used && t.type === ticket.type)
+        setAvailableTickets(sameTypeUnused)
+        setSelectedTicketIds(prev => existingType === ticket.type ? new Set([...prev, ticket.id]) : new Set([ticket.id]))
         setShowScanner(false)
       } catch {
         setScanError('チケット情報の取得に失敗しました。')
@@ -267,6 +305,11 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
     // ── メンテナンスクーポン ──
     if (parsed.type === 'ginjiro-maintenance-coupon') {
       const mc = parsed as MaintenanceCouponQRData
+      if (appliedTickets.length > 0) {
+        setScanError('割引チケット適用中はメンテナンスクーポンを併用できません。先にチケットを解除してください。')
+        setScanLoading(false)
+        return
+      }
       const usedType = await fetchTodayUsedType(mc.userId, today)
       if (!canUseDiscountType(usedType, 'coupon')) {
         setScanError(
@@ -277,7 +320,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         return
       }
       setCustomer({ userId: mc.userId, name: mc.name })
-      setDiscount({ ticketId: null, ticketType: 'coupon', label: 'メンテナンスクーポン', amount: 3000 })
+      setAppliedCoupon({ amount: 3000 })
       setShowScanner(false)
       setScanLoading(false)
       return
@@ -288,10 +331,6 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
     setCustomer({ userId: passport.userId, name: passport.name })
     setShowScanner(false)
     setScanLoading(false)
-  }
-
-  function handleRemoveDiscount() {
-    setDiscount(null)
   }
 
   async function handleComplete() {
@@ -306,22 +345,24 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
 
     try {
       // ── 1. 直前再検証（QR読み込み時から状態が変わっていないか） ──
-      if (discount?.ticketId) {
+      if (appliedTickets.length > 0) {
         const tickets = await getUserTickets(customer?.userId ?? '')
-        const ticket = tickets.find(t => t.id === discount.ticketId)
-        if (!ticket) {
-          setCompleteError('チケットが見つかりません。会計を中止しました。')
-          setCompleting(false)
-          return
+        for (const at of appliedTickets) {
+          const ticket = tickets.find(t => t.id === at.ticketId)
+          if (!ticket) {
+            setCompleteError('チケットが見つかりません。会計を中止しました。')
+            setCompleting(false)
+            return
+          }
+          if (ticket.used) {
+            setCompleteError(`チケット（${at.label} ¥${at.amount.toLocaleString()}）はすでに使用済みです。`)
+            setCompleting(false)
+            return
+          }
         }
-        if (ticket.used) {
-          setCompleteError('このチケットはすでに使用済みです。')
-          setCompleting(false)
-          return
-        }
-      } else if (discount && customer) {
+      } else if (isMaintenanceCoupon && customer) {
         const usedType = await fetchTodayUsedType(customer.userId, today)
-        if (!canUseDiscountType(usedType, discount.ticketType)) {
+        if (!canUseDiscountType(usedType, 'coupon')) {
           setCompleteError('本日のメンテナンスクーポンはすでに使用済みか、他の割引と併用しています。')
           setCompleting(false)
           return
@@ -340,7 +381,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         subtotal,
         discount_total: discountTotal,
         total,
-        used_ticket_ids: discount?.ticketId ? [discount.ticketId] : [],
+        used_ticket_ids: appliedTickets.map(t => t.ticketId),
         items: selectedItems.map(i => ({
           item_id: i.id, item_name: i.name, category: i.category, price: i.price, quantity: 1,
         })),
@@ -355,20 +396,22 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
       // 会計履歴は既に保存済みなので、ここで失敗してもチケットは未使用のまま残り、
       // 「チケットused化だけ成功して会計履歴が残らない」状態には絶対にならない。
       try {
-        if (discount?.ticketId) {
-          await markTicketUsed(discount.ticketId, staffId)
-          await saveUsageLog({
-            usage_date: today,
-            staff_name: staffId,
-            customer_name: customer?.name ?? '',
-            user_id: customer?.userId ?? '',
-            ticket_id: discount.ticketId,
-            ticket_type: discount.ticketType,
-            amount: discount.amount,
-            terminal: 'staff-terminal',
-            status: 'used',
-          })
-        } else if (discount && customer) {
+        if (appliedTickets.length > 0) {
+          for (const at of appliedTickets) {
+            await markTicketUsed(at.ticketId, staffId)
+            await saveUsageLog({
+              usage_date: today,
+              staff_name: staffId,
+              customer_name: customer?.name ?? '',
+              user_id: customer?.userId ?? '',
+              ticket_id: at.ticketId,
+              ticket_type: at.ticketType,
+              amount: at.amount,
+              terminal: 'staff-terminal',
+              status: 'used',
+            })
+          }
+        } else if (isMaintenanceCoupon && customer) {
           // メンテナンスクーポン（ticket行を持たない）も使用ログに残す
           await saveUsageLog({
             usage_date: today,
@@ -424,7 +467,9 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         setStockWarning(null)
         setSelectedIds(new Set())
         setCustomer(null)
-        setDiscount(null)
+        setAvailableTickets([])
+        setSelectedTicketIds(new Set())
+        setAppliedCoupon(null)
         setStylistName(null)
         setPaymentMethod(null)
         setGuestNameInput('')
@@ -449,7 +494,7 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
         borderRadius: 16, border: '1px solid rgba(201,162,74,0.22)',
         background: '#0A0A0A', padding: '14px 16px', marginBottom: 16,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: discount ? 10 : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: (isMaintenanceCoupon || availableTickets.length > 0) ? 10 : 0 }}>
           <div style={{ minWidth: 0 }}>
             <p style={{ fontSize: 10, letterSpacing: '0.12em', color: '#e5e5e5', marginBottom: 4 }}>お客様</p>
             <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -541,24 +586,56 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           </div>
         )}
 
-        {discount && (
+        {(isMaintenanceCoupon || availableTickets.length > 0) && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
             borderRadius: 10, background: 'rgba(201,162,74,0.10)', border: '1px solid rgba(201,162,74,0.4)',
-            padding: '8px 12px',
+            padding: '8px 12px', marginBottom: availableTickets.length > 0 ? 10 : 0,
           }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: '#C9A24A', fontFamily: SERIF }}>
               {isMaintenanceCoupon
-                ? `メンテナンスカット ¥${discount.amount.toLocaleString()} 適用中`
-                : `${discount.label} 適用中 -¥${discount.amount.toLocaleString()}`}
+                ? `メンテナンスカット ¥${appliedCoupon!.amount.toLocaleString()} 適用中`
+                : `${DISCOUNT_TYPE_LABEL[appliedTickets[0]?.ticketType] ?? '割引チケット'} ×${selectedTicketIds.size}枚 適用中（-¥${discountTotal.toLocaleString()}）`}
             </p>
             <button
               type="button"
-              onClick={handleRemoveDiscount}
+              onClick={handleClearDiscount}
               style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5', fontSize: 11, cursor: 'pointer' }}
             >
               解除
             </button>
+          </div>
+        )}
+
+        {/* ── 複数枚選択：同種別の未使用チケットをまとめて適用できる（銀二郎新ルール） ── */}
+        {availableTickets.length > 0 && (
+          <div>
+            <p style={{ fontSize: 11, color: '#999999', marginBottom: 8 }}>
+              使用するチケットを選択（{selectedTicketIds.size}/{availableTickets.length}枚選択中）
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {availableTickets.map(t => {
+                const selected = selectedTicketIds.has(t.id)
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggleTicket(t.id)}
+                    style={{
+                      padding: '8px 14px', borderRadius: 10, textAlign: 'center',
+                      background: selected ? 'rgba(201,162,74,0.18)' : 'rgba(255,255,255,0.04)',
+                      border: `1.5px solid ${selected ? '#C9A24A' : 'rgba(255,255,255,0.14)'}`,
+                      boxShadow: selected ? '0 0 12px rgba(201,162,74,0.3)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, color: selected ? '#C9A24A' : '#e5e5e5' }}>
+                      ¥{t.amount.toLocaleString()}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -743,12 +820,12 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
                 <span>¥{(i.price ?? 0).toLocaleString()}</span>
               </div>
             ))}
-            {discount && !isMaintenanceCoupon && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#C9A24A', marginBottom: 4 }}>
-                <span>{discount.label}</span>
-                <span>-¥{discount.amount.toLocaleString()}</span>
+            {appliedTickets.map(t => (
+              <div key={t.ticketId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#C9A24A', marginBottom: 4 }}>
+                <span>{DISCOUNT_TYPE_LABEL[t.ticketType] ?? t.label}</span>
+                <span>-¥{t.amount.toLocaleString()}</span>
               </div>
-            )}
+            ))}
           </div>
         </div>
       )}
