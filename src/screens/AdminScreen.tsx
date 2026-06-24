@@ -62,19 +62,42 @@ export async function saveUsageLog(entry: Omit<UsageLogEntry, 'id' | 'used_at'>)
   } catch { /* non-fatal: log failure must not block UI */ }
 }
 
-/** JST 当日に userId が1件でも使用済みなら true（種別を問わず） */
-export async function fetchTodayUsed(userId: string, today: string): Promise<boolean> {
+/**
+ * JST当日にuserIdが使用済みの割引種別（ticket_type）を1つ返す。未使用ならnull。
+ * 銀二郎新ルール（使用枚数制限の解除）：
+ * - 漢トク券(otoku)・割引券(discount)は同種であれば1日に何枚でも使用可
+ * - メンテナンスクーポン(coupon)は引き続き1日1回まで
+ * - ただし3種の併用（異なる割引種別を同日に使うこと）は不可
+ * 実際の許可判定は canUseDiscountType() で行う。
+ */
+export async function fetchTodayUsedType(userId: string, today: string): Promise<string | null> {
   try {
     const { data, error } = await supabase
       .from('ticket_usage_logs')
-      .select('id')
+      .select('ticket_type')
       .eq('user_id', userId)
       .eq('usage_date', today)
       .eq('status', 'used')
       .limit(1)
-    if (!error && data) return data.length > 0
+    if (!error && data && data.length > 0) return (data[0] as { ticket_type: string }).ticket_type
   } catch { /* table may not exist yet — treat as no restriction */ }
-  return false
+  return null
+}
+
+/**
+ * usedType（当日すでに使用済みの割引種別。未使用ならnull）に対して、
+ * attemptedType（これから使おうとしている割引種別）が使用可能か判定する。
+ */
+export function canUseDiscountType(usedType: string | null, attemptedType: string): boolean {
+  if (usedType === null) return true
+  if (usedType !== attemptedType) return false // 異なる割引種別の併用は不可（1日どれか一つ）
+  return attemptedType !== 'coupon' // メンテナンスクーポンのみ1日1回。漢トク券・割引券は同種なら複数枚可
+}
+
+const DISCOUNT_TYPE_LABEL: Record<string, string> = {
+  otoku: '漢トク券',
+  discount: '割引券',
+  coupon: 'メンテナンスクーポン',
 }
 
 // ── Issue log ─────────────────────────────────────────────────────────────────
@@ -387,7 +410,7 @@ export function AdminScreen() {
   const [pendingUseTicket, setPendingUseTicket]   = useState<TicketRow | null>(null)
   const [useConfirmLoading, setUseConfirmLoading] = useState(false)
   const [useError, setUseError]                   = useState<string | null>(null)
-  const [todayUsedThisDay, setTodayUsedThisDay]   = useState(false)
+  const [todayUsedType, setTodayUsedType]         = useState<string | null>(null)
   const [showUseComplete, setShowUseComplete]     = useState(false)
   const [useCompleteInfo, setUseCompleteInfo]     = useState<{ name: string; label: string; amount: number; remaining: number; checkedIn: boolean } | null>(null)
 
@@ -403,6 +426,7 @@ export function AdminScreen() {
   // Maintenance coupon QR flow
   const [maintCouponData, setMaintCouponData]         = useState<MaintenanceCouponQRData | null>(null)
   const [maintCouponTodayUsed, setMaintCouponTodayUsed] = useState(false)
+  const [maintCouponBlockedByType, setMaintCouponBlockedByType] = useState<string | null>(null)
   const [maintCouponConfirming, setMaintCouponConfirming] = useState(false)
   const [maintCouponConfirmed, setMaintCouponConfirmed] = useState(false)
   const [maintCouponBlockMsg, setMaintCouponBlockMsg] = useState<string | null>(null)
@@ -646,11 +670,12 @@ export function AdminScreen() {
     setPendingUseTicket(null)
     setUseConfirmLoading(false)
     setUseError(null)
-    setTodayUsedThisDay(false)
+    setTodayUsedType(null)
     setShowUseComplete(false)
     setUseCompleteInfo(null)
     setMaintCouponData(null)
     setMaintCouponTodayUsed(false)
+    setMaintCouponBlockedByType(null)
     setMaintCouponConfirming(false)
     setMaintCouponConfirmed(false)
     setMaintCouponBlockMsg(null)
@@ -691,8 +716,9 @@ export function AdminScreen() {
       setMaintCouponConfirming(false)
       setPhase('maintenance-coupon')
       const todayJST = getJapanDateString()
-      const usedToday = await fetchTodayUsed(mcData.userId, todayJST)
-      setMaintCouponTodayUsed(usedToday)
+      const usedType = await fetchTodayUsedType(mcData.userId, todayJST)
+      setMaintCouponTodayUsed(!canUseDiscountType(usedType, 'coupon'))
+      setMaintCouponBlockedByType(usedType)
       return
     }
 
@@ -708,8 +734,8 @@ export function AdminScreen() {
     else playWarningSound()
     await loadUserTickets(passportData.userId)
     const todayJST = getJapanDateString()
-    const usedThisDay = await fetchTodayUsed(passportData.userId, todayJST)
-    setTodayUsedThisDay(usedThisDay)
+    const usedType = await fetchTodayUsedType(passportData.userId, todayJST)
+    setTodayUsedType(usedType)
     setPhase('result')
   }, [loadUserTickets])
 
@@ -771,7 +797,7 @@ export function AdminScreen() {
   }
 
   function handleUseTicketClick(ticket: TicketRow) {
-    if (todayUsedThisDay || !staffId.trim()) return
+    if (!canUseDiscountType(todayUsedType, ticket.type) || !staffId.trim()) return
     setUseError(null)
     setPendingUseTicket(ticket)
     setShowUseConfirm(true)
@@ -802,7 +828,7 @@ export function AdminScreen() {
       setUserTickets(prev => prev.map(t =>
         t.id === ticketId ? { ...t, used: true, used_at: new Date().toISOString() } : t
       ))
-      setTodayUsedThisDay(true)
+      setTodayUsedType(ticketType)
       setCheckInStatus('done')
       setCheckInDate(today)
       setUseCompleteInfo({
@@ -845,10 +871,13 @@ export function AdminScreen() {
     setTicketConfirming(true); setTicketBlockMsg(null)
     const today = getJapanDateString()
     try {
-      // 当日利用チェック（3種共通 1日1枚制限）
-      const usedToday = await fetchTodayUsed(ticketUseData.userId, today)
-      if (usedToday) {
-        setTicketBlockMsg('本日はすでにクーポンを利用済みです（1日1枚制限）。')
+      // 当日利用チェック：異なる割引種別の併用は不可。同種別なら漢トク券・割引券は複数枚可。
+      const usedType = await fetchTodayUsedType(ticketUseData.userId, today)
+      if (!canUseDiscountType(usedType, ticketForUse.type)) {
+        setTicketBlockMsg(
+          `本日は${usedType ? DISCOUNT_TYPE_LABEL[usedType] ?? usedType : '他の割引'}をご利用済みのため使用できません。`
+          + '割引の併用は1日1種類までです。',
+        )
         setTicketConfirming(false)
         return
       }
@@ -1504,7 +1533,7 @@ export function AdminScreen() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {activeTickets.map(ticket => {
                     const tktTc = TICKET_TYPE_COLORS[ticket.type]
-                    const isBlockedToday = todayUsedThisDay
+                    const isBlockedToday = !canUseDiscountType(todayUsedType, ticket.type)
                     const noStaff = !staffId.trim()
                     const btnDisabled = isBlockedToday || noStaff
                     return (
@@ -1547,7 +1576,8 @@ export function AdminScreen() {
                           </div>
                           {isBlockedToday && (
                             <p style={{ fontSize: 9, color: 'rgba(224,96,80,1)', marginTop: 8, lineHeight: 1.5 }}>
-                              本日はすでにチケットを使用済みです。チケットの使用は1日1枚までです。
+                              本日は{todayUsedType ? DISCOUNT_TYPE_LABEL[todayUsedType] ?? todayUsedType : '他の割引'}をご利用済みのため使用できません。<br />
+                              割引の併用は1日1種類までです（同じ種別は複数枚使用できます）。
                             </p>
                           )}
                           {noStaff && !isBlockedToday && (
@@ -1824,8 +1854,8 @@ export function AdminScreen() {
             {maintCouponTodayUsed && !maintCouponConfirmed && (
               <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '12px 16px', marginBottom: 14 }}>
                 <p style={{ fontSize: 13, color: '#E06060', lineHeight: 1.7, fontFamily: SERIF }}>
-                  本日はすでにクーポンを利用済みです。<br />
-                  <span style={{ fontSize: 11, color: 'rgba(224,96,96,1)' }}>1日1枚制限（メンテ・漢トク券・割引券 共通）</span>
+                  本日はすでに{maintCouponBlockedByType ? DISCOUNT_TYPE_LABEL[maintCouponBlockedByType] ?? maintCouponBlockedByType : 'クーポン'}をご利用済みです。<br />
+                  <span style={{ fontSize: 11, color: 'rgba(224,96,96,1)' }}>メンテナンスクーポンは1日1回、他の割引との併用も不可です</span>
                 </p>
               </div>
             )}

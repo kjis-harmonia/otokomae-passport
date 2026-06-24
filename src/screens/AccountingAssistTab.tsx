@@ -12,7 +12,7 @@ import {
 } from '../utils/accountingStore'
 import type { AccountingItem, AccountingCategory, PaymentMethod } from '../utils/accountingStore'
 import {
-  QrCameraScanner, parseQR, saveUsageLog, fetchTodayUsed, upsertLastVisitDate, playSuccessSound,
+  QrCameraScanner, parseQR, saveUsageLog, fetchTodayUsedType, canUseDiscountType, upsertLastVisitDate, playSuccessSound,
 } from './AdminScreen'
 import type { TicketUseQRData, MaintenanceCouponQRData, PassportQRData } from './AdminScreen'
 import { deductStockForRetailSale, getProducts } from '../hq/hqInventoryStore'
@@ -21,6 +21,12 @@ import type { Product } from '../hq/hqInventoryStore'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const QR_EL_ID_ACCOUNTING = 'gj-qr-reader-accounting'
 const MAINTENANCE_COUPON_ITEM_ID = '__maintenance_coupon__'
+
+const DISCOUNT_TYPE_LABEL: Record<string, string> = {
+  otoku: '漢トク券',
+  discount: '割引券',
+  coupon: 'メンテナンスクーポン',
+}
 
 const CATEGORY_LABELS: Record<AccountingCategory, string> = {
   menu: 'メニュー',
@@ -232,9 +238,12 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           setScanLoading(false)
           return
         }
-        const usedToday = await fetchTodayUsed(tu.userId, today)
-        if (usedToday) {
-          setScanError('本日はすでにチケット・クーポンを利用済みです（1日1枚制限）。')
+        const usedType = await fetchTodayUsedType(tu.userId, today)
+        if (!canUseDiscountType(usedType, ticket.type)) {
+          setScanError(
+            `本日は${usedType ? DISCOUNT_TYPE_LABEL[usedType] ?? usedType : '他の割引'}をご利用済みのため使用できません。`
+            + '割引の併用は1日1種類までです。',
+          )
           setScanLoading(false)
           return
         }
@@ -258,9 +267,12 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
     // ── メンテナンスクーポン ──
     if (parsed.type === 'ginjiro-maintenance-coupon') {
       const mc = parsed as MaintenanceCouponQRData
-      const usedToday = await fetchTodayUsed(mc.userId, today)
-      if (usedToday) {
-        setScanError('本日はすでにチケット・クーポンを利用済みです（1日1枚制限）。')
+      const usedType = await fetchTodayUsedType(mc.userId, today)
+      if (!canUseDiscountType(usedType, 'coupon')) {
+        setScanError(
+          `本日は${usedType ? DISCOUNT_TYPE_LABEL[usedType] ?? usedType : '他の割引'}をご利用済みのため使用できません。`
+          + 'メンテナンスクーポンは1日1回、他の割引との併用も不可です。',
+        )
         setScanLoading(false)
         return
       }
@@ -308,9 +320,9 @@ export function AccountingAssistTab({ staffId }: { staffId: string }) {
           return
         }
       } else if (discount && customer) {
-        const usedToday = await fetchTodayUsed(customer.userId, today)
-        if (usedToday) {
-          setCompleteError('本日のメンテナンスクーポンはすでに使用済みです。')
+        const usedType = await fetchTodayUsedType(customer.userId, today)
+        if (!canUseDiscountType(usedType, discount.ticketType)) {
+          setCompleteError('本日のメンテナンスクーポンはすでに使用済みか、他の割引と併用しています。')
           setCompleting(false)
           return
         }
