@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AppHeader } from './components/AppHeader'
 import { BottomNavigation } from './components/BottomNavigation'
@@ -174,6 +175,174 @@ function MusicGuidePopup({ onDismiss }: { onDismiss: () => void }) {
   )
 }
 
+type BgmController = ReturnType<typeof useBgm>
+
+function BgmTrackSheet({
+  open,
+  bgm,
+  onClose,
+}: {
+  open: boolean
+  bgm: BgmController
+  onClose: () => void
+}) {
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.button
+            type="button"
+            aria-label="BGMメニューを閉じる"
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99998,
+              border: 0,
+              background: 'rgba(0,0,0,0.18)',
+              cursor: 'default',
+            }}
+          />
+          <motion.div
+            key="bgm-track-sheet"
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.985 }}
+            transition={{ duration: 0.24, ease: [0.22, 0.68, 0.34, 1] }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="BGM SELECT"
+            style={{
+              position: 'fixed',
+              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)',
+              left: 12,
+              right: 12,
+              zIndex: 99999,
+              width: 'auto',
+              maxWidth: 420,
+              margin: '0 auto',
+              borderRadius: 22,
+              background:
+                'radial-gradient(circle at 92% 0%, rgba(201,162,74,0.14), transparent 36%), linear-gradient(160deg, rgba(16,9,5,0.98) 0%, rgba(5,3,2,0.98) 100%)',
+              border: '1px solid rgba(201,162,74,0.34)',
+              boxShadow:
+                '0 24px 70px rgba(0,0,0,0.84), inset 0 1px 0 rgba(242,230,200,0.08)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              padding: '14px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+              <div>
+                <p
+                  style={{
+                    fontFamily: SERIF,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    letterSpacing: '0.18em',
+                    color: '#F2E6C8',
+                  }}
+                >
+                  BGM SELECT
+                </p>
+                <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', marginTop: 2 }}>
+                  {bgm.isOn ? '再生中' : '停止中'} / {bgm.currentTrack.title}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="BGMメニューを閉じる"
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.035)',
+                  border: '1px solid rgba(201,162,74,0.18)',
+                  color: 'rgba(242,230,200,0.58)',
+                  cursor: 'pointer',
+                  fontSize: 18,
+                  lineHeight: '28px',
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: 8 }}>
+              {bgm.tracks.map((track) => {
+                const active = track.id === bgm.currentTrack.id
+                return (
+                  <button
+                    key={track.id}
+                    type="button"
+                    onClick={() => bgm.selectTrack(track.id)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '11px 12px',
+                      borderRadius: 14,
+                      background: active
+                        ? 'linear-gradient(135deg, rgba(201,162,74,0.16), rgba(107,15,18,0.16))'
+                        : 'rgba(255,255,255,0.025)',
+                      border: active
+                        ? '1px solid rgba(201,162,74,0.46)'
+                        : '1px solid rgba(201,162,74,0.10)',
+                      boxShadow: active ? '0 0 18px rgba(201,162,74,0.10), inset 0 1px 0 rgba(242,230,200,0.06)' : 'none',
+                      color: '#F2E6C8',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        background: active ? '#C9A24A' : 'rgba(201,162,74,0.22)',
+                        boxShadow: active ? '0 0 14px rgba(201,162,74,0.55)' : 'none',
+                        flex: '0 0 auto',
+                      }}
+                    />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: 'block', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.05em' }}>
+                        {track.title}
+                      </span>
+                      <span style={{ display: 'block', marginTop: 2, fontSize: 10, color: 'rgba(242,230,200,0.42)' }}>
+                        {track.subtitle}
+                      </span>
+                    </span>
+                    {active && (
+                      <span style={{ fontSize: 10, color: '#C9A24A', letterSpacing: '0.12em', flex: '0 0 auto' }}>
+                        SELECT
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            <p style={{ marginTop: 10, fontSize: 10, lineHeight: 1.5, color: 'rgba(242,230,200,0.30)' }}>
+              追加曲は public/assets/audio に同名ファイルを置くと再生できます。
+            </p>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body,
+  )
+}
+
 function App() {
   // テストデータを localStorage に1度だけ投入
   seedDevData()
@@ -321,6 +490,7 @@ function App() {
   }, [])
 
   const bgm = useBgm()
+  const [showBgmMenu, setShowBgmMenu] = useState(false)
 
   // ── Music guide — show once after first home screen mount ─────────────────────
   const [showMusicGuide, setShowMusicGuide] = useState(false)
@@ -331,6 +501,10 @@ function App() {
     const t = setTimeout(() => setShowMusicGuide(true), 700)
     return () => clearTimeout(t)
   }, [phase])
+
+  useEffect(() => {
+    if (activeTab !== 'home') setShowBgmMenu(false)
+  }, [activeTab])
 
   function dismissMusicGuide() {
     localStorage.setItem(MUSIC_GUIDE_KEY, 'true')
@@ -360,7 +534,7 @@ function App() {
 
         /* App shell: mounted only after onboarding completes */
         <>
-          <div className="app-shell flex flex-col h-dvh max-w-[430px] mx-auto overflow-hidden">
+          <div className="app-shell flex flex-col h-dvh w-full mx-auto overflow-hidden">
 {activeTab !== 'home' && <AppHeader />}
             <main className="app-main flex-1 overflow-y-auto">
               <AnimatePresence mode="wait" initial={false}>
@@ -419,7 +593,7 @@ function App() {
                     width: 36,
                     height: 36,
                     borderRadius: '50%',
-                    zIndex: 319,
+                    zIndex: 339,
                     pointerEvents: 'none',
                     animation: 'bgmRecordPulse 2.6s ease-in-out 2',
                   }}
@@ -428,13 +602,16 @@ function App() {
 
               <button
                 type="button"
-                onClick={bgm.toggle}
+                onClick={() => {
+                  if (!bgm.isOn) bgm.toggle()
+                  setShowBgmMenu(true)
+                }}
                 aria-label={bgm.isOn ? 'BGMをOFFにする' : 'BGMをONにする'}
                 style={{
                   position: 'fixed',
                   top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
                   right: 16,
-                  zIndex: showMusicGuide ? 320 : 120,
+                  zIndex: 10001,
                   width: 36,
                   height: 36,
                   borderRadius: '50%',
@@ -478,10 +655,142 @@ function App() {
                   <circle cx="9.5" cy="9.5" r="1.3" fill="currentColor" />
                 </svg>
               </button>
+
+              <AnimatePresence>
+                {false && showBgmMenu && (
+                  <motion.div
+                    key="bgm-track-menu"
+                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.22, ease: [0.22, 0.68, 0.34, 1] }}
+                    style={{
+                      position: 'fixed',
+                      bottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)',
+                      left: 12,
+                      right: 12,
+                      zIndex: 10000,
+                      width: 'auto',
+                      maxWidth: 420,
+                      margin: '0 auto',
+                      borderRadius: 22,
+                      background:
+                        'radial-gradient(circle at 92% 0%, rgba(201,162,74,0.14), transparent 36%), linear-gradient(160deg, rgba(16,9,5,0.96) 0%, rgba(5,3,2,0.96) 100%)',
+                      border: '1px solid rgba(201,162,74,0.30)',
+                      boxShadow:
+                        '0 24px 70px rgba(0,0,0,0.78), inset 0 1px 0 rgba(242,230,200,0.08)',
+                      backdropFilter: 'blur(18px)',
+                      WebkitBackdropFilter: 'blur(18px)',
+                      padding: '14px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+                      <div>
+                        <p
+                          style={{
+                            fontFamily: SERIF,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            letterSpacing: '0.18em',
+                            color: '#F2E6C8',
+                          }}
+                        >
+                          BGM SELECT
+                        </p>
+                        <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', marginTop: 2 }}>
+                          {bgm.isOn ? '再生中' : '停止中'} / {bgm.currentTrack.title}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowBgmMenu(false)}
+                        aria-label="BGMメニューを閉じる"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.035)',
+                          border: '1px solid rgba(201,162,74,0.16)',
+                          color: 'rgba(242,230,200,0.54)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {bgm.tracks.map((track) => {
+                        const active = track.id === bgm.currentTrack.id
+                        return (
+                          <button
+                            key={track.id}
+                            type="button"
+                            onClick={() => bgm.selectTrack(track.id)}
+                            style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '11px 12px',
+                              borderRadius: 14,
+                              background: active
+                                ? 'linear-gradient(135deg, rgba(201,162,74,0.16), rgba(107,15,18,0.16))'
+                                : 'rgba(255,255,255,0.025)',
+                              border: active
+                                ? '1px solid rgba(201,162,74,0.46)'
+                                : '1px solid rgba(201,162,74,0.10)',
+                              boxShadow: active ? '0 0 18px rgba(201,162,74,0.10), inset 0 1px 0 rgba(242,230,200,0.06)' : 'none',
+                              color: '#F2E6C8',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                            }}
+                          >
+                            <span
+                              aria-hidden
+                              style={{
+                                width: 9,
+                                height: 9,
+                                borderRadius: '50%',
+                                background: active ? '#C9A24A' : 'rgba(201,162,74,0.22)',
+                                boxShadow: active ? '0 0 14px rgba(201,162,74,0.55)' : 'none',
+                                flex: '0 0 auto',
+                              }}
+                            />
+                            <span style={{ minWidth: 0, flex: 1 }}>
+                              <span style={{ display: 'block', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.05em' }}>
+                                {track.title}
+                              </span>
+                              <span style={{ display: 'block', marginTop: 2, fontSize: 10, color: 'rgba(242,230,200,0.42)' }}>
+                                {track.subtitle}
+                              </span>
+                            </span>
+                            {active && (
+                              <span style={{ fontSize: 10, color: '#C9A24A', letterSpacing: '0.12em', flex: '0 0 auto' }}>
+                                SELECT
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <p style={{ marginTop: 10, fontSize: 10, lineHeight: 1.5, color: 'rgba(242,230,200,0.30)' }}>
+                      追加曲は public/assets/audio に同名ファイルを置くと再生できます。
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </>
           )}
 
           {/* Music guide — one-time popup, first home screen visit */}
+          <BgmTrackSheet
+            open={activeTab === 'home' && showBgmMenu}
+            bgm={bgm}
+            onClose={() => setShowBgmMenu(false)}
+          />
+
           <AnimatePresence>
             {showMusicGuide && (
               <MusicGuidePopup key="music-guide" onDismiss={dismissMusicGuide} />
