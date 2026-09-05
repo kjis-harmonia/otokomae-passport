@@ -16,7 +16,7 @@ import {
 } from './maintenanceSchedule'
 
 const NOTIF_TITLE = '銀二郎 男前パスポート'
-const NOTIF_BODY  = '男前崩壊まであと3日。メンテナンスカットの時間です。'
+const NOTIF_BODY  = '男前キープのメンテナンスまであと3日。カットの時間です。'
 const NOTIF_ICON  = '/assets/app-icon.png'
 
 /** Notification API が利用可能かどうか。 */
