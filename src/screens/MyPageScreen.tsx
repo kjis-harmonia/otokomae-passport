@@ -63,11 +63,11 @@ function computeMaintenance(lastVisitDate: string | null): MaintenanceInfo | nul
   } else if (daysRemaining >= 4) {
     color = '#F0B840'; headline = `メンテナンス推奨まであと ${daysRemaining}日`; badge = 'そろそろ'
   } else if (daysRemaining >= 1) {
-    color = '#E06060'; headline = `男前崩壊まであと ${daysRemaining}日`; badge = '緊急'
+    color = '#E06060'; headline = `男前キープ期限まであと ${daysRemaining}日`; badge = '要予約'
   } else if (daysRemaining === 0) {
     color = '#E03030'; headline = '今日が推奨メンテナンス日です'; badge = '今すぐ'
   } else {
-    color = '#E03030'; headline = `男前崩壊 ${Math.abs(daysRemaining)}日超過`; badge = '崩壊'
+    color = '#E03030'; headline = `メンテナンス推奨日を ${Math.abs(daysRemaining)}日超過`; badge = '要整え'
   }
   return { lastVisitDate, nextDate, daysRemaining, color, headline, badge }
 }
