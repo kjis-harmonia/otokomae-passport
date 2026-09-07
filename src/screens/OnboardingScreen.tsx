@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { MemberStatus } from '../data/brand'
 import { setStoredValue, ONBOARDING_DONE_KEY, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getUserId, getMemberIssuedAt } from '../utils/userId'
+import { registerBgmAudio, stopAllBgmAudio } from '../hooks/useBgm'
 
 type Step = 0 | 1
 
@@ -29,7 +30,8 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   function handleStart() {
     // BGM: play on user gesture to satisfy browser autoplay policy
     try {
-      const audio = new Audio('/assets/audio/ginjiro-theme.mp4')
+      stopAllBgmAudio()
+      const audio = registerBgmAudio(new Audio('/assets/audio/ginjiro-theme.mp4'))
       audio.volume = 0.28
       audio.loop = false
       void audio.play()
@@ -50,7 +52,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4 }}
-      className="flex flex-col h-dvh max-w-[430px] mx-auto relative overflow-hidden"
+      className="app-shell flex flex-col h-dvh w-full mx-auto relative overflow-hidden"
       style={{
         background:
           step === 0

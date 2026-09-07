@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 
 const BGM_KEY = 'ginjiro_bgm_on'
 const BGM_TRACK_KEY = 'ginjiro_bgm_track'
+const BGM_AUDIO_REGISTRY_KEY = '__ginjiroBgmAudioRegistry'
 
 export interface BgmTrack {
   id: string
@@ -14,22 +15,56 @@ export const BGM_TRACKS: BgmTrack[] = [
   {
     id: 'theme',
     title: '銀二郎 Theme',
-    subtitle: '黒金のメインテーマ',
+    subtitle: '店内を包むメインBGM',
     src: '/assets/audio/ginjiro-theme.mp4',
   },
   {
-    id: 'night',
-    title: '夜の理髪室',
-    subtitle: '静かに整える夜',
-    src: '/assets/audio/ginjiro-night.mp4',
-  },
-  {
-    id: 'mode',
-    title: '漢前 Mode',
-    subtitle: '気分を上げる一曲',
-    src: '/assets/audio/ginjiro-mode.mp4',
+    id: 'hiroshima',
+    title: '広島',
+    subtitle: '広島の熱を乗せた一曲',
+    src: '/assets/audio/hiroshima.mov',
   },
 ]
+
+type GinjiroWindow = Window & {
+  [BGM_AUDIO_REGISTRY_KEY]?: Set<HTMLAudioElement>
+}
+
+const fallbackAudioRegistry = new Set<HTMLAudioElement>()
+
+function getAudioRegistry(): Set<HTMLAudioElement> {
+  if (typeof window === 'undefined') return fallbackAudioRegistry
+
+  const ginjiroWindow = window as GinjiroWindow
+  if (!ginjiroWindow[BGM_AUDIO_REGISTRY_KEY]) {
+    ginjiroWindow[BGM_AUDIO_REGISTRY_KEY] = new Set<HTMLAudioElement>()
+  }
+  return ginjiroWindow[BGM_AUDIO_REGISTRY_KEY]!
+}
+
+function silenceAudio(audio: HTMLAudioElement): void {
+  audio.pause()
+  try {
+    audio.currentTime = 0
+  } catch {
+    // Some browsers reject currentTime changes while metadata is unavailable.
+  }
+}
+
+export function registerBgmAudio(audio: HTMLAudioElement): HTMLAudioElement {
+  getAudioRegistry().add(audio)
+  return audio
+}
+
+export function stopAllBgmAudio(except?: HTMLAudioElement | null): void {
+  const registry = getAudioRegistry()
+
+  registry.forEach((audio) => {
+    if (audio === except) return
+    silenceAudio(audio)
+    registry.delete(audio)
+  })
+}
 
 function getInitialTrack(): BgmTrack {
   const savedId = localStorage.getItem(BGM_TRACK_KEY)
@@ -42,7 +77,7 @@ export function useBgm() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   function createAudio(track: BgmTrack): HTMLAudioElement {
-    const audio = new Audio(track.src)
+    const audio = registerBgmAudio(new Audio(track.src))
     audio.volume = 0.22
     audio.loop = true
     return audio
@@ -50,6 +85,7 @@ export function useBgm() {
 
   function getAudio(): HTMLAudioElement {
     if (!audioRef.current) {
+      stopAllBgmAudio()
       audioRef.current = createAudio(currentTrack)
     }
     return audioRef.current
@@ -60,16 +96,40 @@ export function useBgm() {
     const playing = !audio.paused
 
     if (isOn && playing) {
-      audio.pause()
-      setIsOn(false)
-      localStorage.setItem(BGM_KEY, 'false')
+      stop()
     } else {
-      setIsOn(true)
-      localStorage.setItem(BGM_KEY, 'true')
-      void audio.play().catch(() => {
-        // Browser autoplay policy or missing audio file; keep UI non-fatal.
-      })
+      playAudio(audio)
     }
+  }
+
+  function playAudio(audio: HTMLAudioElement) {
+    setIsOn(true)
+    localStorage.setItem(BGM_KEY, 'true')
+    stopAllBgmAudio(audio)
+    void audio.play().catch(() => {
+      // Browser autoplay policy or missing audio file; keep UI non-fatal.
+    })
+  }
+
+  function stop() {
+    stopAllBgmAudio()
+    audioRef.current = null
+    setIsOn(false)
+    localStorage.setItem(BGM_KEY, 'false')
+  }
+
+  function playTrack(trackId: string) {
+    const nextTrack = BGM_TRACKS.find((track) => track.id === trackId)
+    if (!nextTrack) return
+
+    if (nextTrack.id !== currentTrack.id || !audioRef.current) {
+      stopAllBgmAudio()
+      audioRef.current = createAudio(nextTrack)
+    }
+
+    setCurrentTrack(nextTrack)
+    localStorage.setItem(BGM_TRACK_KEY, nextTrack.id)
+    playAudio(audioRef.current)
   }
 
   function selectTrack(trackId: string) {
@@ -77,26 +137,24 @@ export function useBgm() {
     if (!nextTrack) return
 
     const wasPlaying = audioRef.current ? !audioRef.current.paused : false
-    audioRef.current?.pause()
-    audioRef.current = createAudio(nextTrack)
+    if (wasPlaying || isOn) {
+      playTrack(trackId)
+      return
+    }
+
+    stopAllBgmAudio()
+    audioRef.current = null
 
     setCurrentTrack(nextTrack)
     localStorage.setItem(BGM_TRACK_KEY, nextTrack.id)
-
-    if (wasPlaying || isOn) {
-      setIsOn(true)
-      localStorage.setItem(BGM_KEY, 'true')
-      void audioRef.current.play().catch(() => {
-        // Browser autoplay policy or missing audio file; keep UI non-fatal.
-      })
-    }
   }
 
   useEffect(() => {
     return () => {
-      audioRef.current?.pause()
+      stopAllBgmAudio()
+      audioRef.current = null
     }
   }, [])
 
-  return { isOn, toggle, tracks: BGM_TRACKS, currentTrack, selectTrack }
+  return { isOn, toggle, stop, tracks: BGM_TRACKS, currentTrack, selectTrack, playTrack }
 }
