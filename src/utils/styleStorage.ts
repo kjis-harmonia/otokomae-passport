@@ -341,7 +341,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
     catchCopy: '渋く、粋に、そしてカッコよく。',
     description:
       '年を重ねたからこそ出せる、本物の色気。昭和の美学を受け継いだ渋みと大人の余裕が滲み出るスタイル。若い奴には絶対に出せない、ちょい悪の真髄がここにある。',
-    price: 8000,
+    price: 3500,
     durationMinutes: 60,
     imageUrl: '/assets/styles/showa-hair.png',
     tags: ['昭和', '渋い', 'ちょい悪', 'クラシック', '大人'],
@@ -545,6 +545,7 @@ export function seedInitialStyles(): void {
     '覚醒の色':             14500,
     'リーゼントパンチ':     8000,
     '俺は濡れパン':         8000,
+    'ちょい悪オヤジ専用 昭和ヘアスタイル': 3500,
   }
 
   let priceChanged = false

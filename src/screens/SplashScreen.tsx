@@ -18,8 +18,9 @@ export function SplashScreen({ onDone }: Props) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.55 }}
-      className="fixed inset-0 max-w-[430px] mx-auto flex flex-col items-center justify-center"
+      className="fixed inset-y-0 left-1/2 w-full -translate-x-1/2 flex flex-col items-center justify-center overflow-hidden"
       style={{
+        maxWidth: 'var(--app-max-width)',
         background:
           'radial-gradient(circle at 50% 0%, rgba(139,26,42,0.18), transparent 40%), linear-gradient(160deg, #080706 0%, #0a0909 48%, #0e0708 100%)',
         zIndex: 9999,

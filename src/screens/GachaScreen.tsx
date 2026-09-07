@@ -277,7 +277,7 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
   return (
     <div className="min-h-full overflow-x-hidden bg-[#070403] px-4 pb-6 pt-4">
       <section
-        className="mx-auto max-w-[430px] overflow-hidden rounded-lg px-4 py-5"
+        className="mx-auto w-full max-w-[var(--app-max-width)] overflow-hidden rounded-lg px-4 py-5"
         style={{
           background: 'linear-gradient(145deg, #160B09 0%, #090504 52%, #250A0C 100%)',
           border: '1px solid rgba(201,169,97,0.36)',
@@ -511,7 +511,7 @@ export function GachaScreen({ memberStatus, onMemberStatusChange }: Props) {
                     />
                   )}
                   <motion.div
-                    className="w-full max-w-[390px] rounded-lg px-4 py-5"
+                    className="w-full max-w-full sm:max-w-[480px] rounded-lg px-4 py-5"
                     initial={{ opacity: 0, scale: 0.86, y: 24 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     transition={{ duration: prefersReducedMotion ? 0.12 : 0.5, ease: MOTION_EASE }}

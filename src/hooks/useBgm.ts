@@ -22,7 +22,7 @@ export const BGM_TRACKS: BgmTrack[] = [
     id: 'hiroshima',
     title: '広島',
     subtitle: '広島の熱を乗せた一曲',
-    src: '/assets/audio/hiroshima.mov',
+    src: '/assets/audio/hiroshima.mp4',
   },
 ]
 
@@ -73,13 +73,46 @@ function getInitialTrack(): BgmTrack {
 
 export function useBgm() {
   const [isOn, setIsOn] = useState(() => localStorage.getItem(BGM_KEY) === 'true')
+  const [isPlaying, setIsPlaying] = useState(false)
   const [currentTrack, setCurrentTrack] = useState<BgmTrack>(getInitialTrack)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const isOnRef = useRef(isOn)
+
+  function setPlayingIfCurrent(audio: HTMLAudioElement, playing: boolean) {
+    if (audioRef.current !== audio) return
+    setIsPlaying(playing)
+  }
+
+  function replayIfCurrentAudio(audio: HTMLAudioElement, reset = false) {
+    if (!isOnRef.current || audioRef.current !== audio) return
+
+    try {
+      if (reset) audio.currentTime = 0
+    } catch {
+      // iOS Safari can reject currentTime changes while media state is unsettled.
+    }
+
+    void audio.play().catch(() => {
+      // Browser audio interruptions are non-fatal; the next user action can resume.
+    })
+  }
 
   function createAudio(track: BgmTrack): HTMLAudioElement {
     const audio = registerBgmAudio(new Audio(track.src))
     audio.volume = 0.22
     audio.loop = true
+    audio.preload = 'auto'
+    audio.addEventListener('play', () => setPlayingIfCurrent(audio, true))
+    audio.addEventListener('playing', () => setPlayingIfCurrent(audio, true))
+    audio.addEventListener('pause', () => setPlayingIfCurrent(audio, false))
+    audio.addEventListener('ended', () => {
+      setPlayingIfCurrent(audio, false)
+      replayIfCurrentAudio(audio, true)
+    })
+    audio.addEventListener('error', () => setPlayingIfCurrent(audio, false))
+    audio.addEventListener('waiting', () => replayIfCurrentAudio(audio))
+    audio.addEventListener('stalled', () => replayIfCurrentAudio(audio))
+    audio.addEventListener('suspend', () => replayIfCurrentAudio(audio))
     return audio
   }
 
@@ -106,7 +139,10 @@ export function useBgm() {
     setIsOn(true)
     localStorage.setItem(BGM_KEY, 'true')
     stopAllBgmAudio(audio)
-    void audio.play().catch(() => {
+    void audio.play().then(() => {
+      setPlayingIfCurrent(audio, true)
+    }).catch(() => {
+      setPlayingIfCurrent(audio, false)
       // Browser autoplay policy or missing audio file; keep UI non-fatal.
     })
   }
@@ -114,6 +150,7 @@ export function useBgm() {
   function stop() {
     stopAllBgmAudio()
     audioRef.current = null
+    setIsPlaying(false)
     setIsOn(false)
     localStorage.setItem(BGM_KEY, 'false')
   }
@@ -156,5 +193,26 @@ export function useBgm() {
     }
   }, [])
 
-  return { isOn, toggle, stop, tracks: BGM_TRACKS, currentTrack, selectTrack, playTrack }
+  useEffect(() => {
+    isOnRef.current = isOn
+  }, [isOn])
+
+  useEffect(() => {
+    function resumeVisibleAudio() {
+      if (document.visibilityState !== 'visible' || !isOnRef.current || !audioRef.current) return
+      if (audioRef.current.paused || audioRef.current.ended) {
+        replayIfCurrentAudio(audioRef.current, audioRef.current.ended)
+      }
+    }
+
+    document.addEventListener('visibilitychange', resumeVisibleAudio)
+    window.addEventListener('pageshow', resumeVisibleAudio)
+
+    return () => {
+      document.removeEventListener('visibilitychange', resumeVisibleAudio)
+      window.removeEventListener('pageshow', resumeVisibleAudio)
+    }
+  }, [])
+
+  return { isOn, isPlaying, toggle, stop, tracks: BGM_TRACKS, currentTrack, selectTrack, playTrack }
 }

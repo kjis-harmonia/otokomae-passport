@@ -286,7 +286,7 @@ function BgmTrackSheet({
                   BGM SELECT
                 </p>
                 <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.42)', marginTop: 2 }}>
-                  好きな曲を選べます / {bgm.isOn ? `${bgm.currentTrack.title} 再生中` : '停止中'}
+                  好きな曲を選べます / {bgm.isPlaying ? `${bgm.currentTrack.title} 再生中` : '停止中'}
                 </p>
               </div>
               <button
@@ -312,7 +312,7 @@ function BgmTrackSheet({
             <div style={{ display: 'grid', gap: 8 }}>
               {bgm.tracks.map((track) => {
                 const active = track.id === bgm.currentTrack.id
-                const playing = active && bgm.isOn
+                const playing = active && bgm.isPlaying
                 return (
                   <div
                     key={track.id}
@@ -666,14 +666,14 @@ function App() {
                   width: 40,
                   height: 40,
                   borderRadius: '50%',
-                  background: bgm.isOn
+                  background: bgm.isPlaying
                     ? 'linear-gradient(160deg, rgba(20,11,5,0.92), rgba(7,3,2,0.88) 54%, rgba(76,9,14,0.28))'
                     : 'linear-gradient(160deg, rgba(8,4,2,0.76), rgba(4,2,1,0.70))',
-                  border: `1.5px solid ${bgm.isOn ? 'rgba(201,162,74,0.82)' : 'rgba(201,162,74,0.18)'}`,
-                  boxShadow: bgm.isOn
+                  border: `1.5px solid ${bgm.isPlaying ? 'rgba(201,162,74,0.82)' : 'rgba(201,162,74,0.18)'}`,
+                  boxShadow: bgm.isPlaying
                     ? '0 0 16px rgba(201,162,74,0.40), 0 0 6px rgba(201,162,74,0.22), 0 2px 10px rgba(0,0,0,0.6)'
                     : '0 2px 8px rgba(0,0,0,0.45)',
-                  color: bgm.isOn ? '#C9A24A' : 'rgba(201,162,74,0.30)',
+                  color: bgm.isPlaying ? '#C9A24A' : 'rgba(201,162,74,0.30)',
                   cursor: 'pointer',
                   backdropFilter: 'blur(14px)',
                   WebkitBackdropFilter: 'blur(14px)',
@@ -681,11 +681,11 @@ function App() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   WebkitTapHighlightColor: 'transparent',
-                  opacity: bgm.isOn ? 1 : 0.58,
+                  opacity: bgm.isPlaying ? 1 : 0.58,
                   transition: 'border-color 0.25s, box-shadow 0.25s, color 0.25s, opacity 0.25s',
                 }}
               >
-                <SoundtrackIcon active={bgm.isOn} size={25} />
+                <SoundtrackIcon active={bgm.isPlaying} size={25} />
               </button>
 
             </>
