@@ -92,8 +92,8 @@ const DEFAULT_HERO_IMAGE = {
   imageSize: '112%',
 } as const
 
-const COMPOSED_HERO_INSET = 'clamp(10px, 2.8vw, 16px)'
-const COMPOSED_HERO_SIZE = 'calc(100% - clamp(20px, 5.6vw, 32px))'
+const COMPOSED_HERO_INSET = 'clamp(14px, 3.8vw, 22px)'
+const COMPOSED_HERO_SIZE = 'calc(100% - clamp(28px, 7.6vw, 44px))'
 
 type HeroDisplayConfig = Pick<HomeHeroSlide, 'title' | 'eyebrow' | 'copy' | 'sideCopy'> &
   Partial<Pick<HomeHeroSlide, 'position' | 'imageLeft' | 'imageTop' | 'imageSize' | 'isComposedArt'>> & {
@@ -469,8 +469,9 @@ function HeroSlider({
       <div
         className="relative w-full overflow-hidden select-none"
         style={{
-          height: 'clamp(520px, 72svh, 740px)',
-          minHeight: 520,
+          height: activeSlide.isComposedArt ? undefined : 'clamp(520px, 72svh, 740px)',
+          minHeight: activeSlide.isComposedArt ? undefined : 520,
+          aspectRatio: activeSlide.isComposedArt ? '1064 / 1478' : undefined,
           borderRadius: 20,
           border: '1px solid rgba(201,162,74,0.24)',
           boxShadow:
@@ -503,8 +504,8 @@ function HeroSlider({
                   width: slide.isComposedArt ? COMPOSED_HERO_SIZE : slide.imageSize,
                   height: slide.isComposedArt ? COMPOSED_HERO_SIZE : slide.imageSize,
                   borderRadius: slide.isComposedArt ? 14 : 0,
-                  objectFit: 'cover',
-                  objectPosition: slide.position,
+                  objectFit: slide.isComposedArt ? 'contain' : 'cover',
+                  objectPosition: slide.isComposedArt ? 'center center' : slide.position,
                   background: '#050302',
                   filter: slide.isComposedArt
                     ? 'saturate(1) contrast(1.02) brightness(0.98)'
