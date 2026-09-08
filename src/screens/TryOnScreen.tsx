@@ -30,7 +30,7 @@ const STYLES: TryOnStyle[] = [
   { id: 'curl',    name: 'カールアイパー',     imageSrc: '/assets/hero-curl-iper.jpg',    position: '50% 30%' },
   { id: 'natsu',   name: '夏ニグロ',           imageSrc: '/assets/hero-natsu-niguro.jpg', position: '50% 32%' },
   { id: 'punch',   name: 'パンチパーマ',       imageSrc: '/assets/hero-punch-perm.jpg',   position: '50% 35%' },
-  { id: 'ginpara', name: '銀パラ',             imageSrc: '/assets/ginpara.png',           position: '50% 34%' },
+  { id: 'ginpara', name: '銀パラ',             imageSrc: '/assets/styles/ginpara-showcase.jpg', position: '50% 34%' },
   { id: 'teitei',  name: 'テイテイ刈り',       imageSrc: '/assets/teitei-gari.png',       position: '50% 24%' },
   { id: 'gokudo',  name: '極道ボウズ',         imageSrc: '/assets/gokudo-bozu.png',       position: '50% 30%' },
   { id: 'showa',   name: '昭和のアイパー',     imageSrc: '/assets/showa-aiper.png',       position: '50% 30%' },

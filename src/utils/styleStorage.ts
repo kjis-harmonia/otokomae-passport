@@ -223,7 +223,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '銀二郎が誇る特製パーマ。艶感と自然な動きのバランスが絶妙で、どんな角度から見ても隙のない存在感を放つ。ナイトシーンからビジネスまで一貫した品格を保つ、本物の男前のための一手。',
     price: 15000,
     durationMinutes: 90,
-    imageUrl: '/assets/ginpara.png',
+    imageUrl: '/assets/styles/ginpara-showcase.jpg',
     tags: ['パーマ', '艶', '色気', 'プレミアム', '経営者'],
     stats: { intimidation: 3, sexiness: 5, popularity: 4, difficulty: 2, durability: 4 },
     isFeatured: true,
@@ -396,21 +396,6 @@ const SEED_DRAFTS: StyleCardDraft[] = [
     sortOrder: 19,
   },
   {
-    title: '銀パラカーリー',
-    category: 'premium',
-    catchCopy: '銀二郎が誇る、究極のカール。',
-    description:
-      '銀二郎特製のカーリーパーマが生み出す、見る者を圧倒する存在感。艶と威圧感を両立させた至高の一手。王道でありながら、その場の空気を支配する力を持つ。',
-    price: 15000,
-    durationMinutes: 120,
-    imageUrl: '/assets/styles/ginpara.png',
-    tags: ['パーマ', 'カーリー', '威圧', '艶', 'プレミアム'],
-    stats: { intimidation: 5, sexiness: 4, popularity: 3, difficulty: 4, durability: 4 },
-    isFeatured: true,
-    isPublished: true,
-    sortOrder: 20,
-  },
-  {
     title: '海軍御用達',
     category: 'premium',
     catchCopy: '規律が生む、究極の男前。',
@@ -418,7 +403,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '鍛え上げられた男が纏う、清潔感と威圧感の極致。海軍が認めた硬派なショートスタイルは、無駄を一切省いた男の美学そのもの。見るだけで姿勢が正したくなる。',
     price: 5000,
     durationMinutes: 40,
-    imageUrl: '/assets/styles/kaigun.png',
+    imageUrl: '/assets/styles/kaigun-showcase.jpg',
     tags: ['ショート', '威圧', '清潔感', '硬派', '軍隊'],
     stats: { intimidation: 5, sexiness: 3, popularity: 2, difficulty: 1, durability: 5 },
     isFeatured: false,
@@ -512,7 +497,7 @@ export function seedInitialStyles(): void {
   }
 
   // Remove deprecated styles
-  const REMOVED_TITLES = new Set(['夜勤帰りのダンディ', 'ツイストスパイラル'])
+  const REMOVED_TITLES = new Set(['夜勤帰りのダンディ', 'ツイストスパイラル', '銀パラカーリー'])
   const hadRemoved = pool.some((s) => REMOVED_TITLES.has(s.title))
   if (hadRemoved) {
     pool = pool.filter((s) => !REMOVED_TITLES.has(s.title))
@@ -561,7 +546,10 @@ export function seedInitialStyles(): void {
   // Migrate outdated or empty imageUrls
   const STALE_PATHS: Record<string, string> = {
     '/assets/hero-teitei-gari.jpg':    '/assets/teitei-gari.png',
-    '/assets/hero-ginpara.jpg':        '/assets/ginpara.png',
+    '/assets/hero-ginpara.jpg':        '/assets/styles/ginpara-showcase.jpg',
+    '/assets/ginpara.png':             '/assets/styles/ginpara-showcase.jpg',
+    '/assets/styles/ginpara.png':      '/assets/styles/ginpara-showcase.jpg',
+    '/assets/styles/kaigun.png':       '/assets/styles/kaigun-showcase.jpg',
     // 4 images moved from /assets/ → /assets/styles/
     '/assets/shinsai-punch.png':       '/assets/styles/shinsai-punch.png',
     '/assets/kakusei.png':             '/assets/styles/kakusei.png',

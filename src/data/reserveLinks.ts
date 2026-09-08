@@ -30,7 +30,6 @@ export const RESERVE_LINKS: Readonly<Record<string, string>> = {
   'ヤンキーパンチ':       PUNCH_PERM_URL,
   // 王道パーマ — 専用クーポンURL
   'ニグロパーマ':         JAMAICAN_URL,
-  '銀パラカーリー':       GINPARA_URL,
   // 威圧感MAX — 専用クーポンURL
   '海軍御用達':           'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000009719263&add=0&addMenu=0&rootCd=10',
   'シンサイ刈り':         'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000009719263&add=0&addMenu=0&rootCd=10',

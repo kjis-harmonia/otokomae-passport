@@ -12,7 +12,7 @@ const REGISTRY: Array<{ key: string } & StyleImageDef> = [
   { key: 'カールアイパー',     src: '/assets/hero-curl-iper.jpg',        position: '50% 30%' },
   { key: '夏ニグロ',           src: '/assets/hero-natsu-niguro.jpg',     position: '50% 32%' },
   { key: 'パンチパーマ',       src: '/assets/hero-punch-perm.jpg',       position: '50% 35%' },
-  { key: '銀パラ',             src: '/assets/ginpara.png',               position: '50% 34%' },
+  { key: '銀パラ',             src: '/assets/styles/ginpara-showcase.jpg', position: '50% 34%' },
   { key: 'テイテイ刈り',       src: '/assets/teitei-gari.png',           position: '50% 24%', detailTopOpacity: 0.30 },
   { key: '極道ボウズ',         src: '/assets/gokudo-bozu.png',           position: '50% 30%' },
   { key: '昭和のアイパー',     src: '/assets/styles/showa-aipar.png',   position: '50% 30%' },
@@ -27,8 +27,7 @@ const REGISTRY: Array<{ key: string } & StyleImageDef> = [
   { key: 'サイドバックアイパー', src: '/assets/styles/sidebuck.png',     position: '50% 30%' },
   { key: 'ヤンキーパンチ',     src: '/assets/styles/yanki-punch.png',   position: '50% 30%' },
   { key: 'ニグロパーマ',       src: '/assets/styles/nigro.png',          position: '50% 30%' },
-  { key: '銀パラカーリー',     src: '/assets/styles/ginpara.png',        position: '50% 34%' },
-  { key: '海軍御用達',         src: '/assets/styles/kaigun.png',         position: '50% 30%' },
+  { key: '海軍御用達',         src: '/assets/styles/kaigun-showcase.jpg',  position: '50% 30%' },
   { key: 'シンサイ刈り',       src: '/assets/styles/shinsaigari.png',   position: '50% 30%' },
 ]
 
