@@ -40,16 +40,21 @@ const UI_CATEGORIES = [
 
 // ── Image helpers ─────────────────────────────────────────────────────────────
 
-function getCardImgStyle(_style: StyleCard): React.CSSProperties {
+function getCardImgStyle(): React.CSSProperties {
   return { objectFit: 'contain', objectPosition: 'center center' }
 }
 
-function getCardOverlay(style: StyleCard): string {
-  const base = style.title === 'トラック野郎御用達' ? 'rgba(0,0,0' : 'rgba(5,3,2'
-  return (
-    `linear-gradient(to top,` +
-    `${base},0.98) 0%,${base},0.85) 20%,${base},0.48) 42%,${base},0.08) 64%,transparent 80%)`
-  )
+function getStyleThemeRgb(style: StyleCard | undefined): string {
+  if (!style) return '201,162,74'
+  const title = style.title
+  if (title.includes('ジャマイカ')) return '70,174,92'
+  if (title.includes('海軍')) return '72,138,208'
+  if (title.includes('銀')) return '112,170,214'
+  if (title.includes('夏') || title.includes('スペイン')) return '62,160,174'
+  if (title.includes('覚醒')) return '144,92,214'
+  if (title.includes('テイテイ') || title.includes('昭和') || title.includes('サイド') || title.includes('リーゼント')) return '220,166,70'
+  if (title.includes('濡れ') || title.includes('シンサイ') || title.includes('パンチ')) return '190,36,45'
+  return '201,162,74'
 }
 
 // ── Hero billboard ────────────────────────────────────────────────────────────
@@ -133,48 +138,95 @@ function LibraryHero({ style, onTap }: { style: StyleCard; onTap: () => void }) 
 // ── Style thumbnail card ──────────────────────────────────────────────────────
 
 function StyleThumb({
-  style, onTap, index,
+  style, onTap, index, active,
 }: {
   style: StyleCard
   onTap: () => void
   index: number
+  active: boolean
 }) {
+  const themeRgb = getStyleThemeRgb(style)
+
   return (
     <motion.button
       type="button"
       onClick={onTap}
-      whileTap={{ scale: 0.92 }}
+      data-style-card-id={style.id}
+      whileTap={{ scale: 0.96 }}
       initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.045, duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] }}
+      animate={{
+        opacity: active ? 1 : 0.76,
+        y: active ? -4 : 0,
+        scale: active ? 1.045 : 0.965,
+      }}
+      transition={{ delay: index * 0.025, duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] }}
       style={{
         flexShrink: 0,
-        width: 'clamp(116px, 37vw, 155px)',
+        width: 'clamp(150px, 41vw, 188px)',
         aspectRatio: '2/3',
-        borderRadius: 10,
+        borderRadius: 12,
         overflow: 'hidden',
         position: 'relative',
-        background: '#0A0504',
-        border: '1px solid rgba(201,162,74,0.13)',
-        boxShadow: '0 4px 18px rgba(0,0,0,0.5)',
+        background: 'linear-gradient(180deg, rgba(28,14,10,0.92), rgba(13,7,5,0.96))',
+        border: active ? '1px solid rgba(232,197,122,0.50)' : '1px solid rgba(201,162,74,0.16)',
+        boxShadow: active
+          ? `0 12px 30px rgba(0,0,0,0.34), 0 0 28px rgba(${themeRgb},0.22), inset 0 1px 0 rgba(242,230,200,0.12)`
+          : '0 8px 22px rgba(0,0,0,0.24), inset 0 1px 0 rgba(242,230,200,0.05)',
         cursor: 'pointer',
+        scrollSnapAlign: 'center',
+        scrollSnapStop: 'always',
       }}
     >
-      <StyleCardImage
-        src={resolveStyleImageUrl(style)}
-        alt={style.title}
-        className="absolute inset-0 w-full h-full"
-        imgStyle={getCardImgStyle(style)}
-        size="md"
-      />
-      <div className="absolute inset-0 pointer-events-none" style={{ background: getCardOverlay(style) }} />
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 9px 10px' }}>
+      <div
+        className="relative overflow-hidden"
+        style={{
+          height: '84%',
+          background: `radial-gradient(circle at 50% 30%, rgba(${themeRgb},0.12), transparent 48%), rgba(16,8,6,0.72)`,
+        }}
+      >
+        <StyleCardImage
+          src={resolveStyleImageUrl(style)}
+          alt={style.title}
+          className="absolute inset-0 w-full h-full"
+          imgStyle={{
+            ...getCardImgStyle(),
+            filter: active ? 'brightness(1.10) saturate(1.08)' : 'brightness(0.94) saturate(1.02)',
+            transition: 'filter 0.28s ease',
+          }}
+          size="md"
+        />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 42%, rgba(201,162,74,0.04))',
+          }}
+        />
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '16%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: active
+            ? `linear-gradient(90deg, rgba(${themeRgb},0.14), rgba(30,14,9,0.98), rgba(201,162,74,0.13))`
+            : 'rgba(24,12,9,0.88)',
+          borderTop: '1px solid rgba(201,162,74,0.12)',
+        }}
+      >
         <p
           style={{
-            fontSize: 12,
-            color: 'rgba(201,162,74,0.9)',
+            fontFamily: SERIF,
+            fontSize: active ? 15 : 14,
+            fontWeight: 700,
+            lineHeight: 1,
+            color: active ? '#E8C77A' : 'rgba(201,162,74,0.88)',
             textAlign: 'center',
-            textShadow: '0 1px 8px rgba(0,0,0,0.95)',
+            letterSpacing: '0.04em',
           }}
         >
           ¥{style.price.toLocaleString()}
@@ -194,16 +246,82 @@ function StyleRow({
   styles: StyleCard[]
   onStyleSelect: (s: StyleCard) => void
 }) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const frameRef = useRef<number | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(styles[0]?.id ?? null)
+
+  const activeStyle = styles.find((style) => style.id === activeId) ?? styles[0]
+  const activeThemeRgb = getStyleThemeRgb(activeStyle)
+
+  function measureActiveCard() {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    const scrollerRect = scroller.getBoundingClientRect()
+    const centerX = scrollerRect.left + scrollerRect.width / 2
+    const cards = Array.from(scroller.querySelectorAll<HTMLElement>('[data-style-card-id]'))
+
+    let closestId: string | null = null
+    let closestDistance = Number.POSITIVE_INFINITY
+
+    cards.forEach((card) => {
+      const rect = card.getBoundingClientRect()
+      const cardCenter = rect.left + rect.width / 2
+      const distance = Math.abs(centerX - cardCenter)
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestId = card.dataset.styleCardId ?? null
+      }
+    })
+
+    if (closestId) setActiveId(closestId)
+  }
+
+  function scheduleMeasure() {
+    if (frameRef.current !== null) return
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = null
+      measureActiveCard()
+    })
+  }
+
+  useEffect(() => {
+    scheduleMeasure()
+    window.addEventListener('resize', scheduleMeasure)
+    return () => {
+      window.removeEventListener('resize', scheduleMeasure)
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styles.map((style) => style.id).join('|')])
+
   if (styles.length === 0) return null
 
   return (
     <motion.div
-      style={{ marginBottom: 36 }}
+      style={{ marginBottom: 42, position: 'relative' }}
       initial={{ opacity: 0 }}
       whileInView={{ opacity: 1 }}
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.4 }}
     >
+      <motion.div
+        aria-hidden
+        animate={{
+          background: `radial-gradient(ellipse at 50% 54%, rgba(${activeThemeRgb},0.26) 0%, rgba(${activeThemeRgb},0.11) 30%, transparent 72%)`,
+        }}
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 26,
+          bottom: -8,
+          filter: 'blur(18px)',
+          opacity: 0.72,
+          pointerEvents: 'none',
+        }}
+      />
       {/* Row header */}
       <div
         style={{
@@ -237,15 +355,22 @@ function StyleRow({
 
       {/* Horizontal scroll strip */}
       <div
+        ref={scrollerRef}
         className="[&::-webkit-scrollbar]:hidden"
+        onScroll={scheduleMeasure}
         style={{
+          position: 'relative',
           display: 'flex',
-          gap: 10,
-          overflowX: 'scroll',
-          paddingLeft: 16,
-          paddingRight: 32,
+          gap: 12,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          paddingLeft: 20,
+          paddingRight: 40,
+          paddingTop: 12,
+          paddingBottom: 16,
           scrollbarWidth: 'none',
           WebkitOverflowScrolling: 'touch',
+          scrollSnapType: 'x mandatory',
         } as React.CSSProperties}
       >
         {styles.map((style, i) => (
@@ -253,6 +378,7 @@ function StyleRow({
             key={style.id}
             style={style}
             index={i}
+            active={activeId === style.id}
             onTap={() => onStyleSelect(style)}
           />
         ))}
@@ -409,12 +535,10 @@ function StyleReelView({
   const imgUrl   = style ? resolveStyleImageUrl(style) : null
   const reserveUrl = style ? getReserveUrl(style.title) : null
 
-  // Close reserve sheet when navigating to a new style
-  useEffect(() => { setShowReserveSheet(false) }, [idx])
-
   function navigate(newDir: -1 | 1) {
     const next = idx + newDir
     if (next < 0 || next >= styles.length) return
+    setShowReserveSheet(false)
     setDir(newDir)
     setIdx(next)
   }
@@ -673,7 +797,7 @@ function StyleReelView({
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
-export function StyleLibraryScreen({ onTabChange: _onTabChange, onModalChange }: Props) {
+export function StyleLibraryScreen({ onModalChange }: Props) {
   const [styles] = useState(() =>
     loadStyles()
       .filter((s) => s.isPublished)
