@@ -38,7 +38,7 @@ const UI_CATEGORIES = [
   {
     id: '威圧感MAX',
     sub: 'MAXIMUM PRESSURE',
-    titles: ['海軍御用達', 'シンサイ刈り', '極道ボウズ', 'トラック野郎御用達', 'テイテイ刈り', 'バチバチパンチパーマ', 'シンサイパンチ'],
+    titles: ['海軍御用達', 'シンサイ刈り', '海の男専用', 'トラック野郎御用達', 'テイテイ刈り', 'バチバチパンチパーマ', 'シンサイパンチ'],
   },
   {
     id: '季節限定',
@@ -57,7 +57,7 @@ function getStyleThemeRgb(style: StyleCard | undefined): string {
   if (!style) return '201,162,74'
   const title = style.title
   if (title.includes('ジャマイカ')) return '70,174,92'
-  if (title.includes('海軍')) return '72,138,208'
+  if (title.includes('海軍') || title.includes('海の男')) return '72,138,208'
   if (title.includes('銀')) return '112,170,214'
   if (title.includes('夏') || title.includes('スペイン')) return '62,160,174'
   if (title.includes('覚醒')) return '144,92,214'
@@ -69,6 +69,7 @@ function getStyleThemeRgb(style: StyleCard | undefined): string {
 function getStyleEnglishLabel(style: StyleCard): string {
   const title = style.title
   if (title.includes('海軍')) return 'MILITARY FADE'
+  if (title.includes('海の男')) return 'SEA STYLE'
   if (title.includes('銀パラ')) return 'SILVER PERM'
   if (title.includes('スペイン')) return 'NATURAL PERM'
   if (title.includes('濡れ')) return 'WET FADE'

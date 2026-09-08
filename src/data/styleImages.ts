@@ -14,7 +14,7 @@ const REGISTRY: Array<{ key: string } & StyleImageDef> = [
   { key: 'パンチパーマ',       src: '/assets/hero-punch-perm.jpg',       position: '50% 35%' },
   { key: '銀パラ',             src: '/assets/styles/ginpara-showcase.jpg', position: '50% 34%' },
   { key: 'テイテイ刈り',       src: '/assets/teitei-gari.png',           position: '50% 24%', detailTopOpacity: 0.30 },
-  { key: '極道ボウズ',         src: '/assets/gokudo-bozu.png',           position: '50% 30%' },
+  { key: '海の男専用',         src: '/assets/styles/library-uminotoko.jpg', position: '50% 38%' },
   { key: '昭和のアイパー',     src: '/assets/styles/showa-aipar.png',   position: '50% 30%' },
   { key: 'リーゼントパンチ',   src: '/assets/styles/rejent-punch2.png', position: '50% 30%' },
   { key: 'ジャマイカンアフロ', src: '/assets/jamaican-afro.png',         position: '50% 30%' },

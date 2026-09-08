@@ -32,7 +32,7 @@ const STYLES: TryOnStyle[] = [
   { id: 'punch',   name: 'パンチパーマ',       imageSrc: '/assets/hero-punch-perm.jpg',   position: '50% 35%' },
   { id: 'ginpara', name: '銀パラ',             imageSrc: '/assets/styles/ginpara-showcase.jpg', position: '50% 34%' },
   { id: 'teitei',  name: 'テイテイ刈り',       imageSrc: '/assets/teitei-gari.png',       position: '50% 24%' },
-  { id: 'gokudo',  name: '極道ボウズ',         imageSrc: '/assets/gokudo-bozu.png',       position: '50% 30%' },
+  { id: 'gokudo',  name: '海の男専用',         imageSrc: '/assets/styles/library-uminotoko.jpg', position: '50% 38%' },
   { id: 'showa',   name: '昭和のアイパー',     imageSrc: '/assets/showa-aiper.png',       position: '50% 30%' },
   { id: 'rejent',  name: 'リーゼントパンチ',   imageSrc: '/assets/rejent-punch.png',      position: '50% 30%' },
   { id: 'afro',    name: 'ジャマイカンアフロ', imageSrc: '/assets/jamaican-afro.png',     position: '50% 30%' },

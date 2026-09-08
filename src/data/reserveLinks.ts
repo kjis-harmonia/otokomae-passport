@@ -37,7 +37,7 @@ export const RESERVE_LINKS: Readonly<Record<string, string>> = {
   'ジャマイカンアフロ':   JAMAICAN_URL,
   'スペインパーマ':       CURL_IPER_URL,
   'テイテイ刈り':         TEITEI_URL,
-  '極道ボウズ':           PUNCH_PERM_URL,
+  '海の男専用':           PUNCH_PERM_URL,
   'トラック野郎御用達':   PUNCH_PERM_URL,
   // 専用クーポンURL 確定分
   'シンサイパンチ':                     'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008914837&add=0&addMenu=0&rootCd=10',

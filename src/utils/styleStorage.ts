@@ -246,15 +246,15 @@ const SEED_DRAFTS: StyleCardDraft[] = [
     sortOrder: 9,
   },
   {
-    title: '極道ボウズ',
+    title: '海の男専用',
     category: 'casual',
-    catchCopy: '無駄を削ぎ落とした男の覚悟。',
+    catchCopy: '潮風に負けん、漢の髪型。',
     description:
-      '限界まで短く刈り込んだ潔さ。\n飾らない。誤魔化さない。\n男の生き様がそのまま出るスタイル。',
+      '港で映える、漁師の貫禄を宿した硬派な短髪スタイル。潮風に負けない清潔感と、無駄を削ぎ落とした男らしさで、飾らずに存在感を放つ。',
     price: 3500,
     durationMinutes: 30,
-    imageUrl: '/assets/gokudo-bozu.png',
-    tags: ['坊主', '漢', 'シンプル', '短髪', '男前'],
+    imageUrl: '/assets/styles/library-uminotoko.jpg',
+    tags: ['海', '漁師', 'シンプル', '短髪', '男前'],
     stats: { intimidation: 5, sexiness: 3, popularity: 2, difficulty: 1, durability: 5 },
     isFeatured: false,
     isPublished: true,
@@ -479,13 +479,45 @@ export function seedInitialStyles(): void {
     return
   }
 
-  const existingTitles = new Set(existing.map((s) => s.title))
+  let pool = existing
+
+  const hasSeaStyle = pool.some((style) => style.title === '海の男専用')
+  const SEA_STYLE_PATCH = {
+    title: '海の男専用',
+    catchCopy: '潮風に負けん、漢の髪型。',
+    description:
+      '港で映える、漁師の貫禄を宿した硬派な短髪スタイル。潮風に負けない清潔感と、無駄を削ぎ落とした男らしさで、飾らずに存在感を放つ。',
+    imageUrl: '/assets/styles/library-uminotoko.jpg',
+    tags: ['海', '漁師', 'シンプル', '短髪', '男前'],
+  }
+  let titleChanged = false
+  pool = pool
+    .filter((style) => {
+      const shouldDropDuplicate = hasSeaStyle && style.title === '極道ボウズ'
+      if (shouldDropDuplicate) titleChanged = true
+      return !shouldDropDuplicate
+    })
+    .map((style) => {
+      if (style.title !== '極道ボウズ' && style.title !== '海の男専用') return style
+
+      const needsUpdate =
+        style.title !== SEA_STYLE_PATCH.title ||
+        style.catchCopy !== SEA_STYLE_PATCH.catchCopy ||
+        style.description !== SEA_STYLE_PATCH.description ||
+        style.imageUrl !== SEA_STYLE_PATCH.imageUrl ||
+        style.tags.join('|') !== SEA_STYLE_PATCH.tags.join('|')
+
+      if (!needsUpdate) return style
+      titleChanged = true
+      return { ...style, ...SEA_STYLE_PATCH, updatedAt: now() }
+    })
+
+  const existingTitles = new Set(pool.map((s) => s.title))
   const missing = SEED_DRAFTS.filter((d) => !existingTitles.has(d.title))
 
-  let pool = existing
   if (missing.length > 0) {
     const ts = now()
-    const maxOrder = Math.max(...existing.map((s) => s.sortOrder))
+    const maxOrder = Math.max(...pool.map((s) => s.sortOrder))
     const newStyles: StyleCard[] = missing.map((draft, i) => ({
       ...draft,
       id: `seed-add-${String(i + 1).padStart(2, '0')}`,
@@ -493,7 +525,7 @@ export function seedInitialStyles(): void {
       createdAt: ts,
       updatedAt: ts,
     }))
-    pool = [...existing, ...newStyles]
+    pool = [...pool, ...newStyles]
   }
 
   // Remove deprecated styles
@@ -524,7 +556,7 @@ export function seedInitialStyles(): void {
     '銀パラ':               15000,
     'テイテイ刈り':         8000,
     'バチバチパンチパーマ': 8000,
-    '極道ボウズ':           3500,
+    '海の男専用':           3500,
     'スペインパーマ':       8000,
     '昭和のアイパー':       8000,
     '覚醒の色':             14500,
@@ -550,6 +582,7 @@ export function seedInitialStyles(): void {
     '/assets/ginpara.png':             '/assets/styles/ginpara-showcase.jpg',
     '/assets/styles/ginpara.png':      '/assets/styles/ginpara-showcase.jpg',
     '/assets/styles/kaigun.png':       '/assets/styles/kaigun-showcase.jpg',
+    '/assets/gokudo-bozu.png':         '/assets/styles/library-uminotoko.jpg',
     // 4 images moved from /assets/ → /assets/styles/
     '/assets/shinsai-punch.png':       '/assets/styles/shinsai-punch.png',
     '/assets/kakusei.png':             '/assets/styles/kakusei.png',
@@ -576,5 +609,5 @@ export function seedInitialStyles(): void {
     return { ...style, imageUrl: resolved, updatedAt: now() }
   })
 
-  if (missing.length > 0 || imageChanged || hadRemoved || truckPromoted || priceChanged) writeAll(final)
+  if (missing.length > 0 || imageChanged || hadRemoved || truckPromoted || priceChanged || titleChanged) writeAll(final)
 }

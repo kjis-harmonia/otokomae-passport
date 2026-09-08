@@ -9,6 +9,7 @@ const STYLE_LIBRARY_IMAGES: ReadonlyArray<{ key: string; src: string }> = [
   { key: '昭和ヘアスタイル', src: '/assets/styles/library-showa-hair.jpg' },
   { key: 'ジャマイカンアフロ', src: '/assets/styles/library-jamaican-afro.jpg' },
   { key: 'トラック野郎御用達', src: '/assets/styles/library-truck-yaro.jpg' },
+  { key: '海の男専用', src: '/assets/styles/library-uminotoko.jpg' },
   { key: 'シンサイ刈り', src: '/assets/styles/library-shinsaigari.jpg' },
   { key: 'シンサイパンチ', src: '/assets/styles/library-shinsai-punch.jpg' },
   { key: 'サラリーマン専用 ギリギリパーマ', src: '/assets/styles/library-ri-man-parm.jpg' },
