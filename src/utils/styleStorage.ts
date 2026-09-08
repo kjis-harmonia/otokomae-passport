@@ -251,7 +251,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
     catchCopy: '潮風に負けん、漢の髪型。',
     description:
       '港で映える、漁師の貫禄を宿した硬派な短髪スタイル。潮風に負けない清潔感と、無駄を削ぎ落とした男らしさで、飾らずに存在感を放つ。',
-    price: 3500,
+    price: 5000,
     durationMinutes: 30,
     imageUrl: '/assets/styles/library-uminotoko.jpg',
     tags: ['海', '漁師', 'シンプル', '短髪', '男前'],
@@ -556,7 +556,7 @@ export function seedInitialStyles(): void {
     '銀パラ':               15000,
     'テイテイ刈り':         8000,
     'バチバチパンチパーマ': 8000,
-    '海の男専用':           3500,
+    '海の男専用':           5000,
     'スペインパーマ':       8000,
     '昭和のアイパー':       8000,
     '覚醒の色':             14500,

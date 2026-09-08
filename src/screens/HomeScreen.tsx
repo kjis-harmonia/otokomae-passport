@@ -62,7 +62,7 @@ const HERO_SPOTLIGHT_TITLES = [
   '俺は濡れパン',
   'テイテイ刈り',
   'ジャマイカンアフロ',
-  '昭和のアイパー',
+  '海の男専用',
   'ちょい悪オヤジ専用 昭和ヘアスタイル',
 ] as const
 
@@ -136,6 +136,18 @@ const HERO_DISPLAY: Record<string, HeroDisplayConfig> = {
     imageTop: '0%',
     imageSize: '100%',
     homeSrc: '/images/home-hero/home-afro.webp.png',
+    isComposedArt: true,
+  },
+  '海の男専用': {
+    title: '海の男専用',
+    eyebrow: '潮風に負けん、漢の髪型。',
+    copy: '港で映える、漁師の貫禄。',
+    sideCopy: '海で、生き様を語れ。',
+    position: '50% 50%',
+    imageLeft: '0%',
+    imageTop: '0%',
+    imageSize: '100%',
+    homeSrc: '/assets/styles/library-uminotoko.jpg',
     isComposedArt: true,
   },
   '昭和のアイパー': {
