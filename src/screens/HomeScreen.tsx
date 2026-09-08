@@ -7,6 +7,7 @@ import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import { StyleDetailModal } from '../components/StyleDetailModal'
 import { FreshnessWidget } from '../components/FreshnessWidget'
 import { HERO_SLIDE_IMAGES, resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
+import { resolveStyleLibraryImageUrl } from '../data/styleLibraryImages'
 import type { StyleCard } from '../data/styleCard'
 import type { Member, NavTab } from '../data/brand'
 import {
@@ -293,7 +294,7 @@ function PickupMenuSection({
               }}
             >
               <StyleCardImage
-                src={resolveStyleImageUrl(style)}
+                src={resolveStyleLibraryImageUrl(style)}
                 alt={style.title}
                 className="absolute inset-0 w-full h-full"
                 imgStyle={getThumbImgStyle(style)}
