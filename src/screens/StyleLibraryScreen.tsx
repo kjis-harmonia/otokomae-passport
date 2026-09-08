@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronLeft, Play } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage, StyleCardPlaceholder } from '../components/StyleCardPlaceholder'
-import { resolveStyleImageUrl } from '../data/styleImages'
+import { resolveStyleLibraryImageUrl } from '../data/styleLibraryImages'
 import { getReserveUrl } from '../data/reserveLinks'
 import type { StyleCard } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
@@ -130,7 +130,7 @@ function ShowcaseCard({
       }}
     >
       <StyleCardImage
-        src={resolveStyleImageUrl(style)}
+        src={resolveStyleLibraryImageUrl(style)}
         alt={style.title}
         className="absolute inset-0 w-full h-full"
         imgStyle={{
@@ -431,7 +431,7 @@ function StyleThumb({
         }}
       >
         <StyleCardImage
-          src={resolveStyleImageUrl(style)}
+          src={resolveStyleLibraryImageUrl(style)}
           alt={style.title}
           className="absolute inset-0 w-full h-full"
           imgStyle={{
@@ -643,7 +643,7 @@ function ReserveSheet({
   onClose: () => void
 }) {
   const reserveUrl = getReserveUrl(style.title)
-  const imgUrl = resolveStyleImageUrl(style)
+  const imgUrl = resolveStyleLibraryImageUrl(style)
 
   return (
     <>
@@ -778,7 +778,7 @@ function StyleReelView({
   const touchStartTime            = useRef<number | null>(null)
 
   const style    = styles[idx]
-  const imgUrl   = style ? resolveStyleImageUrl(style) : null
+  const imgUrl   = style ? resolveStyleLibraryImageUrl(style) : null
   const reserveUrl = style ? getReserveUrl(style.title) : null
 
   function navigate(newDir: -1 | 1) {
