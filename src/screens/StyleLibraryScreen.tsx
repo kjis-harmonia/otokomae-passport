@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Play } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage, StyleCardPlaceholder } from '../components/StyleCardPlaceholder'
 import { resolveStyleImageUrl } from '../data/styleImages'
@@ -14,6 +14,15 @@ interface Props {
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+
+const SHOWCASE_TITLES = [
+  '銀パラカーリー',
+  '海軍御用達',
+  'スペインパーマ',
+  '俺は濡れパン',
+  'テイテイ刈り',
+  '夏ニグロ',
+] as const
 
 const UI_CATEGORIES = [
   {
@@ -57,81 +66,318 @@ function getStyleThemeRgb(style: StyleCard | undefined): string {
   return '201,162,74'
 }
 
-// ── Hero billboard ────────────────────────────────────────────────────────────
+function getStyleEnglishLabel(style: StyleCard): string {
+  const title = style.title
+  if (title.includes('海軍')) return 'MILITARY FADE'
+  if (title.includes('銀パラ')) return 'SILVER PERM'
+  if (title.includes('スペイン')) return 'NATURAL PERM'
+  if (title.includes('濡れ')) return 'WET FADE'
+  if (title.includes('テイテイ')) return 'TEITEI CUT'
+  if (title.includes('夏')) return 'SUMMER STYLE'
+  if (title.includes('カール')) return 'CURL IRON'
+  if (title.includes('昭和')) return 'SHOWA STYLE'
+  return 'GINJIRO STYLE'
+}
 
-function LibraryHero({ style, onTap }: { style: StyleCard; onTap: () => void }) {
+// ── Showcase carousel ─────────────────────────────────────────────────────────
+
+function ShowcaseCard({
+  style,
+  index,
+  active,
+  activeIndex,
+  onTap,
+}: {
+  style: StyleCard
+  index: number
+  active: boolean
+  activeIndex: number
+  onTap: () => void
+}) {
+  const themeRgb = getStyleThemeRgb(style)
+  const side = index < activeIndex ? -1 : 1
+
   return (
     <motion.button
       type="button"
       onClick={onTap}
-      whileTap={{ scale: 0.995 }}
-      className="relative block w-full overflow-hidden focus:outline-none"
-      style={{ height: '48dvh', background: '#070303' }}
+      data-showcase-card-id={style.id}
+      initial={{ opacity: 0, y: 18, scale: 0.92 }}
+      animate={{
+        opacity: active ? 1 : 0.58,
+        y: active ? 0 : 18,
+        scale: active ? 1 : 0.84,
+        rotateY: active ? 0 : side * -7,
+        filter: active ? 'brightness(1.08) saturate(1.08)' : 'brightness(0.72) saturate(0.92)',
+      }}
+      whileTap={{ scale: active ? 0.985 : 0.82 }}
+      transition={{ duration: 0.34, ease: [0.22, 0.68, 0.34, 1] }}
+      className="relative block overflow-hidden focus:outline-none"
+      style={{
+        flex: '0 0 auto',
+        width: 'clamp(244px, 70vw, 360px)',
+        aspectRatio: '3 / 4',
+        borderRadius: 18,
+        background: `radial-gradient(circle at 50% 0%, rgba(${themeRgb},0.18), transparent 50%), #0d0705`,
+        border: active ? '1.5px solid rgba(242,214,142,0.74)' : '1px solid rgba(242,214,142,0.20)',
+        boxShadow: active
+          ? `0 20px 55px rgba(0,0,0,0.46), 0 0 34px rgba(${themeRgb},0.30), 0 0 0 1px rgba(242,230,200,0.08), inset 0 1px 0 rgba(255,255,255,0.12)`
+          : '0 14px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05)',
+        scrollSnapAlign: 'center',
+        scrollSnapStop: 'always',
+        cursor: 'pointer',
+        transformStyle: 'preserve-3d',
+      }}
     >
       <StyleCardImage
         src={resolveStyleImageUrl(style)}
         alt={style.title}
         className="absolute inset-0 w-full h-full"
-        imgStyle={{ objectFit: 'contain', objectPosition: 'center' }}
+        imgStyle={{
+          objectFit: 'cover',
+          objectPosition: 'center center',
+          transform: active ? 'scale(1.01)' : 'scale(1)',
+          transition: 'transform 0.34s ease',
+        }}
         size="lg"
       />
 
-      {/* Cinematic gradients */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background: [
-            'linear-gradient(to top,  rgba(5,3,2,0.97) 0%, rgba(5,3,2,0.72) 28%, rgba(5,3,2,0.08) 58%, transparent 76%)',
-            'linear-gradient(to right, rgba(5,3,2,0.32) 0%, transparent 44%)',
+            'linear-gradient(180deg, rgba(255,244,205,0.08) 0%, transparent 28%)',
+            'linear-gradient(to top, rgba(7,4,3,0.76) 0%, rgba(7,4,3,0.28) 24%, transparent 46%)',
+            active ? `radial-gradient(circle at 50% 100%, rgba(${themeRgb},0.16), transparent 56%)` : 'transparent',
           ].join(', '),
         }}
       />
 
-      {/* Bottom content */}
-      <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: active ? 7 : 9,
+          borderRadius: active ? 14 : 12,
+          border: active ? '1px solid rgba(242,214,142,0.18)' : '1px solid rgba(242,214,142,0.08)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      <div className="absolute bottom-0 left-0 right-0" style={{ padding: active ? '0 22px 24px' : '0 18px 20px' }}>
         <p
           style={{
-            fontSize: 9, letterSpacing: '0.28em',
-            color: 'rgba(201,162,74,0.72)', marginBottom: 5,
+            fontSize: active ? 10 : 9,
+            letterSpacing: '0.34em',
+            color: 'rgba(242,214,142,0.72)',
+            marginBottom: active ? 7 : 5,
           }}
         >
-          FEATURED
+          {getStyleEnglishLabel(style)}
         </p>
         <h2
           style={{
-            fontFamily: SERIF, fontSize: 32, fontWeight: 700,
-            color: '#F2E6C8', lineHeight: 1.12, marginBottom: 6,
-            textShadow: '0 2px 20px rgba(0,0,0,0.8)',
+            fontFamily: SERIF,
+            fontSize: active ? 32 : 26,
+            fontWeight: 700,
+            color: '#F7E9CA',
+            lineHeight: 1.12,
+            letterSpacing: '0.04em',
+            textShadow: '0 2px 18px rgba(0,0,0,0.65)',
+            marginBottom: active ? 8 : 6,
           }}
         >
           {style.title}
         </h2>
-        {style.catchCopy && (
+        {active && style.catchCopy && (
           <p
             style={{
-              fontSize: 13, color: 'rgba(242,230,200,0.56)',
-              lineHeight: 1.6, marginBottom: 14,
-              textShadow: '0 1px 8px rgba(0,0,0,0.9)',
+              fontFamily: SERIF,
+              fontSize: 14,
+              color: 'rgba(247,233,202,0.78)',
+              lineHeight: 1.55,
+              marginBottom: 18,
+              textShadow: '0 1px 12px rgba(0,0,0,0.60)',
             }}
           >
-            {style.catchCopy}
+            {style.catchCopy.split('。')[0]}。
           </p>
         )}
-        <span
-          style={{
-            display: 'inline-flex', alignItems: 'center',
-            padding: '9px 18px', borderRadius: 12,
-            background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-            border: '1px solid rgba(201,162,74,0.44)',
-            boxShadow: '0 3px 14px rgba(107,15,18,0.45)',
-            fontFamily: SERIF, fontSize: 14, fontWeight: 700,
-            letterSpacing: '0.18em', color: '#F2E6C8',
-          }}
-        >
-          詳しく見る
-        </span>
+        {active && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 9,
+              padding: '12px 22px',
+              borderRadius: 999,
+              background: 'rgba(8,5,3,0.58)',
+              border: '1px solid rgba(242,214,142,0.76)',
+              boxShadow: `0 0 22px rgba(${themeRgb},0.20), inset 0 1px 0 rgba(255,255,255,0.12)`,
+              fontFamily: SERIF,
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              color: '#F7E9CA',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+            }}
+          >
+            <Play size={15} fill="currentColor" strokeWidth={0} />
+            スタイルを見る
+          </span>
+        )}
       </div>
     </motion.button>
+  )
+}
+
+function StyleShowcaseCarousel({
+  styles,
+  onStyleSelect,
+}: {
+  styles: StyleCard[]
+  onStyleSelect: (s: StyleCard) => void
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const frameRef = useRef<number | null>(null)
+  const initialActiveId = styles[Math.min(1, Math.max(0, styles.length - 1))]?.id ?? null
+  const [activeId, setActiveId] = useState<string | null>(initialActiveId)
+  const activeIndex = Math.max(0, styles.findIndex((style) => style.id === activeId))
+  const activeStyle = styles[activeIndex] ?? styles[0]
+  const activeThemeRgb = getStyleThemeRgb(activeStyle)
+
+  function measureActiveCard() {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    const scrollerRect = scroller.getBoundingClientRect()
+    const centerX = scrollerRect.left + scrollerRect.width / 2
+    const cards = Array.from(scroller.querySelectorAll<HTMLElement>('[data-showcase-card-id]'))
+    let closestId: string | null = null
+    let closestDistance = Number.POSITIVE_INFINITY
+
+    cards.forEach((card) => {
+      const rect = card.getBoundingClientRect()
+      const distance = Math.abs(centerX - (rect.left + rect.width / 2))
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestId = card.dataset.showcaseCardId ?? null
+      }
+    })
+
+    if (closestId) setActiveId(closestId)
+  }
+
+  function scheduleMeasure() {
+    if (frameRef.current !== null) return
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = null
+      measureActiveCard()
+    })
+  }
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    const target = initialActiveId
+      ? scroller?.querySelector<HTMLElement>(`[data-showcase-card-id="${initialActiveId}"]`)
+      : null
+    if (scroller && target) {
+      const left = target.offsetLeft - (scroller.clientWidth - target.clientWidth) / 2
+      scroller.scrollTo({ left, behavior: 'auto' })
+    }
+    scheduleMeasure()
+    window.addEventListener('resize', scheduleMeasure)
+    return () => {
+      window.removeEventListener('resize', scheduleMeasure)
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styles.map((style) => style.id).join('|')])
+
+  if (styles.length === 0) return null
+
+  return (
+    <section style={{ position: 'relative', overflow: 'hidden', padding: '4px 0 26px' }}>
+      <motion.div
+        aria-hidden
+        animate={{
+          background: [
+            `radial-gradient(ellipse at 50% 38%, rgba(${activeThemeRgb},0.32) 0%, rgba(${activeThemeRgb},0.12) 34%, transparent 70%)`,
+            'linear-gradient(180deg, rgba(242,214,142,0.08), transparent 40%)',
+          ].join(', '),
+        }}
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+        style={{
+          position: 'absolute',
+          inset: '-28px 0 6px',
+          filter: 'blur(16px)',
+          opacity: 0.86,
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        ref={scrollerRef}
+        className="[&::-webkit-scrollbar]:hidden"
+        onScroll={scheduleMeasure}
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 18,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          paddingLeft: 'calc((100% - clamp(244px, 70vw, 360px)) / 2)',
+          paddingRight: 'calc((100% - clamp(244px, 70vw, 360px)) / 2)',
+          paddingTop: 10,
+          paddingBottom: 20,
+          perspective: 900,
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
+          scrollSnapType: 'x mandatory',
+        } as React.CSSProperties}
+      >
+        {styles.map((style, i) => (
+          <ShowcaseCard
+            key={style.id}
+            style={style}
+            index={i}
+            active={style.id === activeId}
+            activeIndex={activeIndex}
+            onTap={() => {
+              if (style.id === activeId) {
+                onStyleSelect(style)
+                return
+              }
+              const scroller = scrollerRef.current
+              const target = scroller?.querySelector<HTMLElement>(`[data-showcase-card-id="${style.id}"]`)
+              if (!scroller || !target) return
+              const left = target.offsetLeft - (scroller.clientWidth - target.clientWidth) / 2
+              scroller.scrollTo({ left, behavior: 'smooth' })
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'center', gap: 8 }}>
+        {styles.map((style) => {
+          const active = style.id === activeId
+          return (
+            <span
+              key={style.id}
+              style={{
+                width: active ? 28 : 8,
+                height: 4,
+                borderRadius: 99,
+                background: active ? '#E8C77A' : 'rgba(242,230,200,0.22)',
+                boxShadow: active ? '0 0 12px rgba(232,199,122,0.48)' : 'none',
+                transition: 'width 0.25s ease, background 0.25s ease',
+              }}
+            />
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
@@ -809,16 +1055,15 @@ export function StyleLibraryScreen({ onModalChange }: Props) {
     onModalChange?.(reelIndex !== null)
   }, [reelIndex, onModalChange])
 
-  const [heroStyle] = useState<StyleCard | null>(() => {
-    const featured = styles.filter((s) => s.isFeatured)
-    const pool = featured.length > 0 ? featured : styles
-    return pool[Math.floor(Math.random() * pool.length)] ?? null
-  })
-
   function openReel(style: StyleCard) {
     const i = styles.findIndex((s) => s.id === style.id)
     setReelIndex(i >= 0 ? i : 0)
   }
+
+  const showcaseStyles = SHOWCASE_TITLES
+    .map((title) => styles.find((style) => style.title === title))
+    .filter((style): style is StyleCard => style !== undefined)
+  const resolvedShowcaseStyles = showcaseStyles.length >= 3 ? showcaseStyles : styles.slice(0, 6)
 
   const rows = UI_CATEGORIES.map(({ id, sub, titles }) => ({
     id,
@@ -832,22 +1077,30 @@ export function StyleLibraryScreen({ onModalChange }: Props) {
     <div className="ginjiro-luxury-bg ginjiro-luxury-bg--styles">
       <div className="relative z-10" style={{ paddingBottom: 40 }}>
         {/* Page header */}
-        <div style={{ padding: '18px 16px 12px' }}>
-          <p style={{ fontSize: 8, letterSpacing: '0.30em', color: 'rgba(201,162,74,0.50)', marginBottom: 3 }}>
+        <div style={{ padding: '18px 18px 8px' }}>
+          <p style={{ fontSize: 8, letterSpacing: '0.30em', color: 'rgba(201,162,74,0.52)', marginBottom: 5 }}>
             STYLE LIBRARY
           </p>
-          <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.04em' }}>
-            男前スタイル図鑑
+          <h1 style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#F7E9CA', letterSpacing: '0.04em' }}>
+            スタイルライブラリ
           </h1>
+          <div
+            aria-hidden
+            style={{
+              width: 64,
+              height: 3,
+              borderRadius: 99,
+              marginTop: 9,
+              background: 'linear-gradient(90deg, #E8C77A, rgba(232,199,122,0.18))',
+              boxShadow: '0 0 14px rgba(232,199,122,0.34)',
+            }}
+          />
         </div>
 
-        {/* Hero */}
-        {heroStyle && (
-          <LibraryHero style={heroStyle} onTap={() => openReel(heroStyle)} />
-        )}
+        <StyleShowcaseCarousel styles={resolvedShowcaseStyles} onStyleSelect={openReel} />
 
         {/* Category rows */}
-        <div style={{ paddingTop: 32 }}>
+        <div style={{ paddingTop: 8 }}>
           {rows.map(({ id, sub, styles: rowStyles }) => (
             <StyleRow key={id} id={id} sub={sub} styles={rowStyles} onStyleSelect={openReel} />
           ))}
