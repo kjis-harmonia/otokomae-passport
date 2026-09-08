@@ -13,9 +13,10 @@
 .ginjiro-luxury-bg {
   position: relative;
   background:
-    radial-gradient(circle at 82% 8%,  rgba(128, 12, 20, 0.16) 0%, transparent 37%),
-    radial-gradient(circle at 18% 2%,  rgba(230, 202, 101, 0.07) 0%, transparent 30%),
-    linear-gradient(180deg, #050000 0%, #0b0203 48%, #030000 100%);
+    radial-gradient(circle at 82% 8%,  rgba(151, 21, 28, 0.24) 0%, transparent 39%),
+    radial-gradient(circle at 18% 2%,  rgba(230, 202, 101, 0.10) 0%, transparent 32%),
+    radial-gradient(circle at 50% 92%, rgba(201, 82, 32, 0.08) 0%, transparent 42%),
+    linear-gradient(180deg, #160504 0%, #120606 48%, #170707 100%);
 }
 
 /* Hairline texture + diagonal gold streak (fixed, non-scrolling) */
@@ -28,8 +29,8 @@
   background:
     repeating-linear-gradient(
       115deg,
-      rgba(255, 255, 255, 0.022) 0px,
-      rgba(255, 255, 255, 0.022) 1px,
+      rgba(255, 255, 255, 0.026) 0px,
+      rgba(255, 255, 255, 0.026) 1px,
       transparent 1px,
       transparent 7px
     ),
@@ -37,13 +38,13 @@
       38deg,
       transparent 0%,
       transparent 47.8%,
-      rgba(230, 202, 101, 0.028) 47.8%,
-      rgba(230, 202, 101, 0.028) 48.2%,
+      rgba(230, 202, 101, 0.040) 47.8%,
+      rgba(230, 202, 101, 0.040) 48.2%,
       transparent 48.2%,
       transparent 100%
     ),
-    radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.036) 0%, transparent 28%);
-  opacity: 0.50;
+    radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.046) 0%, transparent 30%);
+  opacity: 0.58;
 }
 
 /* Conic gradient — slow breathe rotation */
@@ -56,12 +57,12 @@
   background: conic-gradient(
     from 180deg,
     transparent                  0deg,
-    rgba(230, 202, 101, 0.068)  48deg,
-    rgba(128, 12,  20,  0.110)  92deg,
+    rgba(230, 202, 101, 0.090)  48deg,
+    rgba(151, 21,  28,  0.150)  92deg,
     transparent                155deg,
     transparent                360deg
   );
-  opacity: 0.22;
+  opacity: 0.28;
   animation: ginjiro-bg-breathe 24s linear infinite;
   transform-origin: center;
 }
@@ -80,19 +81,19 @@
 
 .ginjiro-luxury-bg--home {
   background:
-    radial-gradient(circle at 84% 6%,  rgba(128, 12, 20, 0.22) 0%, transparent 38%),
-    radial-gradient(circle at 16% 2%,  rgba(230, 202, 101, 0.10) 0%, transparent 32%),
-    radial-gradient(circle at 50% 72%, rgba(100,  5, 12, 0.09) 0%, transparent 40%),
-    linear-gradient(180deg, #060001 0%, #0c0203 45%, #040001 75%, #060102 100%);
+    radial-gradient(circle at 84% 6%,  rgba(151, 21, 28, 0.34) 0%, transparent 40%),
+    radial-gradient(circle at 16% 2%,  rgba(230, 202, 101, 0.14) 0%, transparent 34%),
+    radial-gradient(circle at 50% 72%, rgba(126, 12, 17, 0.15) 0%, transparent 44%),
+    linear-gradient(180deg, #180605 0%, #160607 45%, #100606 75%, #1a0808 100%);
 }
 
 /* ── StyleLibrary: showcase — weaker crimson, stronger hairline ──────────── */
 
 .ginjiro-luxury-bg--styles {
   background:
-    radial-gradient(circle at 82% 10%, rgba(100,  8, 16, 0.11) 0%, transparent 32%),
-    radial-gradient(circle at 20%  4%, rgba(230, 202, 101, 0.06) 0%, transparent 28%),
-    linear-gradient(180deg, #040002 0%, #080204 50%, #030001 100%);
+    radial-gradient(circle at 82% 10%, rgba(126, 14, 22, 0.20) 0%, transparent 34%),
+    radial-gradient(circle at 20%  4%, rgba(230, 202, 101, 0.10) 0%, transparent 30%),
+    linear-gradient(180deg, #150505 0%, #120607 50%, #160707 100%);
 }
 
 .ginjiro-luxury-bg--styles::before {
@@ -103,9 +104,9 @@
 
 .ginjiro-luxury-bg--diagnosis {
   background:
-    radial-gradient(circle at 50% 16%, rgba(128, 12, 20, 0.18) 0%, transparent 42%),
-    radial-gradient(circle at 20%  4%, rgba(230, 202, 101, 0.07) 0%, transparent 30%),
-    linear-gradient(180deg, #050001 0%, #0a0203 50%, #040000 100%);
+    radial-gradient(circle at 50% 16%, rgba(151, 21, 28, 0.28) 0%, transparent 44%),
+    radial-gradient(circle at 20%  4%, rgba(230, 202, 101, 0.11) 0%, transparent 32%),
+    linear-gradient(180deg, #160504 0%, #120606 50%, #170707 100%);
 }
 
 .ginjiro-luxury-bg--diagnosis::after {
