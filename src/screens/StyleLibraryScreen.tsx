@@ -171,14 +171,12 @@ function StyleThumb({
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 9px 10px' }}>
         <p
           style={{
-            fontFamily: SERIF, fontSize: 14, fontWeight: 700,
-            color: '#F2E6C8', lineHeight: 1.22,
+            fontSize: 12,
+            color: 'rgba(201,162,74,0.9)',
+            textAlign: 'center',
             textShadow: '0 1px 8px rgba(0,0,0,0.95)',
           }}
         >
-          {style.title}
-        </p>
-        <p style={{ fontSize: 12, color: 'rgba(201,162,74,0.84)', marginTop: 3 }}>
           ¥{style.price.toLocaleString()}
         </p>
       </div>

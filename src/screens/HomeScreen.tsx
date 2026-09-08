@@ -309,37 +309,10 @@ function PickupMenuSection({
                 }}
               />
               <div style={{ position: 'absolute', left: 8, right: 8, bottom: 8 }}>
-                <p
-                  style={{
-                    fontFamily: SERIF,
-                    fontSize: style.title.length > 7 ? 11 : 13,
-                    fontWeight: 700,
-                    color: '#F2E6C8',
-                    lineHeight: 1.18,
-                    textShadow: '0 1px 9px rgba(0,0,0,0.95)',
-                    minHeight: 30,
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                  }}
-                >
-                  {style.title}
-                </p>
-                <p
-                  style={{
-                    marginTop: 4,
-                    fontSize: 9,
-                    lineHeight: 1.35,
-                    color: 'rgba(242,230,200,0.70)',
-                    minHeight: 25,
-                  }}
-                >
-                  {style.catchCopy.split('。')[0]}。
-                </p>
                 <button
                   type="button"
                   onClick={() => onStyleSelect(style)}
                   style={{
-                    marginTop: 8,
                     width: '100%',
                     height: 30,
                     borderRadius: 5,
