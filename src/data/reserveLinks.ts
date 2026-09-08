@@ -36,10 +36,10 @@ export const RESERVE_LINKS: Readonly<Record<string, string>> = {
   'シンサイ刈り':         'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000009719263&add=0&addMenu=0&rootCd=10',
   // 既存スタイル — 暫定から専用クーポンURLへ更新
   'ジャマイカンアフロ':   JAMAICAN_URL,
-  'スペインパーマ':       CURL_IPER_URL,
+  'スペインパーマ':       'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008914867&add=0&addMenu=0&rootCd=10',
   'テイテイ刈り':         TEITEI_URL,
   '海の男専用':           SEA_STYLE_URL,
-  'トラック野郎御用達':   PUNCH_PERM_URL,
+  'トラック野郎御用達':   'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008761373&add=0&addMenu=0&rootCd=10',
   // 専用クーポンURL 確定分
   'シンサイパンチ':                     'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008914837&add=0&addMenu=0&rootCd=10',
   '覚醒の色':                           'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000010603641&add=0&addMenu=0&rootCd=10',

@@ -147,7 +147,7 @@ const HERO_DISPLAY: Record<string, HeroDisplayConfig> = {
     imageLeft: '0%',
     imageTop: '0%',
     imageSize: '100%',
-    homeSrc: '/assets/styles/library-uminotoko.jpg',
+    homeSrc: '/images/home-hero/home-uminotoko.jpg',
     isComposedArt: true,
   },
   '昭和のアイパー': {
