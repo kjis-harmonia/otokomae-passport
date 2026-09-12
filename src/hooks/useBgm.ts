@@ -4,6 +4,9 @@ const BGM_KEY = 'ginjiro_bgm_on'
 const BGM_TRACK_KEY = 'ginjiro_bgm_track'
 const BGM_AUDIO_REGISTRY_KEY = '__ginjiroBgmAudioRegistry'
 
+export const DEFAULT_BGM_TRACK_ID = 'night-rendezvous'
+export const DEFAULT_BGM_TRACK_SRC = '/assets/audio/銀二郎ナイト・ランデブー　CATS&STAR×TeiTei.mp4'
+
 export interface BgmTrack {
   id: string
   title: string
@@ -12,6 +15,18 @@ export interface BgmTrack {
 }
 
 export const BGM_TRACKS: BgmTrack[] = [
+  {
+    id: DEFAULT_BGM_TRACK_ID,
+    title: '銀二郎ナイト・ランデブー',
+    subtitle: 'CATS&STAR × TeiTei',
+    src: DEFAULT_BGM_TRACK_SRC,
+  },
+  {
+    id: 'ginjiro-cats-star',
+    title: 'Ginjiro CATS&STAR',
+    subtitle: 'CATS&STAR が鳴らす銀二郎サウンド',
+    src: '/assets/audio/Ginjiro CATS&STAR.mp4',
+  },
   {
     id: 'theme',
     title: '銀二郎 Theme',
@@ -68,7 +83,11 @@ export function stopAllBgmAudio(except?: HTMLAudioElement | null): void {
 
 function getInitialTrack(): BgmTrack {
   const savedId = localStorage.getItem(BGM_TRACK_KEY)
-  return BGM_TRACKS.find((track) => track.id === savedId) ?? BGM_TRACKS[0]
+  return (
+    BGM_TRACKS.find((track) => track.id === savedId) ??
+    BGM_TRACKS.find((track) => track.id === DEFAULT_BGM_TRACK_ID) ??
+    BGM_TRACKS[0]
+  )
 }
 
 export function useBgm() {

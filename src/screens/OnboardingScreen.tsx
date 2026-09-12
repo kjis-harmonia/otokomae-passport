@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { MemberStatus } from '../data/brand'
 import { setStoredValue, ONBOARDING_DONE_KEY, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getUserId, getMemberIssuedAt } from '../utils/userId'
-import { registerBgmAudio, stopAllBgmAudio } from '../hooks/useBgm'
+import { DEFAULT_BGM_TRACK_SRC, registerBgmAudio, stopAllBgmAudio } from '../hooks/useBgm'
 
 type Step = 0 | 1
 
@@ -31,7 +31,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
     // BGM: play on user gesture to satisfy browser autoplay policy
     try {
       stopAllBgmAudio()
-      const audio = registerBgmAudio(new Audio('/assets/audio/ginjiro-theme.mp4'))
+      const audio = registerBgmAudio(new Audio(DEFAULT_BGM_TRACK_SRC))
       audio.volume = 0.28
       audio.loop = false
       void audio.play()
