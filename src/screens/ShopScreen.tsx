@@ -42,6 +42,8 @@ const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'
 
 const SHOP_IMAGES = {
   header: '/images/shop/ginjiro-shop-header.jpg',
+  thisWeekBanner: '/images/shop/shop-banner-this-week.jpg',
+  newArrivalBanner: '/images/shop/shop-banner-new-arrival.jpg',
   retail: '/images/shop/retail-styling.jpg',
   tee: '/images/shop/ginjiro-tshirt.jpg',
   hoodie: '/images/shop/ginjiro-hoodie.jpg',
@@ -440,16 +442,25 @@ const shopCss = `
 
   .shop-banner {
     flex: 0 0 82%;
-    min-height: 112px;
+    aspect-ratio: 1280 / 448;
+    min-height: 0;
     border: 0;
     border-radius: 16px;
-    padding: 18px;
+    padding: 0;
     color: #fff;
     text-align: left;
     scroll-snap-align: start;
     overflow: hidden;
     position: relative;
     box-shadow: 0 12px 26px rgba(0,0,0,0.10);
+  }
+
+  .shop-banner img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    object-position: center center;
   }
 
   .shop-banner--red {
@@ -1048,15 +1059,17 @@ export function ShopScreen() {
 
       <div className="shop-content">
         <section className="shop-banner-rail" aria-label="注目エリア">
-          <button type="button" className="shop-banner shop-banner--red">
-            <small>THIS WEEK</small>
-            <h2>今週のおすすめ</h2>
-            <p>店販アイテムと銀二郎グッズを見やすくチェック。</p>
+          <button type="button" className="shop-banner shop-banner--red" aria-label="今週のおすすめ">
+            <img
+              src={SHOP_IMAGES.thisWeekBanner}
+              alt="今週のおすすめ 店販アイテムと銀二郎グッズを見やすくチェック。"
+            />
           </button>
-          <button type="button" className="shop-banner shop-banner--black">
-            <small>NEW ARRIVAL</small>
-            <h2>新作入荷予定</h2>
-            <p>Tシャツ、パーカー、ジャンパーを準備中。</p>
+          <button type="button" className="shop-banner shop-banner--black" aria-label="新作入荷予定">
+            <img
+              src={SHOP_IMAGES.newArrivalBanner}
+              alt="新作入荷予定 Tシャツ、パーカー、ジャンパーを準備中。"
+            />
           </button>
         </section>
 
