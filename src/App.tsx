@@ -31,7 +31,7 @@ import { seedDevData } from './utils/devSeed'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
 const SHOP_AUTH_KEY = 'ginjiro_shop_auth'
-const SHOP_PASSCODE = 'kei168181'
+const SHOP_PASSCODE = '81811234'
 
 type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
