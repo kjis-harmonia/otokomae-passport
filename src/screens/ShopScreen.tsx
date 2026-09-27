@@ -267,7 +267,9 @@ function ProductCard({
         <ProductImage product={product} />
       </div>
       <div className="shop-card-copy">
-        {product.label && <span className="shop-label">{product.label}</span>}
+        <span className={product.label ? 'shop-label' : 'shop-label shop-label--placeholder'}>
+          {product.label ?? 'LABEL'}
+        </span>
         <h3>{product.name}</h3>
         <div className="shop-price-row">
           <strong>{formatYen(product.price)}</strong>
@@ -634,6 +636,8 @@ const shopCss = `
     box-shadow: 0 4px 16px rgba(0,0,0,0.055);
     border: 1px solid #ece8df;
     -webkit-tap-highlight-color: transparent;
+    display: grid;
+    grid-template-rows: auto 1fr;
   }
 
   .shop-card--compact {
@@ -642,6 +646,8 @@ const shopCss = `
 
   .shop-card-image-wrap {
     position: relative;
+    background: #fbfaf7;
+    border-bottom: 1px solid #f0ebe2;
   }
 
   .shop-image {
@@ -651,11 +657,15 @@ const shopCss = `
     display: grid;
     place-items: center;
     overflow: hidden;
+    box-sizing: border-box;
+    padding: 14px;
+    background: #fbfaf7 !important;
   }
 
   .shop-image--large {
     border-radius: 0 0 26px 26px;
     aspect-ratio: 1.08 / 1;
+    padding: 22px;
   }
 
   .shop-image img {
@@ -663,7 +673,9 @@ const shopCss = `
     height: 100%;
     display: block;
     object-fit: contain;
-    padding: 7px;
+    object-position: center center;
+    padding: 0;
+    box-sizing: border-box;
   }
 
   .shop-product-art {
@@ -715,17 +727,28 @@ const shopCss = `
   .shop-card-copy {
     padding: 10px 11px 13px;
     display: grid;
+    grid-template-rows: 20px minmax(38px, auto) auto;
     gap: 6px;
+    min-height: 112px;
   }
 
   .shop-label {
     width: fit-content;
+    min-height: 20px;
     color: #8f1116;
     background: #fff4ea;
     border-radius: 999px;
     padding: 3px 7px;
     font-size: 10px;
     font-weight: 900;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    line-height: 1;
+  }
+
+  .shop-label--placeholder {
+    visibility: hidden;
   }
 
   .shop-card-copy h3 {
@@ -734,7 +757,11 @@ const shopCss = `
     font-size: 13px;
     font-weight: 800;
     line-height: 1.35;
-    min-height: 35px;
+    min-height: 38px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .shop-price-row {
@@ -742,6 +769,7 @@ const shopCss = `
     align-items: baseline;
     gap: 7px;
     flex-wrap: wrap;
+    min-height: 24px;
   }
 
   .shop-price-row strong {
@@ -758,6 +786,10 @@ const shopCss = `
   .shop-sale-rail .shop-card {
     flex: 0 0 44%;
     scroll-snap-align: start;
+  }
+
+  .shop-card--compact .shop-image {
+    padding: 12px;
   }
 
   .shop-staff-card {
@@ -804,10 +836,7 @@ const shopCss = `
 
   .shop-staff-thumb .shop-image {
     aspect-ratio: 1 / 1;
-  }
-
-  .shop-staff-thumb .shop-image img {
-    padding: 4px;
+    padding: 8px;
   }
 
   .shop-bottom-actions {
