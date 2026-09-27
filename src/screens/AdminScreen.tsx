@@ -1632,7 +1632,11 @@ export function AdminScreen() {
                     value={ticketTab === 'discount' ? discountAmountInput : otokuAmountInput}
                     onChange={e => {
                       const v = e.target.value.replace(/[^\d]/g, '')
-                      ticketTab === 'discount' ? setDiscountAmountInput(v) : setOtokuAmountInput(v)
+                      if (ticketTab === 'discount') {
+                        setDiscountAmountInput(v)
+                      } else {
+                        setOtokuAmountInput(v)
+                      }
                     }}
                     placeholder="0"
                     style={{
@@ -1695,7 +1699,7 @@ export function AdminScreen() {
               {effectiveAmount > 0 && (
                 <div style={{ padding: '10px 16px', borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.18)', textAlign: 'center' }}>
                   <p style={{ fontFamily: SERIF, fontSize: 14, color: '#C9A24A', letterSpacing: '0.06em' }}>
-                    {currentTab.autoTitle}　¥{effectiveAmount.toLocaleString()}　×　{quantity}枚
+                    {currentTab.autoTitle} ¥{effectiveAmount.toLocaleString()} x {quantity}枚
                   </p>
                 </div>
               )}

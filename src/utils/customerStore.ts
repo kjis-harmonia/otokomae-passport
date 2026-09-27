@@ -22,10 +22,10 @@ export interface CustomerRow {
 
 /**
  * 顧客名の照合用正規化（前後/半角/全角スペース除去・連続スペース除去・大文字小文字吸収）。
- * 「山田太郎」「山田 太郎」「山田　太郎」を同一人物候補として扱うための内部キー。
+ * 「山田太郎」「山田 太郎」「山田 + 全角スペース + 太郎」を同一人物候補として扱うための内部キー。
  */
 export function normalizeCustomerName(name: string): string {
-  return name.trim().replace(/[ 　]+/g, '').toLowerCase()
+  return name.trim().replace(/[ \u3000]+/g, '').toLowerCase()
 }
 
 function generateGuestUserId(): string {

@@ -7,7 +7,7 @@ export const BRAND = {
 
 export type MemberRank = 'ブロンズ' | 'シルバー' | 'ゴールド' | 'プラチナ'
 
-export type NavTab = 'home' | 'gacha' | 'tryon' | 'styles' | 'diagnosis' | 'reserve' | 'mypage' | 'tickets'
+export type NavTab = 'home' | 'gacha' | 'tryon' | 'styles' | 'shop' | 'diagnosis' | 'reserve' | 'mypage' | 'tickets'
 
 export interface Member {
   id: string

@@ -12,13 +12,13 @@ const TAB_LABELS: Partial<Record<NavTab, string>> = {
   home:      'ホーム',
   tickets:   'チケット',
   styles:    'スタイル',
-  diagnosis: '診断',
+  shop:      'SHOP',
 }
 
 const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'
 
 const LEFT_TABS:  NavTab[] = ['home', 'tickets']
-const RIGHT_TABS: NavTab[] = ['styles', 'diagnosis']
+const RIGHT_TABS: NavTab[] = ['styles', 'shop']
 
 // ── SVG gradient defs (shared across tab icons) ───────────────────────────────
 
@@ -89,17 +89,30 @@ function IconStyles({ isActive }: IconProps) {
   )
 }
 
-function IconDiagnosis({ isActive }: IconProps) {
+function IconShop({ isActive }: IconProps) {
   const stroke = isActive ? 'url(#ginjiro-nav-gold-active)' : 'url(#ginjiro-nav-gold-muted)'
   const sw = isActive ? 1.65 : 1.5
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="8.5"  stroke={stroke} strokeWidth={sw} />
-      <circle cx="12" cy="12" r="2.8"  stroke={stroke} strokeWidth={sw} />
-      <line x1="12"   y1="3"    x2="12"   y2="6.8"  stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
-      <line x1="12"   y1="17.2" x2="12"   y2="21"   stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
-      <line x1="3"    y1="12"   x2="6.8"  y2="12"   stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
-      <line x1="17.2" y1="12"   x2="21"   y2="12"   stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
+      <path
+        d="M6.5 8.5h11l-.8 11H7.3l-.8-11Z"
+        stroke={stroke}
+        strokeWidth={sw}
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9 8.5V7.2C9 5.4 10.3 4 12 4s3 1.4 3 3.2v1.3"
+        stroke={stroke}
+        strokeWidth={sw}
+        strokeLinecap="round"
+      />
+      <path
+        d="M8.5 12.4h7M8.8 15.6h6.4"
+        stroke={stroke}
+        strokeWidth={isActive ? 1.25 : 1.1}
+        strokeLinecap="round"
+        opacity="0.72"
+      />
     </svg>
   )
 }
@@ -157,7 +170,7 @@ function TabIcon({ id, isActive }: { id: NavTab; isActive: boolean }) {
     case 'home':      return <IconHome      isActive={isActive} />
     case 'tickets':   return <IconTickets   isActive={isActive} />
     case 'styles':    return <IconStyles    isActive={isActive} />
-    case 'diagnosis': return <IconDiagnosis isActive={isActive} />
+    case 'shop':      return <IconShop      isActive={isActive} />
     default:          return null
   }
 }

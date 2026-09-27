@@ -68,6 +68,7 @@ async function fetchLastVisitDateForUser(userId: string): Promise<string | null>
 // ── TicketWalletSection（保有チケット：漢トク券・割引券・譲渡） ──────────────────
 
 type WalletItem = { kind: 'ticket'; data: TicketRow }
+type ConfirmTicket = { item: WalletItem; qrPayload: string }
 
 // 券種＋金額でグループ化
 interface HomeTicketGroup {
@@ -105,7 +106,7 @@ function TicketWalletSection() {
   const userId   = getUserId()
 
   const [items,         setItems]         = useState<WalletItem[]>([])
-  const [confirmItem,   setConfirmItem]   = useState<WalletItem | null>(null)
+  const [confirmItem,   setConfirmItem]   = useState<ConfirmTicket | null>(null)
   const [transferItem,  setTransferItem]  = useState<WalletItem | null>(null)
   const [transferToken, setTransferToken] = useState<string | null>(null)
   const [showXferQr,    setShowXferQr]    = useState(false)
@@ -188,7 +189,24 @@ function TicketWalletSection() {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       }
-    } catch {}
+    } catch {
+      // Share cancellation and clipboard permission denial do not need user-facing errors.
+    }
+  }
+
+  function openTicketUseModal(item: WalletItem) {
+    const issuedAt = new Date()
+    const expiresAt = new Date(issuedAt.getTime() + 30 * 60 * 1000)
+    setConfirmItem({
+      item,
+      qrPayload: JSON.stringify({
+        type: 'ginjiro-ticket-use',
+        userId,
+        selectedTicketId: item.data.id,
+        issuedAt: issuedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+      }),
+    })
   }
 
   if (items.length === 0) return (
@@ -334,7 +352,7 @@ function TicketWalletSection() {
                 {/* Primary: 使用する */}
                 <button
                   type="button"
-                  onClick={() => { if (canUse && !todayUsed && group.activeItems[0]) setConfirmItem(group.activeItems[0]) }}
+                  onClick={() => { if (canUse && !todayUsed && group.activeItems[0]) openTicketUseModal(group.activeItems[0]) }}
                   disabled={!canUse || todayUsed}
                   style={{
                     width: '100%', padding: '11px 0', borderRadius: 10,
@@ -379,14 +397,7 @@ function TicketWalletSection() {
       {/* ── チケット使用QRモーダル ── */}
       <AnimatePresence>
         {confirmItem && (() => {
-          const t = confirmItem.data
-          const qrPayload = JSON.stringify({
-            type: 'ginjiro-ticket-use',
-            userId,
-            selectedTicketId: t.id,
-            issuedAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-          })
+          const t = confirmItem.item.data
           return (
             <div
               style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.90)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
@@ -408,7 +419,7 @@ function TicketWalletSection() {
                   </p>
                 )}
                 <div style={{ display: 'inline-block', padding: 14, background: '#FFFFFF', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', marginBottom: 16 }}>
-                  <QRCodeSVG value={qrPayload} size={180} level="M" />
+                  <QRCodeSVG value={confirmItem.qrPayload} size={180} level="M" />
                 </div>
                 <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.70)', lineHeight: 1.75, marginBottom: 20 }}>
                   このQRをスタッフに提示してください。<br />

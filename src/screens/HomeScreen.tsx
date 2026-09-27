@@ -43,7 +43,7 @@ function getThumbOverlay(style: StyleCard): string {
   const base = style.title === 'トラック野郎御用達' ? 'rgba(0,0,0' : 'rgba(5,3,2'
   return (
     `linear-gradient(to top,` +
-    `${base},0.98) 0%,${base},0.84) 22%,${base},0.44) 44%,${base},0.06) 64%,transparent 80%)`
+    `${base},0.70) 0%,${base},0.38) 34%,${base},0.10) 58%,transparent 76%)`
   )
 }
 
@@ -66,10 +66,21 @@ const HERO_SPOTLIGHT_TITLES = [
   'ちょい悪オヤジ専用 昭和ヘアスタイル',
 ] as const
 
-const PICKUP_MENU_TITLES = [
-  '俺は濡れパン',
-  'カールアイパー',
-  '銀パラ',
+const PICKUP_STYLIST_SECTIONS = [
+  {
+    id: 'teitei',
+    bannerSrc: '/images/pickup/teitei-pickup.jpg',
+    bannerAlt: 'テイテイ PICK UP',
+    accent: '201,162,74',
+    titles: ['海の男専用', 'テイテイ刈り', 'ちょい悪オヤジ専用 昭和ヘアスタイル'],
+  },
+  {
+    id: 'ginjiro',
+    bannerSrc: '/images/pickup/ginjiro-pickup.jpg',
+    bannerAlt: '銀二郎 PICK UP',
+    accent: '180,25,32',
+    titles: ['海軍御用達', '俺は濡れパン', '夏ニグロ'],
+  },
 ] as const
 
 type HomeHeroSlide = {
@@ -239,11 +250,19 @@ function PickupMenuSection({
   onStyleSelect: (s: StyleCard) => void
   onSeeAll: () => void
 }) {
-  const displayStyles = pickStylesByTitle(styles, PICKUP_MENU_TITLES, 3)
+  const byTitle = new Map(styles.map((style) => [style.title, style]))
+  const displaySections = PICKUP_STYLIST_SECTIONS.map((section) => ({
+    ...section,
+    styles: section.titles
+      .map((title) => byTitle.get(title))
+      .filter((style): style is StyleCard => style !== undefined),
+  })).filter((section) => section.styles.length > 0)
+
+  if (displaySections.length === 0) return null
 
   return (
     <section className="px-4">
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 14 }}>
         <div style={{ minWidth: 0 }}>
           <p
             style={{
@@ -283,65 +302,138 @@ function PickupMenuSection({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 8,
+          gap: 16,
         }}
       >
-        {displayStyles.map((style, i) => {
+        {displaySections.map((section, sectionIndex) => {
           return (
-            <motion.article
-              key={style.id}
+            <motion.div
+              key={section.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.32, ease: EASE_OUT }}
+              transition={{ delay: sectionIndex * 0.06, duration: 0.34, ease: EASE_OUT }}
               style={{
-                minWidth: 0,
                 position: 'relative',
-                overflow: 'hidden',
-                borderRadius: 7,
-                aspectRatio: '0.67',
-                background: '#070403',
-                border: '1px solid rgba(201,162,74,0.25)',
-                boxShadow: '0 12px 30px rgba(0,0,0,0.56), inset 0 1px 0 rgba(242,230,200,0.05)',
               }}
             >
-              <StyleCardImage
-                src={resolveStyleLibraryImageUrl(style)}
-                alt={style.title}
-                className="absolute inset-0 w-full h-full"
-                imgStyle={getThumbImgStyle(style)}
-                size="md"
-              />
-              <div className="absolute inset-0 pointer-events-none" style={{ background: getThumbOverlay(style) }} />
               <div
                 aria-hidden
-                className="absolute inset-0 pointer-events-none"
                 style={{
-                  background:
-                    'linear-gradient(180deg, rgba(201,162,74,0.13) 0%, transparent 18%, transparent 80%, rgba(107,15,18,0.18) 100%)',
+                  position: 'absolute',
+                  left: -16,
+                  right: -16,
+                  top: 2,
+                  height: 82,
+                  background: `linear-gradient(90deg, transparent 0%, rgba(${section.accent},0.07) 30%, rgba(242,230,200,0.06) 50%, rgba(${section.accent},0.07) 70%, transparent 100%)`,
+                  filter: 'blur(14px)',
+                  pointerEvents: 'none',
                 }}
               />
-              <div style={{ position: 'absolute', left: 8, right: 8, bottom: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => onStyleSelect(style)}
+              <div
+                style={{
+                  position: 'relative',
+                  overflow: 'hidden',
+                  borderRadius: 8,
+                  aspectRatio: '4 / 1',
+                  background: '#070403',
+                  border: '1px solid rgba(201,162,74,0.24)',
+                  boxShadow: '0 10px 22px rgba(0,0,0,0.30), inset 0 1px 0 rgba(242,230,200,0.07)',
+                }}
+              >
+                <img
+                  src={section.bannerSrc}
+                  alt={section.bannerAlt}
                   style={{
                     width: '100%',
-                    height: 30,
-                    borderRadius: 5,
-                    background: 'rgba(5,3,2,0.72)',
-                    border: '1px solid rgba(201,162,74,0.70)',
-                    color: '#E8C77A',
-                    fontFamily: SERIF,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
+                    height: '100%',
+                    objectFit: 'cover',
+                    objectPosition: 'center center',
+                    display: 'block',
+                    filter: 'brightness(0.82) saturate(0.92)',
                   }}
-                >
-                  見る &gt;
-                </button>
+                />
+                <div
+                  aria-hidden
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    boxShadow: 'inset 0 0 0 1px rgba(242,230,200,0.04)',
+                    background: 'linear-gradient(90deg, rgba(5,3,2,0.28), transparent 26%, transparent 76%, rgba(5,3,2,0.26))',
+                  }}
+                />
               </div>
-            </motion.article>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                  gap: 8,
+                  margin: '9px -4px 0',
+                  padding: '2px 4px 6px',
+                }}
+              >
+                {section.styles.map((style, i) => (
+                  <motion.button
+                    key={style.id}
+                    type="button"
+                    onClick={() => onStyleSelect(style)}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: sectionIndex * 0.06 + i * 0.05, duration: 0.3, ease: EASE_OUT }}
+                    style={{
+                      minWidth: 0,
+                      position: 'relative',
+                      overflow: 'hidden',
+                      borderRadius: 8,
+                      aspectRatio: '0.70',
+                      background: '#080403',
+                      border: '1px solid rgba(201,162,74,0.24)',
+                      boxShadow: '0 10px 20px rgba(0,0,0,0.32), inset 0 1px 0 rgba(242,230,200,0.05)',
+                      cursor: 'pointer',
+                      padding: 0,
+                      appearance: 'none',
+                    }}
+                  >
+                    <StyleCardImage
+                      src={resolveStyleLibraryImageUrl(style)}
+                      alt={style.title}
+                      className="absolute inset-0 w-full h-full"
+                      imgStyle={getThumbImgStyle(style)}
+                      size="md"
+                    />
+                    <div className="absolute inset-0 pointer-events-none" style={{ background: getThumbOverlay(style) }} />
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        background:
+                          'linear-gradient(180deg, rgba(201,162,74,0.07) 0%, transparent 24%, transparent 84%, rgba(107,15,18,0.10) 100%)',
+                      }}
+                    />
+                    <span
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        bottom: 8,
+                        width: 58,
+                        height: 27,
+                        borderRadius: 5,
+                        background: 'rgba(5,3,2,0.58)',
+                        border: '1px solid rgba(201,162,74,0.58)',
+                        color: '#F0D38A',
+                        fontFamily: SERIF,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      見る &gt;
+                    </span>
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
           )
         })}
       </div>
