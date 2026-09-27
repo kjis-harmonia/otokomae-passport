@@ -11,6 +11,7 @@ import { TicketWalletScreen } from './screens/TicketWalletScreen'
 import { MyPageScreen } from './screens/MyPageScreen'
 import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
 import { ShopScreen } from './screens/ShopScreen'
+import { DiagnosisScreen } from './screens/DiagnosisScreen'
 import { OnboardingScreen } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import PremiumGachaExperience from './components/PremiumGachaExperience'
@@ -573,8 +574,7 @@ function App() {
   const [shopUnlocked, setShopUnlocked] = useState(isShopUnlocked)
   const [showShopPasswordGate, setShowShopPasswordGate] = useState(() => {
     const requestedTab = new URLSearchParams(window.location.search).get('tab')
-    const normalizedTab = requestedTab === 'diagnosis' ? 'shop' : requestedTab
-    return normalizedTab === 'shop' && !isShopUnlocked()
+    return requestedTab === 'shop' && !isShopUnlocked()
   })
 
   // ── Loading state: min time + critical image preload ──────────────────────────
@@ -611,9 +611,9 @@ function App() {
   })
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
-    const requestedTab = tab === 'diagnosis' ? 'shop' : tab
+    const requestedTab = tab
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
-    const valid: NavTab[] = ['home', 'styles', 'shop', 'tryon', 'reserve', 'mypage', 'tickets']
+    const valid: NavTab[] = ['home', 'styles', 'shop', 'diagnosis', 'tryon', 'reserve', 'mypage', 'tickets']
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
@@ -623,8 +623,9 @@ function App() {
   // navHighlight drives the bottom nav visual indicator independently from activeTab
   const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
-    const requestedTab = tab === 'diagnosis' ? 'shop' : tab
+    const requestedTab = tab
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
+    if (requestedTab === 'diagnosis') return 'shop'
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
     return navTabs.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
@@ -709,9 +710,14 @@ function App() {
   }
 
   const handleTabChange = useCallback((tab: NavTab) => {
-    const nextTab = tab === 'diagnosis' ? 'shop' : tab
+    const nextTab = tab
     if (nextTab === 'shop' && !shopUnlocked) {
       setShowShopPasswordGate(true)
+      return
+    }
+    if (nextTab === 'diagnosis') {
+      setNavHighlight('shop')
+      setActiveTab('diagnosis')
       return
     }
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
@@ -797,6 +803,7 @@ function App() {
                   {activeTab === 'reserve'   && <ReserveScreen />}
                   {activeTab === 'tickets'   && <TicketWalletScreen />}
                   {activeTab === 'styles'    && <StyleLibraryScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
+                  {activeTab === 'diagnosis' && <DiagnosisScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'shop'      && <ShopScreen />}
                   {activeTab === 'mypage'    && <MyPageScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                 </motion.div>

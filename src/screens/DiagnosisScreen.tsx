@@ -8,7 +8,7 @@ import { STYLE_CATEGORY_LABELS } from '../data/styleCard'
 import type { StyleCategory, StyleStats } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
 import { StyleDetailModal } from '../components/StyleDetailModal'
-import diagnosisHero from '../assets/diagnosis/otokomae-diagnosis-hero.png'
+import diagnosisHero from '../assets/diagnosis/ginjiro-shop-under-construction.jpg'
 
 interface Props {
   onTabChange: (tab: NavTab) => void
@@ -16,6 +16,7 @@ interface Props {
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+const DIAGNOSIS_PLACEHOLDER_MODE = true
 
 const DIAG_CSS = `
 @keyframes gjDiagShine {
@@ -280,8 +281,8 @@ export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
             transition={{ duration: 0.38 }}
           >
             <motion.div
-              onClick={styles.length > 0 ? handleStart : undefined}
-              whileTap={styles.length > 0 ? { scale: 0.976, opacity: 0.88 } : {}}
+              onClick={!DIAGNOSIS_PLACEHOLDER_MODE && styles.length > 0 ? handleStart : undefined}
+              whileTap={!DIAGNOSIS_PLACEHOLDER_MODE && styles.length > 0 ? { scale: 0.976, opacity: 0.88 } : {}}
               transition={{ duration: 0.12 }}
               style={{
                 position: 'relative',
@@ -294,15 +295,15 @@ export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
                   '0 0 72px rgba(110,5,28,0.32)',
                   'inset 0 1px 0 rgba(201,162,74,0.18)',
                 ].join(', '),
-                cursor: styles.length > 0 ? 'pointer' : 'default',
+                cursor: !DIAGNOSIS_PLACEHOLDER_MODE && styles.length > 0 ? 'pointer' : 'default',
                 WebkitTapHighlightColor: 'transparent',
                 userSelect: 'none',
-                opacity: styles.length === 0 ? 0.44 : 1,
+                opacity: !DIAGNOSIS_PLACEHOLDER_MODE && styles.length === 0 ? 0.44 : 1,
               } as React.CSSProperties}
             >
               <img
                 src={diagnosisHero}
-                alt="男前診断をはじめる"
+                alt="SHOP機能実装中"
                 style={{ display: 'block', width: '100%', height: 'auto' }}
                 draggable={false}
               />
@@ -310,18 +311,20 @@ export function DiagnosisScreen({ onTabChange, onModalChange }: Props) {
               <div aria-hidden className="gj-conic-shine" />
             </motion.div>
 
-            <p style={{
-              textAlign: 'center',
-              fontSize: 11,
-              letterSpacing: '0.18em',
-              color: 'rgba(201,162,74,0.44)',
-              marginTop: 16,
-              fontFamily: SERIF,
-            }}>
-              所要時間：約1分
-            </p>
+            {!DIAGNOSIS_PLACEHOLDER_MODE && (
+              <p style={{
+                textAlign: 'center',
+                fontSize: 11,
+                letterSpacing: '0.18em',
+                color: 'rgba(201,162,74,0.44)',
+                marginTop: 16,
+                fontFamily: SERIF,
+              }}>
+                所要時間：約1分
+              </p>
+            )}
 
-            {styles.length === 0 && (
+            {!DIAGNOSIS_PLACEHOLDER_MODE && styles.length === 0 && (
               <p style={{
                 textAlign: 'center',
                 fontSize: 12,
