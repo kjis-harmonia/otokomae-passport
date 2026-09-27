@@ -39,12 +39,17 @@ type ShopProduct = {
 }
 
 const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'
+const SHOP_DISPLAY_PRICE = 2700
 
 const SHOP_IMAGES = {
   header: '/images/shop/ginjiro-shop-header.jpg',
   thisWeekBanner: '/images/shop/shop-banner-this-week.jpg',
   newArrivalBanner: '/images/shop/shop-banner-new-arrival.jpg',
   retail: '/images/shop/retail-styling.jpg',
+  broshHardPomade: '/images/shop/retail-brosh-hard-pomade.jpg',
+  broshBaseSpray: '/images/shop/retail-brosh-base-spray.jpg',
+  broshWackoMaria: '/images/shop/retail-brosh-wacko-maria.jpg',
+  doorsStrongGel: '/images/shop/retail-doors-strong-gel.jpg',
   tee: '/images/shop/ginjiro-tshirt.jpg',
   hoodie: '/images/shop/ginjiro-hoodie.jpg',
   jumper: '/images/shop/ginjiro-jumper.jpg',
@@ -67,7 +72,7 @@ const STATIC_PRODUCTS: ShopProduct[] = [
     kind: 'wear',
     category: 'tee',
     name: '銀二郎Tシャツ',
-    price: null,
+    price: SHOP_DISPLAY_PRICE,
     label: '新作予定',
     imageUrl: SHOP_IMAGES.tee,
     description: '日常使いしやすい銀二郎オリジナルTシャツ。サイズ展開を準備中です。',
@@ -82,7 +87,7 @@ const STATIC_PRODUCTS: ShopProduct[] = [
     kind: 'wear',
     category: 'hoodie',
     name: '銀二郎パーカー',
-    price: null,
+    price: SHOP_DISPLAY_PRICE,
     label: '限定予定',
     imageUrl: SHOP_IMAGES.hoodie,
     description: '黒金の銀二郎らしさを普段着に落とし込む予定のパーカーです。',
@@ -97,7 +102,7 @@ const STATIC_PRODUCTS: ShopProduct[] = [
     kind: 'wear',
     category: 'jumper',
     name: '銀二郎ジャンパー',
-    price: null,
+    price: SHOP_DISPLAY_PRICE,
     label: '準備中',
     imageUrl: SHOP_IMAGES.jumper,
     description: '店舗でも街でも映える、銀二郎オリジナルのアウター企画です。',
@@ -112,7 +117,7 @@ const STATIC_PRODUCTS: ShopProduct[] = [
     kind: 'music',
     category: 'music',
     name: 'CATS&STAR アルバム',
-    price: null,
+    price: SHOP_DISPLAY_PRICE,
     label: 'Coming soon',
     imageUrl: SHOP_IMAGES.music,
     description: '銀二郎サウンドを後々ショップでも販売予定。詳細は準備中です。',
@@ -141,7 +146,7 @@ function getProductImage(product: Product): string | null {
 function getRetailAccent(product: Product, index: number): Pick<ShopProduct, 'color' | 'accent' | 'label' | 'discount'> {
   const text = `${product.name} ${product.accounting_group ?? ''}`
   if (text.includes('BROSH') || text.includes('ブロッシュ')) {
-    return { color: '#f8f3eb', accent: '#9b1f23', label: index === 0 ? '人気' : undefined, discount: index === 1 ? '10%OFF' : undefined }
+    return { color: '#f8f3eb', accent: '#9b1f23', label: index === 0 ? '人気' : undefined }
   }
   if (text.includes('シャンプ') || text.includes('ケア')) return { color: '#eef5f5', accent: '#246b66', label: 'おすすめ' }
   if (text.includes('コーム')) return { color: '#f4f4f4', accent: '#1f2933', label: '定番' }
@@ -153,18 +158,58 @@ function getRetailAccent(product: Product, index: number): Pick<ShopProduct, 'co
   ][index % 3]
 }
 
+function normalizeRetailName(product: Product): string {
+  const name = product.name.trim()
+  const upper = name.toUpperCase()
+
+  if (
+    upper.includes('BROSH HARD') ||
+    name.includes('黒フクロウ') ||
+    (name.includes('ブロッシュ') && (name.includes('黒') || name.includes('フクロウ') || name.includes('ハード')))
+  ) {
+    return 'BROSH HARD POMADE 115g'
+  }
+
+  if (upper.includes('DOORS') || name.includes('ドアーズ') || name.includes('ストロングジェル')) {
+    return 'DOORS ドアーズ ストロングジェル'
+  }
+
+  return name
+}
+
+function getMappedRetailImage(product: Product, displayName: string): string | null {
+  const text = `${product.name} ${displayName} ${product.accounting_group ?? ''}`.toUpperCase()
+  const originalText = `${product.name} ${displayName} ${product.accounting_group ?? ''}`
+
+  if (text.includes('DOORS') || originalText.includes('ドアーズ') || originalText.includes('ストロングジェル')) {
+    return SHOP_IMAGES.doorsStrongGel
+  }
+  if (text.includes('BASE SPRAY') || originalText.includes('ベーススプレー') || originalText.includes('スプレー')) {
+    return SHOP_IMAGES.broshBaseSpray
+  }
+  if (text.includes('WACKO') || text.includes('GUILTY') || originalText.includes('ワコマリア')) {
+    return SHOP_IMAGES.broshWackoMaria
+  }
+  if (text.includes('BROSH') || originalText.includes('ブロッシュ')) {
+    return SHOP_IMAGES.broshHardPomade
+  }
+
+  return getProductImage(product)
+}
+
 function toShopProduct(product: Product, index: number): ShopProduct {
   const accent = getRetailAccent(product, index)
+  const displayName = normalizeRetailName(product)
   return {
     id: product.id,
     kind: 'retail',
     category: 'retail',
-    name: product.name,
-    price: product.price,
-    originalPrice: accent.discount && product.price > 0 ? Math.round(product.price * 1.12) : null,
+    name: displayName,
+    price: SHOP_DISPLAY_PRICE,
+    originalPrice: null,
     label: accent.label,
-    discount: accent.discount,
-    imageUrl: getProductImage(product) || SHOP_IMAGES.retail,
+    discount: undefined,
+    imageUrl: getMappedRetailImage(product, displayName) || SHOP_IMAGES.retail,
     description: `${product.accounting_group?.trim() || '銀二郎セレクト'}の商品です。店舗端末の店販情報と連動して表示しています。`,
     group: product.accounting_group?.trim() || '店販アイテム',
     color: accent.color,
@@ -1097,12 +1142,12 @@ export function ShopScreen() {
         </section>
 
         <section className="shop-section">
-          <SectionHeader title="期間限定セール" action="本日まで" />
+          <SectionHeader title="期間限定" action="おすすめ" />
           <div className="shop-sale-rail">
-            {(saleProducts.length > 0 ? saleProducts : recommendedProducts.slice(0, 4)).map((product, index) => (
+            {(saleProducts.length > 0 ? saleProducts : recommendedProducts.slice(0, 4)).map((product) => (
               <ProductCard
                 key={`${product.id}-sale`}
-                product={{ ...product, discount: product.discount ?? `${10 + index * 5}%OFF` }}
+                product={product}
                 onSelect={handleSelectProduct}
                 compact
               />
