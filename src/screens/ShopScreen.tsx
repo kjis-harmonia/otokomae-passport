@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   ChevronRight,
+  Heart,
   Minus,
   Music2,
   Package,
@@ -9,12 +10,13 @@ import {
   Search,
   Shirt,
   ShoppingCart,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { getProducts, subscribeProductsRealtime } from '../hq/hqInventoryStore'
 import type { Product } from '../hq/hqInventoryStore'
 
 type LoadingPhase = 'loading' | 'ready'
-type ShopCategory = 'retail' | 'tee' | 'hoodie' | 'jumper' | 'music' | 'recommend' | 'sale'
+type ShopCategory = 'retail' | 'tee' | 'hoodie' | 'jumper' | 'music' | 'recommend' | 'sale' | 'cap' | 'gift'
 type ProductKind = 'retail' | 'wear' | 'music'
 
 type ShopProduct = {
@@ -39,6 +41,7 @@ type ShopProduct = {
 }
 
 const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'
+const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const SHOP_DISPLAY_PRICE = 2700
 
 const SHOP_IMAGES = {
@@ -61,9 +64,8 @@ const CATEGORY_ITEMS: Array<{ id: ShopCategory; label: string; icon: string; ima
   { id: 'tee', label: 'Tシャツ', icon: 'T', imageUrl: SHOP_IMAGES.tee },
   { id: 'hoodie', label: 'パーカー', icon: 'H', imageUrl: SHOP_IMAGES.hoodie },
   { id: 'jumper', label: 'ジャンパー', icon: 'J', imageUrl: SHOP_IMAGES.jumper },
-  { id: 'music', label: 'CATS&STAR CD', icon: '♪', imageUrl: SHOP_IMAGES.music },
-  { id: 'recommend', label: 'おすすめ', icon: '推' },
-  { id: 'sale', label: 'セール', icon: '%' },
+  { id: 'cap', label: 'キャップ', icon: 'CAP' },
+  { id: 'gift', label: 'ギフト', icon: '箱', imageUrl: SHOP_IMAGES.music },
 ]
 
 const STATIC_PRODUCTS: ShopProduct[] = [
@@ -264,12 +266,12 @@ function ProductCard({
       <div className="shop-card-image-wrap">
         {rank && <span className="shop-rank-badge">{rank}</span>}
         {product.discount && <span className="shop-discount-badge">{product.discount}</span>}
+        <span className="shop-favorite" aria-hidden="true">
+          <Heart size={15} strokeWidth={2.2} />
+        </span>
         <ProductImage product={product} />
       </div>
       <div className="shop-card-copy">
-        <span className={product.label ? 'shop-label' : 'shop-label shop-label--placeholder'}>
-          {product.label ?? 'LABEL'}
-        </span>
         <h3>{product.name}</h3>
         <div className="shop-price-row">
           <strong>{formatYen(product.price)}</strong>
@@ -869,6 +871,410 @@ const shopCss = `
     border-color: #111;
   }
 
+  .shop-page {
+    background:
+      linear-gradient(180deg, #ffffff 0%, #ffffff 62%, #fbfaf7 100%);
+    color: #161616;
+  }
+
+  .shop-top {
+    padding: 18px 16px 13px;
+    background: rgba(255,255,255,0.985);
+    border-bottom: 1px solid rgba(17,17,17,0.065);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.045);
+  }
+
+  .shop-title-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+    min-height: 96px;
+    align-items: center;
+  }
+
+  .shop-brand-logo {
+    grid-column: 2;
+    justify-self: center;
+    width: min(286px, calc(100vw - 128px));
+    height: 96px;
+  }
+
+  .shop-brand-logo img {
+    object-fit: contain;
+  }
+
+  .shop-title-row button {
+    grid-column: 3;
+    justify-self: end;
+    width: 48px;
+    height: 48px;
+    border-color: #ded8cf;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.055);
+  }
+
+  .shop-search {
+    margin-top: 10px;
+    height: 50px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 11px;
+    border: 1.5px solid #d9d5ce;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 18px rgba(0,0,0,0.035);
+  }
+
+  .shop-search span {
+    font-size: 15px;
+    font-weight: 650;
+    color: #77736e;
+  }
+
+  .shop-filter-icon {
+    color: #55514c;
+    padding-left: 13px;
+    border-left: 1px solid #ded8cf;
+    box-sizing: content-box;
+  }
+
+  .shop-content {
+    gap: 25px;
+    padding-top: 13px;
+  }
+
+  .shop-feature-stack {
+    display: grid;
+    gap: 10px;
+    padding: 0 16px;
+  }
+
+  .shop-feature-card {
+    min-height: 144px;
+    border: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1.16fr) minmax(0, 0.84fr);
+    text-align: left;
+    color: #121212;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.085);
+    isolation: isolate;
+  }
+
+  .shop-feature-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(circle at 76% 26%, rgba(176,140,72,0.14), transparent 32%),
+      linear-gradient(135deg, rgba(255,255,255,0.82), rgba(236,231,221,0.42));
+  }
+
+  .shop-feature-card--light {
+    background: #f4f1eb;
+  }
+
+  .shop-feature-card--dark {
+    color: #f8f4ea;
+    background:
+      radial-gradient(circle at 76% 24%, rgba(156,17,26,0.38), transparent 31%),
+      linear-gradient(135deg, #15110f 0%, #050505 100%);
+  }
+
+  .shop-feature-card--dark::before {
+    background:
+      linear-gradient(90deg, rgba(0,0,0,0.28), rgba(0,0,0,0)),
+      radial-gradient(circle at 95% 6%, rgba(180,135,57,0.24), transparent 38%);
+  }
+
+  .shop-feature-copy {
+    display: grid;
+    align-content: center;
+    justify-items: start;
+    gap: 8px;
+    padding: 18px 6px 18px 18px;
+    min-width: 0;
+  }
+
+  .shop-feature-copy small {
+    font-family: ${MONO};
+    font-size: 10px;
+    letter-spacing: 0.34em;
+    font-weight: 900;
+    color: rgba(20,20,20,0.56);
+  }
+
+  .shop-feature-card--dark .shop-feature-copy small {
+    color: rgba(232,211,171,0.70);
+  }
+
+  .shop-feature-copy strong {
+    font-family: ${SERIF};
+    font-size: 23px;
+    line-height: 1.04;
+    font-weight: 900;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .shop-feature-copy em {
+    margin: 0;
+    font-style: normal;
+    color: rgba(20,20,20,0.72);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.55;
+  }
+
+  .shop-feature-card--dark .shop-feature-copy em {
+    color: rgba(255,255,255,0.72);
+  }
+
+  .shop-feature-copy span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: #493616;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .shop-feature-card--dark .shop-feature-copy span {
+    color: #e7c97c;
+  }
+
+  .shop-feature-visual {
+    position: relative;
+    display: flex;
+    align-items: end;
+    justify-content: center;
+    gap: 2px;
+    overflow: hidden;
+    padding: 12px 11px 0 0;
+  }
+
+  .shop-feature-visual::after {
+    content: '';
+    position: absolute;
+    right: 2px;
+    bottom: 0;
+    width: 122px;
+    height: 34px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.10);
+    filter: blur(10px);
+    z-index: -1;
+  }
+
+  .shop-feature-visual--retail img:first-child {
+    width: 68px;
+    max-height: 92px;
+    object-fit: contain;
+    transform: translateY(2px);
+  }
+
+  .shop-feature-visual--retail img:last-child {
+    width: 50px;
+    max-height: 112px;
+    object-fit: contain;
+  }
+
+  .shop-feature-visual--wear {
+    justify-content: end;
+    padding-right: 0;
+  }
+
+  .shop-feature-visual--wear img {
+    width: 156px;
+    max-width: 118%;
+    height: 128px;
+    object-fit: contain;
+    object-position: right bottom;
+    transform: translate(16px, 10px) scale(1.12);
+  }
+
+  .shop-section {
+    gap: 11px;
+  }
+
+  .shop-section-head {
+    padding: 0 16px;
+  }
+
+  .shop-section-head h2 {
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+
+  .shop-section-head button {
+    font-size: 12px;
+    color: #25221d;
+  }
+
+  .shop-category-rail {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+    scroll-snap-type: none;
+    padding: 0 16px;
+  }
+
+  .shop-category-card {
+    width: auto;
+    min-width: 0;
+    gap: 7px;
+  }
+
+  .shop-category-icon {
+    width: 100%;
+    max-width: 58px;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 14px;
+    background: #fbfaf8;
+    color: #8e171c;
+    font-size: 11px;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.045);
+  }
+
+  .shop-category-icon img {
+    object-fit: contain;
+    padding: 7px;
+    box-sizing: border-box;
+  }
+
+  .shop-category-card span {
+    font-size: 10.5px;
+    line-height: 1.18;
+    white-space: nowrap;
+  }
+
+  .shop-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 16px;
+  }
+
+  .shop-card {
+    border-radius: 12px;
+    border-color: #ede8df;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.052);
+    min-width: 0;
+  }
+
+  .shop-card-image-wrap {
+    background: #fbfbfa;
+    border-bottom-color: #eee9e1;
+  }
+
+  .shop-image {
+    padding: 8px;
+    background: #fbfbfa !important;
+  }
+
+  .shop-image img {
+    max-width: 86%;
+    max-height: 86%;
+  }
+
+  .shop-favorite {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(0,0,0,0.06);
+    color: rgba(35,35,35,0.58);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+  }
+
+  .shop-rank-badge,
+  .shop-discount-badge {
+    top: 6px;
+    left: 6px;
+    border-radius: 8px;
+    font-size: 9px;
+    padding: 4px 5px;
+  }
+
+  .shop-card-copy {
+    min-height: 60px;
+    padding: 6px 6px 8px;
+    grid-template-rows: auto auto;
+    gap: 3px;
+  }
+
+  .shop-card-copy h3 {
+    min-height: 27px;
+    font-size: 10.5px;
+    line-height: 1.25;
+    font-weight: 750;
+  }
+
+  .shop-price-row {
+    min-height: 17px;
+    gap: 3px;
+  }
+
+  .shop-price-row strong {
+    color: #2a2724;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 800;
+  }
+
+  .shop-price-row del {
+    display: none;
+  }
+
+  .shop-sale-rail {
+    gap: 8px;
+  }
+
+  .shop-sale-rail .shop-card {
+    flex: 0 0 calc((100vw - 56px) / 4);
+    min-width: 78px;
+  }
+
+  .shop-card--compact .shop-image {
+    padding: 8px;
+  }
+
+  .shop-staff-card {
+    flex-basis: 76%;
+    border-radius: 14px;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.055);
+  }
+
+  .shop-bottom-actions {
+    padding-inline: 16px;
+  }
+
+  @media (max-width: 360px) {
+    .shop-feature-copy strong {
+      font-size: 21px;
+    }
+
+    .shop-feature-copy em {
+      font-size: 12px;
+    }
+
+    .shop-grid {
+      gap: 6px;
+      padding-inline: 12px;
+    }
+
+    .shop-card-copy h3 {
+      font-size: 10px;
+    }
+  }
+
   .shop-detail-top {
     position: sticky;
     top: 0;
@@ -1135,27 +1541,39 @@ export function ShopScreen() {
         <div className="shop-search" role="search">
           <Search size={20} strokeWidth={2.3} />
           <span>商品を検索</span>
+          <SlidersHorizontal className="shop-filter-icon" size={20} strokeWidth={2.1} />
         </div>
       </header>
 
       <div className="shop-content">
-        <section className="shop-banner-rail" aria-label="注目エリア">
-          <button type="button" className="shop-banner shop-banner--red" aria-label="今週のおすすめ">
-            <img
-              src={SHOP_IMAGES.thisWeekBanner}
-              alt="今週のおすすめ 店販アイテムと銀二郎グッズを見やすくチェック。"
-            />
+        <section className="shop-feature-stack" aria-label="注目エリア">
+          <button type="button" className="shop-feature-card shop-feature-card--light" aria-label="今週のおすすめ">
+            <span className="shop-feature-copy">
+              <small>THIS WEEK</small>
+              <strong>今週のおすすめ</strong>
+              <em>銀二郎が選ぶ、<br />こだわりのアイテム。</em>
+              <span>アイテムを見る <ChevronRight size={14} /></span>
+            </span>
+            <span className="shop-feature-visual shop-feature-visual--retail">
+              <img src={SHOP_IMAGES.broshHardPomade} alt="" />
+              <img src={SHOP_IMAGES.broshBaseSpray} alt="" />
+            </span>
           </button>
-          <button type="button" className="shop-banner shop-banner--black" aria-label="新作入荷予定">
-            <img
-              src={SHOP_IMAGES.newArrivalBanner}
-              alt="新作入荷予定 Tシャツ、パーカー、ジャンパーを準備中。"
-            />
+          <button type="button" className="shop-feature-card shop-feature-card--dark" aria-label="新作入荷予定">
+            <span className="shop-feature-copy">
+              <small>NEW ARRIVAL</small>
+              <strong>新作入荷予定</strong>
+              <em>日常に、銀二郎のこだわりを。</em>
+              <span>ラインナップを見る <ChevronRight size={14} /></span>
+            </span>
+            <span className="shop-feature-visual shop-feature-visual--wear">
+              <img src={SHOP_IMAGES.hoodie} alt="" />
+            </span>
           </button>
         </section>
 
         <section className="shop-section">
-          <SectionHeader title="カテゴリー" />
+          <SectionHeader title="カテゴリー" action="すべて見る" />
           <div className="shop-category-rail">
             {CATEGORY_ITEMS.map((category) => (
               <button key={category.id} type="button" className="shop-category-card">
