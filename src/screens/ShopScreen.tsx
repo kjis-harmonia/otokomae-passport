@@ -646,7 +646,7 @@ const shopCss = `
 
   .shop-card-image-wrap {
     position: relative;
-    background: #fbfaf7;
+    background: #fff;
     border-bottom: 1px solid #f0ebe2;
   }
 
@@ -658,8 +658,8 @@ const shopCss = `
     place-items: center;
     overflow: hidden;
     box-sizing: border-box;
-    padding: 14px;
-    background: #fbfaf7 !important;
+    padding: 18px;
+    background: #fff !important;
   }
 
   .shop-image--large {
@@ -669,13 +669,20 @@ const shopCss = `
   }
 
   .shop-image img {
-    width: 100%;
-    height: 100%;
+    width: auto;
+    height: auto;
+    max-width: 74%;
+    max-height: 74%;
     display: block;
-    object-fit: contain;
+    object-fit: contain !important;
     object-position: center center;
     padding: 0;
     box-sizing: border-box;
+  }
+
+  .shop-image--large img {
+    max-width: 88%;
+    max-height: 88%;
   }
 
   .shop-product-art {
@@ -789,7 +796,7 @@ const shopCss = `
   }
 
   .shop-card--compact .shop-image {
-    padding: 12px;
+    padding: 16px;
   }
 
   .shop-staff-card {
