@@ -241,15 +241,43 @@ export interface MaintenanceCouponQRData {
   name: string
 }
 
-export type AnyQRData = PassportQRData | TicketUseQRData | MaintenanceCouponQRData
+export interface PremiumCouponQRData {
+  type: 'ginjiro-premium-coupon'
+  userId: string
+  name: string
+  couponId: string
+  category: 'classic' | 'special' | 'ginpara'
+  title: string
+  menuLabel: string
+  normalPrice?: number | null
+  memberPrice: number
+  issuedAt?: string
+  expiresAt?: string
+}
+
+export type AnyQRData = PassportQRData | TicketUseQRData | MaintenanceCouponQRData | PremiumCouponQRData
 
 const STORE_CHECKIN_QR_VALUE = JSON.stringify({ type: 'ginjiro-store-checkin' })
+
+export function isQrPayloadExpired(expiresAt?: string): boolean {
+  if (!expiresAt) return false
+  const expiry = new Date(expiresAt)
+  if (Number.isNaN(expiry.getTime())) return true
+  return new Date() > expiry
+}
 
 export function parseQR(text: string): AnyQRData | null {
   try {
     const d = JSON.parse(text)
     if (d.type === 'ginjiro-ticket-use' && d.userId && d.selectedTicketId) return d as TicketUseQRData
     if (d.type === 'ginjiro-maintenance-coupon' && d.userId) return d as MaintenanceCouponQRData
+    if (d.type === 'ginjiro-premium-coupon' && d.userId && d.couponId && d.memberPrice !== undefined) {
+      return {
+        ...d,
+        memberPrice: Number(d.memberPrice),
+        normalPrice: d.normalPrice === undefined || d.normalPrice === null ? null : Number(d.normalPrice),
+      } as PremiumCouponQRData
+    }
     if ((d.type === 'ginjiro-member' || d.type === 'otokomae-passport') && d.userId) {
       return { type: d.type, userId: d.userId, name: d.name || '名前未設定' }
     }
@@ -259,7 +287,7 @@ export function parseQR(text: string): AnyQRData | null {
 
 // ── Phase ─────────────────────────────────────────────────────────────────────
 
-type Phase = 'scan' | 'loading' | 'result' | 'ticket-loading' | 'ticket-result' | 'maintenance-coupon'
+type Phase = 'scan' | 'loading' | 'result' | 'ticket-loading' | 'ticket-result' | 'maintenance-coupon' | 'premium-coupon'
 
 // ── QR Camera Scanner ─────────────────────────────────────────────────────────
 
@@ -371,7 +399,12 @@ export function QrCameraScanner({
 
 // ── AdminScreen ───────────────────────────────────────────────────────────────
 
-export function AdminScreen() {
+type AdminScreenMode = 'issue' | 'recovery'
+type AdminMainTab = 'issue' | 'recovery' | 'live-status' | 'accounting'
+
+const SHOW_LEGACY_STAFF_TOOLS = false
+
+export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [phase, setPhase] = useState<Phase>('scan')
 
   // Customer
@@ -431,6 +464,10 @@ export function AdminScreen() {
   const [maintCouponConfirmed, setMaintCouponConfirmed] = useState(false)
   const [maintCouponBlockMsg, setMaintCouponBlockMsg] = useState<string | null>(null)
 
+  // Premium coupon QR flow
+  const [premiumCouponData, setPremiumCouponData] = useState<PremiumCouponQRData | null>(null)
+  const [premiumCouponExpired, setPremiumCouponExpired] = useState(false)
+
   // Checkin
   const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
@@ -439,7 +476,7 @@ export function AdminScreen() {
   const [showStoreQr, setShowStoreQr] = useState(false)
 
   // ── Main tab (issue / recovery / live-status / accounting) ────────────────
-  const [mainTab, setMainTab] = useState<'issue' | 'recovery' | 'live-status' | 'accounting'>('issue')
+  const [mainTab, setMainTab] = useState<AdminMainTab>(mode)
 
   // Live status tab state
   const [liveStatusRows, setLiveStatusRows] = useState<LiveStatusRow[]>([])
@@ -679,6 +716,8 @@ export function AdminScreen() {
     setMaintCouponConfirming(false)
     setMaintCouponConfirmed(false)
     setMaintCouponBlockMsg(null)
+    setPremiumCouponData(null)
+    setPremiumCouponExpired(false)
   }
 
   const loadUserTickets = useCallback(async (userId: string) => {
@@ -719,6 +758,14 @@ export function AdminScreen() {
       const usedType = await fetchTodayUsedType(mcData.userId, todayJST)
       setMaintCouponTodayUsed(!canUseDiscountType(usedType, 'coupon'))
       setMaintCouponBlockedByType(usedType)
+      return
+    }
+
+    if (data.type === 'ginjiro-premium-coupon') {
+      const pcData = data as PremiumCouponQRData
+      setPremiumCouponData(pcData)
+      setPremiumCouponExpired(isQrPayloadExpired(pcData.expiresAt))
+      setPhase('premium-coupon')
       return
     }
 
@@ -966,6 +1013,10 @@ export function AdminScreen() {
       setRecoveryScanError('チケット使用QRです。パスポートQRを読み取ってください。')
       return
     }
+    if (parsed.type === 'ginjiro-maintenance-coupon' || parsed.type === 'ginjiro-premium-coupon') {
+      setRecoveryScanError('クーポンQRです。パスポートQRを読み取ってください。')
+      return
+    }
     const newUserId = (parsed as PassportQRData).userId
     if (newUserId === selectedCustomer?.user_id) {
       setRecoveryScanError('同じ端末のQRです。新しい端末のQRを読み取ってください。')
@@ -1053,7 +1104,7 @@ export function AdminScreen() {
       `}</style>
 
       {/* ── Realtime log toast ── */}
-      {logToast && (
+      {SHOW_LEGACY_STAFF_TOOLS && logToast && (
         <div
           onClick={() => setLogToast(null)}
           style={{
@@ -1086,14 +1137,16 @@ export function AdminScreen() {
         borderBottom: '1px solid rgba(201,162,74,0.12)',
         background: 'linear-gradient(180deg, rgba(201,162,74,0.03) 0%, transparent 100%)',
         flexShrink: 0,
-        marginTop: logToast ? 72 : 0,
+        marginTop: SHOW_LEGACY_STAFF_TOOLS && logToast ? 72 : 0,
         transition: 'margin-top 0.3s ease',
       }}>
         <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)', marginBottom: 12 }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
             <p style={{ fontSize: 8, letterSpacing: '0.32em', color: '#e5e5e5', marginBottom: 1 }}>STAFF TERMINAL</p>
-            <h1 style={{ fontSize: 18, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.1em' }}>銀二郎端末</h1>
+            <h1 style={{ fontSize: 18, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.1em' }}>
+              {mode === 'recovery' ? '会員復旧' : '店舗端末'}
+            </h1>
           </div>
           <button
             onClick={() => setShowStaffPicker(true)}
@@ -1110,68 +1163,72 @@ export function AdminScreen() {
         </div>
       </header>
 
-      {/* ── 営業開始／営業終了 ── */}
-      <div style={{
-        padding: '14px 20px',
-        borderBottom: '1px solid rgba(201,162,74,0.12)',
-        background: '#000000',
-        flexShrink: 0,
-      }}>
-        <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 10 }}>
-          <span style={{ color: '#ffffff' }}>営業状態：</span>
-          <span style={{ color: shopStatus?.status === 'open' ? '#80E060' : '#E06060' }}>
-            {shopActionLoading ? '更新中…' : (shopStatus?.status === 'open' ? '営業中' : '営業終了')}
-          </span>
-        </p>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            onClick={() => setShopConfirmAction('open')}
-            disabled={shopActionLoading}
-            style={{
-              flex: 1, height: 60, borderRadius: 14,
-              background: shopStatus?.status === 'open'
-                ? 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)'
-                : 'rgba(255,255,255,0.05)',
-              border: `2px solid ${shopStatus?.status === 'open' ? '#80E060' : 'rgba(255,255,255,0.15)'}`,
-              color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
-              cursor: shopActionLoading ? 'default' : 'pointer',
-              opacity: shopActionLoading ? 0.6 : 1,
-            }}
-          >
-            営業開始
-          </button>
-          <button
-            onClick={() => setShopConfirmAction('closed')}
-            disabled={shopActionLoading}
-            style={{
-              flex: 1, height: 60, borderRadius: 14,
-              background: shopStatus?.status === 'closed'
-                ? 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)'
-                : 'rgba(255,255,255,0.05)',
-              border: `2px solid ${shopStatus?.status === 'closed' ? '#E06060' : 'rgba(255,255,255,0.15)'}`,
-              color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
-              cursor: shopActionLoading ? 'default' : 'pointer',
-              opacity: shopActionLoading ? 0.6 : 1,
-            }}
-          >
-            営業終了
-          </button>
-        </div>
+      {SHOW_LEGACY_STAFF_TOOLS && (
+        <>
+          {/* ── 営業開始／営業終了 ── */}
+          <div style={{
+            padding: '14px 20px',
+            borderBottom: '1px solid rgba(201,162,74,0.12)',
+            background: '#000000',
+            flexShrink: 0,
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 10 }}>
+              <span style={{ color: '#ffffff' }}>営業状態：</span>
+              <span style={{ color: shopStatus?.status === 'open' ? '#80E060' : '#E06060' }}>
+                {shopActionLoading ? '更新中…' : (shopStatus?.status === 'open' ? '営業中' : '営業終了')}
+              </span>
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShopConfirmAction('open')}
+                disabled={shopActionLoading}
+                style={{
+                  flex: 1, height: 60, borderRadius: 14,
+                  background: shopStatus?.status === 'open'
+                    ? 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)'
+                    : 'rgba(255,255,255,0.05)',
+                  border: `2px solid ${shopStatus?.status === 'open' ? '#80E060' : 'rgba(255,255,255,0.15)'}`,
+                  color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
+                  cursor: shopActionLoading ? 'default' : 'pointer',
+                  opacity: shopActionLoading ? 0.6 : 1,
+                }}
+              >
+                営業開始
+              </button>
+              <button
+                onClick={() => setShopConfirmAction('closed')}
+                disabled={shopActionLoading}
+                style={{
+                  flex: 1, height: 60, borderRadius: 14,
+                  background: shopStatus?.status === 'closed'
+                    ? 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)'
+                    : 'rgba(255,255,255,0.05)',
+                  border: `2px solid ${shopStatus?.status === 'closed' ? '#E06060' : 'rgba(255,255,255,0.15)'}`,
+                  color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
+                  cursor: shopActionLoading ? 'default' : 'pointer',
+                  opacity: shopActionLoading ? 0.6 : 1,
+                }}
+              >
+                営業終了
+              </button>
+            </div>
 
-        {shopActionError && (
-          <p style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#E06060', textAlign: 'center' }}>
-            {shopActionError}
-          </p>
-        )}
-        {shopActionSuccess && (
-          <p style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#80E060', textAlign: 'center' }}>
-            {shopActionSuccess}
-          </p>
-        )}
-      </div>
+            {shopActionError && (
+              <p style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#E06060', textAlign: 'center' }}>
+                {shopActionError}
+              </p>
+            )}
+            {shopActionSuccess && (
+              <p style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#80E060', textAlign: 'center' }}>
+                {shopActionSuccess}
+              </p>
+            )}
+          </div>
+        </>
+      )}
 
       {/* ── 登録者数ダッシュボード ── */}
-      {customerStats && (
+      {SHOW_LEGACY_STAFF_TOOLS && customerStats && (
         <div style={{
           display: 'flex', gap: 10,
           padding: '14px 20px',
@@ -1207,13 +1264,14 @@ export function AdminScreen() {
       )}
 
       {/* ── Main tab switcher ── */}
+      {SHOW_LEGACY_STAFF_TOOLS && (
       <div style={{ display: 'flex', borderBottom: '1px solid rgba(201,162,74,0.12)', background: 'rgba(0,0,0,0.25)', flexShrink: 0 }}>
         {([
           { id: 'accounting',  label: '会計アシスト' },
           { id: 'issue',       label: 'チケット発行' },
           { id: 'live-status', label: 'LIVE STATUS' },
           { id: 'recovery',    label: '会員復旧' },
-        ] as { id: 'issue' | 'recovery' | 'live-status' | 'accounting'; label: string }[]).map(tab => {
+        ] as { id: AdminMainTab; label: string }[]).map(tab => {
           const isActive = mainTab === tab.id
           return (
             <button
@@ -1234,6 +1292,7 @@ export function AdminScreen() {
           )
         })}
       </div>
+      )}
 
       {/* ── Main scroll area ── */}
       <main style={{
@@ -1335,6 +1394,7 @@ export function AdminScreen() {
             )}
 
             {/* Store QR */}
+            {SHOW_LEGACY_STAFF_TOOLS && (
             <div style={{ marginTop: 16 }}>
               <button onClick={() => setShowStoreQr(v => !v)} style={{ width: '100%', padding: '11px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.12)', color: '#e5e5e5', fontSize: 13, letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF }}>
                 {showStoreQr ? '店内設置QRを閉じる' : '店内設置QRを表示（印刷用）'}
@@ -1351,8 +1411,10 @@ export function AdminScreen() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Issue log panel */}
+            {SHOW_LEGACY_STAFF_TOOLS && (
             <div style={{ marginTop: 14 }}>
               <button
                 onClick={() => setShowLogPanel(v => !v)}
@@ -1394,6 +1456,7 @@ export function AdminScreen() {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
 
@@ -1921,6 +1984,73 @@ export function AdminScreen() {
           </div>
         )}
 
+        {/* ===== PREMIUM-COUPON ===== */}
+        {mainTab === 'issue' && phase === 'premium-coupon' && premiumCouponData && (
+          <div>
+            <div style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(160deg, #1A0E05 0%, #080404 100%)', border: `1px solid ${premiumCouponExpired ? 'rgba(224,96,80,0.38)' : 'rgba(201,162,74,0.42)'}`, boxShadow: '0 0 25px rgba(201,162,74,0.12), 0 14px 44px rgba(0,0,0,0.75)', marginBottom: 16, animation: 'gj-slot-in 0.52s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+              <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 25%, #C9A24A 50%, #8B1A1A 75%, transparent)' }} />
+              <div style={{ padding: '16px 20px' }}>
+                <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.9)', marginBottom: 4 }}>PREMIUM COUPON</p>
+                <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6, lineHeight: 1.1 }}>
+                  {premiumCouponData.name}<span style={{ fontSize: 14, marginLeft: 4, color: '#e5e5e5' }}>様</span>
+                </h2>
+                <p style={{ fontSize: 9, color: '#e5e5e5', letterSpacing: '0.06em' }}>
+                  ID: {premiumCouponData.userId.slice(0, 22)}…
+                </p>
+              </div>
+            </div>
+
+            <div style={{ borderRadius: 16, background: 'linear-gradient(155deg, #100806 0%, #050303 100%)', border: `1px solid ${premiumCouponExpired ? 'rgba(224,96,80,0.36)' : 'rgba(201,162,74,0.30)'}`, overflow: 'hidden', marginBottom: 14 }}>
+              <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${premiumCouponExpired ? 'rgba(224,96,80,0.6)' : 'rgba(201,162,74,0.64)'}, transparent)` }} />
+              <div style={{ padding: '16px 18px' }}>
+                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: premiumCouponExpired ? '#E06050' : 'rgba(201,162,74,0.92)', marginBottom: 8, fontFamily: SERIF }}>
+                  電話予約済み確認QR
+                </p>
+                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#F2E6C8', marginBottom: 5 }}>
+                  {premiumCouponData.title}
+                </p>
+                <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.66)', lineHeight: 1.6, marginBottom: 12 }}>
+                  {premiumCouponData.menuLabel}
+                </p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+                  {premiumCouponData.normalPrice !== undefined && premiumCouponData.normalPrice !== null && (
+                    <span style={{ fontSize: 16, color: 'rgba(242,230,200,0.38)', textDecoration: 'line-through' }}>
+                      ¥{premiumCouponData.normalPrice.toLocaleString()}
+                    </span>
+                  )}
+                  <span style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 700, color: '#C9A24A', lineHeight: 1 }}>
+                    ¥{premiumCouponData.memberPrice.toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gap: 7, marginTop: 10 }}>
+                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.74)', lineHeight: 1.6 }}>
+                    スキンフェード＋顔剃り込み / 電話予約限定
+                  </p>
+                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.52)', lineHeight: 1.6 }}>
+                    予約済み確認用のQRです。内容と価格を確認して、通常会計で処理してください。
+                  </p>
+                </div>
+                <span style={{ display: 'inline-block', marginTop: 12, fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: premiumCouponExpired ? 'rgba(224,96,80,0.12)' : 'rgba(100,210,110,0.08)', border: `1px solid ${premiumCouponExpired ? 'rgba(224,96,80,0.38)' : 'rgba(100,210,110,0.3)'}`, color: premiumCouponExpired ? '#E06050' : '#64D26E' }}>
+                  {premiumCouponExpired ? '期限切れ' : '有効'}
+                </span>
+              </div>
+            </div>
+
+            {premiumCouponExpired && (
+              <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '12px 16px', marginBottom: 14 }}>
+                <p style={{ fontSize: 13, color: '#E06060', lineHeight: 1.7, fontFamily: SERIF }}>
+                  このQRは有効期限が切れています。<br />
+                  お客様にもう一度QRを表示してもらってください。
+                </p>
+              </div>
+            )}
+
+            <button onClick={handleReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
+              次のお客様
+            </button>
+          </div>
+        )}
+
         {/* ===== RECOVERY TAB ===== */}
         {mainTab === 'recovery' && (
           <div>
@@ -2136,7 +2266,7 @@ export function AdminScreen() {
         )}
 
         {/* ===== LIVE STATUS管理 ===== */}
-        {mainTab === 'live-status' && (
+        {SHOW_LEGACY_STAFF_TOOLS && mainTab === 'live-status' && (
           <div>
             <p style={{ fontSize: 12, color: '#e5e5e5', letterSpacing: '0.08em', marginBottom: 16, lineHeight: 1.7 }}>
               カードをタップすると<br />
@@ -2242,7 +2372,7 @@ export function AdminScreen() {
         )}
 
         {/* ===== 会計アシスト ===== */}
-        {mainTab === 'accounting' && (
+        {SHOW_LEGACY_STAFF_TOOLS && mainTab === 'accounting' && (
           <AccountingAssistTab staffId={staffId} />
         )}
       </main>
@@ -2605,7 +2735,7 @@ export function AdminScreen() {
       )}
 
       {/* ── 営業開始／営業終了 確認モーダル ── */}
-      {shopConfirmAction && (
+      {SHOW_LEGACY_STAFF_TOOLS && shopConfirmAction && (
         <div
           onClick={() => setShopConfirmAction(null)}
           style={{ position: 'fixed', inset: 0, zIndex: 320, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}

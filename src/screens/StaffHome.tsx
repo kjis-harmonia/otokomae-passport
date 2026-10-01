@@ -5,13 +5,11 @@ import type { PendingChangeSummary, StaffInventoryHandle } from './StaffInventor
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
-type StaffMode = 'menu' | 'shop' | 'inventory'
+type StaffMode = 'menu' | 'shop' | 'inventory' | 'recovery'
 
 /**
  * /staff を開いた直後の分岐画面 + 戻るナビゲーション。
- * 「店舗端末」= 既存のAdminScreen（営業開始/終了・会計アシスト・チケット・LIVE STATUS・
- * 会員復旧 等、これまでの /staff そのまま）。「在庫管理」= 銀二郎本部と同じ products
- * テーブル・hqInventoryStore を共有する新しい在庫管理画面。
+ * 店舗端末は日常業務用のQR読み取り、在庫管理は店販管理、会員復旧は必要時だけ使う導線。
  */
 export function StaffHome() {
   const [mode, setMode] = useState<StaffMode>('menu')
@@ -72,7 +70,7 @@ export function StaffHome() {
               店舗端末
             </p>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
-              会計・QR・LIVE STATUS
+              QR読み込み・来店更新・割引券発行
             </p>
           </button>
 
@@ -90,6 +88,23 @@ export function StaffHome() {
             </p>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
               店販・在庫・発注確認
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode('recovery')}
+            style={{
+              width: '100%', padding: '20px 20px', borderRadius: 18, textAlign: 'left',
+              background: 'rgba(255,255,255,0.025)',
+              border: '1px solid rgba(201,162,74,0.24)', cursor: 'pointer',
+            }}
+          >
+            <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
+              会員復旧
+            </p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.52)' }}>
+              機種変更・データ移管
             </p>
           </button>
         </div>
@@ -119,7 +134,11 @@ export function StaffHome() {
       </div>
 
       <div style={{ flex: '1 1 auto' }}>
-        {mode === 'shop' ? <AdminScreen /> : <StaffInventoryScreen ref={inventoryRef} />}
+        {mode === 'shop'
+          ? <AdminScreen key="staff-issue" mode="issue" />
+          : mode === 'recovery'
+            ? <AdminScreen key="staff-recovery" mode="recovery" />
+            : <StaffInventoryScreen ref={inventoryRef} />}
       </div>
 
       {pendingSummary && (
