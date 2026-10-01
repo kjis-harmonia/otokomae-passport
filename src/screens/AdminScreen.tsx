@@ -840,7 +840,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       playSuccessSound()
       setSuccessInfo({ name: scannedData.name, label: currentTab.autoTitle, amount: effectiveAmount, qty: quantity })
       setShowSuccess(true)
-      setTimeout(() => { setShowSuccess(false); handleReset() }, 2500)
+      setDiscountAmountInput('')
+      setOtokuAmountInput('')
+      setQuantity(1)
+      setTimeout(() => setShowSuccess(false), 1800)
     } catch (err) {
       setIssueError(`発行に失敗しました（${err instanceof Error ? err.message : String(err)}）`)
     } finally {
@@ -2408,34 +2411,50 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         )}
       </main>
 
-      {/* ── Fixed bottom: 発行する ── */}
+      {/* ── Fixed bottom: 次のお客様 / 発行する ── */}
       {mainTab === 'issue' && phase === 'result' && scannedData && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
           background: 'linear-gradient(0deg, rgba(6,2,1,0.99) 0%, rgba(6,2,1,0.92) 70%, transparent 100%)',
           padding: '14px 20px calc(14px + env(safe-area-inset-bottom, 0px))',
         }}>
-          <button
-            onClick={handleIssueClick}
-            disabled={!canIssue}
-            style={{
-              width: '100%', height: 66, borderRadius: 18,
-              background: canIssue
-                ? 'linear-gradient(90deg, #800c14 0%, #3a0307 100%)'
-                : 'rgba(255,255,255,0.04)',
-              border: `2px solid ${canIssue ? '#e6ca65' : 'rgba(255,255,255,0.07)'}`,
-              boxShadow: canIssue
-                ? ['0 0 32px rgba(128,12,20,0.72)', '0 0 64px rgba(128,12,20,0.36)', 'inset 0 1px 0 rgba(230,202,101,0.28)', 'inset 0 -1px 0 rgba(230,202,101,0.1)', '0 6px 32px rgba(0,0,0,0.85)'].join(', ')
-                : 'none',
-              color: canIssue ? '#F2E6C8' : '#999999',
-              fontFamily: SERIF, fontSize: 22, fontWeight: 700, letterSpacing: '0.26em',
-              cursor: canIssue ? 'pointer' : 'default',
-              animation: canIssue ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
-              transition: 'background 0.2s, border-color 0.2s',
-            }}
-          >
-            {issueLoading ? '発行中…' : '発行する'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, maxWidth: 480, margin: '0 auto' }}>
+            <button
+              type="button"
+              onClick={handleReset}
+              style={{
+                flex: '0 0 34%', height: 66, borderRadius: 18,
+                background: 'rgba(255,255,255,0.045)',
+                border: '1.5px solid rgba(255,255,255,0.14)',
+                color: '#e5e5e5',
+                fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em',
+                cursor: 'pointer',
+              }}
+            >
+              次のお客様
+            </button>
+            <button
+              onClick={handleIssueClick}
+              disabled={!canIssue}
+              style={{
+                flex: 1, height: 66, borderRadius: 18,
+                background: canIssue
+                  ? 'linear-gradient(90deg, #800c14 0%, #3a0307 100%)'
+                  : 'rgba(255,255,255,0.04)',
+                border: `2px solid ${canIssue ? '#e6ca65' : 'rgba(255,255,255,0.07)'}`,
+                boxShadow: canIssue
+                  ? ['0 0 32px rgba(128,12,20,0.72)', '0 0 64px rgba(128,12,20,0.36)', 'inset 0 1px 0 rgba(230,202,101,0.28)', 'inset 0 -1px 0 rgba(230,202,101,0.1)', '0 6px 32px rgba(0,0,0,0.85)'].join(', ')
+                  : 'none',
+                color: canIssue ? '#F2E6C8' : '#999999',
+                fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.22em',
+                cursor: canIssue ? 'pointer' : 'default',
+                animation: canIssue ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
+                transition: 'background 0.2s, border-color 0.2s',
+              }}
+            >
+              {issueLoading ? '発行中…' : '発行する'}
+            </button>
+          </div>
         </div>
       )}
 
