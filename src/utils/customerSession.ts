@@ -15,6 +15,15 @@ import { USER_ID_KEY } from './userId'
 const CUSTOMER_SESSION_KEY = 'ginjiro_customer_session'
 export const CUSTOMER_AUTH_REQUIRED_EVENT = 'ginjiro:customer-auth-required'
 
+/** 引き継ぎが必要になった理由：action = 操作に必要 / read = 以前のチケットを読み込めなかった */
+export interface CustomerAuthRequiredDetail { source: 'action' | 'read' }
+
+function notifyAuthRequired(source: CustomerAuthRequiredDetail['source']): void {
+  window.dispatchEvent(new CustomEvent<CustomerAuthRequiredDetail>(CUSTOMER_AUTH_REQUIRED_EVENT, { detail: { source } }))
+}
+
+const AUTH_REQUIRED_MESSAGE = '以前のチケットの引き継ぎが必要です。'
+
 export function getCustomerSession(): string | null {
   try {
     const v = localStorage.getItem(CUSTOMER_SESSION_KEY)
@@ -42,14 +51,17 @@ export function clearCustomerSession(): void {
 /** 顧客セッション付き RPC。セッションが無い・失効している場合は RpcError('customer_auth_required') */
 export async function callCustomerRpc<T>(fn: string, params: Record<string, unknown> = {}): Promise<T> {
   const session = getCustomerSession()
-  if (!session) throw new RpcError('customer_auth_required', 'アプリの紐付けが必要です。')
+  if (!session) {
+    notifyAuthRequired('action')
+    throw new RpcError('customer_auth_required', AUTH_REQUIRED_MESSAGE)
+  }
   try {
     return await callRpc<T>(fn, { p_session: session, ...params })
   } catch (err) {
     if (err instanceof RpcError && err.message.includes('customer_auth_required')) {
       clearCustomerSession()
-      window.dispatchEvent(new Event(CUSTOMER_AUTH_REQUIRED_EVENT))
-      throw new RpcError('customer_auth_required', 'アプリの紐付けが必要です。', err)
+      notifyAuthRequired('action')
+      throw new RpcError('customer_auth_required', AUTH_REQUIRED_MESSAGE, err)
     }
     throw err
   }
@@ -61,7 +73,15 @@ export async function callCustomerRpc<T>(fn: string, params: Record<string, unkn
  * 従来の直接読み取り（legacyRead）で表示する。ステップB 後は直接読み取りは失敗し、紐付けが必要になる。
  */
 export async function readAsCustomer<T>(fn: string, legacyRead: () => Promise<T>): Promise<T> {
-  if (!hasCustomerSession()) return legacyRead()
+  if (!hasCustomerSession()) {
+    try {
+      return await legacyRead()
+    } catch (err) {
+      // ステップB 後：セッションの無い既存会員は以前のデータを読めない → 引き継ぎの案内（必要時のみ）
+      notifyAuthRequired('read')
+      throw err
+    }
+  }
   try {
     return await callCustomerRpc<T>(fn)
   } catch (err) {

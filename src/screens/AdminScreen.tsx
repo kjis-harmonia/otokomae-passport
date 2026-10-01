@@ -671,7 +671,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       const r = await issueBindCode(scannedData.userId, staffId)
       setBindCode({ code: r.code, expiresAt: r.expires_at })
     } catch (err) {
-      setBindCodeError(rpcErrorMessage(err, '紐付けコードの発行に失敗しました。通信環境を確認してください。'))
+      setBindCodeError(rpcErrorMessage(err, '引き継ぎコードの発行に失敗しました。通信環境を確認してください。'))
     } finally {
       setBindCodeLoading(false)
     }
@@ -1087,9 +1087,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   disabled={bindCodeLoading}
                   style={{ width: '100%', minHeight: 48, borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.4)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.1em', cursor: bindCodeLoading ? 'default' : 'pointer' }}
                 >
-                  {bindCodeLoading ? '発行中…' : 'アプリ紐付けコードを発行'}
+                  {bindCodeLoading ? '発行中…' : '引き継ぎコードを発行'}
                   <span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: '#e5e5e5', marginTop: 3, letterSpacing: '0.04em' }}>
-                    ご本人確認のうえ発行（アプリで「紐付けが必要です」と表示されたお客様）
+                    ご本人確認のうえ発行（アプリで「以前のチケットを引き継ぐ」を選んだお客様）
                   </span>
                 </button>
               )}

@@ -5,6 +5,7 @@ import { X, Share2, CalendarDays } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { MemberQrModal } from '../components/MemberQrModal'
 import { PassportCard } from '../components/PassportCard'
+import { PreviousTicketsEntry } from '../components/PreviousTicketsBind'
 import { getUserId } from '../utils/userId'
 import { getCustomerByUserId, getLastVisitDateForUser } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
@@ -806,6 +807,11 @@ export function MyPageScreen({ memberStatus }: Props) {
               </p>
             </div>
           )}
+        </div>
+
+        {/* ── 以前のチケットを引き継ぐ（顧客セッションの無い既存会員の端末のみ） ── */}
+        <div style={{ margin: '14px 16px 0' }}>
+          <PreviousTicketsEntry onBound={() => { void fetchTickets() }} />
         </div>
 
         {/* Footer */}

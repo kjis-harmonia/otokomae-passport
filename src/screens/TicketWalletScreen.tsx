@@ -8,7 +8,7 @@ import { getUserTickets, clearActiveTicket, initiateTransfer, cancelTransfer } f
 import { fetchLastVisitDateStrict, fetchTodayUsedType } from '../utils/customerStore'
 import { RpcError } from '../utils/staffSession'
 import { callCustomerRpc } from '../utils/customerSession'
-import { CustomerBindCard } from '../components/CustomerBindCard'
+import { PreviousTicketsPrompt } from '../components/PreviousTicketsBind'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getLastVisit } from '../utils/visitHistory'
 import { getMaintenanceVisit } from '../utils/maintenanceSchedule'
@@ -529,10 +529,8 @@ export function TicketWalletScreen({
           )}
         </header>
 
-        {/* 既存会員：店頭で発行した紐付けコードでこの端末を紐付け（顧客セッション未取得の端末のみ表示） */}
-        <div style={{ marginTop: 14 }}>
-          <CustomerBindCard onBound={() => { refreshTickets(); refreshVisit(); void refreshTodayUsed() }} />
-        </div>
+        {/* 以前のチケットの引き継ぎ：常設表示はせず、必要なときだけ小さなモーダルで案内 */}
+        <PreviousTicketsPrompt onBound={() => { refreshTickets(); refreshVisit(); void refreshTodayUsed() }} />
 
         {/* Filter chips（選択枠がスライド） */}
         <LayoutGroup id="wallet-chips">
@@ -914,7 +912,7 @@ const COUPON_TOKEN_ERRORS: Record<string, string> = {
   no_visit:   '来店記録がないため、まだご利用いただけません。',
   expired:    '前回来店から14日を過ぎたため、ご利用期限が終了しました。',
   used_today: '本日はすでに割引・クーポンをご利用済みです。',
-  customer_auth_required: 'クーポンQRの表示には、店頭でのアプリ紐付けが必要です（画面上部の案内をご覧ください）。',
+  customer_auth_required: 'クーポンQRの表示には、以前のチケットの引き継ぎが必要です。',
 }
 
 /**

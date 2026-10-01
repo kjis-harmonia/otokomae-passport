@@ -102,7 +102,7 @@ PIN は6桁（100万通り）。未登録端末は10分10回までのため、�
 |---|---|
 | `src/utils/customerSession.ts`（新規） | 顧客セッションの保存・`customer_*` 呼び出し・紐付けコード入力・移行期間の読み取り切替 |
 | `src/utils/staffSession.ts`（新規） | スタッフセッション・端末キー・`staff_*` 呼び出し・エラー文言 |
-| `src/components/CustomerBindCard.tsx`（新規） | 「アプリの紐付けが必要です」＋6桁コード入力（セッション未取得の端末のみ表示。サーバーがステップA未適用なら非表示） |
+| `src/components/PreviousTicketsBind.tsx`（新規） | 「以前のチケットを引き継ぐ」。常設表示はせず、Wallet では必要なときだけ小さなモーダル（引き継ぐ／あとで。あとでは7日間自動表示しない）、My画面にはセッションの無い端末だけ導線を表示。中身は従来どおり店頭の6桁コード → `customer_bind_with_code`。サーバーがステップA未適用なら非表示 |
 | `src/hq/hqSession.ts`（新規） | 本部セッション・本部端末キー・`hq_*` 呼び出し（店舗スタッフとは別の保存キー） |
 | `src/hq/HqPinGate.tsx`（新規）・`src/hq-main.tsx` | 本部画面の入口に本部専用6桁 PIN 画面。本部セッションがある間だけ本部画面を表示、切れたら PIN 画面へ |
 | `src/hq/hqCustomerKarteStore.ts` | 会員一覧・会員詳細・会員の売上履歴をすべて本部 RPC 経由に変更 |
@@ -115,10 +115,10 @@ PIN は6桁（100万通り）。未登録端末は10分10回までのため、�
 | `src/utils/customerStore.ts` | お客様：セッション経由。店舗：`getCustomerContextForStaff`・`issueBindCode`・検索・復旧 |
 | `src/screens/AdminScreen.tsx` | 会員QR読み取り後に「アプリ紐付けコードを発行」。会員情報の取得はすべてスタッフ認証経由。非表示だった LIVE STATUS・会計アシスト・発行ログ・会員数のコードと裏での読み取りを削除 |
 | 削除 | `screens/AccountingAssistTab.tsx` / `utils/accountingStore.ts` / `components/LiveStatusSection.tsx` / `components/liveStatus*.css` / `data/liveStatus.ts` / `utils/liveStatusStore.ts` / `utils/shopStatusStore.ts`（いずれも画面から到達不能） |
-| `src/screens/TicketWalletScreen.tsx` | 紐付けカード表示。クーポンQR は `customer_issue_maintenance_coupon` |
+| `src/screens/TicketWalletScreen.tsx` | 引き継ぎは必要時のみモーダル（未引き継ぎでもチケット一覧は通常表示）。クーポンQR は `customer_issue_maintenance_coupon` |
 | `src/screens/MyPageScreen.tsx` / `HomeScreen.tsx` / `components/PassportCard.tsx` | お客様の読み取りをセッション経由に |
 
-**移行期間の扱い**：ステップA 適用後〜ステップB 適用前は、セッション未取得の既存会員の「読み取り」だけ従来の直接読み取りで表示する（現状と同じ公開範囲）。書き込み（譲渡・クーポンQR 等）はセッション必須。ステップB 後は直接読み取りが RLS で失敗し、紐付けカードの案内に従って店頭で紐付ける。
+**移行期間の扱い**：ステップA 適用後〜ステップB 適用前は、セッション未取得の既存会員の「読み取り」だけ従来の直接読み取りで表示する（現状と同じ公開範囲）。書き込み（譲渡・クーポンQR 等）はセッション必須。ステップB 後は直接読み取りが RLS で失敗し、Wallet の「以前のチケットを引き継ぐ」案内（または My画面の導線）から、店頭の引き継ぎコードで引き継ぐ。
 
 ## 切替手順（A → 実機確認 → 速やかに B）
 
@@ -143,7 +143,7 @@ PIN は6桁（100万通り）。未登録端末は10分10回までのため、�
    - 既存会員：店舗端末で紐付けコード発行 → お客様アプリで入力 → Wallet に既存チケット表示
    - メンテナンスQR（**前回来店日から14日以内のテスト会員**で実施。新規登録直後の会員では不可）：お客様側表示（5分・自動更新）→ 店舗端末で確定 → 再利用拒否
 7. 問題なければ**速やかにステップB**：`20261001_security_hardening_b_lockdown.sql`
-8. B 直後に下記「本番確認SQL」を実行し、旧経路が残っていないことを確認。あわせて、**既存会員で顧客セッション未紐付けの端末**に紐付け案内（紐付けカード）が表示されることを確認
+8. B 直後に下記「本番確認SQL」を実行し、旧経路が残っていないことを確認。あわせて、**既存会員で顧客セッション未紐付けの端末**で、Wallet を開くと「以前のチケットを引き継ぐ」の小さなモーダル（引き継ぐ／あとで）が出ること、My画面に同じ導線があることを確認（新規会員の端末には何も出ないこと）
 9. 問題があれば `20261001_security_hardening_rollback.sql` で直接アクセスと旧 RPC を復元（旧アプリに戻す場合のみ）
 
 ## ステップA〜B 間に残る旧経路と、B 後の状態
@@ -161,7 +161,7 @@ A〜B の間は、旧アプリ・移行期間のために以下が開いたま�
 | 直接アクセス | live_statuses / shop_status / accounting_items / accounting_sessions / accounting_session_items / daily_reports / customer_notes | allow_all | 読み書きとも不可 |
 | 直接アクセス | products | allow_all | 店販・販売中の行の SHOP 用列の読み取りのみ |
 | Realtime | 上記ロック対象テーブルの変更通知 | 購読可 | 読み取り権限が無いため配信されない |
-| アプリ内コード | `legacyReadTickets` / `legacyReadLastVisit` / `legacyReadCustomer` / `legacyReadTodayUsage`（セッション未取得の既存会員の表示用） | 動作 | 権限エラーで失敗 → 紐付けカードを表示 |
+| アプリ内コード | `legacyReadTickets` / `legacyReadLastVisit` / `legacyReadCustomer` / `legacyReadTodayUsage`（セッション未取得の既存会員の表示用） | 動作 | 権限エラーで失敗 → 「以前のチケットを引き継ぐ」を案内 |
 | アプリ内コード | onboarding の `complete_customer_onboarding` 代替 / 受け取りの `claim_ticket_transfer` 代替 | A 適用後は使われない（新RPC優先・セッション有無で分岐） | 呼ばれても権限エラー |
 
 アプリ内の移行用コードは B 後は使われないため、B 実施後の次のリリースで削除する。

@@ -193,7 +193,7 @@ export async function initiateTransfer(ticketId: string): Promise<string> {
     const r = await callCustomerRpc<{ token: string }>('customer_create_transfer', { p_ticket_id: ticketId })
     return r.token
   } catch (err) {
-    if (needsBind(err)) throw new Error('チケットを譲るには、店頭でアプリの紐付けが必要です。', { cause: err })
+    if (needsBind(err)) throw new Error('チケットを譲るには、以前のチケットの引き継ぎが必要です。', { cause: err })
     if (err instanceof RpcError && err.detail && typeof err.detail === 'object' && 'error' in (err.detail as object)) {
       throw new Error(err.code, { cause: err }) // RPC は日本語メッセージを返す
     }
@@ -223,7 +223,7 @@ export async function acceptTransfer(token: string, toUserId: string): Promise<T
     if (!r.ticket) throw new Error('トークンが無効または期限切れです')
     return r.ticket
   } catch (err) {
-    if (needsBind(err)) throw new Error('チケットを受け取るには、店頭でアプリの紐付けが必要です。', { cause: err })
+    if (needsBind(err)) throw new Error('チケットを受け取るには、以前のチケットの引き継ぎが必要です。', { cause: err })
     if (err instanceof RpcError && err.detail && typeof err.detail === 'object' && 'error' in (err.detail as object)) {
       throw new Error(err.code, { cause: err }) // claim_ticket_transfer は日本語メッセージを返す
     }
