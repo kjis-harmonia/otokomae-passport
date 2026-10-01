@@ -31,6 +31,7 @@ const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 const STAFF_NAMES  = ['テイテイ', 'ヨンピル', '銀二郎', 'シルビア', 'リアン', 'キャンディ', 'ヒョウ']
 const MAX_QTY      = 30
 const QTY_PRESETS  = [1, 2, 3, 5, 10, 30]
+const DISCOUNT_AMOUNT_PRESETS = [100, 500, 1000]
 
 const TICKET_TABS: { type: TicketType; label: string; autoTitle: string }[] = [
   { type: 'discount', label: '割引券',   autoTitle: '割引券' },
@@ -783,6 +784,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     const todayJST = getJapanDateString()
     const usedType = await fetchTodayUsedType(passportData.userId, todayJST)
     setTodayUsedType(usedType)
+    setCheckInStatus('loading')
+    await upsertLastVisitDate(passportData.userId, todayJST)
+    setCheckInDate(todayJST)
+    setCheckInStatus('done')
     setPhase('result')
   }, [loadUserTickets])
 
@@ -1547,7 +1552,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     来店チェックイン完了
                   </p>
                   <p style={{ fontFamily: SERIF, fontSize: 13, color: '#e5e5e5', lineHeight: 1.8, letterSpacing: '0.04em' }}>
-                    {scannedData.name}様の前回来店日を<br />
+                    QR読み取りと同時に<br />
+                    {scannedData.name}様の来店日を<br />
                     <span style={{ fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.12em' }}>{fmtVisitDate(checkInDate)}</span><br />
                     として記録しました。
                   </p>
@@ -1686,6 +1692,31 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               {/* ── Amount input: both tabs free-form ── */}
               <div style={{ marginBottom: 20 }}>
                 <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 10 }}>金額を入力</p>
+                {ticketTab === 'discount' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                    {DISCOUNT_AMOUNT_PRESETS.map(amount => {
+                      const active = discountAmountInput === String(amount)
+                      return (
+                        <button
+                          key={amount}
+                          type="button"
+                          onClick={() => setDiscountAmountInput(String(amount))}
+                          style={{
+                            padding: '12px 4px', borderRadius: 12,
+                            background: active ? tc.cardBg : 'rgba(255,255,255,0.04)',
+                            border: `1.5px solid ${active ? tc.border : 'rgba(255,255,255,0.09)'}`,
+                            color: active ? tc.text : '#e5e5e5',
+                            fontFamily: SERIF, fontSize: 16, fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          ¥{amount.toLocaleString()}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: effectiveAmount > 0 ? '#C9A24A' : '#999999', pointerEvents: 'none' }}>¥</span>
                   <input
