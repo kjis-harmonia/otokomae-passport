@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { MemberStatus } from '../data/brand'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X, Share2, CalendarDays } from 'lucide-react'
@@ -6,14 +6,11 @@ import { QRCodeSVG } from 'qrcode.react'
 import { MemberQrModal } from '../components/MemberQrModal'
 import { PassportCard } from '../components/PassportCard'
 import { getUserId } from '../utils/userId'
-import { saveMemberStatus } from '../utils/storage'
-import { getCustomerByUserId } from '../utils/customerStore'
+import { getCustomerByUserId, getLastVisitDateForUser } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
-import { supabase } from '../lib/supabase'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
 import {
-  issueTicket,
   getUserTickets,
   initiateTransfer,
   cancelTransfer,
@@ -24,7 +21,6 @@ import { isInStoreModeActive } from '../utils/inStoreMode'
 
 const SERIF            = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const RESERVATION_URL  = 'https://beauty.hotpepper.jp/'
-const MAINT_LOCAL_KEY  = 'ginjiro_maintenance_visits'
 const QR_VALID_SECS    = 1200 // 20 minutes
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
@@ -103,20 +99,6 @@ function groupActiveTickets(tickets: TicketRow[]): TicketGroup[] {
   return Array.from(map.values())
 }
 
-async function fetchUserLastVisitDate(userId: string): Promise<string | null> {
-  try {
-    const { data, error } = await supabase
-      .from('maintenance_visits')
-      .select('last_visit_date')
-      .eq('user_id', userId)
-      .maybeSingle()
-    if (!error && data) return (data as { last_visit_date: string }).last_visit_date
-  } catch { /* ignore */ }
-  try {
-    const stored = JSON.parse(localStorage.getItem(MAINT_LOCAL_KEY) ?? '{}') as Record<string, string>
-    return stored[userId] ?? null
-  } catch { return null }
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -125,7 +107,7 @@ interface Props {
   onMemberStatusChange: (next: MemberStatus) => void
 }
 
-export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
+export function MyPageScreen({ memberStatus }: Props) {
   const [showMemberQr, setShowMemberQr]         = useState(false)
   const [tickets, setTickets]                   = useState<TicketRow[]>([])
   const [ticketsLoading, setTicketsLoading]     = useState(true)
@@ -147,8 +129,6 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
   const [lastVisitDate, setLastVisitDate]       = useState<string | null | undefined>(undefined)
 
   // Stamp reward
-  const [stampRewardMsg, setStampRewardMsg]     = useState<string | null>(null)
-  const stampRewardIssuedRef                    = useRef(false)
 
   // Recovery code (Phase2)
   const [customerData, setCustomerData]         = useState<CustomerRow | null | undefined>(undefined)
@@ -166,29 +146,12 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
 
   useEffect(() => { void fetchTickets() }, [fetchTickets])
   useEffect(() => {
-    fetchUserLastVisitDate(userId).then(d => setLastVisitDate(d))
+    getLastVisitDateForUser(userId).then(d => setLastVisitDate(d))
   }, [userId])
 
   useEffect(() => {
     getCustomerByUserId(userId).then(d => setCustomerData(d ?? null))
   }, [userId])
-
-  // ── Stamp reward ────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (memberStatus.stampCount < 10) { stampRewardIssuedRef.current = false; return }
-    if (stampRewardIssuedRef.current) return
-    stampRewardIssuedRef.current = true
-    void (async () => {
-      try {
-        await issueTicket({ user_id: userId, type: 'discount', title: 'スタンプ割引券', amount: 500, issued_by: 'STAMP_REWARD' })
-        const next = { ...memberStatus, stampCount: memberStatus.stampCount - 10 }
-        onMemberStatusChange(next); saveMemberStatus(next)
-        setStampRewardMsg('割引券 ¥500 が発行されました！')
-        await fetchTickets()
-      } catch { stampRewardIssuedRef.current = false }
-    })()
-  }, [memberStatus.stampCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── QR countdown ────────────────────────────────────────────────────────────
 
@@ -250,7 +213,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
     if (ticket.used || ticket.pending_transfer) return
     setTransferring(true)
     try {
-      const token = await initiateTransfer(ticket.id, userId)
+      const token = await initiateTransfer(ticket.id)
       setTransferToken(token)
       setGiftModalTicket(prev => prev ? { ...prev, pending_transfer: true } : prev)
       setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: true } : t))
@@ -263,7 +226,7 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
 
   async function handleCancelGift(ticket: TicketRow) {
     try {
-      await cancelTransfer(ticket.id, userId)
+      await cancelTransfer(ticket.id)
       setTransferToken(null)
       setGiftModalTicket(prev => prev ? { ...prev, pending_transfer: false } : prev)
       setTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, pending_transfer: false } : t))
@@ -817,16 +780,6 @@ export function MyPageScreen({ memberStatus, onMemberStatusChange }: Props) {
               <span style={{ fontSize: 26, fontWeight: 700, color: memberStatus.stampCount > 0 ? '#E8C547' : 'rgba(242,230,200,0.22)' }}>{memberStatus.stampCount}</span>
               <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.2)', marginLeft: 2 }}> / 10</span>
             </p>
-            {stampRewardMsg && (
-              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 12, padding: '10px 16px', borderRadius: 12, background: 'rgba(120,192,80,0.1)', border: '1px solid rgba(120,192,80,0.3)', textAlign: 'center' }}>
-                <p style={{ fontSize: 12, color: '#78C050', fontWeight: 700 }}>✓ {stampRewardMsg}</p>
-              </motion.div>
-            )}
-            <button type="button"
-              onClick={() => { const next = { ...memberStatus, stampCount: 10 }; onMemberStatusChange(next); saveMemberStatus(next) }}
-              style={{ display: 'block', margin: '12px auto 0', fontSize: 9, color: 'rgba(242,230,200,0.14)', cursor: 'pointer', background: 'none', border: 'none', letterSpacing: '0.06em', textDecoration: 'underline', textUnderlineOffset: 3 }}>
-              開発用：スタンプ10個
-            </button>
           </div>
         </div>
 

@@ -272,7 +272,7 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
             <input placeholder="最低在庫" type="number" inputMode="numeric" value={newMinStock} onChange={(e) => setNewMinStock(e.target.value)} style={inputStyle} />
           </div>
           <input
-            placeholder="価格（円・店販を会計アシストで販売する場合）" type="number" inputMode="numeric"
+            placeholder="価格（円・店販のみ）" type="number" inputMode="numeric"
             value={newPrice} onChange={(e) => setNewPrice(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }}
           />
           {newCategory === '店販' && (

@@ -1,33 +1,21 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
-import { QRCodeSVG } from 'qrcode.react'
-import { supabase } from '../lib/supabase'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
-import { issueTicket, getUserTickets, markTicketUsed } from '../utils/ticketStore'
-import { getJapanDateString } from '../utils/dateUtils'
-import { upsertCustomer, searchCustomersByName, recoverMember, getCustomerStats } from '../utils/customerStore'
-import type { CustomerRow, CustomerStats } from '../utils/customerStore'
+import { issueTickets, getTicketsForStaff, redeemTickets } from '../utils/ticketStore'
+import {
+  registerCustomerWithContext, searchCustomersByName, recoverMember,
+  getCustomerContextForStaff, issueBindCode,
+} from '../utils/customerStore'
+import { callStaffRpc, rpcErrorMessage, RpcError } from '../utils/staffSession'
+import type { CustomerRow } from '../utils/customerStore'
+import { isWelcomeCouponBlockedToday, WELCOME_COUPON_WEEKEND_MESSAGE } from '../utils/welcomeCoupon'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
-import {
-  getLiveStatuses, setLiveStatus, setLiveStatusMessage, setLiveStatusFull, subscribeLiveStatuses,
-} from '../utils/liveStatusStore'
-import {
-  LIVE_STATUS_CODES, LIVE_STATUS_DEFAULT_MESSAGES, LIVE_STATUS_THEME,
-  liveStatusLabel, liveStatusPulseClass, liveStatusSignpoleClass, nextLiveStatus,
-} from '../data/liveStatus'
-import '../components/liveStatusSignpole.css'
-import type { LiveStatusRow } from '../data/liveStatus'
-import { AccountingAssistTab } from './AccountingAssistTab'
-import { getShopStatus, setShopStatus as updateShopStatus } from '../utils/shopStatusStore'
-import type { ShopStatusRow } from '../utils/shopStatusStore'
-import { generateAndSaveDailyReport } from '../hq/hqDailyReportStore'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
-const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 const STAFF_NAMES  = ['テイテイ', 'ヨンピル', '銀二郎', 'シルビア', 'リアン', 'キャンディ', 'ヒョウ']
 const MAX_QTY      = 30
 const QTY_PRESETS  = [1, 2, 3, 5, 10, 30]
@@ -38,52 +26,7 @@ const TICKET_TABS: { type: TicketType; label: string; autoTitle: string }[] = [
   { type: 'otoku',    label: '漢トク券', autoTitle: '漢トク券' },
 ]
 
-// ── Usage log (ticket consumption) ───────────────────────────────────────────
-
-interface UsageLogEntry {
-  id: string
-  used_at: string
-  usage_date: string
-  staff_name: string
-  customer_name: string
-  user_id: string
-  ticket_id: string | null
-  ticket_type: string
-  amount: number
-  terminal: string
-  status: string
-}
-
-export async function saveUsageLog(entry: Omit<UsageLogEntry, 'id' | 'used_at'>): Promise<void> {
-  try {
-    await supabase.from('ticket_usage_logs').insert({
-      ...entry,
-      used_at: new Date().toISOString(),
-    })
-  } catch { /* non-fatal: log failure must not block UI */ }
-}
-
-/**
- * JST当日にuserIdが使用済みの割引種別（ticket_type）を1つ返す。未使用ならnull。
- * 銀二郎新ルール（使用枚数制限の解除）：
- * - 漢トク券(otoku)・割引券(discount)は同種であれば1日に何枚でも使用可
- * - メンテナンスクーポン(coupon)は引き続き1日1回まで
- * - ただし3種の併用（異なる割引種別を同日に使うこと）は不可
- * 実際の許可判定は canUseDiscountType() で行う。
- */
-export async function fetchTodayUsedType(userId: string, today: string): Promise<string | null> {
-  try {
-    const { data, error } = await supabase
-      .from('ticket_usage_logs')
-      .select('ticket_type')
-      .eq('user_id', userId)
-      .eq('usage_date', today)
-      .eq('status', 'used')
-      .limit(1)
-    if (!error && data && data.length > 0) return (data[0] as { ticket_type: string }).ticket_type
-  } catch { /* table may not exist yet — treat as no restriction */ }
-  return null
-}
+// ── 当日の割引利用状況 ────────────────────────────────────────────────────────
 
 /**
  * usedType（当日すでに使用済みの割引種別。未使用ならnull）に対して、
@@ -99,47 +42,6 @@ const DISCOUNT_TYPE_LABEL: Record<string, string> = {
   otoku: '漢トク券',
   discount: '割引券',
   coupon: 'メンテナンスクーポン',
-}
-
-// ── Issue log ─────────────────────────────────────────────────────────────────
-
-interface IssueLogEntry {
-  id: string
-  issued_at: string
-  staff_name: string
-  customer_name: string
-  user_id: string
-  ticket_type: string
-  amount: number
-  quantity: number
-  terminal: string
-  status: string
-}
-
-async function saveIssueLog(entry: Omit<IssueLogEntry, 'id' | 'issued_at'>): Promise<void> {
-  try {
-    await supabase.from('ticket_issue_logs').insert({
-      ...entry,
-      issued_at: new Date().toISOString(),
-    })
-  } catch { /* non-fatal */ }
-}
-
-async function fetchRecentLogs(limit = 12): Promise<IssueLogEntry[]> {
-  try {
-    const { data, error } = await supabase
-      .from('ticket_issue_logs')
-      .select('*')
-      .order('issued_at', { ascending: false })
-      .limit(limit)
-    if (!error && data) return data as IssueLogEntry[]
-  } catch { /* ignore */ }
-  return []
-}
-
-function fmtLogTime(iso: string): string {
-  const d = new Date(iso)
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 // ── Sound ─────────────────────────────────────────────────────────────────────
@@ -172,33 +74,49 @@ function playWarningSound() {
   } catch { /* AudioContext unavailable */ }
 }
 
-// ── Supabase: maintenance_visits ──────────────────────────────────────────────
+// ── 来店日 / メンテナンスクーポン（サーバー RPC） ───────────────────────────────
 
+/** 最終来店日（YYYY-MM-DD / 記録なし null）。通信失敗は例外。 */
 async function fetchLastVisitDate(userId: string): Promise<string | null> {
-  try {
-    const { data, error } = await supabase
-      .from('maintenance_visits')
-      .select('last_visit_date')
-      .eq('user_id', userId)
-      .single()
-    if (!error && data) return (data as { last_visit_date: string }).last_visit_date
-  } catch { /* fall through */ }
-  const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
-  return local[userId] ?? null
+  return (await getCustomerContextForStaff(userId)).last_visit_date
 }
 
-export async function upsertLastVisitDate(userId: string, date: string): Promise<void> {
-  try {
-    await supabase
-      .from('maintenance_visits')
-      .upsert(
-        { user_id: userId, last_visit_date: date, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' },
-      )
-  } catch { /* non-fatal */ }
-  const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
-  setStoredValue(MAINTENANCE_LOCAL_KEY, { ...local, [userId]: date })
+/** 来店チェックイン（来店日＝本日JST）。staff_check_in RPC。失敗時は例外。 */
+export async function checkInVisit(userId: string): Promise<string> {
+  const r = await callStaffRpc<{ visit_date: string }>('staff_check_in', { p_user_id: userId })
+  return String(r.visit_date).slice(0, 10)
 }
+
+export interface MaintenanceCouponPreview {
+  valid:          boolean
+  reason:         string | null
+  user_id:        string
+  customer_name:  string | null
+  days_remaining: number | null
+  qr_expires_at:  string
+  menu:           { name: string; stylist: string; normal_price: number; member_price: number }
+}
+
+/** メンテナンスクーポンQRの確認（消費しない）。通信失敗は例外。 */
+export async function previewMaintenanceCoupon(token: string): Promise<MaintenanceCouponPreview> {
+  return callStaffRpc<MaintenanceCouponPreview>('staff_preview_maintenance_coupon', { p_token: token })
+}
+
+/**
+ * メンテナンスクーポンの使用確定（サーバー側で 5分有効・未使用・14日以内・当日ルールを再検証し、
+ * トークン消費・使用ログ・来店日更新を1トランザクションで行う）。失敗時は RpcError。
+ */
+export async function redeemMaintenanceCoupon(token: string, staffName: string): Promise<{ user_id: string; customer_name: string | null }> {
+  return callStaffRpc('staff_redeem_maintenance_coupon', { p_token: token, p_staff_name: staffName })
+}
+
+/** 旧形式（userId のみ・トークン無し）のクーポンQR */
+export function isLegacyMaintenanceQr(d: MaintenanceCouponQRData): boolean {
+  return !d.token
+}
+
+export const LEGACY_MAINTENANCE_QR_MESSAGE =
+  '旧形式のクーポンQRです。お客様にアプリを最新にしてクーポンQRを再表示してもらってください。'
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -238,8 +156,12 @@ export interface TicketUseQRData {
 
 export interface MaintenanceCouponQRData {
   type: 'ginjiro-maintenance-coupon'
-  userId: string
-  name: string
+  /** v2: サーバー発行の使い捨てトークン（5分有効） */
+  v?: number
+  token?: string
+  /** 旧形式（v1）のみ。v2 では含まれない */
+  userId?: string
+  name?: string
 }
 
 export interface PremiumCouponQRData {
@@ -258,8 +180,6 @@ export interface PremiumCouponQRData {
 
 export type AnyQRData = PassportQRData | TicketUseQRData | MaintenanceCouponQRData | PremiumCouponQRData
 
-const STORE_CHECKIN_QR_VALUE = JSON.stringify({ type: 'ginjiro-store-checkin' })
-
 export function isQrPayloadExpired(expiresAt?: string): boolean {
   if (!expiresAt) return false
   const expiry = new Date(expiresAt)
@@ -271,7 +191,7 @@ export function parseQR(text: string): AnyQRData | null {
   try {
     const d = JSON.parse(text)
     if (d.type === 'ginjiro-ticket-use' && d.userId && d.selectedTicketId) return d as TicketUseQRData
-    if (d.type === 'ginjiro-maintenance-coupon' && d.userId) return d as MaintenanceCouponQRData
+    if (d.type === 'ginjiro-maintenance-coupon' && (d.token || d.userId)) return d as MaintenanceCouponQRData
     if (d.type === 'ginjiro-premium-coupon' && d.userId && d.couponId && d.memberPrice !== undefined) {
       return {
         ...d,
@@ -401,9 +321,8 @@ export function QrCameraScanner({
 // ── AdminScreen ───────────────────────────────────────────────────────────────
 
 type AdminScreenMode = 'issue' | 'recovery'
-type AdminMainTab = 'issue' | 'recovery' | 'live-status' | 'accounting'
+type AdminMainTab = 'issue' | 'recovery'
 
-const SHOW_LEGACY_STAFF_TOOLS = false
 
 export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [phase, setPhase] = useState<Phase>('scan')
@@ -460,10 +379,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   // Maintenance coupon QR flow
   const [maintCouponData, setMaintCouponData]         = useState<MaintenanceCouponQRData | null>(null)
   const [maintCouponTodayUsed, setMaintCouponTodayUsed] = useState(false)
-  const [maintCouponBlockedByType, setMaintCouponBlockedByType] = useState<string | null>(null)
   const [maintCouponConfirming, setMaintCouponConfirming] = useState(false)
   const [maintCouponConfirmed, setMaintCouponConfirmed] = useState(false)
   const [maintCouponBlockMsg, setMaintCouponBlockMsg] = useState<string | null>(null)
+  const [maintCouponPreview, setMaintCouponPreview] = useState<MaintenanceCouponPreview | null>(null)
 
   // Premium coupon QR flow
   const [premiumCouponData, setPremiumCouponData] = useState<PremiumCouponQRData | null>(null)
@@ -473,24 +392,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
 
-  // Store QR
-  const [showStoreQr, setShowStoreQr] = useState(false)
+  // 既存会員のアプリ紐付けコード（6桁・10分有効・1回限り）
+  const [bindCode, setBindCode]             = useState<{ code: string; expiresAt: string } | null>(null)
+  const [bindCodeLoading, setBindCodeLoading] = useState(false)
+  const [bindCodeError, setBindCodeError]   = useState<string | null>(null)
 
-  // ── Main tab (issue / recovery / live-status / accounting) ────────────────
-  const [mainTab, setMainTab] = useState<AdminMainTab>(mode)
-
-  // Live status tab state
-  const [liveStatusRows, setLiveStatusRows] = useState<LiveStatusRow[]>([])
-
-  // 営業開始／営業終了（店舗ステータス）
-  const [shopStatus, setShopStatusState] = useState<ShopStatusRow | null>(null)
-  const [shopActionLoading, setShopActionLoading] = useState(false)
-  const [shopConfirmAction, setShopConfirmAction] = useState<'open' | 'closed' | null>(null)
-  const [shopActionError, setShopActionError] = useState<string | null>(null)
-  const [shopActionSuccess, setShopActionSuccess] = useState<string | null>(null)
-
-  // 登録者数ダッシュボード（スタッフ端末専用）
-  const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null)
+  // ── 表示モード（店舗端末メニューから issue / recovery のどちらかで開く） ────────
+  const [mainTab] = useState<AdminMainTab>(mode)
 
   // Recovery tab state
   const [recoveryStep, setRecoveryStep]               = useState<'search' | 'detail' | 'scan' | 'confirm' | 'done'>('search')
@@ -507,13 +415,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [recoveryScanError, setRecoveryScanError]     = useState<string | null>(null)
   const [recoveryManualInput, setRecoveryManualInput] = useState('')
 
-  // Issue log (realtime toast + log view)
-  const [logToast, setLogToast]         = useState<IssueLogEntry | null>(null)
-  const logToastTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [showLogPanel, setShowLogPanel] = useState(false)
-  const [recentLogs, setRecentLogs]     = useState<IssueLogEntry[]>([])
-  const [logsLoading, setLogsLoading]   = useState(false)
-
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const discountParsed  = parseInt(discountAmountInput.replace(/[^\d]/g, ''), 10) || 0
@@ -526,154 +427,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const activeTickets = userTickets.filter(t => !t.used)
   const currentTab    = TICKET_TABS.find(t => t.type === ticketTab) ?? TICKET_TABS[0]
   const tc            = TICKET_TYPE_COLORS[ticketTab]
-
-  // ── Realtime subscription ─────────────────────────────────────────────────
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('ticket-issue-logs-realtime')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'ticket_issue_logs' },
-        (payload) => {
-          const entry = payload.new as IssueLogEntry
-          if (logToastTimerRef.current) clearTimeout(logToastTimerRef.current)
-          setLogToast(entry)
-          logToastTimerRef.current = setTimeout(() => setLogToast(null), 6000)
-          // If log panel is open, prepend the new entry
-          setRecentLogs(prev => [entry, ...prev].slice(0, 12))
-        },
-      )
-      .subscribe()
-
-    return () => { void supabase.removeChannel(channel) }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Live status (LIVE STATUS管理タブ) ───────────────────────────────────────
-
-  useEffect(() => {
-    getLiveStatuses().then(setLiveStatusRows)
-    const unsubscribe = subscribeLiveStatuses((updated) => {
-      setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
-    })
-    return unsubscribe
-  }, [])
-
-  const handleCycleLiveStatus = useCallback(async (row: LiveStatusRow) => {
-    const updated = await setLiveStatus(row.id, nextLiveStatus(row.status))
-    if (updated) setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
-  }, [])
-
-  // ── 登録者数ダッシュボード ───────────────────────────────────────────────────
-
-  useEffect(() => {
-    getCustomerStats().then(setCustomerStats)
-  }, [])
-
-  const handleSaveLiveStatusMessage = useCallback(async (id: string, message: string) => {
-    const updated = await setLiveStatusMessage(id, message)
-    if (updated) setLiveStatusRows(prev => prev.map(r => (r.id === updated.id ? updated : r)))
-  }, [])
-
-  // ── 営業開始／営業終了 ───────────────────────────────────────────────────────
-
-  useEffect(() => {
-    getShopStatus().then(setShopStatusState)
-  }, [])
-
-  const dismissShopMessageLater = useCallback(() => {
-    setTimeout(() => { setShopActionSuccess(null); setShopActionError(null) }, 4000)
-  }, [])
-
-  const handleOpenShop = useCallback(async () => {
-    setShopConfirmAction(null)
-    setShopActionLoading(true)
-    setShopActionError(null)
-    setShopActionSuccess(null)
-    try {
-      const shop = await updateShopStatus('open')
-      if (!shop) {
-        setShopActionError('営業状態の更新に失敗しました。')
-        return
-      }
-      setShopStatusState(shop)
-
-      const presets: { id: string; status: LiveStatusRow['status']; message: string }[] = [
-        { id: 'teitei',  status: 'ready', message: '本日空きあり' },
-        { id: 'ginjiro', status: 'ready', message: '本日空きあり' },
-        { id: 'free',    status: 'ready', message: '本日受付可能' },
-      ]
-      const updatedRows = await Promise.all(
-        presets.map(p => setLiveStatusFull(p.id, p.status, p.message)),
-      )
-      if (updatedRows.some(r => !r)) {
-        setShopActionError('LIVE STATUSの更新に失敗しました。')
-        return
-      }
-      setLiveStatusRows(prev => prev.map(r => updatedRows.find(u => u?.id === r.id) ?? r))
-      setShopActionSuccess('営業を開始しました。')
-    } finally {
-      setShopActionLoading(false)
-      dismissShopMessageLater()
-    }
-  }, [dismissShopMessageLater])
-
-  const handleCloseShop = useCallback(async () => {
-    setShopConfirmAction(null)
-    setShopActionLoading(true)
-    setShopActionError(null)
-    setShopActionSuccess(null)
-    try {
-      const shop = await updateShopStatus('closed')
-      if (!shop) {
-        setShopActionError('営業状態の更新に失敗しました。')
-        return
-      }
-      setShopStatusState(shop)
-
-      const ids = ['teitei', 'ginjiro', 'free']
-      const updatedRows = await Promise.all(
-        ids.map(id => setLiveStatusFull(id, 'closed', '本日の受付は終了しました')),
-      )
-      if (updatedRows.some(r => !r)) {
-        setShopActionError('LIVE STATUSの更新に失敗しました。')
-        return
-      }
-      setLiveStatusRows(prev => prev.map(r => updatedRows.find(u => u?.id === r.id) ?? r))
-      setShopActionSuccess('営業を終了しました。')
-
-      // ── 銀二郎本部 日報自動生成（Phase7-B） ──
-      // 営業終了は既に確定済みなので、ここで何が起きても営業終了処理自体は成功扱いのまま
-      // （setShopActionErrorは別枠として併記するだけで、営業終了の成功表示は消さない）。
-      try {
-        const result = await generateAndSaveDailyReport()
-        if (result.ok) {
-          setShopActionSuccess('営業を終了しました。日報を生成しました。')
-        } else {
-          console.error('[AdminScreen] 日報の自動生成に失敗しました:', result.errorMessage)
-          setShopActionError('営業終了は完了しましたが、日報生成に失敗しました。')
-        }
-      } catch (reportErr) {
-        console.error('[AdminScreen] 日報の自動生成中に例外が発生しました:', reportErr)
-        setShopActionError('営業終了は完了しましたが、日報生成に失敗しました。')
-      }
-    } finally {
-      setShopActionLoading(false)
-      dismissShopMessageLater()
-    }
-  }, [dismissShopMessageLater])
-
-  // ── Log panel ─────────────────────────────────────────────────────────────
-
-  const loadRecentLogs = useCallback(async () => {
-    setLogsLoading(true)
-    setRecentLogs(await fetchRecentLogs(12))
-    setLogsLoading(false)
-  }, [])
-
-  useEffect(() => {
-    if (showLogPanel) void loadRecentLogs()
-  }, [showLogPanel, loadRecentLogs])
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -704,6 +457,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setTicketUsedThisSession(false)
     setCheckInStatus('idle')
     setCheckInDate(null)
+    setBindCode(null)
+    setBindCodeError(null)
     setShowUseConfirm(false)
     setPendingUseTicket(null)
     setUseConfirmLoading(false)
@@ -713,20 +468,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setUseCompleteInfo(null)
     setMaintCouponData(null)
     setMaintCouponTodayUsed(false)
-    setMaintCouponBlockedByType(null)
     setMaintCouponConfirming(false)
     setMaintCouponConfirmed(false)
     setMaintCouponBlockMsg(null)
+    setMaintCouponPreview(null)
     setPremiumCouponData(null)
     setPremiumCouponExpired(false)
   }
-
-  const loadUserTickets = useCallback(async (userId: string) => {
-    setTicketsLoading(true)
-    try { setUserTickets(await getUserTickets(userId)) }
-    catch { setUserTickets([]) }
-    finally { setTicketsLoading(false) }
-  }, [])
 
   const handleScanned = useCallback(async (text: string) => {
     const data = parseQR(text)
@@ -741,7 +489,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       if (new Date() > new Date(tuData.expiresAt)) { setTicketQrExpired(true); setPhase('ticket-result'); return }
       setTicketQrExpired(false)
       try {
-        const tickets = await getUserTickets(tuData.userId)
+        const tickets = await getTicketsForStaff(tuData.userId)
         setTicketForUse(tickets.find(t => t.id === tuData.selectedTicketId) ?? null)
       } catch { setTicketForUse(null) }
       setPhase('ticket-result')
@@ -754,11 +502,24 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       setMaintCouponConfirmed(false)
       setMaintCouponBlockMsg(null)
       setMaintCouponConfirming(false)
+      setMaintCouponPreview(null)
       setPhase('maintenance-coupon')
-      const todayJST = getJapanDateString()
-      const usedType = await fetchTodayUsedType(mcData.userId, todayJST)
-      setMaintCouponTodayUsed(!canUseDiscountType(usedType, 'coupon'))
-      setMaintCouponBlockedByType(usedType)
+      if (isLegacyMaintenanceQr(mcData) || !mcData.token) {
+        setMaintCouponTodayUsed(true)
+        setMaintCouponBlockMsg(LEGACY_MAINTENANCE_QR_MESSAGE)
+        return
+      }
+      // サーバー側で 5分有効・未使用・14日以内・当日ルールを確認（消費はしない）
+      try {
+        const preview = await previewMaintenanceCoupon(mcData.token)
+        setMaintCouponPreview(preview)
+        setMaintCouponTodayUsed(!preview.valid)
+        if (!preview.valid) setMaintCouponBlockMsg(rpcErrorMessage(new RpcError(preview.reason ?? ''), 'このクーポンQRは使用できません。'))
+        if (preview.valid) playSuccessSound(); else playWarningSound()
+      } catch (err) {
+        setMaintCouponTodayUsed(true)
+        setMaintCouponBlockMsg(rpcErrorMessage(err, 'クーポンの確認に失敗しました。通信環境を確認してください。'))
+      }
       return
     }
 
@@ -773,23 +534,36 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     const passportData = data as PassportQRData
     setScannedData(passportData)
     setPhase('loading')
-    // Phase2: 会員テーブルへ初回登録（非致命的 — 失敗しても発行フローは継続）
-    void upsertCustomer(passportData.userId, passportData.name).then(() => getCustomerStats().then(setCustomerStats))
-    const prev = await fetchLastVisitDate(passportData.userId)
+    // 会員登録（初回登録・名前更新）＋来店日・チケット・当日利用状況をサーバーから一括取得。
+    // 登録に失敗した状態では発行・使用に進ませない。
+    let ctx
+    try {
+      ctx = await registerCustomerWithContext(passportData.userId, passportData.name)
+    } catch (err) {
+      setScannedData(null)
+      setPhase('scan')
+      setParseError(rpcErrorMessage(err, '会員情報の取得に失敗しました。通信環境を確認してもう一度読み取ってください。'))
+      return
+    }
+    const prev = ctx.last_visit_date
     setPrevLastVisitDate(prev)
     if (prev === null) { /* first visit — no sound */ }
     else if (daysSince(prev) <= 14) playSuccessSound()
     else playWarningSound()
-    await loadUserTickets(passportData.userId)
-    const todayJST = getJapanDateString()
-    const usedType = await fetchTodayUsedType(passportData.userId, todayJST)
-    setTodayUsedType(usedType)
+    setUserTickets(ctx.tickets)
+    setTodayUsedType(ctx.today_used_type)
+    // 会員QRの読み取り＝来店登録（14日サイクルを本日からリセット）
     setCheckInStatus('loading')
-    await upsertLastVisitDate(passportData.userId, todayJST)
-    setCheckInDate(todayJST)
-    setCheckInStatus('done')
+    try {
+      const visitDate = await checkInVisit(passportData.userId)
+      setCheckInDate(visitDate)
+      setCheckInStatus('done')
+    } catch (err) {
+      setCheckInStatus('idle')
+      setUseError(rpcErrorMessage(err, '来店登録に失敗しました。「来店チェックイン」を押して再度お試しください。'))
+    }
     setPhase('result')
-  }, [loadUserTickets])
+  }, [])
 
   function handleTabChange(type: TicketType) {
     setTicketTab(type)
@@ -812,30 +586,16 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setIssueLoading(true)
     setIssueError(null)
     try {
-      const issued: TicketRow[] = []
-      for (let i = 0; i < quantity; i++) {
-        const ticket = await issueTicket({
-          user_id:   scannedData.userId,
-          type:      ticketTab,
-          title:     currentTab.autoTitle,
-          amount:    effectiveAmount,
-          issued_by: staffId,
-        })
-        issued.push(ticket)
-      }
-      setUserTickets(prev => [...issued, ...prev])
-
-      // Write issue log to Supabase (triggers Realtime on all other terminals)
-      await saveIssueLog({
-        staff_name:    staffId,
-        customer_name: scannedData.name,
-        user_id:       scannedData.userId,
-        ticket_type:   ticketTab,
-        amount:        effectiveAmount,
+      // 一括発行（サーバー側で全件成功 or 全件失敗。発行ログも同じトランザクションで記録）
+      const issued = await issueTickets({
+        userId:       scannedData.userId,
+        type:         ticketTab === 'otoku' ? 'otoku' : 'discount',
+        amount:       effectiveAmount,
         quantity,
-        terminal:      'staff-terminal',
-        status:        'issued',
+        staffName:    staffId,
+        customerName: scannedData.name,
       })
+      setUserTickets(prev => [...issued, ...prev])
 
       playSuccessSound()
       setSuccessInfo({ name: scannedData.name, label: currentTab.autoTitle, amount: effectiveAmount, qty: quantity })
@@ -845,7 +605,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       setQuantity(1)
       setTimeout(() => setShowSuccess(false), 1800)
     } catch (err) {
-      setIssueError(`発行に失敗しました（${err instanceof Error ? err.message : String(err)}）`)
+      setIssueError(`発行に失敗しました。1枚も発行されていません。${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')}`)
     } finally {
       setIssueLoading(false)
     }
@@ -853,6 +613,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   function handleUseTicketClick(ticket: TicketRow) {
     if (!canUseDiscountType(todayUsedType, ticket.type) || !staffId.trim()) return
+    if (isWelcomeCouponBlockedToday(ticket)) return
     setUseError(null)
     setPendingUseTicket(ticket)
     setShowUseConfirm(true)
@@ -862,23 +623,18 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     if (!pendingUseTicket || !scannedData || !staffId.trim()) return
     setUseConfirmLoading(true)
     setUseError(null)
-    const today = getJapanDateString()
     const ticketId   = pendingUseTicket.id
     const ticketType = pendingUseTicket.type
     try {
-      await markTicketUsed(ticketId, staffId)
-      await saveUsageLog({
-        usage_date:    today,
-        staff_name:    staffId,
-        customer_name: scannedData.name,
-        user_id:       scannedData.userId,
-        ticket_id:     ticketId,
-        ticket_type:   ticketType,
-        amount:        pendingUseTicket.amount,
-        terminal:      'staff-terminal',
-        status:        'used',
+      if (isWelcomeCouponBlockedToday(pendingUseTicket)) {
+        setUseError(WELCOME_COUPON_WEEKEND_MESSAGE)
+        setUseConfirmLoading(false)
+        return
+      }
+      // used化・使用ログ・来店日更新をサーバー側で1トランザクション
+      const { visitDate: today } = await redeemTickets({
+        userId: scannedData.userId, ticketIds: [ticketId], staffName: staffId, customerName: scannedData.name,
       })
-      await upsertLastVisitDate(scannedData.userId, today)
       const remaining = userTickets.filter(t => !t.used && t.id !== ticketId && t.type === ticketType).length
       setUserTickets(prev => prev.map(t =>
         t.id === ticketId ? { ...t, used: true, used_at: new Date().toISOString() } : t
@@ -899,23 +655,39 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       setTimeout(() => setShowUseComplete(false), 3500)
       playSuccessSound()
     } catch (err) {
-      setUseError(`使用確定に失敗しました。${err instanceof Error ? err.message : 'ネットワークを確認してください。'}`)
+      setUseError(`使用確定に失敗しました。${rpcErrorMessage(err, 'ネットワークを確認してください。')}`)
     } finally {
       setUseConfirmLoading(false)
+    }
+  }
+
+  /** 本人確認のうえ、お客様の端末をアプリに紐付けるコードを発行（お客様がアプリで入力） */
+  const handleIssueBindCode = async () => {
+    if (!scannedData || bindCodeLoading) return
+    if (!staffId.trim()) { setBindCodeError('担当者を選択してください。'); return }
+    setBindCodeLoading(true)
+    setBindCodeError(null)
+    try {
+      const r = await issueBindCode(scannedData.userId, staffId)
+      setBindCode({ code: r.code, expiresAt: r.expires_at })
+    } catch (err) {
+      setBindCodeError(rpcErrorMessage(err, '紐付けコードの発行に失敗しました。通信環境を確認してください。'))
+    } finally {
+      setBindCodeLoading(false)
     }
   }
 
   const handleCheckIn = async () => {
     if (!scannedData || checkInStatus === 'loading') return
     setCheckInStatus('loading')
-    const today = getJapanDateString()
     try {
-      await upsertLastVisitDate(scannedData.userId, today)
-      setCheckInDate(today)
+      setCheckInDate(await checkInVisit(scannedData.userId))
       setCheckInStatus('done')
+      setUseError(null)
       playSuccessSound()
-    } catch {
+    } catch (err) {
       setCheckInStatus('idle')
+      setUseError(rpcErrorMessage(err, '来店登録に失敗しました。通信環境を確認してください。'))
     }
   }
 
@@ -923,63 +695,36 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     if (!ticketUseData || !ticketForUse || !staffId.trim()) return
     if (ticketUsedThisSession) { setTicketBlockMsg('このお会計では既にチケットを1枚使用しています。'); return }
     if (ticketForUse.used) { setTicketBlockMsg('このチケットはすでに使用済みです。'); return }
+    if (isWelcomeCouponBlockedToday(ticketForUse)) { setTicketBlockMsg(WELCOME_COUPON_WEEKEND_MESSAGE); return }
     setTicketConfirming(true); setTicketBlockMsg(null)
-    const today = getJapanDateString()
     try {
-      // 当日利用チェック：異なる割引種別の併用は不可。同種別なら漢トク券・割引券は複数枚可。
-      const usedType = await fetchTodayUsedType(ticketUseData.userId, today)
-      if (!canUseDiscountType(usedType, ticketForUse.type)) {
-        setTicketBlockMsg(
-          `本日は${usedType ? DISCOUNT_TYPE_LABEL[usedType] ?? usedType : '他の割引'}をご利用済みのため使用できません。`
-          + '割引の併用は1日1種類までです。',
-        )
-        setTicketConfirming(false)
-        return
-      }
-      await markTicketUsed(ticketForUse.id, staffId)
-      await saveUsageLog({
-        usage_date:    today,
-        staff_name:    staffId,
-        customer_name: '',
-        user_id:       ticketUseData.userId,
-        ticket_id:     ticketForUse.id,
-        ticket_type:   ticketForUse.type,
-        amount:        ticketForUse.amount,
-        terminal:      'staff-terminal',
-        status:        'used',
+      // 当日の併用ルール（異なる割引種別は不可・同種は複数枚可）・本人確認・used化・使用ログ・
+      // 来店日更新はサーバー側で1トランザクション
+      await redeemTickets({
+        userId: ticketUseData.userId, ticketIds: [ticketForUse.id], staffName: staffId, customerName: '',
       })
-      await upsertLastVisitDate(ticketUseData.userId, today)
       setTicketForUse(prev => prev ? { ...prev, used: true, used_at: new Date().toISOString() } : prev)
       setTicketConfirmed(true); setTicketUsedThisSession(true)
       playSuccessSound()
-    } catch {
-      setTicketBlockMsg('使用確定に失敗しました。ネットワークを確認してください。')
+    } catch (err) {
+      setTicketBlockMsg(`使用確定できませんでした。${rpcErrorMessage(err, 'ネットワークを確認してください。')}`)
     } finally { setTicketConfirming(false) }
   }
 
   const handleConfirmMaintenanceCoupon = async () => {
     if (!maintCouponData || !staffId.trim() || maintCouponTodayUsed || maintCouponConfirmed) return
+    if (!maintCouponData.token) { setMaintCouponBlockMsg(LEGACY_MAINTENANCE_QR_MESSAGE); return }
     setMaintCouponConfirming(true)
     setMaintCouponBlockMsg(null)
-    const today = getJapanDateString()
     try {
-      await saveUsageLog({
-        usage_date:    today,
-        staff_name:    staffId,
-        customer_name: maintCouponData.name,
-        user_id:       maintCouponData.userId,
-        ticket_id:     null,
-        ticket_type:   'coupon',
-        amount:        0,
-        terminal:      'staff-terminal',
-        status:        'used',
-      })
-      await upsertLastVisitDate(maintCouponData.userId, today)
+      // サーバー側で再検証（5分有効・未使用・14日以内・当日ルール）し、使い捨てで確定
+      await redeemMaintenanceCoupon(maintCouponData.token, staffId)
       setMaintCouponConfirmed(true)
       setMaintCouponTodayUsed(true)
       playSuccessSound()
-    } catch {
-      setMaintCouponBlockMsg('使用確定に失敗しました。ネットワークを確認してください。')
+    } catch (err) {
+      setMaintCouponBlockMsg(rpcErrorMessage(err, '使用確定に失敗しました。ネットワークを確認してください。'))
+      playWarningSound()
     } finally {
       setMaintCouponConfirming(false)
     }
@@ -1003,12 +748,12 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setRecoveryStep('detail')
     setCustomerLastVisit(undefined)
     setCustomerTicketCount(null)
-    const [lastVisit, countResult] = await Promise.all([
-      fetchLastVisitDate(customer.user_id),
-      supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('user_id', customer.user_id).eq('used', false),
+    const [lastVisit, tickets] = await Promise.all([
+      fetchLastVisitDate(customer.user_id).catch(() => null),
+      getTicketsForStaff(customer.user_id).catch(() => [] as TicketRow[]),
     ])
     setCustomerLastVisit(lastVisit)
-    setCustomerTicketCount(countResult.count ?? 0)
+    setCustomerTicketCount(tickets.filter(t => !t.used).length)
   }, [])
 
   const handleRecoveryQrScan = useCallback((text: string) => {
@@ -1112,30 +857,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       `}</style>
 
       {/* ── Realtime log toast ── */}
-      {SHOW_LEGACY_STAFF_TOOLS && logToast && (
-        <div
-          onClick={() => setLogToast(null)}
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 700,
-            background: 'rgba(12,6,3,0.97)', borderBottom: '1px solid rgba(201,162,74,0.3)',
-            padding: '12px 16px', cursor: 'pointer',
-            animation: 'gj-toast-in 0.28s ease-out both',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.7)',
-          }}
-        >
-          <p style={{ fontSize: 8, letterSpacing: '0.3em', color: '#e5e5e5', marginBottom: 4 }}>ISSUE LOG — 他端末からの通知</p>
-          <p style={{ fontFamily: SERIF, fontSize: 13, color: '#F2E6C8', lineHeight: 1.5 }}>
-            <span style={{ color: '#C9A24A' }}>{logToast.staff_name}</span>
-            {' が '}
-            <span style={{ color: '#F2E6C8' }}>{logToast.customer_name}様</span>
-            {' に '}
-            {logToast.ticket_type === 'discount' ? '割引券' : '漢トク券'}
-            {' ¥'}{logToast.amount.toLocaleString()}
-            {' ×'}{logToast.quantity}枚 を発行
-          </p>
-          <p style={{ fontSize: 9, color: '#e5e5e5', marginTop: 3 }}>{fmtLogTime(logToast.issued_at)}</p>
-        </div>
-      )}
 
       {isStaging() && <StgBadge />}
 
@@ -1145,7 +866,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         borderBottom: '1px solid rgba(201,162,74,0.12)',
         background: 'linear-gradient(180deg, rgba(201,162,74,0.03) 0%, transparent 100%)',
         flexShrink: 0,
-        marginTop: SHOW_LEGACY_STAFF_TOOLS && logToast ? 72 : 0,
+        marginTop: 0,
         transition: 'margin-top 0.3s ease',
       }}>
         <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)', marginBottom: 12 }} />
@@ -1171,136 +892,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         </div>
       </header>
 
-      {SHOW_LEGACY_STAFF_TOOLS && (
-        <>
-          {/* ── 営業開始／営業終了 ── */}
-          <div style={{
-            padding: '14px 20px',
-            borderBottom: '1px solid rgba(201,162,74,0.12)',
-            background: '#000000',
-            flexShrink: 0,
-          }}>
-            <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 10 }}>
-              <span style={{ color: '#ffffff' }}>営業状態：</span>
-              <span style={{ color: shopStatus?.status === 'open' ? '#80E060' : '#E06060' }}>
-                {shopActionLoading ? '更新中…' : (shopStatus?.status === 'open' ? '営業中' : '営業終了')}
-              </span>
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setShopConfirmAction('open')}
-                disabled={shopActionLoading}
-                style={{
-                  flex: 1, height: 60, borderRadius: 14,
-                  background: shopStatus?.status === 'open'
-                    ? 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)'
-                    : 'rgba(255,255,255,0.05)',
-                  border: `2px solid ${shopStatus?.status === 'open' ? '#80E060' : 'rgba(255,255,255,0.15)'}`,
-                  color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
-                  cursor: shopActionLoading ? 'default' : 'pointer',
-                  opacity: shopActionLoading ? 0.6 : 1,
-                }}
-              >
-                営業開始
-              </button>
-              <button
-                onClick={() => setShopConfirmAction('closed')}
-                disabled={shopActionLoading}
-                style={{
-                  flex: 1, height: 60, borderRadius: 14,
-                  background: shopStatus?.status === 'closed'
-                    ? 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)'
-                    : 'rgba(255,255,255,0.05)',
-                  border: `2px solid ${shopStatus?.status === 'closed' ? '#E06060' : 'rgba(255,255,255,0.15)'}`,
-                  color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
-                  cursor: shopActionLoading ? 'default' : 'pointer',
-                  opacity: shopActionLoading ? 0.6 : 1,
-                }}
-              >
-                営業終了
-              </button>
-            </div>
-
-            {shopActionError && (
-              <p style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#E06060', textAlign: 'center' }}>
-                {shopActionError}
-              </p>
-            )}
-            {shopActionSuccess && (
-              <p style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: '#80E060', textAlign: 'center' }}>
-                {shopActionSuccess}
-              </p>
-            )}
-          </div>
-        </>
-      )}
 
       {/* ── 登録者数ダッシュボード ── */}
-      {SHOW_LEGACY_STAFF_TOOLS && customerStats && (
-        <div style={{
-          display: 'flex', gap: 10,
-          padding: '14px 20px',
-          borderBottom: '1px solid rgba(201,162,74,0.12)',
-          background: '#000000',
-          flexShrink: 0,
-        }}>
-          {([
-            { label: '登録者数', value: customerStats.total, unit: '人' },
-            { label: '本日', value: customerStats.today, unit: '人' },
-            { label: '今月', value: customerStats.thisMonth, unit: '人' },
-          ] as const).map(stat => (
-            <div
-              key={stat.label}
-              style={{
-                flex: 1, borderRadius: 12,
-                background: '#0A0A0A',
-                border: '1px solid rgba(255,255,255,0.12)',
-                padding: '10px 4px',
-                textAlign: 'center',
-              }}
-            >
-              <p style={{ fontSize: 11, fontWeight: 700, color: '#ffffff', letterSpacing: '0.06em', marginBottom: 4 }}>
-                {stat.label}
-              </p>
-              <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#ffffff', lineHeight: 1 }}>
-                {stat.value}
-                <span style={{ fontSize: 14, fontWeight: 700 }}>{stat.unit}</span>
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* ── Main tab switcher ── */}
-      {SHOW_LEGACY_STAFF_TOOLS && (
-      <div style={{ display: 'flex', borderBottom: '1px solid rgba(201,162,74,0.12)', background: 'rgba(0,0,0,0.25)', flexShrink: 0 }}>
-        {([
-          { id: 'accounting',  label: '会計アシスト' },
-          { id: 'issue',       label: 'チケット発行' },
-          { id: 'live-status', label: 'LIVE STATUS' },
-          { id: 'recovery',    label: '会員復旧' },
-        ] as { id: AdminMainTab; label: string }[]).map(tab => {
-          const isActive = mainTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setMainTab(tab.id)}
-              style={{
-                flex: 1, padding: '13px 8px',
-                background: isActive ? 'rgba(201,162,74,0.06)' : 'transparent',
-                border: 'none',
-                borderBottom: `2px solid ${isActive ? 'rgba(201,162,74,0.65)' : 'transparent'}`,
-                color: isActive ? '#FFFFFF' : '#b3b3b3',
-                fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.08em',
-                cursor: 'pointer', transition: 'all 0.18s', WebkitTapHighlightColor: 'transparent',
-              }}
-            >
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
-      )}
 
       {/* ── Main scroll area ── */}
       <main style={{
@@ -1402,69 +997,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             )}
 
             {/* Store QR */}
-            {SHOW_LEGACY_STAFF_TOOLS && (
-            <div style={{ marginTop: 16 }}>
-              <button onClick={() => setShowStoreQr(v => !v)} style={{ width: '100%', padding: '11px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.12)', color: '#e5e5e5', fontSize: 13, letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF }}>
-                {showStoreQr ? '店内設置QRを閉じる' : '店内設置QRを表示（印刷用）'}
-              </button>
-              {showStoreQr && (
-                <div style={{ marginTop: 12, borderRadius: 16, background: '#0A0504', border: '1px solid rgba(201,162,74,0.16)', padding: '20px', textAlign: 'center' }}>
-                  <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 10 }}>STORE CHECK-IN QR</p>
-                  <div style={{ display: 'inline-block', padding: 14, background: '#FFFFFF', borderRadius: 12 }}>
-                    <QRCodeSVG value={STORE_CHECKIN_QR_VALUE} size={180} level="M" />
-                  </div>
-                  <p style={{ fontSize: 10, color: '#e5e5e5', marginTop: 10, lineHeight: 1.6 }}>
-                    お客様がこのQRをアプリでスキャンすると<br />来店チェックインが完了します
-                  </p>
-                </div>
-              )}
-            </div>
-            )}
 
             {/* Issue log panel */}
-            {SHOW_LEGACY_STAFF_TOOLS && (
-            <div style={{ marginTop: 14 }}>
-              <button
-                onClick={() => setShowLogPanel(v => !v)}
-                style={{ width: '100%', padding: '11px', borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.12)', color: '#e5e5e5', fontSize: 13, letterSpacing: '0.14em', cursor: 'pointer', fontFamily: SERIF }}
-              >
-                {showLogPanel ? '発行ログを閉じる' : '最近の発行ログを確認する'}
-              </button>
-              {showLogPanel && (
-                <div style={{ marginTop: 10, borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,162,74,0.1)', padding: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <p style={{ fontSize: 9, letterSpacing: '0.2em', color: '#e5e5e5' }}>ISSUE LOG — 全端末共有</p>
-                    <button onClick={() => void loadRecentLogs()} style={{ fontSize: 9, color: '#e5e5e5', background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.1em' }}>
-                      更新
-                    </button>
-                  </div>
-                  {logsLoading ? (
-                    <p style={{ fontSize: 12, color: '#e5e5e5', textAlign: 'center', padding: '8px 0' }}>読込中…</p>
-                  ) : recentLogs.length === 0 ? (
-                    <p style={{ fontSize: 11, color: '#e5e5e5', textAlign: 'center', padding: '8px 0' }}>発行ログはありません</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {recentLogs.map(log => (
-                        <div key={log.id} style={{ padding: '8px 10px', borderRadius: 9, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                            <span style={{ fontSize: 10, color: '#C9A24A', fontFamily: SERIF, fontWeight: 700 }}>
-                              {log.staff_name}
-                            </span>
-                            <span style={{ fontSize: 9, color: '#e5e5e5', letterSpacing: '0.04em' }}>
-                              {fmtLogTime(log.issued_at)}
-                            </span>
-                          </div>
-                          <p style={{ fontSize: 11, color: '#F2E6C8', lineHeight: 1.4 }}>
-                            {log.customer_name}様 ／ {log.ticket_type === 'discount' ? '割引券' : '漢トク券'} ¥{log.amount.toLocaleString()} × {log.quantity}枚
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            )}
           </div>
         )}
 
@@ -1532,6 +1066,34 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* ── アプリ紐付けコード（既存会員の移行・端末のセッション再発行） ── */}
+            <div style={{ marginBottom: 14, borderRadius: 16, padding: '14px 16px', background: 'rgba(201,162,74,0.05)', border: '1px solid rgba(201,162,74,0.22)' }}>
+              {bindCode ? (
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: 13, color: '#e5e5e5', marginBottom: 6 }}>お客様のアプリに入力してもらってください</p>
+                  <p style={{ fontFamily: 'ui-monospace, monospace', fontSize: 40, fontWeight: 800, letterSpacing: '0.24em', color: '#F2E6C8', paddingLeft: '0.24em' }}>
+                    {bindCode.code}
+                  </p>
+                  <p style={{ fontSize: 12, color: '#C9A24A', marginTop: 4 }}>
+                    {new Date(bindCode.expiresAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} まで有効・1回限り
+                  </p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { void handleIssueBindCode() }}
+                  disabled={bindCodeLoading}
+                  style={{ width: '100%', minHeight: 48, borderRadius: 12, background: 'transparent', border: '1px solid rgba(201,162,74,0.4)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.1em', cursor: bindCodeLoading ? 'default' : 'pointer' }}
+                >
+                  {bindCodeLoading ? '発行中…' : 'アプリ紐付けコードを発行'}
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: '#e5e5e5', marginTop: 3, letterSpacing: '0.04em' }}>
+                    ご本人確認のうえ発行（アプリで「紐付けが必要です」と表示されたお客様）
+                  </span>
+                </button>
+              )}
+              {bindCodeError && <p style={{ fontSize: 13, color: '#E06060', marginTop: 8 }}>{bindCodeError}</p>}
             </div>
 
             {/* ── 来店チェックイン ── */}
@@ -1606,8 +1168,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   {activeTickets.map(ticket => {
                     const tktTc = TICKET_TYPE_COLORS[ticket.type]
                     const isBlockedToday = !canUseDiscountType(todayUsedType, ticket.type)
+                    const isWelcomeBlocked = isWelcomeCouponBlockedToday(ticket)
                     const noStaff = !staffId.trim()
-                    const btnDisabled = isBlockedToday || noStaff
+                    const btnDisabled = isBlockedToday || isWelcomeBlocked || noStaff
                     return (
                       <div key={ticket.id} style={{ borderRadius: 16, background: tktTc.cardBg, border: `1px solid ${tktTc.border}`, overflow: 'hidden' }}>
                         <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${tktTc.border}, transparent)` }} />
@@ -1643,16 +1206,21 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                                 whiteSpace: 'nowrap', minWidth: 80, textAlign: 'center',
                               }}
                             >
-                              {isBlockedToday ? '本日使用済' : '使用確定'}
+                              {isBlockedToday ? '本日使用済' : isWelcomeBlocked ? '平日のみ' : '使用確定'}
                             </button>
                           </div>
+                          {isWelcomeBlocked && (
+                            <p style={{ fontSize: 9, color: 'rgba(224,96,80,1)', marginTop: 8, lineHeight: 1.5 }}>
+                              {WELCOME_COUPON_WEEKEND_MESSAGE}
+                            </p>
+                          )}
                           {isBlockedToday && (
                             <p style={{ fontSize: 9, color: 'rgba(224,96,80,1)', marginTop: 8, lineHeight: 1.5 }}>
                               本日は{todayUsedType ? DISCOUNT_TYPE_LABEL[todayUsedType] ?? todayUsedType : '他の割引'}をご利用済みのため使用できません。<br />
                               割引の併用は1日1種類までです（同じ種別は複数枚使用できます）。
                             </p>
                           )}
-                          {noStaff && !isBlockedToday && (
+                          {noStaff && !isBlockedToday && !isWelcomeBlocked && (
                             <p style={{ fontSize: 9, color: 'rgba(224,140,0,1)', marginTop: 8 }}>担当者を選択してください</p>
                           )}
                         </div>
@@ -1888,24 +1456,29 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     <p style={{ fontSize: 11, color: '#FFB400' }}>このお会計では既に1枚使用しています（1会計1枚ルール）</p>
                   </div>
                 )}
+                {isWelcomeCouponBlockedToday(ticketForUse) && !ticketBlockMsg && (
+                  <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '10px 14px', marginBottom: 12 }}>
+                    <p style={{ fontSize: 12, color: '#E06060' }}>{WELCOME_COUPON_WEEKEND_MESSAGE}</p>
+                  </div>
+                )}
 
                 {!ticketForUse.used && (
                   <button
                     onClick={() => { void handleConfirmTicketUse() }}
-                    disabled={ticketConfirming || !staffId.trim() || ticketUsedThisSession}
+                    disabled={ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)}
                     style={{
                       width: '100%', padding: '16px', borderRadius: 14, marginBottom: 10,
-                      background: (ticketConfirming || !staffId.trim() || ticketUsedThisSession)
+                      background: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse))
                         ? 'rgba(255,255,255,0.04)'
                         : 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
-                      border: `1px solid ${(ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? 'rgba(255,255,255,0.08)' : 'rgba(100,200,100,0.44)'}`,
-                      boxShadow: (ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
-                      color: (ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? '#999999' : '#D0F4D8',
+                      border: `1px solid ${(ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? 'rgba(255,255,255,0.08)' : 'rgba(100,200,100,0.44)'}`,
+                      boxShadow: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
+                      color: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? '#999999' : '#D0F4D8',
                       fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.18em',
-                      cursor: (ticketConfirming || !staffId.trim() || ticketUsedThisSession) ? 'default' : 'pointer',
+                      cursor: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? 'default' : 'pointer',
                     }}
                   >
-                    {ticketConfirming ? '確定中…' : '使用確定'}
+                    {ticketConfirming ? '確定中…' : isWelcomeCouponBlockedToday(ticketForUse) ? '平日のみ利用可' : '使用確定'}
                   </button>
                 )}
               </>
@@ -1926,11 +1499,19 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               <div style={{ padding: '16px 20px' }}>
                 <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(100,200,100,1)', marginBottom: 4 }}>MAINTENANCE COUPON</p>
                 <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6, lineHeight: 1.1 }}>
-                  {maintCouponData.name}<span style={{ fontSize: 14, marginLeft: 4, color: '#e5e5e5' }}>様</span>
+                  {maintCouponPreview?.customer_name ?? maintCouponData.name ?? 'お客様'}<span style={{ fontSize: 14, marginLeft: 4, color: '#e5e5e5' }}>様</span>
                 </h2>
-                <p style={{ fontSize: 9, color: '#e5e5e5', letterSpacing: '0.06em' }}>
-                  ID: {maintCouponData.userId.slice(0, 22)}…
-                </p>
+                {maintCouponPreview && (
+                  <p style={{ fontSize: 12, color: '#e5e5e5', letterSpacing: '0.04em' }}>
+                    {maintCouponPreview.days_remaining === null
+                      ? '来店記録なし'
+                      : maintCouponPreview.days_remaining < 0
+                        ? `前回来店から14日経過（期限切れ）`
+                        : maintCouponPreview.days_remaining === 0
+                          ? '14日サイクル：本日まで'
+                          : `14日サイクル：あと${maintCouponPreview.days_remaining}日`}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1939,27 +1520,27 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${maintCouponConfirmed ? 'rgba(100,200,100,0.7)' : 'rgba(100,200,100,0.3)'}, transparent)` }} />
               <div style={{ padding: '16px 18px' }}>
                 <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(100,200,100,1)', marginBottom: 8, fontFamily: SERIF }}>メンテナンスクーポン確認</p>
-                <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', marginBottom: 4 }}>メンテナンスカット</p>
-                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#C9A24A', marginBottom: 8, lineHeight: 1 }}>¥3,000</p>
+                <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', marginBottom: 4 }}>
+                  {maintCouponPreview?.menu.name ?? '銀二郎Only メンテナンスカット'}
+                </p>
+                <p style={{ fontSize: 13, color: '#e5e5e5', marginBottom: 6 }}>担当：{maintCouponPreview?.menu.stylist ?? '銀二郎'}</p>
+                <p style={{ fontFamily: SERIF, fontWeight: 700, marginBottom: 8, lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 14, color: 'rgba(242,230,200,0.5)', textDecoration: 'line-through' }}>
+                    ¥{(maintCouponPreview?.menu.normal_price ?? 3000).toLocaleString()}
+                  </span>
+                  <span style={{ fontSize: 24, color: '#C9A24A' }}>¥{(maintCouponPreview?.menu.member_price ?? 2500).toLocaleString()}</span>
+                </p>
                 {maintCouponConfirmed ? (
                   <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(100,200,100,0.15)', border: '1px solid rgba(100,200,100,0.5)', color: '#64D26E' }}>使用済み</span>
                 ) : maintCouponTodayUsed ? (
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(224,96,80,0.12)', border: '1px solid rgba(224,96,80,0.38)', color: '#E06050' }}>本日使用済み</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: 'rgba(224,96,80,0.12)', border: '1px solid rgba(224,96,80,0.38)', color: '#E06050' }}>使用不可</span>
                 ) : (
                   <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(100,210,110,0.08)', border: '1px solid rgba(100,210,110,0.3)', color: '#64D26E' }}>有効</span>
                 )}
               </div>
             </div>
 
-            {/* 当日利用済みメッセージ */}
-            {maintCouponTodayUsed && !maintCouponConfirmed && (
-              <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '12px 16px', marginBottom: 14 }}>
-                <p style={{ fontSize: 13, color: '#E06060', lineHeight: 1.7, fontFamily: SERIF }}>
-                  本日はすでに{maintCouponBlockedByType ? DISCOUNT_TYPE_LABEL[maintCouponBlockedByType] ?? maintCouponBlockedByType : 'クーポン'}をご利用済みです。<br />
-                  <span style={{ fontSize: 11, color: 'rgba(224,96,96,1)' }}>メンテナンスクーポンは1日1回、他の割引との併用も不可です</span>
-                </p>
-              </div>
-            )}
+            {/* 使用不可の理由（サーバー側の判定結果）は下の maintCouponBlockMsg に表示 */}
 
             {/* 使用確定済み */}
             {maintCouponConfirmed && (
@@ -1967,8 +1548,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(100,200,100,0.12)', border: '1px solid rgba(100,200,100,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>✓</div>
                 <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#80E060', marginBottom: 6 }}>使用確定しました</p>
                 <p style={{ fontSize: 12, color: '#e5e5e5', lineHeight: 1.7 }}>
-                  メンテナンスクーポン ¥3,000<br />
-                  使用ログを記録しました。
+                  {maintCouponPreview?.menu.name ?? '銀二郎Only メンテナンスカット'} ¥{(maintCouponPreview?.menu.member_price ?? 2500).toLocaleString()}<br />
+                  使用ログを記録しました（このQRは再利用できません）。
                 </p>
                 <p style={{ fontSize: 12, color: 'rgba(128,224,96,1)', marginTop: 10, lineHeight: 1.6 }}>
                   来店チェックイン完了<br />
@@ -2299,116 +1880,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           </div>
         )}
 
-        {/* ===== LIVE STATUS管理 ===== */}
-        {SHOW_LEGACY_STAFF_TOOLS && mainTab === 'live-status' && (
-          <div>
-            <p style={{ fontSize: 12, color: '#e5e5e5', letterSpacing: '0.08em', marginBottom: 16, lineHeight: 1.7 }}>
-              カードをタップすると<br />
-              READY → LIMITED → FULL → CLOSED → READY の順で切り替わります。
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {liveStatusRows.map((row) => {
-                const t = LIVE_STATUS_THEME[row.status]
-                return (
-                  <div
-                    key={row.id}
-                    className={liveStatusPulseClass(row.status)}
-                    style={{
-                      borderRadius: 18,
-                      background: 'linear-gradient(155deg, #130608 0%, #0A0404 55%, #080407 100%)',
-                      border: `1.5px solid ${t.border}`,
-                      boxShadow: [
-                        '0 14px 36px rgba(0,0,0,0.55)',
-                        t.glow,
-                      ].filter(Boolean).join(', '),
-                      opacity: t.dim ? 0.62 : 1,
-                      position: 'relative', overflow: 'hidden',
-                    }}
-                  >
-                    <div className={liveStatusSignpoleClass(row.status)} aria-hidden="true" />
-
-                    <div style={{ height: 2, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1, background: `linear-gradient(90deg, transparent, ${t.border} 50%, transparent)` }} />
-
-                    {/* ── タップで状態を循環させるゾーン ── */}
-                    <button
-                      type="button"
-                      onClick={() => void handleCycleLiveStatus(row)}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        width: '100%', minHeight: 132,
-                        background: 'transparent', border: 'none',
-                        padding: '16px 18px', cursor: 'pointer', textAlign: 'left',
-                        WebkitTapHighlightColor: 'transparent',
-                        position: 'relative', zIndex: 1,
-                      }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                        <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.05em', lineHeight: 1.15 }}>
-                          {row.name}
-                        </p>
-                        <p style={{ fontFamily: 'ui-monospace, "SF Mono", "Fira Code", monospace', fontSize: 21, fontWeight: 700, color: t.codeColor, letterSpacing: '0.06em', lineHeight: 1.15 }}>
-                          {LIVE_STATUS_CODES[row.status]}
-                        </p>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: '#e5e5e5', letterSpacing: '0.04em' }}>
-                          {liveStatusLabel(row.id, row.status)}
-                        </p>
-                        <p style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.06em', marginTop: 2 }}>
-                          更新 {fmtLogTime(row.updated_at)}
-                        </p>
-                      </div>
-
-                      <span style={{
-                        flexShrink: 0, marginLeft: 12,
-                        padding: '6px 12px', borderRadius: 99,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.10)',
-                        fontSize: 10, fontWeight: 700, letterSpacing: '0.10em',
-                        color: '#e5e5e5',
-                        fontFamily: SERIF, whiteSpace: 'nowrap',
-                      }}>
-                        タップで切替
-                      </span>
-                    </button>
-
-                    {/* ── 空き状況メッセージ編集（タップ循環とは独立） ── */}
-                    <div
-                      onClick={e => e.stopPropagation()}
-                      style={{
-                        position: 'relative', zIndex: 1,
-                        padding: '0 18px 16px',
-                      }}
-                    >
-                      <p style={{ fontSize: 9, letterSpacing: '0.12em', color: '#e5e5e5', marginBottom: 6 }}>
-                        空き状況メッセージ（顧客画面に表示）
-                      </p>
-                      <input
-                        type="text"
-                        defaultValue={row.availability_message ?? ''}
-                        placeholder={LIVE_STATUS_DEFAULT_MESSAGES[row.status]}
-                        maxLength={40}
-                        onBlur={e => void handleSaveLiveStatusMessage(row.id, e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                        style={{
-                          width: '100%', boxSizing: 'border-box',
-                          padding: '9px 12px', borderRadius: 10,
-                          background: 'rgba(0,0,0,0.28)',
-                          border: '1px solid rgba(255,255,255,0.12)',
-                          color: '#F2E6C8', fontSize: 13, fontFamily: SERIF,
-                          outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ===== 会計アシスト ===== */}
-        {SHOW_LEGACY_STAFF_TOOLS && mainTab === 'accounting' && (
-          <AccountingAssistTab staffId={staffId} />
-        )}
       </main>
 
       {/* ── Fixed bottom: 次のお客様 / 発行する ── */}
@@ -2785,56 +2256,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       )}
 
       {/* ── 営業開始／営業終了 確認モーダル ── */}
-      {SHOW_LEGACY_STAFF_TOOLS && shopConfirmAction && (
-        <div
-          onClick={() => setShopConfirmAction(null)}
-          style={{ position: 'fixed', inset: 0, zIndex: 320, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: '100%', maxWidth: 420,
-              background: 'linear-gradient(180deg, #0D0403 0%, #0A0302 100%)',
-              border: `1.5px solid ${shopConfirmAction === 'open' ? 'rgba(128,224,96,0.5)' : 'rgba(224,96,96,0.5)'}`,
-              borderRadius: 22, boxShadow: '0 32px 80px rgba(0,0,0,0.92)', overflow: 'hidden',
-            }}
-          >
-            <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
-            <div style={{ padding: '32px 24px 28px', textAlign: 'center' }}>
-              <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#ffffff', letterSpacing: '0.06em', lineHeight: 1.5 }}>
-                {shopConfirmAction === 'open' ? '営業を開始しますか？' : '営業を終了しますか？'}
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 12, padding: '0 20px 24px' }}>
-              <button
-                onClick={() => setShopConfirmAction(null)}
-                style={{
-                  flex: 1, height: 60, borderRadius: 14,
-                  background: 'rgba(255,255,255,0.05)', border: '2px solid rgba(255,255,255,0.15)',
-                  color: '#e5e5e5', fontFamily: SERIF, fontSize: 17, fontWeight: 700, letterSpacing: '0.1em',
-                  cursor: 'pointer',
-                }}
-              >
-                いいえ
-              </button>
-              <button
-                onClick={() => void (shopConfirmAction === 'open' ? handleOpenShop() : handleCloseShop())}
-                style={{
-                  flex: 1, height: 60, borderRadius: 14,
-                  background: shopConfirmAction === 'open'
-                    ? 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)'
-                    : 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-                  border: `2px solid ${shopConfirmAction === 'open' ? '#80E060' : '#E06060'}`,
-                  color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 800, letterSpacing: '0.1em',
-                  cursor: 'pointer',
-                }}
-              >
-                はい
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

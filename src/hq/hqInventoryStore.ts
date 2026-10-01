@@ -1,8 +1,12 @@
 import { REALTIME_SUBSCRIBE_STATES } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { callStoreOrHqRpc, getDataAuthMode } from '../utils/dataAuthMode'
 
 // 銀二郎本部 — 在庫管理（Phase5-A）
-// Phase5-Bで会計アシストとの連携（店販販売による在庫の自動引き落とし）を追加。
+//
+// セキュリティ監査対応：products は直接書き込み不可。
+//   本部画面 → hq_product_* / 店舗端末 → staff_product_*（どちらも同じ処理）。
+//   お客様アプリ（SHOP タブ）→ 店販・販売中の商品だけ公開読み取り（表示に必要な列のみ）。
 
 export const PRODUCT_CATEGORIES = ['店販', 'パーマ液', 'カラー剤', '消耗品', '備品'] as const
 export type ProductCategory = typeof PRODUCT_CATEGORIES[number]
@@ -14,9 +18,8 @@ export interface Product {
   is_active: boolean
   current_stock: number
   min_stock: number
-  // price / accounting_group: category='店販'の商品を会計アシストで販売するための価格と
-  // サブカテゴリー（スタイリング剤／シャンプー・ケア／その他）。店販以外のカテゴリーでは
-  // 使用しない。products を会計アシストの店販マスタの正として統合したため、ここに持つ。
+  // price / accounting_group: category='店販'の商品の価格とサブカテゴリー
+  // （スタイリング剤／シャンプー・ケア／その他）。お客様アプリの SHOP 表示に使う。店販以外では使用しない。
   price: number
   accounting_group: string | null
   created_at: string
@@ -44,42 +47,45 @@ export function splitStockAlerts(products: Product[]): { reorder: Product[]; low
   return { reorder, low }
 }
 
+const PUBLIC_SHOP_COLUMNS = 'id, name, category, is_active, current_stock, price, accounting_group, created_at, updated_at'
+
+function normalizeProducts(rows: Product[]): Product[] {
+  return rows
+    .filter((p) => p.is_active !== false)
+    .map((p) => ({
+      ...p,
+      min_stock: p.min_stock ?? 0,
+      category: (PRODUCT_CATEGORIES as readonly string[]).includes(p.category) ? p.category : '店販',
+    }))
+}
+
 /**
  * 在庫一覧取得。is_active=false の商品のみ除外する（論理削除済み）。
  * is_active が null/未設定の行（想定外データ）は非表示にせず表示する側に倒す。
  * category が未設定/不明な値の行も、不明カテゴリーのまま落とさず「店販」にフォールバックする
  * （PRODUCT_CATEGORIES のタブ分けに乗らない値だと、どのタブにも出ず一覧から消えてしまうため）。
+ *
+ * 本部画面・店舗端末：全カテゴリー（RPC）。お客様アプリ：店販のみ（公開読み取り・最低在庫数は含まない）。
  */
 export async function getProducts(): Promise<Product[]> {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('name', { ascending: true })
-    if (error || !data) return []
-    return (data as Product[])
-      .filter((p) => p.is_active !== false)
-      .map((p) => ({
-        ...p,
-        category: (PRODUCT_CATEGORIES as readonly string[]).includes(p.category) ? p.category : '店販',
-      }))
+    if (getDataAuthMode() === 'customer') {
+      const { data, error } = await supabase
+        .from('products')
+        .select(PUBLIC_SHOP_COLUMNS)
+        .eq('category', '店販')
+        .order('name', { ascending: true })
+      if (error || !data) return []
+      return normalizeProducts(data as unknown as Product[])
+    }
+    const rows = await callStoreOrHqRpc<Product[] | null>('staff_products_list', 'hq_products_list')
+    return normalizeProducts(rows ?? [])
   } catch {
     return []
   }
 }
 
-// products.price / accounting_group は追加マイグレーション（schema.sql参照）が必要な列。
-// 未適用環境でも商品追加・編集が壊れないよう、列が無いと分かった時点でこのプロセス内では
-// 以後 price/accounting_group を送らないようにフォールバックする
-// （customerStore.ts の normalized_name と同じ防御パターン）。
-let priceColumnsAvailable = true
-
-function isUndefinedColumnError(error: unknown): boolean {
-  const e = error as { code?: string; message?: string } | null
-  return e?.code === '42703' || e?.code === 'PGRST204'
-    || (e?.message ?? '').includes('price') || (e?.message ?? '').includes('accounting_group')
-}
-
+/** 商品追加。失敗時は null（成功扱いにしない）。 */
 export async function createProduct(input: {
   name: string
   category: ProductCategory
@@ -89,82 +95,67 @@ export async function createProduct(input: {
   accountingGroup?: string | null
 }): Promise<Product | null> {
   try {
-    const basePayload = {
-      name: input.name,
-      category: input.category,
-      current_stock: input.currentStock,
-      min_stock: input.minStock,
-    }
-    const extra = { price: input.price ?? 0, accounting_group: input.accountingGroup?.trim() || null }
-    const payload = priceColumnsAvailable ? { ...basePayload, ...extra } : basePayload
-
-    const { data, error } = await supabase.from('products').insert(payload).select().single()
-    if (!error && data) return data as Product
-    if (error && priceColumnsAvailable && isUndefinedColumnError(error)) {
-      priceColumnsAvailable = false
-      const { data: retryData, error: retryError } = await supabase.from('products').insert(basePayload).select().single()
-      if (retryError || !retryData) return null
-      return retryData as Product
-    }
-    return null
-  } catch {
+    return await callStoreOrHqRpc<Product>('staff_product_create', 'hq_product_create', {
+      p: {
+        name: input.name,
+        category: input.category,
+        current_stock: input.currentStock,
+        min_stock: input.minStock,
+        price: input.price ?? 0,
+        accounting_group: input.accountingGroup?.trim() || null,
+      },
+    })
+  } catch (e) {
+    console.error('[hqInventoryStore] createProduct failed', e)
     return null
   }
 }
 
+/** 商品更新（指定した項目のみ）。失敗時は null（成功扱いにしない）。 */
 export async function updateProduct(
   id: string,
   patch: { name?: string; category?: ProductCategory; minStock?: number; price?: number; accountingGroup?: string | null },
 ): Promise<Product | null> {
+  const p: Record<string, unknown> = {}
+  if (patch.name !== undefined) p.name = patch.name
+  if (patch.category !== undefined) p.category = patch.category
+  if (patch.minStock !== undefined) p.min_stock = patch.minStock
+  if (patch.price !== undefined) p.price = patch.price
+  if (patch.accountingGroup !== undefined) p.accounting_group = patch.accountingGroup?.trim() || null
   try {
-    const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    if (patch.name !== undefined) dbPatch.name = patch.name
-    if (patch.category !== undefined) dbPatch.category = patch.category
-    if (patch.minStock !== undefined) dbPatch.min_stock = patch.minStock
-
-    const extraPatch: Record<string, unknown> = {}
-    if (patch.price !== undefined) extraPatch.price = patch.price
-    if (patch.accountingGroup !== undefined) extraPatch.accounting_group = patch.accountingGroup?.trim() || null
-    const payload = priceColumnsAvailable ? { ...dbPatch, ...extraPatch } : dbPatch
-
-    const { data, error } = await supabase.from('products').update(payload).eq('id', id).select().single()
-    if (!error && data) return data as Product
-    if (error && priceColumnsAvailable && isUndefinedColumnError(error)) {
-      priceColumnsAvailable = false
-      const { data: retryData, error: retryError } = await supabase.from('products').update(dbPatch).eq('id', id).select().single()
-      if (retryError || !retryData) return null
-      return retryData as Product
-    }
-    return null
-  } catch {
+    return await callStoreOrHqRpc<Product>('staff_product_update', 'hq_product_update', { p_id: id, p })
+  } catch (e) {
+    console.error('[hqInventoryStore] updateProduct failed', e)
     return null
   }
 }
 
-/** 論理削除（is_active=false）。過去の会計履歴・日報との整合性のため物理削除はしない。 */
+/** 論理削除（is_active=false）。過去の会計履歴・日報との整合性のため物理削除はしない。失敗時は false。 */
 export async function deleteProduct(id: string): Promise<boolean> {
   try {
-    const { error } = await supabase
-      .from('products')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq('id', id)
-    return !error
-  } catch {
+    await callStoreOrHqRpc('staff_product_delete', 'hq_product_delete', { p_id: id })
+    return true
+  } catch (e) {
+    console.error('[hqInventoryStore] deleteProduct failed', e)
     return false
   }
 }
 
 export type HqInventoryRealtimeStatus = 'connecting' | 'live' | 'error'
 
+/** 在庫一覧の再取得間隔。products は店舗・本部向けの行・列が非公開になり Realtime では
+ *  全件の変更を受け取れないため、定期取得で補う（SHOP 表示用の店販は Realtime でも届く）。 */
+const PRODUCTS_POLL_MS = 20_000
+
 /**
- * products テーブルの変更（会計アシストからの自動減算、本部からのCRUD操作）を
- * リアルタイム購読する。在庫管理タブの再読み込みトリガー用。
- * 購読が確立／切断・失敗した場合は onStatus で通知し、画面は壊さない。
+ * products の変更（会計確定による自動減算、本部・店舗からの CRUD 操作）を検知して onChange を呼ぶ。
+ * 店販の公開行は Realtime、それ以外は定期取得で検知する。購読失敗でも画面は壊さない。
  */
 export function subscribeProductsRealtime(
   onChange: () => void,
   onStatus?: (status: HqInventoryRealtimeStatus) => void,
 ): () => void {
+  const timer = window.setInterval(() => onChange(), PRODUCTS_POLL_MS)
   try {
     const channel = supabase
       .channel('hq-inventory-realtime')
@@ -177,80 +168,24 @@ export function subscribeProductsRealtime(
           status === REALTIME_SUBSCRIBE_STATES.TIMED_OUT ||
           status === REALTIME_SUBSCRIBE_STATES.CLOSED
         ) {
-          onStatus?.('error')
+          // Realtime が使えなくても定期取得で最新化されるため、表示は live 扱いのままにする
+          onStatus?.(getDataAuthMode() === 'customer' ? 'error' : 'live')
         }
       })
-    return () => { void supabase.removeChannel(channel) }
+    return () => { window.clearInterval(timer); void supabase.removeChannel(channel) }
   } catch (e) {
     console.error('[hqInventoryStore] subscribeProductsRealtime exception:', e)
     onStatus?.('error')
-    return () => {}
+    return () => { window.clearInterval(timer) }
   }
 }
 
-export interface RetailSaleItem {
-  itemName: string
-  quantity: number
-}
-
-/**
- * 会計アシストで販売された店販商品（accounting_session_items の category='retail'）分だけ
- * products.current_stock を減算する（Phase5-B）。
- *
- * - item_name と products.name の完全一致でのみ照合する。一致する商品が無い場合は会計自体を
- *   止めず、console.warn で控えめにログを残すのみ（在庫未連携の商品として扱う）。
- * - 一致する商品があるのに更新自体（DBアクセス）が失敗した場合のみ anyFailure=true を返す。
- *   呼び出し側（会計アシスト）はこの場合のみ「在庫更新に失敗しました」をスタッフに表示する。
- * - 在庫は0未満にならない（adjustProductStock側でクランプ済み）。
- */
-export async function deductStockForRetailSale(soldItems: RetailSaleItem[]): Promise<{ anyFailure: boolean }> {
-  if (soldItems.length === 0) return { anyFailure: false }
-
-  try {
-    const products = await getProducts()
-    let anyFailure = false
-
-    for (const sold of soldItems) {
-      const product = products.find((p) => p.name === sold.itemName)
-      if (!product) {
-        console.warn(`[hqInventoryStore] 在庫連携: products に該当する商品が見つかりません（item_name="${sold.itemName}"）。在庫は更新されません。`)
-        continue
-      }
-      const updated = await adjustProductStock(product.id, -sold.quantity)
-      if (!updated) {
-        console.warn(`[hqInventoryStore] 在庫連携: 在庫更新に失敗しました（product="${product.name}"）。`)
-        anyFailure = true
-      }
-    }
-
-    return { anyFailure }
-  } catch (e) {
-    console.error('[hqInventoryStore] deductStockForRetailSale exception:', e)
-    return { anyFailure: true }
-  }
-}
-
-/** 在庫増減。delta は正負どちらも可。結果が0未満になる場合は0でクランプする。 */
+/** 在庫増減。delta は正負どちらも可。結果が0未満になる場合は0でクランプする（サーバー側）。失敗時は null。 */
 export async function adjustProductStock(id: string, delta: number): Promise<Product | null> {
   try {
-    const { data: current, error: fetchError } = await supabase
-      .from('products')
-      .select('current_stock')
-      .eq('id', id)
-      .single()
-    if (fetchError || !current) return null
-
-    const nextStock = Math.max(0, (current.current_stock ?? 0) + delta)
-
-    const { data, error } = await supabase
-      .from('products')
-      .update({ current_stock: nextStock, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single()
-    if (error || !data) return null
-    return data as Product
-  } catch {
+    return await callStoreOrHqRpc<Product>('staff_product_adjust', 'hq_product_adjust', { p_id: id, p_delta: delta })
+  } catch (e) {
+    console.error('[hqInventoryStore] adjustProductStock failed', e)
     return null
   }
 }

@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
+import { supabase } from './lib/supabase'
+import { getCustomerSession, clearCustomerSession } from './utils/customerSession'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AppHeader } from './components/AppHeader'
@@ -12,26 +14,34 @@ import { MyPageScreen } from './screens/MyPageScreen'
 import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
 import { ShopScreen } from './screens/ShopScreen'
 import { DiagnosisScreen } from './screens/DiagnosisScreen'
-import { OnboardingScreen } from './screens/OnboardingScreen'
+import { OnboardingScreen, type OnboardingDonePayload } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import PremiumGachaExperience from './components/PremiumGachaExperience'
 import type { GachaResult } from './components/PremiumGachaExperience'
 import { MemberQrModal } from './components/MemberQrModal'
 import { MOCK_MEMBER } from './data/brand'
 import type { NavTab, MemberStatus } from './data/brand'
-import { loadMemberStatus, saveMemberStatus, getStoredValue, ONBOARDING_DONE_KEY } from './utils/storage'
+import type { WalletFilter } from './data/wallet'
+import {
+  loadMemberStatus,
+  saveMemberStatus,
+  getStoredValue,
+  removeStoredValue,
+  MEMBER_STATUS_KEY,
+  ONBOARDING_DONE_KEY,
+  ONBOARDING_NAME_KEY,
+} from './utils/storage'
 import { HERO_SLIDE_IMAGES } from './data/styleImages'
 import type { TicketRow } from './data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from './data/ticket'
 import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
-import { getUserId } from './utils/userId'
+import { getUserId, MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
 import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
 const SHOP_AUTH_KEY = 'ginjiro_shop_auth'
-const SHOP_PASSCODE = '81811234'
 
 type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
@@ -39,6 +49,50 @@ type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 function isShopUnlocked(): boolean {
   return localStorage.getItem(SHOP_AUTH_KEY) === '1'
 }
+
+function isLocalPreviewHost(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+  )
+}
+
+function consumeDevOnboardingReset(): void {
+  if (typeof window === 'undefined') return
+  if (!isLocalPreviewHost(window.location.hostname)) return
+
+  const params = new URLSearchParams(window.location.search)
+  const shouldReset = params.get('resetOnboarding') === '1' || params.get('devReset') === 'onboarding'
+  if (!shouldReset) return
+
+  removeStoredValue(ONBOARDING_DONE_KEY)
+  removeStoredValue(ONBOARDING_NAME_KEY)
+  removeStoredValue(MEMBER_STATUS_KEY)
+  removeStoredValue(MUSIC_GUIDE_KEY)
+
+  if (params.get('freshUser') === '1' || params.get('newUser') === '1') {
+    removeStoredValue(USER_ID_KEY)
+    removeStoredValue(MEMBER_ISSUED_AT_KEY)
+    clearCustomerSession() // 前のユーザーの顧客セッションを持ち越さない
+  }
+
+  params.delete('resetOnboarding')
+  params.delete('devReset')
+  params.delete('freshUser')
+  params.delete('newUser')
+  const nextSearch = params.toString()
+  window.history.replaceState(
+    null,
+    '',
+    `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`,
+  )
+}
+
+consumeDevOnboardingReset()
 
 function SoundtrackIcon({ active = false, size = 26 }: { active?: boolean; size?: number }) {
   return (
@@ -215,6 +269,168 @@ function MusicGuidePopup({ onDismiss }: { onDismiss: () => void }) {
   )
 }
 
+function WelcomeCouponDialog({
+  name,
+  onTickets,
+  onHome,
+}: {
+  name: string
+  onTickets: () => void
+  onHome: () => void
+}) {
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <motion.div
+      key="welcome-coupon-dialog"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.22 }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 99990,
+        display: 'grid',
+        placeItems: 'center',
+        padding: 'max(24px, env(safe-area-inset-top, 0px)) 24px max(24px, env(safe-area-inset-bottom, 0px))',
+        background:
+          'radial-gradient(circle at 50% 24%, rgba(78,12,18,0.34), transparent 44%), linear-gradient(180deg, rgba(5,3,3,0.94), rgba(9,4,5,0.98))',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 10 }}
+        transition={{ duration: 0.36, ease: [0.22, 0.68, 0.34, 1] }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${name}さんのWelcomeクーポン`}
+        style={{
+          width: '100%',
+          maxWidth: 390,
+          padding: '0 4px',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            width: 42,
+            height: 1,
+            margin: '0 auto 34px',
+            background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.82), transparent)',
+          }}
+        />
+        <p
+          style={{
+            margin: '0 0 18px',
+            color: 'rgba(201,162,74,0.68)',
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.28em',
+            textTransform: 'uppercase',
+          }}
+        >
+          Welcome Coupon
+        </p>
+        <h2
+          style={{
+            margin: '0 0 18px',
+            color: '#F2E6C8',
+            fontFamily: SERIF,
+            fontSize: 'clamp(25px, 7vw, 31px)',
+            lineHeight: 1.55,
+            letterSpacing: '0.08em',
+            fontWeight: 700,
+          }}
+        >
+          ようこそ、<br />
+          二代目銀二郎へ
+        </h2>
+        <p
+          style={{
+            margin: '0 auto 24px',
+            color: 'rgba(242,230,200,0.62)',
+            fontFamily: SERIF,
+            fontSize: 14,
+            lineHeight: 1.9,
+            letterSpacing: '0.08em',
+          }}
+        >
+          Welcomeクーポンをお届けしました
+        </p>
+        <div
+          style={{
+            width: '100%',
+            padding: '18px 0',
+            margin: '0 auto 28px',
+            borderTop: '1px solid rgba(201,162,74,0.22)',
+            borderBottom: '1px solid rgba(201,162,74,0.22)',
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              color: '#F2E6C8',
+              fontFamily: SERIF,
+              fontSize: 'clamp(19px, 5.4vw, 23px)',
+              lineHeight: 1.45,
+              letterSpacing: '0.08em',
+              fontWeight: 700,
+            }}
+          >
+            特殊パーマ<br />
+            <span style={{ color: '#D9B763', letterSpacing: '0.04em' }}>¥2,000 OFF</span>
+          </p>
+        </div>
+        <div style={{ display: 'grid', gap: 16 }}>
+          <button
+            type="button"
+            onClick={onTickets}
+            style={{
+              minHeight: 52,
+              borderRadius: 14,
+              border: '1px solid rgba(201,162,74,0.58)',
+              background:
+                'linear-gradient(160deg, rgba(76,14,18,0.96) 0%, rgba(111,18,28,0.96) 56%, rgba(55,8,12,0.98) 100%)',
+              boxShadow: '0 12px 34px rgba(54,8,12,0.48), inset 0 1px 0 rgba(242,230,200,0.08)',
+              color: '#F2E6C8',
+              fontFamily: SERIF,
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: '0.18em',
+              cursor: 'pointer',
+            }}
+          >
+            クーポンを見る
+          </button>
+          <button
+            type="button"
+            onClick={onHome}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: 'rgba(242,230,200,0.46)',
+              fontFamily: SERIF,
+              fontSize: 12,
+              lineHeight: 1.7,
+              letterSpacing: '0.14em',
+              cursor: 'pointer',
+              padding: '2px 0',
+            }}
+          >
+            ホームへ
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>,
+    document.body,
+  )
+}
+
 function ShopPasswordGate({
   open,
   onUnlock,
@@ -225,24 +441,37 @@ function ShopPasswordGate({
   onClose: () => void
 }) {
   const [passcode, setPasscode] = useState('')
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setPasscode('')
-      setError(false)
+      setError(null)
     }
   }, [open])
 
-  function submit() {
-    if (passcode.trim() === SHOP_PASSCODE) {
-      localStorage.setItem(SHOP_AUTH_KEY, '1')
-      onUnlock()
-      return
+  // パスコードはサーバー側（verify_shop_passcode RPC）で照合する。フロントは正解を持たない。
+  async function submit() {
+    if (checking || !passcode.trim()) return
+    setChecking(true)
+    try {
+      // 顧客セッションがあれば失敗回数を端末単位で数える（第三者の失敗で全員がロックされない）
+      const { data, error: rpcError } = await supabase.rpc('verify_shop_passcode', { p_passcode: passcode.trim(), p_session: getCustomerSession() })
+      if (rpcError) { setError('通信できません。電波を確認してください'); return }
+      const r = data as { ok?: boolean; error?: string }
+      if (r?.ok) {
+        localStorage.setItem(SHOP_AUTH_KEY, '1')
+        onUnlock()
+        return
+      }
+      setError(r?.error === 'locked' ? '入力ミスが続いたため10分間ロック中です' : 'パスワードが違います')
+      setPasscode('')
+    } catch {
+      setError('通信できません。電波を確認してください')
+    } finally {
+      setChecking(false)
     }
-
-    setError(true)
-    setPasscode('')
   }
 
   if (typeof document === 'undefined') return null
@@ -275,7 +504,7 @@ function ShopPasswordGate({
             transition={{ duration: 0.24, ease: [0.22, 0.68, 0.34, 1] }}
             onSubmit={(event) => {
               event.preventDefault()
-              submit()
+              void submit()
             }}
             style={{
               width: '100%',
@@ -314,7 +543,7 @@ function ShopPasswordGate({
               value={passcode}
               onChange={(event) => {
                 setPasscode(event.target.value)
-                setError(false)
+                setError(null)
               }}
               placeholder="パスワード"
               style={{
@@ -335,7 +564,7 @@ function ShopPasswordGate({
 
             {error && (
               <p style={{ margin: '9px 0 0', color: '#c00019', fontSize: 12, fontWeight: 800 }}>
-                パスワードが違います
+                {error}
               </p>
             )}
 
@@ -617,6 +846,9 @@ function App() {
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
+  const [welcomeCouponDialog, setWelcomeCouponDialog] = useState<{ name: string; ticket: TicketRow | null } | null>(null)
+  const [ticketInitialFilter, setTicketInitialFilter] = useState<WalletFilter>('cut')
+  const [ticketRefreshKey, setTicketRefreshKey] = useState(0)
   const [isPremiumGachaOpen, setIsPremiumGachaOpen] = useState(false)
   const [hasOpenModal, setHasOpenModal] = useState(false)
   const [showQrModal, setShowQrModal] = useState(false)
@@ -703,10 +935,13 @@ function App() {
     setHasOpenModal(open)
   }, [])
 
-  function handleOnboardingDone(nextStatus: MemberStatus) {
+  function handleOnboardingDone(nextStatus: MemberStatus, payload?: OnboardingDonePayload) {
     saveMemberStatus(nextStatus)
     setMemberStatus(nextStatus)
     setPhase('app')
+    if (payload?.welcomeCouponIssued && payload.ticket) {
+      setWelcomeCouponDialog({ name: nextStatus.memberName, ticket: payload.ticket })
+    }
   }
 
   const handleTabChange = useCallback((tab: NavTab) => {
@@ -722,6 +957,7 @@ function App() {
     }
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
     if (navTabs.includes(nextTab)) setNavHighlight(nextTab)
+    if (nextTab === 'tickets') setTicketInitialFilter('cut')
     setActiveTab(nextTab)
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
   }, [shopUnlocked])
@@ -749,10 +985,13 @@ function App() {
 
   useEffect(() => {
     if (phase !== 'app') return
+    if (welcomeCouponDialog) return
+    // ホーム画面でのみ案内する（「クーポンを見る」でWalletへ直行したときにクーポンを隠さない）
+    if (activeTab !== 'home') return
     if (localStorage.getItem(MUSIC_GUIDE_KEY) === 'true') return
     const t = setTimeout(() => setShowMusicGuide(true), 700)
     return () => clearTimeout(t)
-  }, [phase])
+  }, [phase, welcomeCouponDialog, activeTab])
 
   useEffect(() => {
     if (activeTab !== 'home') setShowBgmMenu(false)
@@ -801,7 +1040,13 @@ function App() {
                   {activeTab === 'gacha'     && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                   {activeTab === 'tryon'     && <TryOnScreen />}
                   {activeTab === 'reserve'   && <ReserveScreen />}
-                  {activeTab === 'tickets'   && <TicketWalletScreen />}
+                  {activeTab === 'tickets'   && (
+                    <TicketWalletScreen
+                      key={`tickets-${ticketInitialFilter}-${ticketRefreshKey}`}
+                      onModalChange={handleModalChange}
+                      initialFilter={ticketInitialFilter}
+                    />
+                  )}
                   {activeTab === 'styles'    && <StyleLibraryScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'diagnosis' && <DiagnosisScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'shop'      && <ShopScreen />}
@@ -898,6 +1143,28 @@ function App() {
           <AnimatePresence>
             {showMusicGuide && (
               <MusicGuidePopup key="music-guide" onDismiss={dismissMusicGuide} />
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {welcomeCouponDialog && (
+              <WelcomeCouponDialog
+                key="welcome-coupon"
+                name={welcomeCouponDialog.name}
+                onTickets={() => {
+                  setWelcomeCouponDialog(null)
+                  setTicketInitialFilter('other')
+                  setTicketRefreshKey(k => k + 1)
+                  setNavHighlight('tickets')
+                  setActiveTab('tickets')
+                }}
+                onHome={() => {
+                  setWelcomeCouponDialog(null)
+                  setTicketInitialFilter('cut')
+                  setNavHighlight('home')
+                  setActiveTab('home')
+                }}
+              />
             )}
           </AnimatePresence>
 

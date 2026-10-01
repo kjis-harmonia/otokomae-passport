@@ -7,6 +7,7 @@ import App from './App.tsx'
 import { CMSApp } from './cms/CMSApp.tsx'
 import { StaffPinGate } from './screens/StaffPinGate.tsx'
 import { seedInitialStyles } from './utils/styleStorage'
+import { setDataAuthMode } from './utils/dataAuthMode'
 
 seedInitialStyles()
 
@@ -76,6 +77,8 @@ if ('serviceWorker' in navigator) {
 
 const isStaff = detectStaff()
 const isCMS   = !isStaff && detectCMS()
+// 店舗端末は staff_* RPC、お客様アプリは公開読み取り／顧客セッションでデータを扱う
+setDataAuthMode(isStaff ? 'staff' : 'customer')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

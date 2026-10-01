@@ -3,10 +3,19 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { StaffHome } from './StaffHome'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
+import { getStaffToken, staffLogin, verifyStaffSession, clearStaffSession, STAFF_AUTH_REQUIRED_EVENT, STAFF_PIN_LENGTH } from '../utils/staffSession'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
-const CORRECT_PIN = '8181'
-const PIN_AUTH_KEY = 'ginjiro_staff_pin_auth'
+// 旧版はPINの正誤をフロントで判定し、このキーに '1' を保存していた（現在は使用しない）
+const LEGACY_PIN_AUTH_KEY = 'ginjiro_staff_pin_auth'
+
+const ERROR_TEXT = {
+  invalid_pin:    'PINが正しくありません',
+  locked:         '入力ミスが続いたため10分間ロック中です',
+  not_configured: 'PINがサーバーに未設定です（管理者へ連絡）',
+  network:        '通信できません。電波を確認してください',
+} as const
+type PinError = keyof typeof ERROR_TEXT
 
 const PIN_CSS = `
 @keyframes gjPinShine {
@@ -16,45 +25,59 @@ const PIN_CSS = `
 `
 
 export function StaffPinGate() {
-  const [authed, setAuthed] = useState(() =>
-    localStorage.getItem(PIN_AUTH_KEY) === '1'
-  )
+  // サーバー発行のスタッフセッション（14時間）を保持している間だけ端末画面を表示する
+  const [authed, setAuthed] = useState(() => getStaffToken() !== null)
   const [pin, setPin] = useState('')
-  const [error, setError] = useState(false)
+  const [errorKind, setErrorKind] = useState<PinError | null>(null)
+  const error = errorKind !== null
+  const [checking, setChecking] = useState(false)
   const [shakeKey, setShakeKey] = useState(0)
   const [success, setSuccess] = useState(false)
 
-  const submitPin = useCallback((candidate: string) => {
-    if (candidate === CORRECT_PIN) {
+  useEffect(() => {
+    try { localStorage.removeItem(LEGACY_PIN_AUTH_KEY) } catch { /* ignore */ }
+    // 保存済みトークンがサーバーで失効していればPIN画面へ戻す
+    void verifyStaffSession().then(ok => { if (!ok) setAuthed(false) })
+    // 操作中にセッション切れ（staff_auth_required）になったらPIN画面へ戻す
+    const onAuthRequired = () => { setAuthed(false); setSuccess(false); setPin('') }
+    window.addEventListener(STAFF_AUTH_REQUIRED_EVENT, onAuthRequired)
+    return () => window.removeEventListener(STAFF_AUTH_REQUIRED_EVENT, onAuthRequired)
+  }, [])
+
+  const submitPin = useCallback(async (candidate: string) => {
+    setChecking(true)
+    const result = await staffLogin(candidate)
+    setChecking(false)
+    if (result.ok) {
       setSuccess(true)
-      localStorage.setItem(PIN_AUTH_KEY, '1')
       setTimeout(() => setAuthed(true), 500)
-    } else {
-      setError(true)
-      setShakeKey((k) => k + 1)
-      setTimeout(() => {
-        setPin('')
-        setError(false)
-      }, 700)
+      return
     }
+    clearStaffSession()
+    setErrorKind(result.reason)
+    setShakeKey((k) => k + 1)
+    setTimeout(() => {
+      setPin('')
+      setErrorKind(null)
+    }, result.reason === 'invalid_pin' ? 700 : 2400)
   }, [])
 
   const handleDigit = useCallback((d: string) => {
-    if (error) return
+    if (error || checking) return
     setPin((prev) => {
-      if (prev.length >= 4) return prev
+      if (prev.length >= STAFF_PIN_LENGTH) return prev
       const next = prev + d
-      if (next.length === 4) {
-        setTimeout(() => submitPin(next), 80)
+      if (next.length === STAFF_PIN_LENGTH) {
+        setTimeout(() => { void submitPin(next) }, 80)
       }
       return next
     })
-  }, [error, submitPin])
+  }, [error, checking, submitPin])
 
   const handleBack = useCallback(() => {
-    if (error) return
+    if (error || checking) return
     setPin((p) => p.slice(0, -1))
-  }, [error])
+  }, [error, checking])
 
   // Keyboard support
   useEffect(() => {
@@ -153,15 +176,15 @@ export function StaffPinGate() {
           key={shakeKey}
           animate={error ? { x: [-10, 10, -8, 8, -5, 5, -3, 3, 0] } : {}}
           transition={{ duration: 0.55 }}
-          style={{ display: 'flex', gap: 20, marginBottom: 48 }}
+          style={{ display: 'flex', gap: 14, marginBottom: 48 }}
         >
-          {[0, 1, 2, 3].map((i) => (
+          {Array.from({ length: STAFF_PIN_LENGTH }, (_, i) => i).map((i) => (
             <motion.div
               key={i}
               animate={{
                 background: i < pin.length
                   ? error ? '#E06060' : '#C9A24A'
-                  : success && i < 4 ? '#80E060' : 'rgba(201,162,74,0.14)',
+                  : success ? '#80E060' : 'rgba(201,162,74,0.14)',
                 boxShadow: i < pin.length && !error
                   ? '0 0 12px rgba(201,162,74,0.55)'
                   : 'none',
@@ -195,7 +218,7 @@ export function StaffPinGate() {
                 fontFamily: SERIF,
               }}
             >
-              PINが正しくありません
+              {errorKind ? ERROR_TEXT[errorKind] : ''}
             </motion.p>
           )}
         </AnimatePresence>

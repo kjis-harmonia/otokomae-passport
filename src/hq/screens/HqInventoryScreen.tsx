@@ -98,7 +98,7 @@ export function HqInventoryScreen() {
 
   useEffect(() => { load() }, [load])
 
-  // 会計アシストの店販販売による自動減算や、本部からのCRUDをリアルタイム反映する
+  // 店舗端末・本部からの在庫変更を定期的に反映する
   useEffect(() => {
     const unsubscribe = subscribeProductsRealtime(() => {
       if (debounceRef.current) clearTimeout(debounceRef.current)

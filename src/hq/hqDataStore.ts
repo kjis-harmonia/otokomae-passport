@@ -1,12 +1,13 @@
-import { REALTIME_SUBSCRIBE_STATES } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
 import { getJapanDateString } from '../utils/dateUtils'
-import { getShopStatus } from '../utils/shopStatusStore'
-import type { ShopStatusValue } from '../utils/shopStatusStore'
-import type { PaymentMethod } from '../utils/accountingStore'
+import { callHqRpc } from './hqSession'
 
 // 銀二郎本部 — 経営ダッシュボード実データ集計
 // accounting_sessions / accounting_session_items の status='completed' のみを集計対象とする。
+// セキュリティ監査対応：会計データはテーブルを直接読まず、本部セッション必須の RPC
+// （hq_accounting_sessions / hq_accounting_session_items）経由で取得する。
+
+/** 支払い方法（過去の会計データの payment_method） */
+export type PaymentMethod = 'cash' | 'credit' | 'qr'
 
 export type StylistKey = 'テイテイ' | '銀二郎' | 'フリー' | '未設定'
 
@@ -54,7 +55,6 @@ export interface HqDashboardData {
   todayVisitors: number
   todayUnitPrice: number
   monthSales: number
-  shopStatus: ShopStatusValue | null
   stylists: StylistSummary[]
   menuRanking: RankingItem[]
   retailRanking: RankingItem[]
@@ -87,6 +87,74 @@ function groupAndCount(items: { item_name: string; quantity: number | null }[]):
     .map(([name, count], i) => ({ rank: i + 1, name, count }))
 }
 
+/** 本部 RPC が返す completed 会計 */
+export interface HqSessionRow {
+  id: string
+  user_id: string | null
+  total: number | null
+  stylist_name: string | null
+  staff_name: string | null
+  payment_method: string | null
+  created_at: string
+}
+
+export interface HqSessionItemRow {
+  session_id?: string
+  item_name: string
+  category: string
+  quantity: number | null
+}
+
+/** completed 会計（期間 [fromJst, toJst) ・会員で絞り込み可）。失敗時は例外。 */
+export async function fetchHqSessions(opts: { fromJst?: string; toJst?: string; userId?: string } = {}): Promise<HqSessionRow[]> {
+  return (await callHqRpc<HqSessionRow[] | null>('hq_accounting_sessions', {
+    p_from: opts.fromJst ? jstBoundaryISO(opts.fromJst) : null,
+    p_to: opts.toJst ? jstBoundaryISO(opts.toJst) : null,
+    p_user_id: opts.userId ?? null,
+  })) ?? []
+}
+
+/** 会計明細（指定した会計ID分）。失敗時は例外。 */
+export async function fetchHqSessionItems(sessionIds: string[]): Promise<HqSessionItemRow[]> {
+  if (sessionIds.length === 0) return []
+  return (await callHqRpc<HqSessionItemRow[] | null>('hq_accounting_session_items', { p_session_ids: sessionIds })) ?? []
+}
+
+/** 当日分の会計・明細からダッシュボード／日報の共通集計を作る */
+export interface TodayAggregates {
+  todaySales: number
+  todayVisitors: number
+  todayUnitPrice: number
+  stylists: StylistSummary[]
+  menuRanking: RankingItem[]
+  retailRanking: RankingItem[]
+  paymentBreakdown: PaymentBreakdownEntry[]
+}
+
+export function buildTodayAggregates(
+  todaySessions: { total: number | null; stylist_name: string | null; payment_method?: string | null }[],
+  items: { item_name: string; category: string; quantity: number | null }[],
+): TodayAggregates {
+  const todaySales = todaySessions.reduce((sum, s) => sum + (s.total ?? 0), 0)
+  const todayVisitors = todaySessions.length
+  const todayUnitPrice = todayVisitors > 0 ? Math.round(todaySales / todayVisitors) : 0
+  const stylists: StylistSummary[] = STYLISTS.map((name) => {
+    const rows = todaySessions.filter((s) => (s.stylist_name || '未設定') === name)
+    const sales = rows.reduce((sum, s) => sum + (s.total ?? 0), 0)
+    const visitors = rows.length
+    return { name, sales, visitors, unitPrice: visitors > 0 ? Math.round(sales / visitors) : 0 }
+  })
+  return {
+    todaySales,
+    todayVisitors,
+    todayUnitPrice,
+    stylists,
+    menuRanking: groupAndCount(items.filter((it) => it.category === 'menu')).slice(0, 5),
+    retailRanking: groupAndCount(items.filter((it) => it.category === 'retail')),
+    paymentBreakdown: buildPaymentBreakdown(todaySessions),
+  }
+}
+
 export type HqStylistPeriod = 'today' | 'month'
 
 export interface StylistAnalysis extends StylistSummary {
@@ -116,16 +184,7 @@ export async function getHqStylistAnalysis(period: HqStylistPeriod): Promise<HqS
     endStr = range.end
   }
 
-  const { data, error } = await supabase
-    .from('accounting_sessions')
-    .select('total, stylist_name')
-    .eq('status', 'completed')
-    .gte('created_at', jstBoundaryISO(startStr))
-    .lt('created_at', jstBoundaryISO(endStr))
-
-  if (error) throw error
-
-  const sessions = data ?? []
+  const sessions = await fetchHqSessions({ fromJst: startStr, toJst: endStr })
   const totalSales = sessions.reduce((sum, s) => sum + (s.total ?? 0), 0)
 
   const stylists: StylistAnalysis[] = STYLISTS.map((name) => {
@@ -153,111 +212,32 @@ export async function getHqDashboardData(): Promise<HqDashboardData> {
   const tomorrowStr = getJapanDateString(new Date(Date.now() + 24 * 60 * 60 * 1000))
   const { start: monthStartStr, end: monthEndStr } = monthRangeFromToday(todayStr)
 
-  const [todayRes, monthRes, shopStatusRow] = await Promise.all([
-    supabase
-      .from('accounting_sessions')
-      .select('id, total, stylist_name, payment_method')
-      .eq('status', 'completed')
-      .gte('created_at', jstBoundaryISO(todayStr))
-      .lt('created_at', jstBoundaryISO(tomorrowStr)),
-    supabase
-      .from('accounting_sessions')
-      .select('total', { count: 'exact' })
-      .eq('status', 'completed')
-      .gte('created_at', jstBoundaryISO(monthStartStr))
-      .lt('created_at', jstBoundaryISO(monthEndStr)),
-    getShopStatus(),
+  const [todaySessions, monthSessions] = await Promise.all([
+    fetchHqSessions({ fromJst: todayStr, toJst: tomorrowStr }),
+    fetchHqSessions({ fromJst: monthStartStr, toJst: monthEndStr }),
   ])
 
-  if (todayRes.error) throw todayRes.error
-  if (monthRes.error) throw monthRes.error
-
-  const todaySessions = todayRes.data ?? []
-  const monthSessions = monthRes.data ?? []
-
-  const todaySales = todaySessions.reduce((sum, s) => sum + (s.total ?? 0), 0)
-  const todayVisitors = todaySessions.length
-  const todayUnitPrice = todayVisitors > 0 ? Math.round(todaySales / todayVisitors) : 0
   const monthSales = monthSessions.reduce((sum, s) => sum + (s.total ?? 0), 0)
-
-  const stylists: StylistSummary[] = STYLISTS.map((name) => {
-    const rows = todaySessions.filter((s) => (s.stylist_name || '未設定') === name)
-    const sales = rows.reduce((sum, s) => sum + (s.total ?? 0), 0)
-    const visitors = rows.length
-    return {
-      name,
-      sales,
-      visitors,
-      unitPrice: visitors > 0 ? Math.round(sales / visitors) : 0,
-    }
-  })
-
-  const sessionIds = todaySessions.map((s) => s.id)
-  let menuRanking: RankingItem[] = []
-  let retailRanking: RankingItem[] = []
-
-  if (sessionIds.length > 0) {
-    const itemsRes = await supabase
-      .from('accounting_session_items')
-      .select('item_name, category, quantity')
-      .in('session_id', sessionIds)
-      .in('category', ['menu', 'retail'])
-
-    if (itemsRes.error) throw itemsRes.error
-
-    const items = itemsRes.data ?? []
-    menuRanking = groupAndCount(items.filter((it) => it.category === 'menu')).slice(0, 5)
-    retailRanking = groupAndCount(items.filter((it) => it.category === 'retail'))
-  }
+  const items = (await fetchHqSessionItems(todaySessions.map((s) => s.id)))
+    .filter((it) => it.category === 'menu' || it.category === 'retail')
+  const agg = buildTodayAggregates(todaySessions, items)
 
   return {
-    todaySales,
-    todayVisitors,
-    todayUnitPrice,
+    ...agg,
     monthSales,
-    shopStatus: shopStatusRow?.status ?? null,
-    stylists,
-    menuRanking,
-    retailRanking,
-    paymentBreakdown: buildPaymentBreakdown(todaySessions),
   }
 }
 
 export type HqRealtimeStatus = 'connecting' | 'live' | 'error'
 
-/**
- * 経営ダッシュボードの集計元テーブル（accounting_sessions / accounting_session_items /
- * shop_status）の変更をリアルタイム購読する。変更を検知するごとに onChange を呼ぶだけで、
- * 再集計は呼び出し側（onChange内でgetHqDashboardData等を再実行）に委ねる。
- *
- * 購読確立・切断時は onStatus でUIに伝える。購読自体が例外を投げても画面を壊さないよう
- * try/catchで吸収し、'error' を通知するだけに留める。
- */
+/** 会計データは本部 RPC 経由のため Realtime では受け取れない。定期取得で更新する */
+const HQ_DASHBOARD_POLL_MS = 15_000
+
 export function subscribeHqRealtime(
   onChange: () => void,
   onStatus?: (status: HqRealtimeStatus) => void,
 ): () => void {
-  try {
-    const channel = supabase
-      .channel('hq-dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'accounting_sessions' }, () => onChange())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'accounting_session_items' }, () => onChange())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'shop_status' }, () => onChange())
-      .subscribe((status) => {
-        if (status === REALTIME_SUBSCRIBE_STATES.SUBSCRIBED) {
-          onStatus?.('live')
-        } else if (
-          status === REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR ||
-          status === REALTIME_SUBSCRIBE_STATES.TIMED_OUT ||
-          status === REALTIME_SUBSCRIBE_STATES.CLOSED
-        ) {
-          onStatus?.('error')
-        }
-      })
-    return () => { void supabase.removeChannel(channel) }
-  } catch (e) {
-    console.error('[hqDataStore] subscribeHqRealtime exception:', e)
-    onStatus?.('error')
-    return () => {}
-  }
+  const timer = window.setInterval(() => onChange(), HQ_DASHBOARD_POLL_MS)
+  onStatus?.('live')
+  return () => { window.clearInterval(timer) }
 }

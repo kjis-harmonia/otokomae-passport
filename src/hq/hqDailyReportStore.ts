@@ -1,11 +1,15 @@
-import { supabase } from '../lib/supabase'
-import { getJapanDateString } from '../utils/dateUtils'
-import { getHqDashboardData } from './hqDataStore'
+import { buildTodayAggregates } from './hqDataStore'
 import type { PaymentBreakdownEntry, RankingItem, StylistSummary } from './hqDataStore'
-import { getProducts, splitStockAlerts } from './hqInventoryStore'
+import { splitStockAlerts } from './hqInventoryStore'
+import type { Product } from './hqInventoryStore'
+import { callHqRpc } from './hqSession'
+import { rpcErrorMessage } from '../utils/staffSession'
 
 // 銀二郎本部 — 日報（Phase7）
 // 営業終了時のみ生成。営業中は生成しない。日報一覧の取得はRealtime不要（表示時取得のみ）。
+// セキュリティ監査対応：daily_reports・会計データは直接読み書きしない。
+//   作成（本部画面の手動作成）：hq_daily_report_source → 集計 → hq_save_daily_report
+//   一覧：hq_daily_reports（いずれも本部セッション必須）
 
 export interface InventoryAlertEntry {
   name: string
@@ -42,9 +46,16 @@ export interface GenerateDailyReportResult {
  */
 export async function generateAndSaveDailyReport(): Promise<GenerateDailyReportResult> {
   try {
-    const reportDate = getJapanDateString()
-    const dashboard = await getHqDashboardData()
-    const products = await getProducts()
+    // 本日JSTの completed 会計・明細・在庫をサーバーから取得（日付はサーバー基準）
+    const source = await callHqRpc<{
+      report_date: string
+      sessions: { id: string; total: number | null; stylist_name: string | null; payment_method: string | null }[]
+      items: { item_name: string; category: string; quantity: number | null }[]
+      products: Product[]
+    }>('hq_daily_report_source')
+
+    const agg = buildTodayAggregates(source.sessions ?? [], source.items ?? [])
+    const products = (source.products ?? []).filter((p) => p.is_active !== false)
     const { reorder, low } = splitStockAlerts(products)
 
     const inventoryAlerts: InventoryAlertEntry[] = [
@@ -53,53 +64,32 @@ export async function generateAndSaveDailyReport(): Promise<GenerateDailyReportR
     ]
 
     const row = {
-      report_date: reportDate,
-      total_sales: dashboard.todaySales,
-      customer_count: dashboard.todayVisitors,
-      average_spend: dashboard.todayUnitPrice,
-      stylist_summary: dashboard.stylists,
-      menu_summary: dashboard.menuRanking,
-      retail_summary: dashboard.retailRanking.map((r) => ({ name: r.name, count: r.count })),
+      total_sales: agg.todaySales,
+      customer_count: agg.todayVisitors,
+      average_spend: agg.todayUnitPrice,
+      stylist_summary: agg.stylists,
+      menu_summary: agg.menuRanking,
+      retail_summary: agg.retailRanking.map((r) => ({ name: r.name, count: r.count })),
       inventory_alerts: inventoryAlerts,
-      payment_summary: dashboard.paymentBreakdown,
+      payment_summary: agg.paymentBreakdown,
     }
 
     // 会計データはあるはずなのに日報が空になる、といった原因追跡用に集計結果を必ずログ出力する。
     console.log('[hqDailyReportStore] generateAndSaveDailyReport: 集計結果', {
-      reportDate,
-      dashboard,
+      reportDate: source.report_date,
+      agg,
       productsCount: products.length,
       inventoryAlertsCount: inventoryAlerts.length,
     })
 
-    const { data, error } = await supabase
-      .from('daily_reports')
-      .upsert(row, { onConflict: 'report_date' })
-      .select()
-      .single()
-
-    if (error || !data) {
-      console.error('[hqDailyReportStore] generateAndSaveDailyReport upsert error:', {
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code,
-        row,
-      })
-      return {
-        ok: false,
-        report: null,
-        errorMessage: error?.message ?? 'daily_reports への保存に失敗しました（不明なエラー）。',
-      }
-    }
-
-    return { ok: true, report: data as DailyReport }
+    const saved = await callHqRpc<DailyReport>('hq_save_daily_report', { p: row })
+    return { ok: true, report: saved }
   } catch (e) {
-    console.error('[hqDailyReportStore] generateAndSaveDailyReport exception:', e)
+    console.error('[hqDailyReportStore] generateAndSaveDailyReport failed:', e)
     return {
       ok: false,
       report: null,
-      errorMessage: e instanceof Error ? e.message : '日報生成中に予期しないエラーが発生しました。',
+      errorMessage: rpcErrorMessage(e, '日報の保存に失敗しました。'),
     }
   }
 }
@@ -107,13 +97,7 @@ export async function generateAndSaveDailyReport(): Promise<GenerateDailyReportR
 /** 日報一覧を新しい順に取得（最大30件）。Realtimeなし、表示時に毎回取得するだけ。 */
 export async function getDailyReports(limit = 30): Promise<DailyReport[]> {
   try {
-    const { data, error } = await supabase
-      .from('daily_reports')
-      .select('*')
-      .order('report_date', { ascending: false })
-      .limit(limit)
-    if (error || !data) return []
-    return data as DailyReport[]
+    return (await callHqRpc<DailyReport[] | null>('hq_daily_reports', { p_limit: limit })) ?? []
   } catch {
     return []
   }

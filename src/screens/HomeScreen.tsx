@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { CSSProperties, TouchEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import { fetchLastVisitDateStrict } from '../utils/customerStore'
 import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import { StyleDetailModal } from '../components/StyleDetailModal'
@@ -375,19 +375,12 @@ function MaintenanceScheduleSection() {
   const [lastVisitDate, setLastVisitDate] = useState<string | null | undefined>(undefined)
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(getNotificationPermission)
 
-  // Fetch last_visit_date from Supabase (localStorage fallback)
+  // 最終来店日をサーバー（get_my_last_visit RPC）から取得。通信できない場合のみ端末内の旧データで表示
   async function fetchVisit() {
     try {
-      const { data, error } = await supabase
-        .from('maintenance_visits')
-        .select('last_visit_date')
-        .eq('user_id', userId)
-        .maybeSingle()
-      if (!error && data?.last_visit_date) {
-        setLastVisitDate(data.last_visit_date as string)
-        return
-      }
-    } catch { /* ignore */ }
+      setLastVisitDate(await fetchLastVisitDateStrict(userId))
+      return
+    } catch { /* 通信失敗 → 端末内の旧データ */ }
     const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
     setLastVisitDate(local[userId] ?? null)
   }

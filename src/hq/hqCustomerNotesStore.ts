@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase'
+import { callHqRpc } from './hqSession'
 
 // 銀二郎本部 — 接客メモ（顧客カルテ Phase6-B）
 // 「覚えてくれている接客」をシステム化するための自由記述メモ。MVPは追加のみ
@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase'
 // 将来的な発展を想定し、note は完全な自由記述のtextとして保存する
 // （「ポマード派」「濡れパン固定」「息子が野球」のような断片的なタグ的記述も
 // そのまま1件のメモとして積み上げていけるよう、構造化や分類は今回設けない）。
+//
+// セキュリティ監査対応：customer_notes は直接読み書きしない。本部セッション必須の RPC 経由。
 
 export interface CustomerNote {
   id: string
@@ -19,14 +21,7 @@ export interface CustomerNote {
 /** 顧客の接客メモを新しい順に取得（最大50件）。 */
 export async function getCustomerNotes(customerId: string, limit = 50): Promise<CustomerNote[]> {
   try {
-    const { data, error } = await supabase
-      .from('customer_notes')
-      .select('*')
-      .eq('customer_id', customerId)
-      .order('created_at', { ascending: false })
-      .limit(limit)
-    if (error || !data) return []
-    return data as CustomerNote[]
+    return (await callHqRpc<CustomerNote[] | null>('hq_customer_notes', { p_customer_id: customerId, p_limit: limit })) ?? []
   } catch {
     return []
   }
@@ -39,22 +34,13 @@ export async function createCustomerNote(input: {
   createdBy: string
 }): Promise<CustomerNote | null> {
   try {
-    const { data, error } = await supabase
-      .from('customer_notes')
-      .insert({
-        customer_id: input.customerId,
-        note: input.note,
-        created_by: input.createdBy,
-      })
-      .select()
-      .single()
-    if (error || !data) {
-      console.error('[hqCustomerNotesStore] createCustomerNote error:', error)
-      return null
-    }
-    return data as CustomerNote
+    return await callHqRpc<CustomerNote>('hq_create_customer_note', {
+      p_customer_id: input.customerId,
+      p_note: input.note,
+      p_created_by: input.createdBy,
+    })
   } catch (e) {
-    console.error('[hqCustomerNotesStore] createCustomerNote exception:', e)
+    console.error('[hqCustomerNotesStore] createCustomerNote failed:', e)
     return null
   }
 }

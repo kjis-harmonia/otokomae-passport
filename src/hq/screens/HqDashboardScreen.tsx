@@ -79,7 +79,7 @@ export function HqDashboardScreen() {
     load()
   }, [load])
 
-  // accounting_sessions / accounting_session_items / shop_status の変更を購読し、再集計する
+  // 売上データ（本部 RPC）を定期取得して再集計する
   useEffect(() => {
     setRealtimeStatus('connecting')
     const unsubscribe = subscribeHqRealtime(
@@ -137,7 +137,6 @@ export function HqDashboardScreen() {
   }
 
   const { data } = state
-  const isOpen = data.shopStatus === 'open'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -148,24 +147,6 @@ export function HqDashboardScreen() {
         <HqStatTile label="本日来客" value={`${data.todayVisitors}名`} />
         <HqStatTile label="客単価" value={yen(data.todayUnitPrice)} />
         <HqStatTile label="今月売上" value={yen(data.monthSales)} />
-
-        <div style={{
-          flex: '1 1 150px', minWidth: 0,
-          background: HQ_COLORS.panel,
-          border: `1px solid ${isOpen ? 'rgba(123,201,123,0.35)' : HQ_COLORS.panelBorder}`,
-          borderRadius: 4, padding: '14px 16px',
-          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-        }}>
-          <p style={{ fontFamily: HQ_SANS, fontSize: 10, letterSpacing: '0.12em', color: HQ_COLORS.textSecondary, margin: 0, marginBottom: 8 }}>
-            営業状態
-          </p>
-          <p style={{
-            fontFamily: HQ_SERIF, fontSize: 20, fontWeight: 700, margin: 0,
-            color: data.shopStatus === null ? HQ_COLORS.textMute : isOpen ? HQ_COLORS.positive : HQ_COLORS.textSecondary,
-          }}>
-            {data.shopStatus === null ? '不明' : isOpen ? '営業中' : '営業終了'}
-          </p>
-        </div>
 
         <HqStockAlertSummaryTile products={products} />
       </div>

@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { supabase } from '../lib/supabase'
 import { getUserId } from '../utils/userId'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
-import { getCustomerByUserId } from '../utils/customerStore'
+import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
 
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
@@ -47,18 +46,12 @@ export function PassportCard() {
   const [customerData, setCustomerData] = useState<CustomerRow | null | undefined>(undefined)
 
   useEffect(() => {
-    supabase
-      .from('maintenance_visits')
-      .select('last_visit_date')
-      .eq('user_id', userId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!error && data?.last_visit_date) {
-          setLastVisitDate(data.last_visit_date as string)
-        } else {
-          const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
-          if (local[userId]) setLastVisitDate(local[userId])
-        }
+    // 最終来店日はサーバー（get_my_last_visit RPC）。通信できない場合のみ端末内の旧データで表示
+    fetchLastVisitDateStrict(userId)
+      .then(d => setLastVisitDate(d))
+      .catch(() => {
+        const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
+        if (local[userId]) setLastVisitDate(local[userId])
       })
   }, [userId])
 

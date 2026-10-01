@@ -1,9 +1,11 @@
-import { supabase } from '../lib/supabase'
 import { getJapanDateString } from '../utils/dateUtils'
+import { callHqRpc } from './hqSession'
+import { fetchHqSessions, fetchHqSessionItems } from './hqDataStore'
 
 // 銀二郎本部 — 顧客カルテ（Phase6-A MVP）
 // 新規テーブルは作らず、customers / accounting_sessions / accounting_session_items の
 // 既存データから集計するのみ。accounting_sessions.status='completed' のみ集計対象。
+// customers は直接読まない（非公開）。本部セッション必須の RPC（hq_list_customers / hq_get_customer）経由。
 
 export interface CustomerKarteSummary {
   userId: string
@@ -52,6 +54,15 @@ export interface CustomerKarteDetail {
   itemUsage: ItemUsageEntry[]
 }
 
+/** hq_list_customers / hq_get_customer が返す会員行（復旧コードは含まない） */
+interface HqCustomerRow {
+  id: string
+  user_id: string
+  name: string
+  phone_last4: string | null
+  created_at: string
+}
+
 interface RawSessionRow {
   id: string
   user_id: string | null
@@ -80,12 +91,12 @@ function buildItemUsage(items: { item_name: string; category: string; quantity: 
  */
 export async function getCustomerKarteList(): Promise<CustomerKarteSummary[]> {
   const [customersRes, sessionsRes] = await Promise.all([
-    supabase.from('customers').select('user_id, name, phone_last4, created_at'),
-    supabase
-      .from('accounting_sessions')
-      .select('id, user_id, total, stylist_name, staff_name, created_at')
-      .eq('status', 'completed')
-      .not('user_id', 'is', null),
+    callHqRpc<HqCustomerRow[] | null>('hq_list_customers')
+      .then(data => ({ data: data ?? [], error: null }))
+      .catch((error: unknown) => ({ data: null, error })),
+    fetchHqSessions()
+      .then(data => ({ data: data.filter(s => s.user_id !== null), error: null }))
+      .catch((error: unknown) => ({ data: null, error })),
   ])
 
   if (customersRes.error) throw customersRes.error
@@ -139,13 +150,12 @@ export async function getCustomerKarteList(): Promise<CustomerKarteSummary[]> {
 /** 顧客詳細（顧客カルテ詳細画面）。該当顧客が見つからない場合は null。 */
 export async function getCustomerKarteDetail(userId: string): Promise<CustomerKarteDetail | null> {
   const [customerRes, sessionsRes] = await Promise.all([
-    supabase.from('customers').select('id, user_id, name, phone_last4, created_at').eq('user_id', userId).maybeSingle(),
-    supabase
-      .from('accounting_sessions')
-      .select('id, user_id, total, stylist_name, staff_name, created_at')
-      .eq('status', 'completed')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false }),
+    callHqRpc<HqCustomerRow | null>('hq_get_customer', { p_user_id: userId })
+      .then(data => ({ data, error: null }))
+      .catch((error: unknown) => ({ data: null, error })),
+    fetchHqSessions({ userId })
+      .then(data => ({ data, error: null }))
+      .catch((error: unknown) => ({ data: null, error })),
   ])
 
   if (customerRes.error) throw customerRes.error
@@ -181,12 +191,7 @@ export async function getCustomerKarteDetail(userId: string): Promise<CustomerKa
   let itemsBySession = new Map<string, CustomerKarteVisitItem[]>()
   let allItems: { session_id: string; item_name: string; category: string; quantity: number | null }[] = []
   if (sessionIds.length > 0) {
-    const itemsRes = await supabase
-      .from('accounting_session_items')
-      .select('session_id, item_name, category, quantity')
-      .in('session_id', sessionIds)
-    if (itemsRes.error) throw itemsRes.error
-    allItems = itemsRes.data ?? []
+    allItems = (await fetchHqSessionItems(sessionIds)) as typeof allItems
     itemsBySession = new Map()
     for (const it of allItems) {
       const list = itemsBySession.get(it.session_id) ?? []
