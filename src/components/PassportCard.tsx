@@ -4,7 +4,11 @@ import { getUserId } from '../utils/userId'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
-import { CURRENT_RESERVATION_CHANGED_EVENT, loadCurrentReservation } from '../utils/currentReservation'
+import {
+  CURRENT_RESERVATION_CHANGED_EVENT,
+  loadCurrentReservation,
+  toCurrentReservationQrPayload,
+} from '../utils/currentReservation'
 
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -82,7 +86,7 @@ export function PassportCard() {
     type: 'ginjiro-member',
     userId,   // 完全 ID を必ず保持
     name: memberName,
-    reservation: currentReservation ?? undefined,
+    reservation: toCurrentReservationQrPayload(currentReservation),
   })
 
   return (
@@ -309,9 +313,9 @@ export function PassportCard() {
                 >
                   <QRCodeSVG
                     value={qrPayload}
-                    size={96}
-                    level="M"
-                    marginSize={1}
+                    size={108}
+                    level="H"
+                    marginSize={2}
                     fgColor="#000000"
                     bgColor="#FFFFFF"
                     style={{ display: 'block', borderRadius: 4 }}
@@ -447,9 +451,9 @@ export function PassportCard() {
         }}>
           <QRCodeSVG
             value={qrPayload}
-            size={240}
-            level="M"
-            marginSize={2}
+            size={272}
+            level="H"
+            marginSize={4}
             fgColor="#000000"
             bgColor="#FFFFFF"
             style={{ display: 'block' }}

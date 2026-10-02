@@ -1,5 +1,5 @@
 import { getStoredValue, setStoredValue } from './storage'
-import { loadCurrentReservation } from './currentReservation'
+import { loadCurrentReservation, toCurrentReservationQrPayload } from './currentReservation'
 
 export const USER_ID_KEY          = 'ginjiro_user_id'
 export const MEMBER_ISSUED_AT_KEY = 'ginjiro_member_issued_at'
@@ -28,6 +28,6 @@ export function getMemberQrPayload(name: string): string {
     userId:   getUserId(),
     name,
     issuedAt: getMemberIssuedAt(),
-    reservation: loadCurrentReservation() ?? undefined,
+    reservation: toCurrentReservationQrPayload(loadCurrentReservation()),
   })
 }
