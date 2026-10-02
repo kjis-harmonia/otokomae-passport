@@ -1065,7 +1065,7 @@ function App() {
           </div>
 
           {/* Soundtrack button — fixed top-right, visible on home tab only */}
-          {activeTab === 'home' && (
+          {activeTab === 'home' && !showQrModal && (
             <>
               <style>{`
                 @keyframes bgmSoundtrackPulse {
@@ -1135,7 +1135,7 @@ function App() {
 
           {/* Music guide — one-time popup, first home screen visit */}
           <BgmTrackSheet
-            open={activeTab === 'home' && showBgmMenu}
+            open={activeTab === 'home' && !showQrModal && showBgmMenu}
             bgm={bgm}
             onClose={() => setShowBgmMenu(false)}
           />

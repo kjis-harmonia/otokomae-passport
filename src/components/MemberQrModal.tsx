@@ -10,7 +10,7 @@ export function MemberQrModal({ onClose }: Props) {
   return (
     <motion.div
       className="fixed inset-0"
-      style={{ zIndex: 200, background: 'rgba(4,2,1,0.97)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+      style={{ zIndex: 10020, background: 'rgba(4,2,1,0.97)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -23,8 +23,8 @@ export function MemberQrModal({ onClose }: Props) {
         style={{
           position: 'absolute',
           top: 'max(18px, env(safe-area-inset-top, 18px))',
-          right: 18,
-          zIndex: 201,
+          left: 18,
+          zIndex: 10021,
           width: 40, height: 40, borderRadius: '50%',
           background: 'rgba(5,3,2,0.85)',
           border: '1px solid rgba(201,162,74,0.32)',
