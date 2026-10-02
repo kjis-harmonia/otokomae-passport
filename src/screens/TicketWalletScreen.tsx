@@ -801,7 +801,7 @@ const PREMIUM_VISUALS: Record<PremiumCategory, { imageSrc: string; alt: string; 
     tone: 'gold',
   },
   special: {
-    imageSrc: '/images/tickets/premium-special-perm-wide.jpg',
+    imageSrc: '/images/tickets/premium-special-perm-wide.png',
     alt: 'SPECIAL PERM ピンパーマ、ツイストパーマ 12,000円から10,000円',
     tone: 'red',
   },
