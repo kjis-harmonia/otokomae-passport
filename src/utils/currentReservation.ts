@@ -1,11 +1,12 @@
 import { getStoredValue, setStoredValue, removeStoredValue } from './storage'
 import { getJapanDateString } from './dateUtils'
+import { PREMIUM_COUPONS } from '../data/wallet'
 
 export const CURRENT_RESERVATION_KEY = 'ginjiro_current_reservation'
 export const CURRENT_RESERVATION_CHANGED_EVENT = 'ginjiro:current-reservation-changed'
 
 /**
- * Specialクーポンの電話予約（端末内のみ・サーバーには保存しない）。
+ * 電話予約（Specialクーポン・漢前Premium 共通。端末内のみ・サーバーには保存しない）。
  *
  * - 予約日（visitDate, JST の YYYY-MM-DD）を必ず持つ。予約割引が有効なのは予約日当日だけ。
  * - 予約日を過ぎた予約は端末から自動で削除する（次回来店時に同じ予約で再割引されない）。
@@ -13,7 +14,7 @@ export const CURRENT_RESERVATION_CHANGED_EVENT = 'ginjiro:current-reservation-ch
  *   QR に含まれる価格は新形式・旧形式とも一切使わない。
  */
 export type CurrentReservation = {
-  kind: 'cut-special'
+  kind: 'cut-special' | 'premium'
   id: string
   title: string
   menuLabel: string
@@ -28,7 +29,7 @@ export type CurrentReservation = {
 
 type ReservationPreset = Omit<CurrentReservation, 'visitDate' | 'reservedAt'>
 
-/** Specialクーポンのマスタ（店舗端末の表示価格の正） */
+/** 予約マスタ（店舗端末の表示価格の正）。Specialクーポン＋漢前Premium */
 const RESERVATION_PRESETS: Record<string, ReservationPreset> = {
   'cut-teitei-special': {
     kind: 'cut-special',
@@ -50,6 +51,21 @@ const RESERVATION_PRESETS: Record<string, ReservationPreset> = {
     benefit: '顔剃り・シャンプー付き',
     bookingMethod: 'phone',
   },
+  // 漢前Premium（GINJIRO CLASSICS / SPECIAL PERM / GINPARA）は Wallet のクーポンマスタから作る
+  ...Object.fromEntries(PREMIUM_COUPONS.map(def => {
+    const price = def.prices[0]
+    const preset: ReservationPreset = {
+      kind: 'premium',
+      id: def.id,
+      title: def.title,
+      menuLabel: price.label ?? def.subtitle ?? def.title,
+      normalPrice: price.normalPrice ?? null,
+      memberPrice: price.memberPrice,
+      benefit: def.extras?.items.join('＋') ?? '',
+      bookingMethod: 'phone',
+    }
+    return [def.id, preset]
+  })),
 }
 
 /** 予約日に選べる範囲（今日から） */
@@ -93,7 +109,7 @@ export function createReservation(id: string, visitDate: string, reservedAt = ne
 export function normalizeCurrentReservation(value: unknown): CurrentReservation | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
-  const id = typeof v.i === 'string' ? v.i : v.kind === 'cut-special' && typeof v.id === 'string' ? v.id : null
+  const id = typeof v.i === 'string' ? v.i : (v.kind === 'cut-special' || v.kind === 'premium') && typeof v.id === 'string' ? v.id : null
   if (!id) return null
   const reservedAt = typeof v.a === 'string' ? v.a : typeof v.reservedAt === 'string' ? v.reservedAt : null
   const visitDate = isYmd(v.d) ? v.d : isYmd(v.visitDate) ? v.visitDate : japanDateOf(reservedAt)

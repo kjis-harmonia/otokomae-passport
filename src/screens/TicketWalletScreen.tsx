@@ -353,6 +353,14 @@ export function TicketWalletScreen({
     }
   }
 
+  /** 「はい、QR表示」：Specialクーポンと同じ予約保存（下タブQRの CURRENT RESERVATION に即時反映）→ 会計用QR */
+  function confirmPremiumReservation(card: PremiumCard, visitDate: string) {
+    const reservation = createReservation(card.id, visitDate)
+    if (!reservation) return
+    saveCurrentReservation(reservation)
+    openPremiumQr(card)
+  }
+
   function openPremiumQr(card: PremiumCard) {
     setPremiumReservationCard(null)
     setPremiumQrItem({
@@ -666,7 +674,7 @@ export function TicketWalletScreen({
           <PremiumReservationDialog
             card={premiumReservationCard}
             onNo={() => setPremiumReservationCard(null)}
-            onYes={() => openPremiumQr(premiumReservationCard)}
+            onYes={visitDate => confirmPremiumReservation(premiumReservationCard, visitDate)}
           />
         )}
       </AnimatePresence>
@@ -1133,13 +1141,46 @@ function MaintenanceCouponQrDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** 予約日（今日〜RESERVATION_MAX_DAYS_AHEAD 日後）。Specialクーポン・漢前Premium 共通 */
+function useReservationDate() {
+  const today = getJapanDateString()
+  const maxDate = addDaysToDateString(today, RESERVATION_MAX_DAYS_AHEAD)
+  const [visitDate, setVisitDate] = useState(today)
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(visitDate) && visitDate >= today && visitDate <= maxDate
+  return { today, maxDate, visitDate, setVisitDate, validDate }
+}
+
+function ReservationDateField({ value, min, max, onChange }: { value: string; min: string; max: string; onChange: (v: string) => void }) {
+  return (
+    <label style={{ display: 'block', textAlign: 'left', marginBottom: 18 }}>
+      <span style={{ display: 'block', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.6)', marginBottom: 6 }}>
+        ご予約日（この日だけ有効）
+      </span>
+      <input
+        type="date"
+        value={value}
+        min={min}
+        max={max}
+        onChange={e => onChange(e.target.value)}
+        aria-label="ご予約日"
+        style={{
+          width: '100%', height: 46, borderRadius: 12, padding: '0 12px', colorScheme: 'dark',
+          background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(201,162,74,0.35)', color: IVORY,
+          fontFamily: SERIF, fontSize: 15, outline: 'none',
+        }}
+      />
+    </label>
+  )
+}
+
 function PremiumReservationDialog({ card, onYes, onNo }: {
   card: PremiumCard
-  onYes: () => void
+  onYes: (visitDate: string) => void
   onNo: () => void
 }) {
   const reduced = useReducedMotion() ?? false
   const price = card.prices[0]
+  const { today, maxDate, visitDate, setVisitDate, validDate } = useReservationDate()
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
@@ -1179,6 +1220,7 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
             スキンフェード＋顔剃り込み / 店舗端末専用
           </p>
         </div>
+        <ReservationDateField value={visitDate} min={today} max={maxDate} onChange={setVisitDate} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: 10 }}>
           <button
             type="button"
@@ -1190,9 +1232,10 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
           </button>
           <button
             type="button"
-            onClick={onYes}
+            onClick={() => { if (validDate) onYes(visitDate) }}
+            disabled={!validDate}
             className="wallet-cta"
-            style={{ minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #F3D98A 0%, #C9A24A 58%, #8B691A 100%)', border: '1px solid rgba(243,217,138,0.9)', boxShadow: '0 4px 22px rgba(201,162,74,0.36)', color: '#170C03', fontFamily: SERIF, fontSize: 13, fontWeight: 800, letterSpacing: '0.10em', cursor: 'pointer' }}
+            style={{ minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #F3D98A 0%, #C9A24A 58%, #8B691A 100%)', border: '1px solid rgba(243,217,138,0.9)', boxShadow: '0 4px 22px rgba(201,162,74,0.36)', color: '#170C03', fontFamily: SERIF, fontSize: 13, fontWeight: 800, letterSpacing: '0.10em', cursor: validDate ? 'pointer' : 'default', opacity: validDate ? 1 : 0.55 }}
           >
             はい、QR表示
           </button>
@@ -1214,10 +1257,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
   onNo: () => void
 }) {
   const reduced = useReducedMotion() ?? false
-  const today = getJapanDateString()
-  const maxDate = addDaysToDateString(today, RESERVATION_MAX_DAYS_AHEAD)
-  const [visitDate, setVisitDate] = useState(today)
-  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(visitDate) && visitDate >= today && visitDate <= maxDate
+  const { today, maxDate, visitDate, setVisitDate, validDate } = useReservationDate()
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
@@ -1257,24 +1297,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
             {coupon.benefit} / 電話予約済み
           </p>
         </div>
-        <label style={{ display: 'block', textAlign: 'left', marginBottom: 18 }}>
-          <span style={{ display: 'block', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.6)', marginBottom: 6 }}>
-            ご予約日（この日だけ有効）
-          </span>
-          <input
-            type="date"
-            value={visitDate}
-            min={today}
-            max={maxDate}
-            onChange={e => setVisitDate(e.target.value)}
-            aria-label="ご予約日"
-            style={{
-              width: '100%', height: 46, borderRadius: 12, padding: '0 12px', colorScheme: 'dark',
-              background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(201,162,74,0.35)', color: IVORY,
-              fontFamily: SERIF, fontSize: 15, outline: 'none',
-            }}
-          />
-        </label>
+        <ReservationDateField value={visitDate} min={today} max={maxDate} onChange={setVisitDate} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: 10 }}>
           <button
             type="button"
