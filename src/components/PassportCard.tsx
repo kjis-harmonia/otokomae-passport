@@ -4,6 +4,7 @@ import { getUserId } from '../utils/userId'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
+import { CURRENT_RESERVATION_CHANGED_EVENT, loadCurrentReservation } from '../utils/currentReservation'
 
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -44,6 +45,7 @@ export function PassportCard() {
   const [lastVisitDate, setLastVisitDate] = useState<string | null>(null)
   const [qrEnlarged, setQrEnlarged] = useState(false)
   const [customerData, setCustomerData] = useState<CustomerRow | null | undefined>(undefined)
+  const [currentReservation, setCurrentReservation] = useState(() => loadCurrentReservation())
 
   useEffect(() => {
     // 最終来店日はサーバー（get_my_last_visit RPC）。通信できない場合のみ端末内の旧データで表示
@@ -59,6 +61,18 @@ export function PassportCard() {
     getCustomerByUserId(userId).then(d => setCustomerData(d ?? null))
   }, [userId])
 
+  useEffect(() => {
+    const refreshReservation = () => setCurrentReservation(loadCurrentReservation())
+    window.addEventListener(CURRENT_RESERVATION_CHANGED_EVENT, refreshReservation)
+    window.addEventListener('storage', refreshReservation)
+    window.addEventListener('focus', refreshReservation)
+    return () => {
+      window.removeEventListener(CURRENT_RESERVATION_CHANGED_EVENT, refreshReservation)
+      window.removeEventListener('storage', refreshReservation)
+      window.removeEventListener('focus', refreshReservation)
+    }
+  }, [])
+
   // QR には完全 userId を保持。カード表示は先頭 8 文字のみ。
   const memberName  = getStoredValue<string>(ONBOARDING_NAME_KEY, memberStatus.memberName) || 'ゲスト'
   const displayId   = userId.slice(0, 8).toUpperCase()
@@ -68,6 +82,7 @@ export function PassportCard() {
     type: 'ginjiro-member',
     userId,   // 完全 ID を必ず保持
     name: memberName,
+    reservation: currentReservation ?? undefined,
   })
 
   return (
@@ -320,6 +335,40 @@ export function PassportCard() {
               marginTop: 18, marginBottom: 10,
             }} />
 
+            {currentReservation && (
+              <div style={{
+                marginBottom: 12,
+                borderRadius: 14,
+                padding: '10px 12px',
+                background: 'rgba(10,6,4,0.62)',
+                border: '1px solid rgba(201,162,74,0.22)',
+                boxShadow: 'inset 0 1px 0 rgba(255,238,190,0.06)',
+              }}>
+                <p style={{
+                  fontSize: 8,
+                  letterSpacing: '0.24em',
+                  color: 'rgba(201,162,74,0.72)',
+                  marginBottom: 5,
+                  fontFamily: 'monospace',
+                }}>
+                  CURRENT RESERVATION
+                </p>
+                <p style={{
+                  fontFamily: SERIF,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: '#F2E6C8',
+                  lineHeight: 1.45,
+                  letterSpacing: '0.05em',
+                }}>
+                  {currentReservation.title}
+                  <span style={{ color: '#C9A24A', marginLeft: 8 }}>
+                    ¥{currentReservation.memberPrice.toLocaleString()}
+                  </span>
+                </p>
+              </div>
+            )}
+
             {/* Tagline */}
             <p style={{
               textAlign: 'center',
@@ -423,6 +472,26 @@ export function PassportCard() {
           }}>
             ID · {userId.slice(0, 24)}
           </p>
+          {currentReservation && (
+            <div style={{
+              marginTop: 16,
+              borderRadius: 14,
+              padding: '12px 14px',
+              background: 'rgba(10,6,4,0.78)',
+              border: '1px solid rgba(201,162,74,0.26)',
+              textAlign: 'left',
+            }}>
+              <p style={{ fontSize: 9, letterSpacing: '0.22em', color: 'rgba(201,162,74,0.72)', marginBottom: 6 }}>
+                現在の予約
+              </p>
+              <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8', lineHeight: 1.5 }}>
+                {currentReservation.title}
+              </p>
+              <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.64)', lineHeight: 1.6 }}>
+                {currentReservation.menuLabel} / ¥{currentReservation.memberPrice.toLocaleString()}
+              </p>
+            </div>
+          )}
         </div>
 
         <p style={{

@@ -18,7 +18,7 @@ export type WalletFilter   = 'cut' | 'premium' | 'other'
 export const WALLET_FILTERS: { id: WalletFilter; label: string }[] = [
   { id: 'cut',     label: 'GINJIRO CUT' },
   { id: 'premium', label: '漢前Premiumパーマ' },
-  { id: 'other',   label: 'その他' },
+  { id: 'other',   label: '割引チケット' },
 ]
 
 /** カードの状態（表示トーンと Priority の基準） */

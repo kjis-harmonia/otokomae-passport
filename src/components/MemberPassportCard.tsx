@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
+import { loadCurrentReservation } from '../utils/currentReservation'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -32,6 +33,7 @@ export function MemberPassportCard({ name, userId }: Props) {
     type: 'ginjiro-member',
     userId,
     name: displayName,
+    reservation: loadCurrentReservation() ?? undefined,
   })
 
   return (

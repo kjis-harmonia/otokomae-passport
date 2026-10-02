@@ -116,21 +116,102 @@ export interface PremiumState {
 const WEEKEND_OPEN_MIN  = 17 * 60
 const WEEKEND_CLOSE_MIN = 19 * 60
 
+function nthMonday(year: number, month: number, nth: number): number {
+  const first = new Date(Date.UTC(year, month - 1, 1)).getUTCDay()
+  return 1 + ((1 - first + 7) % 7) + 7 * (nth - 1)
+}
+
+function ymd(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function dateFromYmd(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = dateFromYmd(dateStr)
+  d.setUTCDate(d.getUTCDate() + days)
+  return ymd(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate())
+}
+
+function dayOfWeek(dateStr: string): number {
+  return dateFromYmd(dateStr).getUTCDay()
+}
+
+function springEquinoxDay(year: number): number {
+  return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4))
+}
+
+function autumnEquinoxDay(year: number): number {
+  return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4))
+}
+
+function modernJapaneseHolidayBaseSet(year: number): Set<string> {
+  const holidays = new Set<string>()
+  holidays.add(ymd(year, 1, 1))                         // 元日
+  holidays.add(ymd(year, 1, nthMonday(year, 1, 2)))     // 成人の日
+  holidays.add(ymd(year, 2, 11))                        // 建国記念の日
+  holidays.add(ymd(year, 2, 23))                        // 天皇誕生日
+  holidays.add(ymd(year, 3, springEquinoxDay(year)))    // 春分の日
+  holidays.add(ymd(year, 4, 29))                        // 昭和の日
+  holidays.add(ymd(year, 5, 3))                         // 憲法記念日
+  holidays.add(ymd(year, 5, 4))                         // みどりの日
+  holidays.add(ymd(year, 5, 5))                         // こどもの日
+  holidays.add(ymd(year, 7, nthMonday(year, 7, 3)))     // 海の日
+  holidays.add(ymd(year, 8, 11))                        // 山の日
+  holidays.add(ymd(year, 9, nthMonday(year, 9, 3)))     // 敬老の日
+  holidays.add(ymd(year, 9, autumnEquinoxDay(year)))    // 秋分の日
+  holidays.add(ymd(year, 10, nthMonday(year, 10, 2)))   // スポーツの日
+  holidays.add(ymd(year, 11, 3))                        // 文化の日
+  holidays.add(ymd(year, 11, 23))                       // 勤労感謝の日
+  return holidays
+}
+
+function japaneseHolidaySet(year: number): Set<string> {
+  const holidays = modernJapaneseHolidayBaseSet(year)
+
+  for (const holiday of [...holidays].sort()) {
+    if (dayOfWeek(holiday) !== 0) continue
+    let substitute = addDays(holiday, 1)
+    while (holidays.has(substitute)) substitute = addDays(substitute, 1)
+    holidays.add(substitute)
+  }
+
+  let cursor = ymd(year, 1, 2)
+  const end = ymd(year, 12, 30)
+  while (cursor <= end) {
+    if (!holidays.has(cursor) && holidays.has(addDays(cursor, -1)) && holidays.has(addDays(cursor, 1))) {
+      holidays.add(cursor)
+    }
+    cursor = addDays(cursor, 1)
+  }
+
+  return holidays
+}
+
+export function isJapaneseHoliday(dateStr: string): boolean {
+  const year = Number(dateStr.slice(0, 4))
+  if (!Number.isFinite(year)) return false
+  return japaneseHolidaySet(year).has(dateStr)
+}
+
 /**
- * 平日 → 本日利用できます
- * 土日 17:00前 → 本日17:00より受付 / 17:00〜19:00 → 現在受付中 / 19:00以降 → 本日の受付終了
- * 判定は Asia/Tokyo。祝日は考慮しない（曜日のみ）。
+ * 平日 → 終日受付
+ * 土日祝 17:00前 → 本日17:00より受付 / 17:00〜19:00 → 現在受付中 / 19:00以降 → 本日の受付終了
+ * 判定は Asia/Tokyo。祝日は日本の祝日ルールを端末内で計算する。
  */
 export function getPremiumState(now = new Date()): PremiumState {
-  const { weekday, minutes } = getJapanClock(now)
-  const isWeekend = weekday === 0 || weekday === 6
-  if (!isWeekend) return { phase: 'weekday', label: '本日利用できます', isOpenNow: true }
+  const { dateStr, weekday, minutes } = getJapanClock(now)
+  const isLimitedDay = weekday === 0 || weekday === 6 || isJapaneseHoliday(dateStr)
+  if (!isLimitedDay) return { phase: 'weekday', label: '本日終日受付', isOpenNow: true }
   if (minutes < WEEKEND_OPEN_MIN)  return { phase: 'before', label: '本日17:00より受付', isOpenNow: false }
   if (minutes < WEEKEND_CLOSE_MIN) return { phase: 'open', label: '現在受付中', hint: '本日19:00まで', isOpenNow: true }
   return {
     phase: 'closed',
     label: '本日の受付終了',
-    hint:  weekday === 6 ? '次回 明日 17:00〜' : '次回 明日（月）終日',
+    hint:  '土日祝は17:00〜19:00受付',
     isOpenNow: false,
   }
 }

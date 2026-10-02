@@ -12,6 +12,7 @@ import { PreviousTicketsPrompt } from '../components/PreviousTicketsBind'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getLastVisit } from '../utils/visitHistory'
 import { getMaintenanceVisit } from '../utils/maintenanceSchedule'
+import { saveCurrentReservation, type CurrentReservation } from '../utils/currentReservation'
 import type { TicketRow } from '../data/ticket'
 import { SHOP_PHONE_TEL, WALLET_FILTERS, type WalletCard, type WalletFilter } from '../data/wallet'
 import {
@@ -87,6 +88,7 @@ type ConfirmTicket = { ticket: TicketRow; qrPayload: string }
 type PremiumCategory = Extract<WalletCard['category'], 'classic' | 'special' | 'ginpara'>
 type PremiumCard = WalletCard & { category: PremiumCategory }
 type PremiumQrItem = { card: PremiumCard; qrPayload: string }
+type CutSpecialCoupon = (typeof CUT_SPECIAL_VISUALS)[number]
 
 const PREMIUM_QR_VALID_MS = 30 * 60 * 1000
 
@@ -141,7 +143,8 @@ function WalletFilterText({ filter }: { filter: WalletFilter }) {
   }
   return (
     <span className="wallet-chip-label">
-      <span className="wallet-chip-main">その他</span>
+      <span className="wallet-chip-main">割引</span>
+      <span className="wallet-chip-sub">チケット</span>
     </span>
   )
 }
@@ -176,6 +179,9 @@ export function TicketWalletScreen({
   const [premiumReservationCard, setPremiumReservationCard] = useState<PremiumCard | null>(null)
   const [premiumQrItem, setPremiumQrItem] = useState<PremiumQrItem | null>(null)
   const pendingPremiumCallRef = useRef<{ card: PremiumCard; timer: number | null } | null>(null)
+  const [cutReservationCoupon, setCutReservationCoupon] = useState<CutSpecialCoupon | null>(null)
+  const [cutReservationNotice, setCutReservationNotice] = useState<CurrentReservation | null>(null)
+  const pendingCutCallRef = useRef<{ coupon: CutSpecialCoupon; timer: number | null } | null>(null)
   const [transferTicket,    setTransferTicket]    = useState<TicketRow | null>(null)
   const [transferToken,     setTransferToken]     = useState<string | null>(null)
   const [xferring,          setXferring]          = useState(false)
@@ -249,6 +255,7 @@ export function TicketWalletScreen({
 
   const cards = useMemo(() => filterCards(allCards, filter), [allCards, filter])
   const detailCard = detailId ? allCards.find(c => c.id === detailId) ?? null : null
+  const showCutSpecials = filter === 'cut'
   const premiumCards = useMemo<Array<WalletCard & { category: PremiumCategory }>>(
     () => filterCards(allCards.filter(isPremiumCard), 'premium').filter(isPremiumCard),
     [allCards],
@@ -262,7 +269,7 @@ export function TicketWalletScreen({
   }
 
   // BottomNavigation はモーダル表示中に隠す
-  const anyModalOpen = !!detailCard || !!confirmItem || showMaintenanceQr || !!premiumReservationCard || !!premiumQrItem || !!transferToken || !!xferError
+  const anyModalOpen = !!detailCard || !!confirmItem || showMaintenanceQr || !!premiumReservationCard || !!premiumQrItem || !!cutReservationCoupon || !!cutReservationNotice || !!transferToken || !!xferError
   useEffect(() => { onModalChange?.(anyModalOpen) }, [anyModalOpen, onModalChange])
   useEffect(() => () => onModalChange?.(false), [onModalChange])
 
@@ -274,10 +281,19 @@ export function TicketWalletScreen({
     setPremiumReservationCard(pending.card)
   }, [])
 
+  const showPendingCutReservation = useCallback(() => {
+    const pending = pendingCutCallRef.current
+    if (!pending) return
+    if (pending.timer !== null) window.clearTimeout(pending.timer)
+    pendingCutCallRef.current = null
+    setCutReservationCoupon(pending.coupon)
+  }, [])
+
   useEffect(() => {
     const revealAfterReturn = () => {
       if (document.visibilityState !== 'visible') return
       showPendingPremiumReservation()
+      showPendingCutReservation()
     }
     document.addEventListener('visibilitychange', revealAfterReturn)
     window.addEventListener('focus', revealAfterReturn)
@@ -286,11 +302,14 @@ export function TicketWalletScreen({
       const pending = pendingPremiumCallRef.current
       if (pending && pending.timer !== null) window.clearTimeout(pending.timer)
       pendingPremiumCallRef.current = null
+      const pendingCut = pendingCutCallRef.current
+      if (pendingCut && pendingCut.timer !== null) window.clearTimeout(pendingCut.timer)
+      pendingCutCallRef.current = null
       document.removeEventListener('visibilitychange', revealAfterReturn)
       window.removeEventListener('focus', revealAfterReturn)
       window.removeEventListener('pageshow', revealAfterReturn)
     }
-  }, [showPendingPremiumReservation])
+  }, [showPendingPremiumReservation, showPendingCutReservation])
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -312,6 +331,7 @@ export function TicketWalletScreen({
   }
 
   function handlePremiumCallClick(card: PremiumCard) {
+    if (!premium.isOpenNow) return
     setDetailId(null)
     const current = pendingPremiumCallRef.current
     if (current && current.timer !== null) window.clearTimeout(current.timer)
@@ -322,12 +342,43 @@ export function TicketWalletScreen({
     }
   }
 
+  function handleCutSpecialCallClick(coupon: CutSpecialCoupon) {
+    setDetailId(null)
+    const current = pendingCutCallRef.current
+    if (current && current.timer !== null) window.clearTimeout(current.timer)
+    pendingCutCallRef.current = {
+      coupon,
+      timer: window.setTimeout(showPendingCutReservation, 1500),
+    }
+  }
+
   function openPremiumQr(card: PremiumCard) {
     setPremiumReservationCard(null)
     setPremiumQrItem({
       card,
       qrPayload: buildPremiumQrPayload(card, userId, memberName),
     })
+  }
+
+  function buildCutReservation(coupon: CutSpecialCoupon): CurrentReservation {
+    return {
+      kind: 'cut-special',
+      id: coupon.id,
+      title: coupon.title,
+      menuLabel: coupon.menuLabel,
+      normalPrice: coupon.normalPrice,
+      memberPrice: coupon.memberPrice,
+      benefit: coupon.benefit,
+      bookingMethod: 'phone',
+      reservedAt: new Date().toISOString(),
+    }
+  }
+
+  function confirmCutReservation(coupon: CutSpecialCoupon) {
+    const reservation = buildCutReservation(coupon)
+    saveCurrentReservation(reservation)
+    setCutReservationCoupon(null)
+    setCutReservationNotice(reservation)
   }
 
   async function handleTransfer(ticket: TicketRow) {
@@ -383,9 +434,10 @@ export function TicketWalletScreen({
       return (
         <MiniCta
           icon={<Phone size={14} />}
-          label="電話で予約"
+          label={premium.isOpenNow ? '電話で予約' : '17時から受付'}
           tone={premium.isOpenNow ? 'premium' : 'quiet'}
-          href={SHOP_PHONE_TEL}
+          href={premium.isOpenNow ? SHOP_PHONE_TEL : undefined}
+          disabled={!premium.isOpenNow}
           onClick={() => handlePremiumCallClick(card)}
         />
       )
@@ -432,7 +484,8 @@ export function TicketWalletScreen({
         <>
           <PrimaryButton
             tone={premium.isOpenNow ? 'premium' : 'quiet'}
-            href={SHOP_PHONE_TEL}
+            href={premium.isOpenNow ? SHOP_PHONE_TEL : undefined}
+            disabled={!premium.isOpenNow}
             onClick={() => handlePremiumCallClick(card)}
           >
             <Phone size={16} /> 電話で予約する
@@ -499,7 +552,7 @@ export function TicketWalletScreen({
       ? { tone: 'gold' as const, text: `今日使える特典が ${liveCards.length}件 あります` }
       : null
   const todayLabel = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'short' }).format(now)
-  const featuredLabel = filter === 'cut' ? 'メンテナンスカット' : 'その他'
+  const featuredLabel = filter === 'cut' ? 'メンテナンスカット' : '割引チケット'
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -554,6 +607,8 @@ export function TicketWalletScreen({
         <div style={{ marginTop: 14 }}>
           {loading ? (
             <DeckSkeleton />
+          ) : showCutSpecials ? (
+            <CutSpecialCouponSection onCallClick={handleCutSpecialCallClick} />
           ) : cards.length === 0 ? (
             <EmptyState filter={filter} />
           ) : (
@@ -561,6 +616,7 @@ export function TicketWalletScreen({
               {visiblePremiumCards.length > 0 && (
                 <PremiumCouponSection
                   cards={visiblePremiumCards}
+                  canCallNow={premium.isOpenNow}
                   onCallClick={handlePremiumCallClick}
                 />
               )}
@@ -639,6 +695,27 @@ export function TicketWalletScreen({
         )}
       </AnimatePresence>
 
+      {/* ── カットSpecial 予約確認モーダル ── */}
+      <AnimatePresence>
+        {cutReservationCoupon && (
+          <CutReservationDialog
+            coupon={cutReservationCoupon}
+            onNo={() => setCutReservationCoupon(null)}
+            onYes={() => confirmCutReservation(cutReservationCoupon)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── カットSpecial QR反映完了アナウンス ── */}
+      <AnimatePresence>
+        {cutReservationNotice && (
+          <CutReservationNotice
+            reservation={cutReservationNotice}
+            onClose={() => setCutReservationNotice(null)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* ── 譲渡エラーモーダル ── */}
       <AnimatePresence>
         {xferError && (
@@ -705,35 +782,80 @@ export function TicketWalletScreen({
 
 type CtaTone = 'gold' | 'premium' | 'quiet'
 
+const CUT_SPECIAL_VISUALS = [
+  {
+    id: 'cut-teitei-special',
+    title: 'テイテイSpecialクーポン',
+    imageSrc: '/images/tickets/cut-teitei-special.jpg',
+    alt: 'テイテイSpecialクーポン 天空の髪ピチュ フルコース 6,800円',
+    menuLabel: '天空の髪ピチュ FULL COURSE',
+    normalPrice: null,
+    memberPrice: 6800,
+    benefit: 'カット・ヘッドスパ・顔剃り・マッサージ',
+  },
+  {
+    id: 'cut-ginjiro-special',
+    title: '銀二郎Specialクーポン',
+    imageSrc: '/images/tickets/cut-ginjiro-special.jpg',
+    alt: '銀二郎Specialクーポン スキンフェードカット 顔剃り、シャンプー付き 4,000円',
+    menuLabel: 'スキンフェードカット',
+    normalPrice: 4500,
+    memberPrice: 4000,
+    benefit: '顔剃り・シャンプー付き',
+  },
+] as const
+
 const PREMIUM_VISUALS: Record<PremiumCategory, { imageSrc: string; alt: string; tone: 'gold' | 'red' | 'silver' }> = {
   classic: {
-    imageSrc: '/images/tickets/premium-classics.png',
+    imageSrc: '/images/tickets/premium-classics-wide.jpg',
     alt: 'GINJIRO CLASSICS アイパー、パンチ、ニグロ、濡れパン 9,000円から8,000円',
     tone: 'gold',
   },
   special: {
-    imageSrc: '/images/tickets/premium-special-perm.png',
+    imageSrc: '/images/tickets/premium-special-perm-wide.jpg',
     alt: 'SPECIAL PERM ピンパーマ、ツイストパーマ 12,000円から10,000円',
     tone: 'red',
   },
   ginpara: {
-    imageSrc: '/images/tickets/premium-ginpara.png',
+    imageSrc: '/images/tickets/premium-ginpara-wide.jpg',
     alt: 'GINPARA 銀パラ 16,000円から15,000円',
     tone: 'silver',
   },
 }
 
+function CutSpecialCouponSection({ onCallClick }: { onCallClick: (coupon: CutSpecialCoupon) => void }) {
+  return (
+    <section className="wallet-cut-special-list" aria-label="カット Special クーポン">
+      {CUT_SPECIAL_VISUALS.map(item => (
+        <article key={item.id} className="wallet-cut-special">
+          <h2 className="wallet-cut-special__title">{item.title}</h2>
+          <a
+            href={SHOP_PHONE_TEL}
+            className="wallet-cut-special__image-wrap"
+            aria-label={`${item.title}を電話で予約する`}
+            onClick={() => onCallClick(item)}
+          >
+            <img src={item.imageSrc} alt={item.alt} loading="lazy" decoding="async" />
+          </a>
+        </article>
+      ))}
+    </section>
+  )
+}
+
 function PremiumCouponSection({
   cards,
+  canCallNow,
   onCallClick,
 }: {
   cards: PremiumCard[]
+  canCallNow: boolean
   onCallClick: (card: PremiumCard) => void
 }) {
   return (
     <section className="wallet-premium-coupon-list" aria-label="漢前Premiumクーポン">
       {cards.map(card => (
-        <PremiumCouponCard key={card.id} card={card} onCallClick={onCallClick} />
+        <PremiumCouponCard key={card.id} card={card} canCallNow={canCallNow} onCallClick={onCallClick} />
       ))}
     </section>
   )
@@ -741,19 +863,28 @@ function PremiumCouponSection({
 
 function PremiumCouponCard({
   card,
+  canCallNow,
   onCallClick,
 }: {
   card: PremiumCard
+  canCallNow: boolean
   onCallClick: (card: PremiumCard) => void
 }) {
   const visual = PREMIUM_VISUALS[card.category]
 
   return (
     <a
-      href={SHOP_PHONE_TEL}
-      className={`wallet-premium-image-card wallet-premium-image-card--${visual.tone}`}
-      aria-label={`${card.title}を電話で予約する`}
-      onClick={() => onCallClick(card)}
+      href={canCallNow ? SHOP_PHONE_TEL : undefined}
+      className={`wallet-premium-image-card wallet-premium-image-card--${visual.tone}${canCallNow ? '' : ' wallet-premium-image-card--disabled'}`}
+      aria-label={canCallNow ? `${card.title}を電話で予約する` : `${card.title}は土日祝17時から19時のみ電話予約できます`}
+      aria-disabled={!canCallNow}
+      onClick={(event) => {
+        if (!canCallNow) {
+          event.preventDefault()
+          return
+        }
+        onCallClick(card)
+      }}
     >
       <img src={visual.imageSrc} alt={visual.alt} loading="lazy" decoding="async" />
     </a>
@@ -802,7 +933,7 @@ function MiniCta({ label, icon, tone, onClick, href, disabled }: {
     opacity: disabled ? 0.55 : 1,
   }
   const stop = (e: React.KeyboardEvent) => e.stopPropagation()
-  if (href) {
+  if (href && !disabled) {
     return (
       <a
         data-wallet-cta
@@ -842,7 +973,7 @@ function PrimaryButton({ children, tone, onClick, href, disabled }: {
     cursor: disabled ? 'default' : 'pointer',
     opacity: disabled ? 0.6 : 1,
   }
-  if (href) return <a href={href} className="wallet-cta" style={style} onClick={() => onClick?.()}>{children}</a>
+  if (href && !disabled) return <a href={href} className="wallet-cta" style={style} onClick={() => onClick?.()}>{children}</a>
   return <button type="button" className="wallet-cta" style={style} disabled={disabled} onClick={onClick}>{children}</button>
 }
 
@@ -1082,6 +1213,128 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
   )
 }
 
+function CutReservationDialog({ coupon, onYes, onNo }: {
+  coupon: CutSpecialCoupon
+  onYes: () => void
+  onNo: () => void
+}) {
+  const reduced = useReducedMotion() ?? false
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      onClick={onNo}
+    >
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label="予約済み確認"
+        initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+        transition={{ duration: reduced ? 0 : 0.22 }}
+        onClick={e => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(160deg, #180806 0%, #080404 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
+      >
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.58)', marginBottom: 10 }}>PHONE RESERVATION</p>
+        <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: IVORY, lineHeight: 1.45, marginBottom: 8 }}>
+          予約済みですか？
+        </p>
+        <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.68)', lineHeight: 1.75, marginBottom: 14 }}>
+          電話予約が完了した場合のみ、<br />
+          下タブのQRへ現在の予約状況を反映します。
+        </p>
+        <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
+          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: IVORY, marginBottom: 5 }}>{coupon.title}</p>
+          <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.6)', lineHeight: 1.6, marginBottom: 8 }}>{coupon.menuLabel}</p>
+          <p style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            {typeof coupon.normalPrice === 'number' && (
+              <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.38)', textDecoration: 'line-through' }}>
+                ¥{coupon.normalPrice.toLocaleString()}
+              </span>
+            )}
+            <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#C9A24A', lineHeight: 1 }}>
+              ¥{coupon.memberPrice.toLocaleString()}
+            </span>
+          </p>
+          <p style={{ marginTop: 8, fontSize: 11, color: 'rgba(242,230,200,0.52)', lineHeight: 1.5 }}>
+            {coupon.benefit} / 電話予約済み
+          </p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onNo}
+            className="wallet-cta"
+            style={{ minHeight: 52, borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(242,230,200,0.62)', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer' }}
+          >
+            いいえ
+          </button>
+          <button
+            type="button"
+            onClick={onYes}
+            className="wallet-cta"
+            style={{ minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #F3D98A 0%, #C9A24A 58%, #8B691A 100%)', border: '1px solid rgba(243,217,138,0.9)', boxShadow: '0 4px 22px rgba(201,162,74,0.36)', color: '#170C03', fontFamily: SERIF, fontSize: 13, fontWeight: 800, letterSpacing: '0.10em', cursor: 'pointer' }}
+          >
+            はい、QRに反映
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function CutReservationNotice({ reservation, onClose }: {
+  reservation: CurrentReservation
+  onClose: () => void
+}) {
+  const reduced = useReducedMotion() ?? false
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      onClick={onClose}
+    >
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label="QR反映完了"
+        initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+        transition={{ duration: reduced ? 0 : 0.22 }}
+        onClick={e => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(160deg, #150706 0%, #070303 100%)', border: '1px solid rgba(201,162,74,0.34)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '28px 22px 22px', textAlign: 'center' }}
+      >
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.62)', marginBottom: 12 }}>RESERVATION UPDATED</p>
+        <p style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 700, color: IVORY, lineHeight: 1.5, marginBottom: 10 }}>
+          下タブのQRへ反映しました
+        </p>
+        <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.70)', lineHeight: 1.85, marginBottom: 16 }}>
+          お会計時は下タブ中央のQRコードを開き、<br />
+          従業員にお見せください。
+        </p>
+        <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
+          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: IVORY, marginBottom: 5 }}>{reservation.title}</p>
+          <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.62)', lineHeight: 1.6, marginBottom: 8 }}>{reservation.menuLabel}</p>
+          <p style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            {typeof reservation.normalPrice === 'number' && (
+              <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.38)', textDecoration: 'line-through' }}>
+                ¥{reservation.normalPrice.toLocaleString()}
+              </span>
+            )}
+            <span style={{ fontFamily: SERIF, fontSize: 27, fontWeight: 700, color: '#C9A24A', lineHeight: 1 }}>
+              ¥{reservation.memberPrice.toLocaleString()}
+            </span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="wallet-cta"
+          style={{ width: '100%', minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 22px rgba(107,15,18,0.40)', color: IVORY, fontFamily: SERIF, fontSize: 14, fontWeight: 800, letterSpacing: '0.14em', cursor: 'pointer' }}
+        >
+          OK
+        </button>
+      </motion.div>
+    </div>
+  )
+}
+
 function DeckSkeleton() {
   const block: React.CSSProperties = {
     borderRadius: 24, background: 'linear-gradient(158deg, #15100E 0%, #0B0807 100%)',
@@ -1101,7 +1354,7 @@ function EmptyState({ filter }: { filter: WalletFilter }) {
     ? 'メンテナンスカット'
     : filter === 'premium'
       ? '漢前Premiumパーマ'
-      : 'その他'
+      : '割引チケット'
   return (
     <div style={{
       margin: '0 16px', height: CARD_HEIGHT,

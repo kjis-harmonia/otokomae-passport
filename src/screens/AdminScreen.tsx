@@ -13,6 +13,7 @@ import type { CustomerRow } from '../utils/customerStore'
 import { isWelcomeCouponBlockedToday, WELCOME_COUPON_WEEKEND_MESSAGE } from '../utils/welcomeCoupon'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
+import { normalizeCurrentReservation, type CurrentReservation } from '../utils/currentReservation'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -144,6 +145,7 @@ export interface PassportQRData {
   type: string
   userId: string
   name: string
+  reservation?: CurrentReservation | null
 }
 
 export interface TicketUseQRData {
@@ -200,7 +202,12 @@ export function parseQR(text: string): AnyQRData | null {
       } as PremiumCouponQRData
     }
     if ((d.type === 'ginjiro-member' || d.type === 'otokomae-passport') && d.userId) {
-      return { type: d.type, userId: d.userId, name: d.name || '名前未設定' }
+      return {
+        type: d.type,
+        userId: d.userId,
+        name: d.name || '名前未設定',
+        reservation: normalizeCurrentReservation(d.reservation),
+      }
     }
     return null
   } catch { return null }
@@ -1067,6 +1074,43 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 </div>
               </div>
             </div>
+
+            {scannedData.reservation && (
+              <div style={{
+                marginBottom: 14,
+                borderRadius: 18,
+                overflow: 'hidden',
+                background: 'linear-gradient(155deg, #150806 0%, #060303 100%)',
+                border: '1px solid rgba(201,162,74,0.34)',
+                boxShadow: '0 10px 34px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,238,190,0.06)',
+              }}>
+                <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.75), transparent)' }} />
+                <div style={{ padding: '15px 18px' }}>
+                  <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.86)', marginBottom: 8 }}>
+                    CURRENT RESERVATION
+                  </p>
+                  <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', lineHeight: 1.35, marginBottom: 4 }}>
+                    {scannedData.reservation.title}
+                  </p>
+                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.68)', lineHeight: 1.55, marginBottom: 10 }}>
+                    {scannedData.reservation.menuLabel}
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 8 }}>
+                    {typeof scannedData.reservation.normalPrice === 'number' && (
+                      <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.38)', textDecoration: 'line-through' }}>
+                        ¥{scannedData.reservation.normalPrice.toLocaleString()}
+                      </span>
+                    )}
+                    <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#C9A24A', lineHeight: 1 }}>
+                      ¥{scannedData.reservation.memberPrice.toLocaleString()}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.54)', lineHeight: 1.55 }}>
+                    {scannedData.reservation.benefit} / 電話予約済み
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* ── アプリ紐付けコード（既存会員の移行・端末のセッション再発行） ── */}
             <div style={{ marginBottom: 14, borderRadius: 16, padding: '14px 16px', background: 'rgba(201,162,74,0.05)', border: '1px solid rgba(201,162,74,0.22)' }}>
