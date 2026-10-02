@@ -58,7 +58,8 @@ export function WalletCardFace({
   const sc        = statusColor(card)
   const isTicket  = card.category === 'otoku'
   const isPremium = isPremiumCategory(card.category)
-  const tag       = card.subtitle ?? card.eyebrow
+  // チケットの英字（OTOKU TICKET 等）は券種名の繰り返しで、狭い画面では途切れるため出さない
+  const tag       = isTicket ? '' : card.subtitle ?? card.eyebrow
   // Welcomeクーポンは見出しを「特殊パーマ」だけにして途切れさせない
   const title     = isWelcome ? card.title.replace(/\s*Welcome\s*クーポン\s*$/, '') || card.title : card.title
   const heroCarriesStatus = isFront && !inactive && (card.category === 'cut' || isPremium)
@@ -105,20 +106,24 @@ export function WalletCardFace({
       <div style={{ position: 'relative', height: CARD_STRIP - 16, flexShrink: 0, paddingRight: isTicket ? '28%' : 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: 24 }}>
           {isWelcome ? (
-            <p style={{ minWidth: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.22em', color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <p style={{ minWidth: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.12em', color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               WELCOME COUPON
             </p>
           ) : (
             <p style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, fontSize: 11, letterSpacing: '0.16em', whiteSpace: 'nowrap' }}>
               <span style={{ fontWeight: 700, color: theme.accent }}>{cardCategoryLabel(card)}</span>
-              <span style={{ width: 3, height: 3, borderRadius: 9, background: 'rgba(242,230,200,0.3)', flexShrink: 0 }} />
-              <span style={{ color: 'rgba(242,230,200,0.56)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tag}</span>
+              {tag && (
+                <>
+                  <span style={{ width: 3, height: 3, borderRadius: 9, background: 'rgba(242,230,200,0.3)', flexShrink: 0 }} />
+                  <span style={{ color: 'rgba(242,230,200,0.56)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tag}</span>
+                </>
+              )}
             </p>
           )}
           {!heroCarriesStatus && (isWelcome && !inactive ? (
             <span style={{
-              flexShrink: 0, fontSize: 12, fontWeight: 800, letterSpacing: '0.12em',
-              padding: '4px 11px', borderRadius: 999, color: '#1A0E04', whiteSpace: 'nowrap',
+              flexShrink: 0, fontSize: 12, fontWeight: 800, letterSpacing: '0.04em',
+              padding: '4px 10px', borderRadius: 999, color: '#1A0E04', whiteSpace: 'nowrap',
               background: 'linear-gradient(135deg, #F3D98A 0%, #C9A24A 100%)', border: '1px solid rgba(243,217,138,0.9)',
             }}>
               平日限定
