@@ -12,7 +12,8 @@ import { PreviousTicketsPrompt } from '../components/PreviousTicketsBind'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getLastVisit } from '../utils/visitHistory'
 import { getMaintenanceVisit } from '../utils/maintenanceSchedule'
-import { saveCurrentReservation, type CurrentReservation } from '../utils/currentReservation'
+import { createReservation, saveCurrentReservation, RESERVATION_MAX_DAYS_AHEAD, type CurrentReservation } from '../utils/currentReservation'
+import { getJapanDateString, addDaysToDateString } from '../utils/dateUtils'
 import type { TicketRow } from '../data/ticket'
 import { SHOP_PHONE_TEL, WALLET_FILTERS, type WalletCard, type WalletFilter } from '../data/wallet'
 import {
@@ -360,22 +361,10 @@ export function TicketWalletScreen({
     })
   }
 
-  function buildCutReservation(coupon: CutSpecialCoupon): CurrentReservation {
-    return {
-      kind: 'cut-special',
-      id: coupon.id,
-      title: coupon.title,
-      menuLabel: coupon.menuLabel,
-      normalPrice: coupon.normalPrice,
-      memberPrice: coupon.memberPrice,
-      benefit: coupon.benefit,
-      bookingMethod: 'phone',
-      reservedAt: new Date().toISOString(),
-    }
-  }
-
-  function confirmCutReservation(coupon: CutSpecialCoupon) {
-    const reservation = buildCutReservation(coupon)
+  function confirmCutReservation(coupon: CutSpecialCoupon, visitDate: string) {
+    // 価格・メニューはマスタから。予約日当日だけ有効（翌日以降は端末から自動で消える）
+    const reservation = createReservation(coupon.id, visitDate)
+    if (!reservation) return
     saveCurrentReservation(reservation)
     setCutReservationCoupon(null)
     setCutReservationNotice(reservation)
@@ -701,7 +690,7 @@ export function TicketWalletScreen({
           <CutReservationDialog
             coupon={cutReservationCoupon}
             onNo={() => setCutReservationCoupon(null)}
-            onYes={() => confirmCutReservation(cutReservationCoupon)}
+            onYes={visitDate => confirmCutReservation(cutReservationCoupon, visitDate)}
           />
         )}
       </AnimatePresence>
@@ -1213,12 +1202,22 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
   )
 }
 
+function formatVisitDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number)
+  const weekday = ['日', '月', '火', '水', '木', '金', '土'][new Date(Date.UTC(y, m - 1, d)).getUTCDay()]
+  return `${m}月${d}日（${weekday}）`
+}
+
 function CutReservationDialog({ coupon, onYes, onNo }: {
   coupon: CutSpecialCoupon
-  onYes: () => void
+  onYes: (visitDate: string) => void
   onNo: () => void
 }) {
   const reduced = useReducedMotion() ?? false
+  const today = getJapanDateString()
+  const maxDate = addDaysToDateString(today, RESERVATION_MAX_DAYS_AHEAD)
+  const [visitDate, setVisitDate] = useState(today)
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(visitDate) && visitDate >= today && visitDate <= maxDate
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
@@ -1258,6 +1257,24 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
             {coupon.benefit} / 電話予約済み
           </p>
         </div>
+        <label style={{ display: 'block', textAlign: 'left', marginBottom: 18 }}>
+          <span style={{ display: 'block', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.6)', marginBottom: 6 }}>
+            ご予約日（この日だけ有効）
+          </span>
+          <input
+            type="date"
+            value={visitDate}
+            min={today}
+            max={maxDate}
+            onChange={e => setVisitDate(e.target.value)}
+            aria-label="ご予約日"
+            style={{
+              width: '100%', height: 46, borderRadius: 12, padding: '0 12px', colorScheme: 'dark',
+              background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(201,162,74,0.35)', color: IVORY,
+              fontFamily: SERIF, fontSize: 15, outline: 'none',
+            }}
+          />
+        </label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: 10 }}>
           <button
             type="button"
@@ -1269,9 +1286,10 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
           </button>
           <button
             type="button"
-            onClick={onYes}
+            onClick={() => { if (validDate) onYes(visitDate) }}
+            disabled={!validDate}
             className="wallet-cta"
-            style={{ minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #F3D98A 0%, #C9A24A 58%, #8B691A 100%)', border: '1px solid rgba(243,217,138,0.9)', boxShadow: '0 4px 22px rgba(201,162,74,0.36)', color: '#170C03', fontFamily: SERIF, fontSize: 13, fontWeight: 800, letterSpacing: '0.10em', cursor: 'pointer' }}
+            style={{ minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #F3D98A 0%, #C9A24A 58%, #8B691A 100%)', border: '1px solid rgba(243,217,138,0.9)', boxShadow: '0 4px 22px rgba(201,162,74,0.36)', color: '#170C03', fontFamily: SERIF, fontSize: 13, fontWeight: 800, letterSpacing: '0.10em', cursor: validDate ? 'pointer' : 'default', opacity: validDate ? 1 : 0.55 }}
           >
             はい、QRに反映
           </button>
@@ -1309,6 +1327,7 @@ function CutReservationNotice({ reservation, onClose }: {
           従業員にお見せください。
         </p>
         <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
+          <p style={{ fontSize: 11, letterSpacing: '0.1em', color: '#C9A24A', marginBottom: 6 }}>ご予約日 {formatVisitDate(reservation.visitDate)}・当日のみ有効</p>
           <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: IVORY, marginBottom: 5 }}>{reservation.title}</p>
           <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.62)', lineHeight: 1.6, marginBottom: 8 }}>{reservation.menuLabel}</p>
           <p style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>

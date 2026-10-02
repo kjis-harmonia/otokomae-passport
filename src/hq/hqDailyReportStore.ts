@@ -74,14 +74,6 @@ export async function generateAndSaveDailyReport(): Promise<GenerateDailyReportR
       payment_summary: agg.paymentBreakdown,
     }
 
-    // 会計データはあるはずなのに日報が空になる、といった原因追跡用に集計結果を必ずログ出力する。
-    console.log('[hqDailyReportStore] generateAndSaveDailyReport: 集計結果', {
-      reportDate: source.report_date,
-      agg,
-      productsCount: products.length,
-      inventoryAlertsCount: inventoryAlerts.length,
-    })
-
     const saved = await callHqRpc<DailyReport>('hq_save_daily_report', { p: row })
     return { ok: true, report: saved }
   } catch (e) {

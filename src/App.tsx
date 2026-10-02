@@ -17,7 +17,6 @@ import { DiagnosisScreen } from './screens/DiagnosisScreen'
 import { OnboardingScreen, type OnboardingDonePayload } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import PremiumGachaExperience from './components/PremiumGachaExperience'
-import type { GachaResult } from './components/PremiumGachaExperience'
 import { MemberQrModal } from './components/MemberQrModal'
 import { MOCK_MEMBER } from './data/brand'
 import type { NavTab, MemberStatus } from './data/brand'
@@ -865,9 +864,7 @@ function App() {
   // ── Transfer acceptance overlay ───────────────────────────────────────────────
   const [transferToken, setTransferToken]   = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search)
-    const token  = params.get('token')
-    console.log('[App] URL search:', window.location.search, '→ token param:', token)
-    return token
+    return params.get('token')
   })
   const [transferTicket,  setTransferTicket]  = useState<TicketRow | null>(null)
   const [transferLoading, setTransferLoading] = useState(() =>
@@ -879,12 +876,10 @@ function App() {
 
   useEffect(() => {
     if (!transferToken) return
-    console.log('[App] transferToken detected, fetching ticket for token:', transferToken)
     setTransferLoading(true)
     setTransferTicket(null)
     getTicketByTransferToken(transferToken)
       .then(t => {
-        console.log('[App] getTicketByTransferToken result:', t)
         setTransferTicket(t)
       })
       .catch(err => {
@@ -969,8 +964,8 @@ function App() {
     setActiveTab('shop')
   }, [])
 
-  const handleGachaComplete = useCallback((result: GachaResult) => {
-    console.log('[PremiumGacha] result:', result)
+  const handleGachaComplete = useCallback(() => {
+    // 結果の表示はガチャ演出側で行う
   }, [])
 
   const handleGachaClose = useCallback(() => {

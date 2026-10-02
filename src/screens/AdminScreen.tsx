@@ -13,7 +13,8 @@ import type { CustomerRow } from '../utils/customerStore'
 import { isWelcomeCouponBlockedToday, WELCOME_COUPON_WEEKEND_MESSAGE } from '../utils/welcomeCoupon'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
-import { normalizeCurrentReservation, type CurrentReservation } from '../utils/currentReservation'
+import { normalizeCurrentReservation, isReservationForDate, type CurrentReservation } from '../utils/currentReservation'
+import { PREMIUM_COUPONS } from '../data/wallet'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -194,12 +195,24 @@ export function parseQR(text: string): AnyQRData | null {
     const d = JSON.parse(text)
     if (d.type === 'ginjiro-ticket-use' && d.userId && d.selectedTicketId) return d as TicketUseQRData
     if (d.type === 'ginjiro-maintenance-coupon' && (d.token || d.userId)) return d as MaintenanceCouponQRData
-    if (d.type === 'ginjiro-premium-coupon' && d.userId && d.couponId && d.memberPrice !== undefined) {
+    if (d.type === 'ginjiro-premium-coupon' && d.userId && d.couponId) {
+      // QR からは会員・クーポンID・期限だけを使い、メニュー名・価格は店舗側のマスタから復元する（QR内の価格は使わない）
+      const def = PREMIUM_COUPONS.find(c => c.id === d.couponId)
+      const price = def?.prices[0]
+      if (!def || !price || (def.category !== 'classic' && def.category !== 'special' && def.category !== 'ginpara')) return null
       return {
-        ...d,
-        memberPrice: Number(d.memberPrice),
-        normalPrice: d.normalPrice === undefined || d.normalPrice === null ? null : Number(d.normalPrice),
-      } as PremiumCouponQRData
+        type: 'ginjiro-premium-coupon',
+        userId: String(d.userId),
+        name: typeof d.name === 'string' && d.name ? d.name : '名前未設定',
+        couponId: def.id,
+        category: def.category,
+        title: def.title,
+        menuLabel: price.label ?? def.subtitle ?? def.title,
+        normalPrice: price.normalPrice ?? null,
+        memberPrice: price.memberPrice,
+        issuedAt: typeof d.issuedAt === 'string' ? d.issuedAt : undefined,
+        expiresAt: typeof d.expiresAt === 'string' ? d.expiresAt : undefined,
+      }
     }
     if ((d.type === 'ginjiro-member' || d.type === 'otokomae-passport') && d.userId) {
       return {
@@ -1075,7 +1088,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               </div>
             </div>
 
-            {scannedData.reservation && (
+            {/* Special予約：予約日当日だけ予約割引を表示（価格は店舗側マスタ。QR内の価格は使わない） */}
+            {scannedData.reservation && isReservationForDate(scannedData.reservation) && (
               <div style={{
                 marginBottom: 14,
                 borderRadius: 18,
@@ -1087,7 +1101,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.75), transparent)' }} />
                 <div style={{ padding: '15px 18px' }}>
                   <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.86)', marginBottom: 8 }}>
-                    CURRENT RESERVATION
+                    CURRENT RESERVATION · 本日のご予約
                   </p>
                   <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', lineHeight: 1.35, marginBottom: 4 }}>
                     {scannedData.reservation.title}
@@ -1110,6 +1124,11 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   </p>
                 </div>
               </div>
+            )}
+            {scannedData.reservation && !isReservationForDate(scannedData.reservation) && (
+              <p style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', fontSize: 12, color: '#bdbdbd', lineHeight: 1.6 }}>
+                {scannedData.reservation.title}：ご予約日 {scannedData.reservation.visitDate.replace(/-/g, '/')}（本日は対象外のため予約割引なし）
+              </p>
             )}
 
             {/* ── アプリ紐付けコード（既存会員の移行・端末のセッション再発行） ── */}

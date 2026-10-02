@@ -814,13 +814,7 @@ export function MyPageScreen({ memberStatus }: Props) {
           <PreviousTicketsEntry onBound={() => { void fetchTickets() }} />
         </div>
 
-        {/* Footer */}
-        <div style={{ padding: '28px 20px 10px' }}>
-          <p style={{ fontSize: 9, textAlign: 'center', color: 'rgba(201,162,74,0.15)', letterSpacing: '0.1em' }}>
-            ※ 会員情報の本格連携は近日公開予定です
-          </p>
-        </div>
-        <div style={{ height: 20 }} />
+        <div style={{ height: 56 }} />
       </div>
     </>
   )
