@@ -796,7 +796,7 @@ const CUT_SPECIAL_VISUALS = [
 
 const PREMIUM_VISUALS: Record<PremiumCategory, { imageSrc: string; alt: string; tone: 'gold' | 'red' | 'silver' }> = {
   classic: {
-    imageSrc: '/images/tickets/premium-classics-wide.jpg',
+    imageSrc: '/images/tickets/premium-classics-wide.png',
     alt: 'GINJIRO CLASSICS アイパー、パンチ、ニグロ、濡れパン 9,000円から8,000円',
     tone: 'gold',
   },
@@ -806,7 +806,7 @@ const PREMIUM_VISUALS: Record<PremiumCategory, { imageSrc: string; alt: string; 
     tone: 'red',
   },
   ginpara: {
-    imageSrc: '/images/tickets/premium-ginpara-wide.jpg',
+    imageSrc: '/images/tickets/premium-ginpara-wide.png',
     alt: 'GINPARA 銀パラ 16,000円から15,000円',
     tone: 'silver',
   },
