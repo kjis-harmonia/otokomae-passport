@@ -124,9 +124,11 @@ PIN は6桁（100万通り）。未登録端末は10分10回までのため、�
 
 ステップB は既存会員全員の紐付け完了を待たずに実行する。B 後、未紐付けの既存会員は次回来店時に店頭の10分コードで順次紐付ける。
 
-1. （適用済み）`20261001_welcome_coupon_onboarding.sql`
-2. **catch-up**：`20261001_prod_schema_catchup.sql` を SQL Editor で実行（本番に無かった customer_notes テーブルと daily_reports.payment_summary 列を追加。冪等。**これを先に実行しないとステップA が失敗する**）
-3. **ステップA**：`20261001_security_hardening_a_functions.sql` を SQL Editor で実行（追加のみ・今のアプリに影響なし）
+> migration は Supabase CLI 互換の名前（14桁 version・ファイル名の並び＝適用順）に揃えた（2026-10-04）。旧 schema.sql（supabase 直下）は `supabase/migrations/20261001000000_base_schema.sql`、切り戻しは `supabase/rollback/` にある。中身は変えていない。
+
+1. （適用済み）`supabase/migrations/20261001000100_welcome_coupon_onboarding.sql`
+2. **catch-up**：`supabase/migrations/20261001000200_prod_schema_catchup.sql` を SQL Editor で実行（本番に無かった customer_notes テーブルと daily_reports.payment_summary 列を追加。冪等。**これを先に実行しないとステップA が失敗する**）
+3. **ステップA**：`supabase/migrations/20261001000300_security_hardening_a_functions.sql` を SQL Editor で実行（追加のみ・今のアプリに影響なし）
 4. PIN とパスコードを設定（値はファイルやチャットに残さず、その場で入力。旧値は公開済みのため**新しい値**にする）
    ```sql
    select app_private.set_secret('staff_pin', '＜6桁の数字＞');
@@ -142,9 +144,9 @@ PIN は6桁（100万通り）。未登録端末は10分10回までのため、�
    - 店舗端末の在庫管理・お客様アプリの SHOP（店販商品の表示）
    - 既存会員：店舗端末で紐付けコード発行 → お客様アプリで入力 → Wallet に既存チケット表示
    - メンテナンスQR（**前回来店日から14日以内のテスト会員**で実施。新規登録直後の会員では不可）：お客様側表示（5分・自動更新）→ 店舗端末で確定 → 再利用拒否
-7. 問題なければ**速やかにステップB**：`20261001_security_hardening_b_lockdown.sql`
+7. 問題なければ**速やかにステップB**：`supabase/migrations/20261001000400_security_hardening_b_lockdown.sql`
 8. B 直後に下記「本番確認SQL」を実行し、旧経路が残っていないことを確認。あわせて、**既存会員で顧客セッション未紐付けの端末**で、Wallet を開くと「以前のチケットを引き継ぐ」の小さなモーダル（引き継ぐ／あとで）が出ること、My画面に同じ導線があることを確認（新規会員の端末には何も出ないこと）
-9. 問題があれば `20261001_security_hardening_rollback.sql` で直接アクセスと旧 RPC を復元（旧アプリに戻す場合のみ）
+9. 問題があれば `supabase/rollback/20261001_security_hardening_rollback.sql` で直接アクセスと旧 RPC を復元（旧アプリに戻す場合のみ）
 
 ## ステップA〜B 間に残る旧経路と、B 後の状態
 

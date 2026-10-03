@@ -10,25 +10,29 @@ import { fileURLToPath } from 'node:url'
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const migrationsDir = join(root, 'supabase', 'migrations')
 const testsDir = join(root, 'supabase', 'tests')
-const schemaFile = join(root, 'supabase', 'schema.sql')
+const rollbackDir = join(root, 'supabase', 'rollback')
 
-// 適用順（docs/security-hardening.md の切替手順と、その後の予約・顧客・GINPay・会計・サービスマスター）。
-// ファイル名の並び順ではなくこの順で適用する（20261001 の4件は同じ日付で、名前順と適用順が違う）。
+// 適用順（Supabase CLI 互換：14桁の version が一意で、ファイル名の並び＝適用順）。
+// base_schema は旧 supabase/schema.sql（本番には最初から存在する土台）。切り戻し用は supabase/rollback/ に分けてある。
+const BASE_MIGRATION = '20261001000000_base_schema.sql'
 const MIGRATION_ORDER = [
-  '20261001_welcome_coupon_onboarding.sql',
-  '20261001_prod_schema_catchup.sql',
-  '20261001_security_hardening_a_functions.sql',
-  '20261001_security_hardening_b_lockdown.sql',
-  '20261002_booking_phase1.sql',
-  '20261003_customer_ledger.sql',
-  '20261004_ginpay_ledger.sql',
-  '20261005_checkout.sql',
-  '20261006_service_master.sql',
+  BASE_MIGRATION,
+  '20261001000100_welcome_coupon_onboarding.sql',
+  '20261001000200_prod_schema_catchup.sql',
+  '20261001000300_security_hardening_a_functions.sql',
+  '20261001000400_security_hardening_b_lockdown.sql',
+  '20261002000000_booking_phase1.sql',
+  '20261003000000_customer_ledger.sql',
+  '20261004000000_ginpay_ledger.sql',
+  '20261005000000_checkout.sql',
+  '20261006000000_service_master.sql',
 ]
-// 通常は適用しないもの（切り戻し専用）
-const MIGRATION_EXCLUDED = ['20261001_security_hardening_rollback.sql']
-// 以前の名前（改名済み）。リポジトリに参照が残っていないこと
-const STALE_MIGRATION_NAMES = ['20261003_ginpay_ledger', '20261004_checkout']
+// 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
+const STALE_MIGRATION_NAMES = [
+  'supabase/schema.sql', '20261001_welcome_coupon_onboarding', '20261001_prod_schema_catchup', '20261001_security_hardening_a_functions',
+  '20261001_security_hardening_b_lockdown', '20261002_booking_phase1', '20261003_customer_ledger', '20261004_ginpay_ledger',
+  '20261005_checkout', '20261006_service_master', '20261003_ginpay_ledger', '20261004_checkout',
+]
 
 const args = parseArgs(process.argv.slice(2))
 const dbUrl = args.databaseUrl ?? process.env.PREFLIGHT_DATABASE_URL ?? process.env.DATABASE_URL ?? null
@@ -50,13 +54,15 @@ async function main() {
     assertSupabaseLike(dbUrl, 'DATABASE_URL')
     if (baselineDbUrl) assertSupabaseLike(baselineDbUrl, 'PREFLIGHT_BASELINE_DATABASE_URL')
 
-    if (existsSync(schemaFile)) runPsqlFile(dbUrl, schemaFile, 'schema bootstrap')
-    for (const file of migrations) runPsqlFile(dbUrl, file, `migration ${relative(root, file)}`)
-    for (const file of migrations) runPsqlFile(dbUrl, file, `migration replay ${relative(root, file)}`)
+    // 各 migration は Supabase CLI と同じく1トランザクションで適用する。
+    // base_schema は土台の一括作成で再実行を想定していないため、再適用（冪等性の確認）は base 以外だけ
+    const later = migrations.filter((file) => !file.endsWith(BASE_MIGRATION))
+    for (const file of migrations) runPsqlMigration(dbUrl, file, `migration ${relative(root, file)}`)
+    for (const file of later) runPsqlMigration(dbUrl, file, `migration replay ${relative(root, file)}`)
     if (baselineDbUrl) {
-      // 本番相当のコピー：適用前のデータの指紋を取り、全 migration を適用してから比較する（schema.sql は流さない）
+      // 本番相当のコピー：本番には base_schema が最初からある。適用前のデータの指紋を取り、base 以外を適用してから比較する
       baselineBefore = snapshot(baselineDbUrl)
-      for (const file of migrations) runPsqlFile(baselineDbUrl, file, `baseline migration ${relative(root, file)}`)
+      for (const file of later) runPsqlMigration(baselineDbUrl, file, `baseline migration ${relative(root, file)}`)
     }
     return baselineDbUrl
       ? `clean apply + replay + baseline apply ok (${migrations.length} migrations)`
@@ -188,21 +194,23 @@ Safety:
   return out
 }
 
-/** 適用順の静的検査：ディレクトリと適用順の一致、20261002 以降の version 重複・逆転、旧ファイル名の参照 */
+/** 適用順の静的検査：ディレクトリ＝適用順、14桁 version の一意・昇順（ファイル名の並び＝適用順）、切り戻しの分離、旧ファイル名の参照 */
 function migrationStaticCheck() {
   if (!existsSync(migrationsDir)) throw new Error('supabase/migrations not found')
-  const files = readdirSync(migrationsDir).filter((name) => name.endsWith('.sql'))
+  const files = readdirSync(migrationsDir).filter((name) => name.endsWith('.sql')).sort()
   for (const file of files) {
-    if (!/^\d{8}_[a-z0-9][a-z0-9_.-]*\.sql$/i.test(file)) throw new Error(`migration filename is not ordered/numeric-prefixed: ${file}`)
-    if (!MIGRATION_ORDER.includes(file) && !MIGRATION_EXCLUDED.includes(file)) throw new Error(`migration not in the apply order: ${file}`)
+    if (!/^\d{14}_[a-z0-9][a-z0-9_]*\.sql$/.test(file)) throw new Error(`migration filename is not a Supabase CLI version (14 digits): ${file}`)
+    if (/rollback/i.test(file)) throw new Error(`rollback migration must not be in supabase/migrations: ${file}`)
   }
-  for (const file of MIGRATION_ORDER) if (!files.includes(file)) throw new Error(`migration listed but missing: ${file}`)
-  // 20261001 の4件は本番で適用済み・手順書どおりの順。それ以降は日付（version）が一意で昇順であること
-  const later = MIGRATION_ORDER.filter((f) => f.slice(0, 8) > '20261001').map((f) => f.slice(0, 8))
-  for (let i = 0; i < later.length; i += 1) {
-    if (later.indexOf(later[i]) !== i) throw new Error(`duplicate migration version: ${later[i]}`)
-    if (i > 0 && later[i] <= later[i - 1]) throw new Error(`migration order reversed at ${later[i]}`)
+  if (JSON.stringify(files) !== JSON.stringify(MIGRATION_ORDER)) {
+    throw new Error(`supabase/migrations does not match the apply order (found: ${files.join(', ')})`)
   }
+  const versions = MIGRATION_ORDER.map((f) => f.slice(0, 14))
+  for (let i = 0; i < versions.length; i += 1) {
+    if (versions.indexOf(versions[i]) !== i) throw new Error(`duplicate migration version: ${versions[i]}`)
+    if (i > 0 && versions[i] <= versions[i - 1]) throw new Error(`migration order reversed at ${versions[i]}`)
+  }
+  if (!existsSync(join(rollbackDir, '20261001_security_hardening_rollback.sql'))) throw new Error('rollback script missing from supabase/rollback')
   const stale = findInRepo(STALE_MIGRATION_NAMES)
   if (stale.length) throw new Error(`references to old migration names: ${stale.join(', ')}`)
   return MIGRATION_ORDER.map((file) => join(migrationsDir, file))
@@ -258,7 +266,7 @@ function findInRepo(needles) {
   const self = fileURLToPath(import.meta.url)
   const hits = []
   walkRepo((full, text) => {
-    if (full === self) return
+    if (full === self || full.startsWith(migrationsDir) || full.startsWith(rollbackDir)) return
     for (const n of needles) if (text.includes(n)) hits.push(`${n} in ${relative(root, full)}`)
   })
   return hits
@@ -299,6 +307,12 @@ function requireCommand(command) {
 function runPsqlFile(url, file, label) {
   if (!existsSync(file)) throw new Error(`missing SQL file for ${label}: ${relative(root, file)}`)
   runCommand('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', url, '-f', file], label)
+}
+
+/** migration は1トランザクション（-1）で適用する（Supabase CLI と同じ。途中で失敗すればその migration は丸ごと戻る） */
+function runPsqlMigration(url, file, label) {
+  if (!existsSync(file)) throw new Error(`missing migration for ${label}: ${relative(root, file)}`)
+  runCommand('psql', ['-X', '-q', '-1', '-v', 'ON_ERROR_STOP=1', url, '-f', file], label)
 }
 
 function runPsqlQuery(url, sql, label) {

@@ -1,4 +1,4 @@
--- Staging preflight: service master (20261006_service_master.sql) matches the confirmed state.
+-- Staging preflight: service master (20261006000000_service_master.sql) matches the confirmed state.
 -- Read-only. Fails if the master differs from the expected counts or if anything ambiguous was merged / enabled.
 
 do $$
