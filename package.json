@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "preflight:staging": "node scripts/staging-preflight.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

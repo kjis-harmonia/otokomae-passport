@@ -495,3 +495,6 @@ as $$
                  from public.products p where p.is_active and p.category = '店販' and p.price > 0)
   )
 $$;
+
+-- app_private の関数は外部から実行できない（他の migration と同じ。この migration で追加したトリガー関数を含む）
+revoke all on all functions in schema app_private from public, anon, authenticated;
