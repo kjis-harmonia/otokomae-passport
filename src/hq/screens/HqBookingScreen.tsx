@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { HQ_COLORS, HQ_SANS } from '../hqTheme'
 import { getJapanDateString, addDaysToDateString } from '../../utils/dateUtils'
 import {
-  getBookingMasters, updateBookingSettings, upsertStaffMember, upsertMenu, getSchedule, setShiftTemplate, setDaySchedule,
+  getBookingMasters, updateBookingSettings, upsertStaffMember, getSchedule, setShiftTemplate, setDaySchedule,
   setBusinessHours, createTimeBlock, deleteTimeBlock, setClosure, deleteClosure, hqBookingErrorMessage, jstIso, BLOCK_KIND_LABEL,
-  type BookingMasters, type ServiceMenu, type Schedule, type BlockKind, type StaffMember, type BusinessHour, type DaySchedule,
+  type BookingMasters, type Schedule, type BlockKind, type StaffMember, type BusinessHour, type DaySchedule,
 } from '../hqBookingStore'
 
 // 本部：予約設定（シフト・メニュー・スタッフ・営業・設定）
@@ -22,10 +22,10 @@ const T = {
 const WEEK = ['日', '月', '火', '水', '木', '金', '土']
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] // 月曜はじまりで表示
 
-type Tab = 'shifts' | 'menus' | 'staff' | 'hours' | 'settings'
+// メニュー・価格は本部の「メニュー・価格」で編集する（予約と会計で共通のマスター）
+type Tab = 'shifts' | 'staff' | 'hours' | 'settings'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'shifts', label: 'シフト' },
-  { id: 'menus', label: 'メニュー' },
   { id: 'staff', label: 'スタッフ' },
   { id: 'hours', label: '営業' },
   { id: 'settings', label: '設定' },
@@ -67,7 +67,6 @@ export function HqBookingScreen() {
       ) : (
         <div style={{ marginTop: 20 }}>
           {tab === 'shifts' && <ShiftsTab masters={masters} onSaved={reload} />}
-          {tab === 'menus' && <MenusTab masters={masters} onSaved={reload} />}
           {tab === 'staff' && <StaffTab masters={masters} onSaved={reload} />}
           {tab === 'hours' && <HoursTab masters={masters} onSaved={reload} />}
           {tab === 'settings' && <SettingsTab masters={masters} onSaved={reload} />}
@@ -333,129 +332,6 @@ function DayEditor({ name, edit, busy, onChange, onWork, onOff, onReset, onCance
   )
 }
 
-// ── メニュー ─────────────────────────────────────────────────────────────────
-
-function MenusTab({ masters, onSaved }: { masters: BookingMasters; onSaved: () => Promise<void> }) {
-  const [editing, setEditing] = useState<ServiceMenu | 'new' | null>(null)
-  const nameOf = (id: string) => masters.staff.find(x => x.id === id)?.display_name ?? '—'
-  if (editing) {
-    return <MenuEditor menu={editing === 'new' ? null : editing} staff={masters.staff.filter(s => s.is_active)}
-      onClose={() => setEditing(null)} onSaved={async () => { await onSaved(); setEditing(null) }} />
-  }
-  return (
-    <>
-      <p style={{ fontSize: 14, color: T.sub, lineHeight: 1.7 }}>
-        所要時間と担当スタッフが決まったメニューだけを「受付中」にしてください。所要時間が未設定のメニューは予約できません。
-      </p>
-      <div style={{ marginTop: 12, borderTop: `1px solid ${T.line}` }}>
-        {masters.menus.map(m => (
-          <button key={m.id} type="button" onClick={() => setEditing(m)} style={rowButton}>
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 15 }}>{m.name}</span>
-              <span style={{ display: 'block', fontSize: 13, color: T.sub, marginTop: 3, lineHeight: 1.6 }}>
-                {m.duration_min ? `${m.duration_min}分` : '所要時間 未設定'}
-                {m.buffer_after_min ? ` + 片付け${m.buffer_after_min}分` : ''}
-                {' / '}{m.price !== null ? `¥${m.price.toLocaleString()}` : '料金 未設定'}
-                {' / '}担当 {m.staff.length
-                  ? m.staff.map(s => `${nameOf(s.staff_id)}${s.duration_override_min ? `（${s.duration_override_min}分）` : ''}`).join('・')
-                  : '未設定'}
-              </span>
-            </span>
-            <span style={{ fontSize: 13, color: m.is_active ? T.text : T.mute, whiteSpace: 'nowrap' }}>{m.is_active ? '受付中' : '停止中'}</span>
-          </button>
-        ))}
-      </div>
-      <TextButton onClick={() => setEditing('new')} style={{ marginTop: 12 }}>＋ メニューを追加</TextButton>
-    </>
-  )
-}
-
-function MenuEditor({ menu, staff, onClose, onSaved }: { menu: ServiceMenu | null; staff: StaffMember[]; onClose: () => void; onSaved: () => Promise<void> }) {
-  const [name, setName] = useState(menu?.name ?? '')
-  const [duration, setDuration] = useState(menu?.duration_min?.toString() ?? '')
-  const [buffer, setBuffer] = useState((menu?.buffer_after_min ?? 0).toString())
-  const [price, setPrice] = useState(menu?.price?.toString() ?? '')
-  const [normal, setNormal] = useState(menu?.normal_price?.toString() ?? '')
-  const [active, setActive] = useState(menu?.is_active ?? false)
-  // 担当：staff_id → スタッフ別所要時間（空欄 = メニューの所要時間）
-  const [assigned, setAssigned] = useState<Record<string, string>>(
-    () => Object.fromEntries((menu?.staff ?? []).map(s => [s.staff_id, s.duration_override_min?.toString() ?? ''])))
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const num = (v: string) => (v.trim() === '' ? null : Number(v))
-
-  async function save() {
-    setBusy(true); setError(null)
-    try {
-      await upsertMenu({
-        ...(menu ? { id: menu.id } : { code: `menu-${Date.now().toString(36)}` }),
-        name: name.trim(), duration_min: num(duration), buffer_after_min: num(buffer) ?? 0, price: num(price), normal_price: num(normal),
-        is_active: active,
-        staff: Object.entries(assigned).map(([id, d]) => ({ staff_id: id, duration_override_min: num(d) })),
-      })
-      await onSaved()
-    } catch (err) {
-      setError(hqBookingErrorMessage(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <>
-      <TextButton onClick={onClose}>‹ メニュー一覧</TextButton>
-      <h3 style={{ fontSize: 17, fontWeight: 600, marginTop: 8 }}>{menu ? 'メニューを編集' : 'メニューを追加'}</h3>
-      <div style={{ display: 'grid', gap: 12, marginTop: 16, maxWidth: 480 }}>
-        <Input label="メニュー名" value={name} onChange={setName} />
-        <FormRow>
-          <Input label="所要時間（分）" type="number" value={duration} onChange={setDuration} />
-          <Input label="片付け（分）" type="number" value={buffer} onChange={setBuffer} />
-        </FormRow>
-        <FormRow>
-          <Input label="料金（円）" type="number" value={price} onChange={setPrice} />
-          <Input label="通常料金（円・任意）" type="number" value={normal} onChange={setNormal} />
-        </FormRow>
-        <div>
-          <p style={{ fontSize: 13, color: T.sub, marginBottom: 2 }}>担当できるスタッフ</p>
-          <p style={{ fontSize: 12, color: T.mute, marginBottom: 6 }}>人によって所要時間が違う場合だけ、右に分数を入力してください。</p>
-          <div style={{ borderTop: `1px solid ${T.line}` }}>
-            {staff.map(s => {
-              const on = s.id in assigned
-              return (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 50, borderBottom: `1px solid ${T.line}` }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, cursor: 'pointer', flex: 1, minHeight: 44 }}>
-                    <input type="checkbox" checked={on} style={{ width: 18, height: 18 }}
-                      onChange={e => {
-                        const next = { ...assigned }
-                        if (e.target.checked) next[s.id] = ''; else delete next[s.id]
-                        setAssigned(next)
-                      }} />
-                    {s.display_name}
-                  </label>
-                  {on && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: T.sub }}>
-                      <input type="number" inputMode="numeric" value={assigned[s.id]} placeholder={duration || '—'}
-                        aria-label={`${s.display_name}の所要時間`} onChange={e => setAssigned({ ...assigned, [s.id]: e.target.value })}
-                        style={{ ...fieldStyle, width: 76 }} />
-                      分
-                    </label>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, cursor: 'pointer', minHeight: 44 }}>
-          <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} style={{ width: 18, height: 18 }} />
-          予約を受け付ける
-        </label>
-        {error && <p style={{ color: T.danger, fontSize: 14 }}>{error}</p>}
-        <PrimaryButton disabled={busy || name.trim() === ''} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</PrimaryButton>
-      </div>
-    </>
-  )
-}
-
 // ── スタッフ ─────────────────────────────────────────────────────────────────
 
 function StaffTab({ masters, onSaved }: { masters: BookingMasters; onSaved: () => Promise<void> }) {
@@ -635,10 +511,6 @@ function SettingsTab({ masters, onSaved }: { masters: BookingMasters; onSaved: (
 
 // ── 共通部品 ─────────────────────────────────────────────────────────────────
 
-const rowButton: React.CSSProperties = {
-  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 0', textAlign: 'left',
-  background: 'none', borderWidth: '0 0 1px 0', borderStyle: 'solid', borderColor: T.line, color: T.text, cursor: 'pointer', fontFamily: HQ_SANS,
-}
 const fieldStyle: React.CSSProperties = {
   height: 40, boxSizing: 'border-box', padding: '0 10px', borderRadius: 6, fontSize: 15, fontFamily: HQ_SANS,
   background: T.field, color: T.text, border: `1px solid ${T.line}`, outline: 'none', colorScheme: 'dark', width: '100%',

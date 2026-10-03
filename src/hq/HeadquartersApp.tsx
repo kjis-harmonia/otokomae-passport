@@ -11,6 +11,7 @@ import { HqClientsScreen } from './screens/HqClientsScreen'
 import { HqSalesLedgerScreen } from './screens/HqSalesLedgerScreen'
 import { HqGinpayScreen } from './screens/HqGinpayScreen'
 import { HqBookingScreen } from './screens/HqBookingScreen'
+import { HqServiceMasterScreen } from './screens/HqServiceMasterScreen'
 import { ReservationLedger } from '../components/booking/ReservationLedger'
 import { hqBookingApi } from '../utils/bookingApi'
 import { hqCustomerApi } from '../utils/customerApi'
@@ -55,6 +56,7 @@ export function HeadquartersApp() {
       {tab === 'ledger' && <ReservationLedger api={hqBookingApi} customers={hqCustomerApi} ginpay={hqGinpayApi} bottomGap={isMobile ? 32 : 28} />}
       {tab === 'ginpay' && <HqGinpayScreen />}
       {tab === 'register' && <HqSalesLedgerScreen />}
+      {tab === 'menus' && <HqServiceMasterScreen />}
       {tab === 'booking' && <HqBookingScreen />}
       {tab === 'inventory' && <HqInventoryScreen />}
       {tab === 'reports' && <HqDailyReportScreen />}

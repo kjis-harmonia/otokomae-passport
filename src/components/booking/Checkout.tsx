@@ -303,9 +303,11 @@ function ItemPicker({ api, onPick, onClose }: { api: CheckoutApi; onPick: (src: 
   const [manual, setManual] = useState({ name: '', price: '', category: 'menu' as CatalogItem['category'] })
   useEffect(() => { api.catalog().then(setCat).catch(() => setCat({ service_menus: [], menus: [], products: [] })) }, [api])
   const match = (i: CatalogItem) => !q.trim() || i.name.includes(q.trim())
+  // 正規サービスはカテゴリ（カット・カラー・パーマ・オプション・セット…）ごと、その後に旧会計メニューと店販
+  const serviceGroups = cat ? [...new Set(cat.service_menus.map(i => i.group ?? 'メニュー'))] : []
   const groups: [string, SaleLine['source'], CatalogItem[]][] = cat ? [
-    ['予約メニュー', 'service_menu', cat.service_menus.filter(match)],
-    ['メニュー・オプション', 'accounting_item', cat.menus.filter(match)],
+    ...serviceGroups.map(g => [g, 'service_menu', cat.service_menus.filter(i => (i.group ?? 'メニュー') === g && match(i))] as [string, SaleLine['source'], CatalogItem[]]),
+    ['旧会計メニュー', 'accounting_item', cat.menus.filter(match)],
     ['店販', 'product', cat.products.filter(match)],
   ] : []
   return (
@@ -319,7 +321,7 @@ function ItemPicker({ api, onPick, onClose }: { api: CheckoutApi; onPick: (src: 
           <p style={{ fontSize: 12, color: C.mute }}>{label}</p>
           {items.map(i => (
             <button key={`${src}-${i.id}`} type="button" onClick={() => onPick(src, i)} style={{ ...lineBtn, minHeight: 44 }}>
-              <span style={{ fontSize: 14 }}>{i.name}</span><span style={{ fontSize: 14, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{yen(i.price)}</span>
+              <span style={{ fontSize: 14 }}>{i.name}</span><span style={{ fontSize: 14, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{yen(i.price)}{i.price_from ? '〜' : ''}</span>
             </button>
           ))}
         </div>

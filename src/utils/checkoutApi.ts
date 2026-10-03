@@ -31,7 +31,9 @@ export interface CheckoutContext {
   staff: { id: string; name: string }[]
   tax: { mode: 'inclusive' | 'exclusive' | null; rate: number | null }
 }
-export interface CatalogItem { id: string; name: string; category: ItemCategory; price: number }
+/** 会計で選べる品目。正規サービスは kind（service|option|set）と group（カット・カラーなどのカテゴリ）、price_from（「〜」付き価格）を持つ */
+export interface CatalogItem { id: string; name: string; category: ItemCategory; price: number; kind?: 'service' | 'option' | 'set'; group?: string | null; price_from?: boolean }
+/** service_menus = 正規サービスマスター、menus = 正規サービスにつながっていない旧会計メニュー、products = 店販 */
 export interface Catalog { service_menus: CatalogItem[]; menus: CatalogItem[]; products: CatalogItem[] }
 
 export interface SaleLine {

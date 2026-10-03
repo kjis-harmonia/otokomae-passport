@@ -11,17 +11,52 @@ export interface BookingSettings {
 }
 export interface StaffMember { id: string; display_name: string; is_bookable: boolean; is_active: boolean; sort_order: number }
 export interface MenuStaff { staff_id: string; duration_override_min: number | null }
+/** 正規サービスマスター（予約と会計で共通）。price は税込の表示価格 */
+export type ServiceKind = 'service' | 'option' | 'set'
 export interface ServiceMenu {
   id: string
   code: string
   name: string
+  kind: ServiceKind
+  category: string | null
   duration_min: number | null
   buffer_after_min: number
   price: number | null
   normal_price: number | null
+  /** 「〜」付きの価格（下限） */
+  price_from: boolean
+  price_tax_included: boolean
+  /** 参考所要時間（公式サイトの記載など。予約には使わない） */
+  reference_duration_min: number | null
+  reference_duration_note: string | null
+  /** マスターで有効 */
   is_active: boolean
+  /** 予約できる（所要時間と担当スタッフが必要） */
+  booking_enabled: boolean
+  /** 会計で選べる */
+  checkout_enabled: boolean
   sort_order: number
   staff: MenuStaff[]
+}
+/** 販促オファー（HOT PEPPER クーポン・App 会員価格）。offer_price が null は価格未確認 */
+export interface ServiceOffer {
+  id: string
+  code: string
+  channel: 'hotpepper' | 'app'
+  external_id: string | null
+  name: string
+  offer_price: number | null
+  conditions: string | null
+  /** 土日祝不可 */
+  weekdays_only: boolean
+  /** 受付時間帯（HH:MM） */
+  time_from: string | null
+  time_to: string | null
+  first_visit_only: boolean
+  is_active: boolean
+  menu_ids: string[]
+  /** 担当の条件（空なら指定なし） */
+  staff_ids: string[]
 }
 export interface BusinessHour { weekday: number; is_closed: boolean; open_time: string | null; close_time: string | null }
 export interface ShiftTemplate { staff_id: string; weekday: number; start_time: string; end_time: string }
@@ -29,6 +64,7 @@ export interface BookingMasters {
   settings: BookingSettings
   staff: StaffMember[]
   menus: ServiceMenu[]
+  offers: ServiceOffer[]
   business_hours: BusinessHour[]
   templates: ShiftTemplate[]
 }
@@ -56,7 +92,8 @@ export const BLOCK_KIND_LABEL: Record<BlockKind, string> = {
 export const HQ_BOOKING_ERROR: Record<string, string> = {
   invalid_time: '開始・終了時刻を確認してください。',
   has_reservations: 'この時間に予約があるため変更・削除できません。先に予約を移動してください。',
-  duration_required: '受付中にするには所要時間が必要です。',
+  duration_required: '予約を受け付けるには所要時間が必要です（メニューも有効にしてください）。',
+  staff_required: '予約を受け付けるには、担当できるスタッフを1人以上選んでください。',
   duplicate_code: 'このコードは使われています。',
   duplicate_name: '同じ名前のスタッフがいます。',
   invalid_value: '入力内容を確認してください。',
