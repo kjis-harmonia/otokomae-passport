@@ -6,8 +6,6 @@ export const MEMBER_KEY = 'otokomae_member'
 export const GACHA_DATE_KEY = 'otokomae_gacha_date'
 export const GACHA_RESULT_KEY = 'otokomae_gacha_result'
 export const TRYON_STYLE_KEY = 'otokomae_tryon_style'
-export const RESERVE_MENU_KEY = 'otokomae_reserve_menu'
-export const RESERVE_TIME_KEY = 'otokomae_reserve_time'
 
 export function getStoredValue<T>(key: string, fallback: T): T {
   try {

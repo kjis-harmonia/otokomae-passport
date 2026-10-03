@@ -7,7 +7,14 @@ import { HqDashboardScreen } from './screens/HqDashboardScreen'
 import { HqSalesScreen } from './screens/HqSalesScreen'
 import { HqStylistScreen } from './screens/HqStylistScreen'
 import { HqMembersScreen } from './screens/HqMembersScreen'
-import { HqCustomerKarteScreen } from './screens/HqCustomerKarteScreen'
+import { HqClientsScreen } from './screens/HqClientsScreen'
+import { HqSalesLedgerScreen } from './screens/HqSalesLedgerScreen'
+import { HqGinpayScreen } from './screens/HqGinpayScreen'
+import { HqBookingScreen } from './screens/HqBookingScreen'
+import { ReservationLedger } from '../components/booking/ReservationLedger'
+import { hqBookingApi } from '../utils/bookingApi'
+import { hqCustomerApi } from '../utils/customerApi'
+import { hqGinpayApi } from '../utils/ginpayApi'
 import { HqInventoryScreen } from './screens/HqInventoryScreen'
 import { HqDailyReportScreen } from './screens/HqDailyReportScreen'
 import { HqSettingsScreen } from './screens/HqSettingsScreen'
@@ -44,7 +51,11 @@ export function HeadquartersApp() {
       {tab === 'sales' && <HqSalesScreen />}
       {tab === 'stylist' && <HqStylistScreen />}
       {tab === 'members' && <HqMembersScreen />}
-      {tab === 'customers' && <HqCustomerKarteScreen />}
+      {tab === 'customers' && <HqClientsScreen />}
+      {tab === 'ledger' && <ReservationLedger api={hqBookingApi} customers={hqCustomerApi} ginpay={hqGinpayApi} bottomGap={isMobile ? 32 : 28} />}
+      {tab === 'ginpay' && <HqGinpayScreen />}
+      {tab === 'register' && <HqSalesLedgerScreen />}
+      {tab === 'booking' && <HqBookingScreen />}
       {tab === 'inventory' && <HqInventoryScreen />}
       {tab === 'reports' && <HqDailyReportScreen />}
       {tab === 'settings' && <HqSettingsScreen />}

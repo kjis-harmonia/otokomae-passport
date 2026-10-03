@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react'
 import { AdminScreen } from './AdminScreen'
 import { StaffInventoryScreen } from './StaffInventoryScreen'
+import { StaffReservationsScreen } from './StaffReservationsScreen'
+import { StaffClientsScreen } from './StaffClientsScreen'
 import type { PendingChangeSummary, StaffInventoryHandle } from './StaffInventoryScreen'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
-type StaffMode = 'menu' | 'shop' | 'inventory' | 'recovery'
+type StaffMode = 'menu' | 'shop' | 'reservations' | 'clients' | 'inventory' | 'recovery'
 
 /**
  * /staff を開いた直後の分岐画面 + 戻るナビゲーション。
@@ -76,6 +78,40 @@ export function StaffHome() {
 
           <button
             type="button"
+            onClick={() => setMode('reservations')}
+            style={{
+              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.22)', cursor: 'pointer',
+            }}
+          >
+            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
+              予約
+            </p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
+              予約台帳・電話予約の登録
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode('clients')}
+            style={{
+              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.22)', cursor: 'pointer',
+            }}
+          >
+            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
+              顧客
+            </p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
+              顧客一覧・顧客台帳
+            </p>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setMode('inventory')}
             style={{
               width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
@@ -112,17 +148,23 @@ export function StaffHome() {
     )
   }
 
+  // 予約台帳は一日中表示する明るい画面なので、戻るバーも明るく揃える
+  const light = mode === 'reservations' || mode === 'clients'
+
   return (
-    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: '#080302' }}>
+    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: light ? '#FFFFFF' : '#080302' }}>
       <div style={{
         position: 'sticky', top: 0, zIndex: 650,
-        background: '#000000', borderBottom: '1px solid rgba(201,162,74,0.2)',
+        background: light ? '#FFFFFF' : '#000000', borderBottom: light ? '1px solid #E7E7E3' : '1px solid rgba(201,162,74,0.2)',
         padding: '10px 16px', flexShrink: 0,
       }}>
         <button
           type="button"
           onClick={handleBackClick}
-          style={{
+          style={light ? {
+            padding: '8px 4px', minHeight: 36, background: 'none', border: 'none',
+            color: '#1B1B1A', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          } : {
             padding: '8px 16px', borderRadius: 10,
             background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.16)',
             color: '#e5e5e5', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.06em',
@@ -136,9 +178,13 @@ export function StaffHome() {
       <div style={{ flex: '1 1 auto' }}>
         {mode === 'shop'
           ? <AdminScreen key="staff-issue" mode="issue" />
-          : mode === 'recovery'
-            ? <AdminScreen key="staff-recovery" mode="recovery" />
-            : <StaffInventoryScreen ref={inventoryRef} />}
+          : mode === 'reservations'
+            ? <StaffReservationsScreen />
+            : mode === 'clients'
+            ? <StaffClientsScreen />
+            : mode === 'recovery'
+              ? <AdminScreen key="staff-recovery" mode="recovery" />
+              : <StaffInventoryScreen ref={inventoryRef} />}
       </div>
 
       {pendingSummary && (

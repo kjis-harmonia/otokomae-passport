@@ -1,353 +1,58 @@
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { Scissors, Clock, CalendarDays, Check, ChevronRight } from 'lucide-react'
-import { getStoredValue, setStoredValue, RESERVE_MENU_KEY, RESERVE_TIME_KEY } from '../utils/storage'
+import { MAINTENANCE_CUT_URL, getReserveUrl } from '../data/reserveLinks'
+import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../data/wallet'
 
-interface MenuItem {
-  id: string
-  name: string
-  price: string
-  duration: string
-}
+// 予約の案内。
+// アプリ内での予約はまだ受け付けていない（予約システムは Feature Flag OFF）。
+// 以前の画面は予約を保存しないのに「予約完了」に見えたため、確定操作をなくし、
+// 実際に予約が取れる電話・HOT PEPPER Beauty へだけ案内する。
 
-const MENUS: MenuItem[] = [
-  { id: 'cut', name: 'カット', price: '¥3,300', duration: '約40分' },
-  { id: 'cut-shave', name: 'カット＋シェービング', price: '¥5,500', duration: '約60分' },
-  { id: 'cut-color', name: 'カット＋カラー', price: '¥8,800', duration: '約90分' },
-]
+const SANS = '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif'
 
-interface TimeSlot {
-  id: string
-  label: string
-  hours: string
-}
-
-const TIME_SLOTS: TimeSlot[] = [
-  { id: 'morning', label: '午前', hours: '10:00-12:00' },
-  { id: 'noon', label: '昼', hours: '12:00-15:00' },
-  { id: 'evening', label: '夕方', hours: '15:00-19:00' },
+/** 既存のクーポン予約リンクがあるメニューだけ（reserveLinks のURLをそのまま使う） */
+const HOTPEPPER_MENUS: { label: string; url: string }[] = [
+  { label: 'メンテナンスカット（前回来店から14日以内）', url: MAINTENANCE_CUT_URL },
+  ...['濡れパン', 'パンチパーマ', 'カールアイパー', 'ニグロパーマ', '銀パラ', 'テイテイ刈り']
+    .map(label => ({ label, url: getReserveUrl(label) }))
+    .filter(m => m.url),
 ]
 
 export function ReserveScreen() {
-  const [selectedMenuId, setSelectedMenuId] = useState<string | null>(
-    getStoredValue<string>(RESERVE_MENU_KEY, '') || null
-  )
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(
-    getStoredValue<string>(RESERVE_TIME_KEY, '') || null
-  )
-  const [confirmed, setConfirmed] = useState(false)
-
-  function handleMenuSelect(id: string) {
-    setSelectedMenuId(id)
-    setStoredValue(RESERVE_MENU_KEY, id)
-    setConfirmed(false)
-  }
-
-  function handleTimeSelect(id: string) {
-    setSelectedTimeSlot(id)
-    setStoredValue(RESERVE_TIME_KEY, id)
-    setConfirmed(false)
-  }
-
-  function handleConfirm() {
-    if (!selectedMenuId || !selectedTimeSlot) return
-    setConfirmed(true)
-  }
-
-  const selectedMenu = MENUS.find((m) => m.id === selectedMenuId) ?? null
-  const selectedTime = TIME_SLOTS.find((t) => t.id === selectedTimeSlot) ?? null
-  const canConfirm = selectedMenuId !== null && selectedTimeSlot !== null
-
   return (
-    <div className="py-5 space-y-6">
-      {/* Section header */}
-      <div className="px-5">
-        <p className="text-[10px] tracking-[0.2em] uppercase" style={{ color: 'rgba(201,162,39,0.45)' }}>
-          Reservation
-        </p>
-        <p className="text-xl font-bold tracking-wide mt-0.5" style={{ color: '#F5F0E8' }}>
-          ご予約
-        </p>
-        <p className="text-sm mt-0.5" style={{ color: '#8A8A7A' }}>
-          男前の時間を、先に押さえる。
-        </p>
-      </div>
+    <div style={{ padding: '24px 16px 120px', color: '#F2F2F2', fontFamily: SANS }}>
+      <h1 style={{ fontSize: 22, fontWeight: 600 }}>予約</h1>
+      <p style={{ fontSize: 15, color: '#A3A3A3', lineHeight: 1.7, marginTop: 8 }}>
+        ご予約はお電話か HOT PEPPER Beauty で承っています。
+      </p>
 
-      {/* CTA card */}
-      <div className="mx-4">
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{
-            background:
-              'radial-gradient(circle at 18% 0%, rgba(139,26,42,0.16), transparent 42%), linear-gradient(135deg, #1C1C1A 0%, #0E0E0C 60%, #130E02 100%)',
-            border: '1px solid rgba(201,162,39,0.34)',
-            boxShadow:
-              '0 12px 40px rgba(0,0,0,0.7), inset 0 1px 0 rgba(245,240,232,0.05), inset 0 0 22px rgba(201,162,39,0.045)',
-          }}
-        >
-          <div
-            className="h-1 w-full"
-            style={{ background: 'linear-gradient(90deg, #8B1A2A, #C9A227, #8B1A2A)' }}
-          />
-          <div className="px-5 py-4 flex items-center gap-4">
-            <div
-              className="flex-shrink-0 p-3 rounded-xl"
-              style={{
-                background: 'linear-gradient(145deg, rgba(201,162,39,0.13), rgba(139,26,42,0.08))',
-                border: '1px solid rgba(201,162,39,0.24)',
-                boxShadow: 'inset 0 0 14px rgba(201,162,39,0.06)',
-              }}
-            >
-              <CalendarDays size={24} strokeWidth={1.5} style={{ color: 'rgba(201,162,39,0.76)' }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold" style={{ color: '#F5F0E8' }}>
-                今すぐ予約する
-              </p>
-              <p className="text-[11px] mt-0.5" style={{ color: '#8A8A7A' }}>
-                外部予約サービス連携予定
-              </p>
-            </div>
-            <button
-              type="button"
-              className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold tracking-wider transition-opacity active:opacity-60"
-              style={{
-                background: 'linear-gradient(145deg, rgba(201,162,39,0.14), rgba(139,26,42,0.08))',
-                border: '1px solid rgba(201,162,39,0.34)',
-                color: 'rgba(232,197,71,0.86)',
-                boxShadow: 'inset 0 0 12px rgba(201,162,39,0.035)',
-              }}
-            >
-              予約へ
-            </button>
-          </div>
-        </div>
-      </div>
+      <a
+        href={SHOP_PHONE_TEL}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, marginTop: 20, borderRadius: 10,
+          background: '#F2F2F2', color: '#0B0B0B', fontSize: 16, fontWeight: 600, textDecoration: 'none',
+        }}
+      >
+        電話で予約する（{SHOP_PHONE_DISPLAY}）
+      </a>
 
-      {/* Menu selection */}
-      <div className="px-4">
-        <p
-          className="text-[10px] tracking-[0.2em] uppercase mb-3"
-          style={{ color: 'rgba(201,162,39,0.45)' }}
-        >
-          メニューを選ぶ
-        </p>
-        <div className="space-y-2">
-          {MENUS.map((menu) => {
-            const isSelected = selectedMenuId === menu.id
-            return (
-              <motion.button
-                key={menu.id}
-                type="button"
-                onClick={() => handleMenuSelect(menu.id)}
-                whileTap={{ scale: 0.98 }}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left"
-                style={{
-                  background: isSelected
-                    ? 'radial-gradient(circle at 0% 50%, rgba(201,162,39,0.12), transparent 38%), linear-gradient(145deg, rgba(34,30,24,0.98), rgba(17,17,16,0.98) 58%, rgba(45,14,20,0.5))'
-                    : 'linear-gradient(145deg, rgba(30,28,24,0.96), rgba(17,17,16,0.98) 58%, rgba(41,14,19,0.42))',
-                  border: isSelected
-                    ? '1.5px solid rgba(232,197,71,0.58)'
-                    : '1px solid rgba(201,162,39,0.18)',
-                  boxShadow: isSelected
-                    ? '0 0 20px rgba(201,162,39,0.13), inset 0 1px 0 rgba(245,240,232,0.05)'
-                    : 'inset 0 1px 0 rgba(245,240,232,0.035)',
-                }}
-              >
-                <div
-                  className="flex-shrink-0 p-2 rounded-lg"
-                  style={{
-                    background: isSelected
-                      ? 'linear-gradient(145deg, rgba(201,162,39,0.15), rgba(139,26,42,0.08))'
-                      : 'linear-gradient(145deg, rgba(201,162,39,0.055), rgba(255,255,255,0.018))',
-                    border: isSelected
-                      ? '1px solid rgba(201,162,39,0.26)'
-                      : '1px solid rgba(201,162,39,0.08)',
-                  }}
-                >
-                  <Scissors
-                    size={16}
-                    strokeWidth={1.8}
-                    style={{
-                      color: isSelected ? '#E8C547' : 'rgba(245,240,232,0.28)',
-                      transform: 'rotate(270deg)',
-                    }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-semibold"
-                    style={{ color: isSelected ? '#F5F0E8' : 'rgba(245,240,232,0.68)' }}
-                  >
-                    {menu.name}
-                  </p>
-                  <p className="text-[11px] mt-0.5" style={{ color: '#8A8A7A' }}>
-                    {menu.duration}
-                  </p>
-                </div>
-                <span
-                  className="flex-shrink-0 text-sm font-bold"
-                  style={{ color: isSelected ? '#E8C547' : 'rgba(201,162,39,0.48)' }}
-                >
-                  {menu.price}
-                </span>
-                {isSelected ? (
-                  <div
-                    className="flex-shrink-0 flex items-center justify-center rounded-full"
-                    style={{
-                      width: 20,
-                      height: 20,
-                      background: 'linear-gradient(135deg, #E8C547, #C9A227)',
-                      boxShadow: '0 0 12px rgba(201,162,39,0.35)',
-                    }}
-                  >
-                    <Check size={12} strokeWidth={2.5} style={{ color: '#0D0D0D' }} />
-                  </div>
-                ) : (
-                  <ChevronRight size={15} strokeWidth={1.8} style={{ color: 'rgba(255,255,255,0.15)' }} />
-                )}
-              </motion.button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Time slot selection */}
-      <div className="px-4">
-        <p
-          className="text-[10px] tracking-[0.2em] uppercase mb-3"
-          style={{ color: 'rgba(201,162,39,0.45)' }}
-        >
-          希望時間帯
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {TIME_SLOTS.map((slot) => {
-            const isSelected = selectedTimeSlot === slot.id
-            return (
-              <motion.button
-                key={slot.id}
-                type="button"
-                onClick={() => handleTimeSelect(slot.id)}
-                whileTap={{ scale: 0.96 }}
-                className="flex flex-col items-center gap-1.5 py-3.5 rounded-xl"
-                style={{
-                  background: isSelected
-                    ? 'radial-gradient(circle at 50% 0%, rgba(201,162,39,0.12), transparent 42%), linear-gradient(145deg, rgba(34,30,24,0.98), rgba(17,17,16,0.98) 58%, rgba(45,14,20,0.46))'
-                    : 'linear-gradient(145deg, rgba(30,28,24,0.96), rgba(17,17,16,0.98) 58%, rgba(41,14,19,0.38))',
-                  border: isSelected
-                    ? '1.5px solid rgba(232,197,71,0.58)'
-                    : '1px solid rgba(201,162,39,0.18)',
-                  boxShadow: isSelected
-                    ? '0 0 18px rgba(201,162,39,0.12), inset 0 1px 0 rgba(245,240,232,0.05)'
-                    : 'inset 0 1px 0 rgba(245,240,232,0.035)',
-                }}
-              >
-                <Clock
-                  size={16}
-                  strokeWidth={1.8}
-                  style={{ color: isSelected ? '#E8C547' : 'rgba(245,240,232,0.28)' }}
-                />
-                <span
-                  className="text-sm font-semibold"
-                  style={{ color: isSelected ? '#F5F0E8' : 'rgba(245,240,232,0.62)' }}
-                >
-                  {slot.label}
-                </span>
-                <span className="text-[9px]" style={{ color: '#8A8A7A' }}>
-                  {slot.hours}
-                </span>
-              </motion.button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* CTA / Confirmation */}
-      <div className="px-4">
-        {confirmed && selectedMenu && selectedTime ? (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, ease: 'easeOut' }}
-            className="space-y-3"
-          >
-            <div
-              className="rounded-xl px-4 py-4 space-y-3"
-              style={{
-                background: 'rgba(139,26,42,0.1)',
-                border: '1px solid rgba(139,26,42,0.3)',
-              }}
-            >
-              <p
-                className="text-[10px] tracking-[0.18em] uppercase"
-                style={{ color: 'rgba(176,32,53,0.7)' }}
-              >
-                予約内容の確認
-              </p>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px]" style={{ color: '#8A8A7A' }}>メニュー</span>
-                  <span className="text-sm font-semibold" style={{ color: '#F5F0E8' }}>
-                    {selectedMenu.name}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px]" style={{ color: '#8A8A7A' }}>料金</span>
-                  <span className="text-sm font-bold" style={{ color: '#C9A227' }}>
-                    {selectedMenu.price}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px]" style={{ color: '#8A8A7A' }}>希望時間帯</span>
-                  <span className="text-sm font-semibold" style={{ color: '#F5F0E8' }}>
-                    {selectedTime.label}（{selectedTime.hours}）
-                  </span>
-                </div>
-              </div>
-              <div
-                className="pt-2"
-                style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
-              >
-                <p className="text-[11px]" style={{ color: 'rgba(176,32,53,0.75)' }}>
-                  スタッフに相談して確定します
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setConfirmed(false)}
-              className="w-full py-2.5 rounded-xl text-xs font-medium tracking-wider transition-opacity active:opacity-60"
-              style={{
-                background: 'transparent',
-                border: '1px solid rgba(255,255,255,0.08)',
-                color: 'rgba(245,240,232,0.35)',
-              }}
-            >
-              変更する
-            </button>
-          </motion.div>
-        ) : (
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={!canConfirm}
-            className="w-full py-3.5 rounded-xl font-semibold tracking-widest text-sm transition-opacity active:opacity-70 disabled:cursor-not-allowed"
+      <h2 style={{ fontSize: 13, fontWeight: 600, color: '#A3A3A3', marginTop: 32, marginBottom: 4 }}>HOT PEPPER Beauty で予約</h2>
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.09)' }}>
+        {HOTPEPPER_MENUS.map(m => (
+          <a
+            key={m.label}
+            href={m.url}
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
-              background: canConfirm
-                ? 'linear-gradient(135deg, #8B1A2A 0%, #B02035 100%)'
-                : 'linear-gradient(135deg, rgba(74,74,74,0.24), rgba(139,26,42,0.08))',
-              color: canConfirm ? '#F5F0E8' : 'rgba(245,240,232,0.42)',
-              border: canConfirm
-                ? '1px solid rgba(176,32,53,0.45)'
-                : '1px solid rgba(201,162,39,0.14)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 52, padding: '0 2px',
+              borderBottom: '1px solid rgba(255,255,255,0.09)', color: '#F2F2F2', fontSize: 15, textDecoration: 'none',
             }}
           >
-            この内容で相談する
-          </button>
-        )}
+            <span>{m.label}</span>
+            <span aria-hidden="true" style={{ color: '#6E6E6E' }}>›</span>
+          </a>
+        ))}
       </div>
-
-      <div className="h-2" />
+      <p style={{ fontSize: 13, color: '#6E6E6E', marginTop: 12 }}>HOT PEPPER Beauty のページが開きます。</p>
     </div>
   )
 }
