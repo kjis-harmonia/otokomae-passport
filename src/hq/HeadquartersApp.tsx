@@ -12,6 +12,8 @@ import { HqSalesLedgerScreen } from './screens/HqSalesLedgerScreen'
 import { HqGinpayScreen } from './screens/HqGinpayScreen'
 import { HqBookingScreen } from './screens/HqBookingScreen'
 import { HqServiceMasterScreen } from './screens/HqServiceMasterScreen'
+import { HqJohnnyScreen } from './screens/HqJohnnyScreen'
+import { JOHNNY_UI_ENABLED } from '../utils/johnnyFlag'
 import { ReservationLedger } from '../components/booking/ReservationLedger'
 import { hqBookingApi } from '../utils/bookingApi'
 import { hqCustomerApi } from '../utils/customerApi'
@@ -58,6 +60,7 @@ export function HeadquartersApp() {
       {tab === 'register' && <HqSalesLedgerScreen />}
       {tab === 'menus' && <HqServiceMasterScreen />}
       {tab === 'booking' && <HqBookingScreen />}
+      {JOHNNY_UI_ENABLED && tab === 'johnny' && <HqJohnnyScreen />}
       {tab === 'inventory' && <HqInventoryScreen />}
       {tab === 'reports' && <HqDailyReportScreen />}
       {tab === 'settings' && <HqSettingsScreen />}

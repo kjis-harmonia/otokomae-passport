@@ -27,6 +27,7 @@ const MIGRATION_ORDER = [
   '20261005000000_checkout.sql',
   '20261006000000_service_master.sql',
   '20261007000000_client_visit_model.sql',
+  '20261008000000_johnny_phase1.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
@@ -118,6 +119,15 @@ async function main() {
     if (skipDb) return 'skipped'
     runPsqlFile(dbUrl, join(testsDir, 'ginpay_ledger.sql'), 'GINPay ledger suite')
     return 'GINPay ledger suite ok (charge, sale payment, sale void reversal, Stripe, merge, reconciliation)'
+  })
+
+  await stage('johnny', async () => {
+    // Edge の手順（無効時は停止・認証より先に書かない・未確認の予約メニューを使わない）と画面の表示条件
+    runCommand('node', ['scripts/johnny-regression.mjs'], 'JOHNNY edge/UI regression')
+    if (skipDb) return 'edge/UI regression ok; DB JOHNNY contracts skipped'
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_johnny.sql'), 'JOHNNY Phase 1 contracts')
+    if (baselineDbUrl) runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_johnny.sql'), 'baseline JOHNNY Phase 1 contracts')
+    return `JOHNNY audit/RLS/tool facade/intent lifecycle/snapshot ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
   })
 
   await stage('concurrency', async () => {

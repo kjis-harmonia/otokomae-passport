@@ -37,6 +37,7 @@ import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
 import { getUserId, MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
 import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
+import { JOHNNY_UI_ENABLED } from './utils/johnnyFlag'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
@@ -1033,7 +1034,7 @@ function App() {
                 >
                   {activeTab === 'home'      && <HomeScreen member={liveMember} onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'gacha'     && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
-                  {activeTab === 'tryon'     && <TryOnScreen />}
+                  {activeTab === 'tryon'     && <TryOnScreen onJohnnyBooking={JOHNNY_UI_ENABLED ? () => handleTabChange('reserve') : undefined} />}
                   {activeTab === 'reserve'   && <ReserveScreen />}
                   {activeTab === 'tickets'   && (
                     <TicketWalletScreen

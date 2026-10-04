@@ -1,5 +1,9 @@
+import { useState } from 'react'
+import { JohnnyPanel } from '../components/johnny/JohnnyPanel'
 import { MAINTENANCE_CUT_URL, getReserveUrl } from '../data/reserveLinks'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../data/wallet'
+import { loadJohnnyHandoff } from '../utils/johnnyHandoff'
+import { JOHNNY_UI_ENABLED } from '../utils/johnnyFlag'
 
 // 予約の案内。
 // アプリ内での予約はまだ受け付けていない（予約システムは Feature Flag OFF）。
@@ -17,12 +21,24 @@ const HOTPEPPER_MENUS: { label: string; url: string }[] = [
 ]
 
 export function ReserveScreen() {
+  const [handoff] = useState(() => (JOHNNY_UI_ENABLED ? loadJohnnyHandoff() : null))
+
   return (
     <div style={{ padding: '24px 16px 120px', color: '#F2F2F2', fontFamily: SANS }}>
       <h1 style={{ fontSize: 22, fontWeight: 600 }}>予約</h1>
       <p style={{ fontSize: 15, color: '#A3A3A3', lineHeight: 1.7, marginTop: 8 }}>
         ご予約はお電話か HOT PEPPER Beauty で承っています。
       </p>
+
+      {JOHNNY_UI_ENABLED && (<div style={{ marginTop: 18 }}>
+        <JohnnyPanel
+          mode="booking"
+          title="JOHNNY"
+          placeholder="明日の夕方、銀二郎で空いとる？"
+          initialMessage={handoff?.styleTitle ? `${handoff.styleTitle}で一番早く取れる時間` : ''}
+          handoff={handoff}
+        />
+      </div>)}
 
       <a
         href={SHOP_PHONE_TEL}

@@ -2,11 +2,16 @@ import { useState, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronLeft, Play } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
+import { setStoredValue, TRYON_STYLE_KEY } from '../utils/storage'
+import { saveJohnnyHandoff } from '../utils/johnnyHandoff'
 import { StyleCardImage, StyleCardPlaceholder } from '../components/StyleCardPlaceholder'
+import { JohnnyPanel } from '../components/johnny/JohnnyPanel'
+import { JOHNNY_UI_ENABLED } from '../utils/johnnyFlag'
 import { resolveStyleLibraryImageUrl } from '../data/styleLibraryImages'
 import { getReserveUrl } from '../data/reserveLinks'
 import type { StyleCard } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
+import type { JohnnyStyleSuggestion } from '../utils/johnnyApi'
 
 interface Props {
   onTabChange: (tab: NavTab) => void
@@ -1044,7 +1049,7 @@ function StyleReelView({
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
-export function StyleLibraryScreen({ onModalChange }: Props) {
+export function StyleLibraryScreen({ onTabChange, onModalChange }: Props) {
   const [styles] = useState(() =>
     loadStyles()
       .filter((s) => s.isPublished)
@@ -1074,6 +1079,11 @@ export function StyleLibraryScreen({ onModalChange }: Props) {
       .filter((s): s is StyleCard => s !== undefined),
   }))
 
+  // 予約相談へ渡すのはスタイルだけ（予約メニューは確認済みの対応表からサーバーが決める）
+  function handoffFromSuggestion(style: JohnnyStyleSuggestion) {
+    return { styleTitle: style.title, styleSlug: style.slug, tryonStyleId: style.tryon_style_id }
+  }
+
   return (
     <div className="ginjiro-luxury-bg ginjiro-luxury-bg--styles">
       <div className="relative z-10" style={{ paddingBottom: 40 }}>
@@ -1097,6 +1107,24 @@ export function StyleLibraryScreen({ onModalChange }: Props) {
             }}
           />
         </div>
+
+        {JOHNNY_UI_ENABLED && (<div style={{ padding: '0 18px 16px' }}>
+          <JohnnyPanel
+            mode="style"
+            title="JOHNNY"
+            placeholder="仕事でもいける短め、セットは楽なやつ"
+            onTryOn={(style) => {
+              const handoff = handoffFromSuggestion(style)
+              saveJohnnyHandoff(handoff)
+              if (style.tryon_style_id) setStoredValue(TRYON_STYLE_KEY, style.tryon_style_id)
+              onTabChange('tryon')
+            }}
+            onBooking={(style) => {
+              saveJohnnyHandoff(handoffFromSuggestion(style))
+              onTabChange('reserve')
+            }}
+          />
+        </div>)}
 
         <StyleShowcaseCarousel styles={resolvedShowcaseStyles} onStyleSelect={openReel} />
 

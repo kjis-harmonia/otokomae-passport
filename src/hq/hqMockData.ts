@@ -1,8 +1,9 @@
+import { JOHNNY_UI_ENABLED } from '../utils/johnnyFlag'
 // 銀二郎本部 — ダミーデータ（UIプロトタイプ段階。実データ未接続）
 
-export type HqTab = 'dashboard' | 'sales' | 'stylist' | 'members' | 'customers' | 'ledger' | 'ginpay' | 'register' | 'menus' | 'booking' | 'inventory' | 'reports' | 'settings'
+export type HqTab = 'dashboard' | 'sales' | 'stylist' | 'members' | 'customers' | 'ledger' | 'ginpay' | 'register' | 'menus' | 'booking' | 'johnny' | 'inventory' | 'reports' | 'settings'
 
-export const HQ_TABS: { id: HqTab; label: string; code: string }[] = [
+const BASE_HQ_TABS: { id: HqTab; label: string; code: string }[] = [
   { id: 'dashboard', label: 'ダッシュボード', code: 'DASH' },
   { id: 'sales',     label: '売上分析',       code: 'SALES' },
   { id: 'stylist',   label: 'スタイリスト分析', code: 'STAFF' },
@@ -17,6 +18,11 @@ export const HQ_TABS: { id: HqTab; label: string; code: string }[] = [
   { id: 'reports',   label: '日報',           code: 'REPORT' },
   { id: 'settings',  label: '設定',           code: 'CFG' },
 ]
+
+// JOHNNY は VITE_JOHNNY_ENABLED のビルドでだけ（Production では表示しない）
+export const HQ_TABS: { id: HqTab; label: string; code: string }[] = JOHNNY_UI_ENABLED
+  ? BASE_HQ_TABS.flatMap(t => t.id === 'booking' ? [t, { id: 'johnny' as const, label: 'JOHNNY', code: 'OP' }] : [t])
+  : BASE_HQ_TABS
 
 export const HQ_KPI = [
   { label: '本日売上', value: '¥284,500', delta: '+12.4%', positive: true, sub: '前日比' },

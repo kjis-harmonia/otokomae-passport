@@ -3,9 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, ChevronLeft, Check, ZoomIn, ZoomOut, Share2, ImagePlus, Wand2 } from 'lucide-react'
 import type { ImageSegmenter } from '@mediapipe/tasks-vision'
 import { getStoredValue, setStoredValue, TRYON_STYLE_KEY } from '../utils/storage'
+import { saveJohnnyHandoff } from '../utils/johnnyHandoff'
+import { JOHNNY_UI_ENABLED } from '../utils/johnnyFlag'
 import { getReserveUrl } from '../data/reserveLinks'
 
 type Phase = 'setup' | 'compose'
+
+interface TryOnScreenProps {
+  /** JOHNNY に予約相談（VITE_JOHNNY_ENABLED のときだけ。HOT PEPPER の予約導線は常に残す） */
+  onJohnnyBooking?: () => void
+}
 
 interface TryOnStyle {
   id: string
@@ -96,7 +103,7 @@ function StepLabel({ n, label }: { n: number; label: string }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function TryOnScreen() {
+export function TryOnScreen({ onJohnnyBooking }: TryOnScreenProps) {
   const [phase, setPhase] = useState<Phase>('setup')
   const [selectedId, setSelectedId] = useState<string | null>(
     getStoredValue<string>(TRYON_STYLE_KEY, '') || null,
@@ -347,6 +354,13 @@ export function TryOnScreen() {
   const selectedStyle = STYLES.find((s) => s.id === selectedId) ?? null
   const canStart = !!photoUrl && !!selectedId
 
+  // JOHNNY への予約相談：渡すのはスタイルだけ（予約メニューは確認済みの対応表からサーバーが決める。画面では推測しない）
+  function handleJohnnyBooking() {
+    if (!selectedStyle || !onJohnnyBooking) return
+    saveJohnnyHandoff({ styleTitle: selectedStyle.name, tryonStyleId: selectedStyle.id })
+    onJohnnyBooking()
+  }
+
   /* ══════════════════════════════════════════════════════════════════════════
      COMPOSE PHASE
   ══════════════════════════════════════════════════════════════════════════ */
@@ -538,6 +552,16 @@ export function TryOnScreen() {
               </motion.button>
             )}
           </div>
+          {JOHNNY_UI_ENABLED && onJohnnyBooking && (
+            <button
+              type="button"
+              onClick={handleJohnnyBooking}
+              className="w-full rounded-xl py-2.5 text-[12px] tracking-[0.14em] active:opacity-60"
+              style={{ border: '1px solid rgba(201,162,74,0.18)', color: 'rgba(242,230,200,0.72)' }}
+            >
+              JOHNNYに予約相談
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setPhase('setup')}
