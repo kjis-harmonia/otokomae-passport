@@ -78,13 +78,19 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   const manualAmount = manual ? Math.max(0, parseInt(manual.amount || '0', 10) || 0) : 0
   const localTotals = useMemo(() => saleTotals(lines, chosenTickets, manualAmount), [lines, chosenTickets, manualAmount])
   const [quote, setQuote] = useState<QuoteResult | null>(null)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
+  const [quoteLoading, setQuoteLoading] = useState(false)
 
   useEffect(() => {
     if (!ctx || lines.length === 0) {
       setQuote(null)
+      setQuoteError(null)
+      setQuoteLoading(false)
       return
     }
     let alive = true
+    setQuoteLoading(true)
+    setQuoteError(null)
     api.quote({
       reservation_id: ctx.reservation?.id,
       client_id: ctx.reservation ? undefined : client?.id,
@@ -92,10 +98,21 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
       ticket_ids: ticketIds,
       manual_discount: manualAmount > 0 && manual ? { amount: manualAmount, label: manual.label.trim() } : undefined,
     }).then(res => {
-      if (alive && !('error' in res)) {
+      if (!alive) return
+      setQuoteLoading(false)
+      if ('error' in res) {
+        setQuote(null)
+        setQuoteError(checkoutErrorMessage(res.error))
+      } else {
         setQuote(res)
+        setQuoteError(null)
       }
-    }).catch(() => {})
+    }).catch(() => {
+      if (!alive) return
+      setQuoteLoading(false)
+      setQuote(null)
+      setQuoteError('最新の見積もり計算に失敗しました')
+    })
     return () => { alive = false }
   }, [api, ctx, client, lines, ticketIds, manualAmount, manual])
 
@@ -114,7 +131,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   const ginpayShort = method === 'ginpay' && !!ginpayAccount && ginpayAccount.balance < totals.total
   const ginpayOk = method !== 'ginpay' || (!!ginpayAccount && totals.total > 0 && !ginpayShort && !ginpayMismatch)
   const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && !!method && totals.total >= 0
-    && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy
+    && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy && !!quote && !quoteLoading && !quoteError
 
   function update(key: number, patch: Partial<SaleLine>) { setLines(ls => ls.map(l => l.key === key ? { ...l, ...patch } : l)) }
   function addItem(src: SaleLine['source'], item: CatalogItem) {
@@ -294,7 +311,8 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
       {ctx && (
         <div style={{ flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div style={{ maxWidth: 640, margin: '0 auto' }}>
-            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : ginpayMismatch ? 'GINPayは利用できません' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            {quoteError && <p style={{ margin: '0 0 8px', fontSize: 13, color: C.danger }}>{quoteError}</p>}
+            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : quoteLoading ? '計算中…' : quoteError ? '見積もりエラー' : !quote && lines.length > 0 ? '見積もり未取得' : ginpayMismatch ? 'GINPayは利用できません' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
       )}

@@ -13,8 +13,8 @@ declare
   v_op_token text;
   v_op_token_2 text;
   v_app_token text;
-  v_req_hash text := encode(digest('order:cart_1001:amount:5000', 'sha256'), 'hex');
-  v_diff_hash text := encode(digest('order:cart_1001:amount:9999', 'sha256'), 'hex');
+  v_req_hash text := encode(extensions.digest('order:cart_1001:amount:5000', 'sha256'), 'hex');
+  v_diff_hash text := encode(extensions.digest('order:cart_1001:amount:9999', 'sha256'), 'hex');
   v_consume_res jsonb;
   v_ok boolean;
   i int;

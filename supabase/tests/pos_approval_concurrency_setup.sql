@@ -26,7 +26,7 @@ declare
   v_mgr_id      uuid;
   v_op_tok      text;
   v_app_tok     text;
-  v_req_hash    text := encode(digest('order:concurrent_test:' || v_run::text, 'sha256'), 'hex');
+  v_req_hash    text := encode(extensions.digest('order:concurrent_test:' || v_run::text, 'sha256'), 'hex');
   v_r           jsonb;
   i             integer;
 begin

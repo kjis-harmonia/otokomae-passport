@@ -192,6 +192,11 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   idempotency_conflict: '同じキーで異なる内容の会計が送信されました。',
   below_base_price: '基準価格未満の金額は設定できません。',
   operator_required_for_override: '価格の変更には担当者の本人確認が必要です。',
+  customer_context_mismatch: 'スキャンされた顧客情報と選択された顧客が一致しません。',
+  maintenance_offer_unconfigured: 'メンテナンスメニューの設定が確認できません。',
+  l2_authorization_not_enabled: '手入力および価格変更機能は現在利用できません。',
+  quote_required: '会計の計算結果が取得できていません。再読み込みしてください。',
+  reservation_price_missing: '予約時の価格が未設定のため会計できません。',
 }
 
 export function checkoutErrorMessage(code: string): string {
