@@ -31,6 +31,7 @@ const MIGRATION_ORDER = [
   '20261009000000_ginpay_reconcile_guard.sql',
   '20261009000100_customer_presence_token.sql',
   '20261009000200_pos_operator_approval.sql',
+  '20261009000300_pos_pricing_engine.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
@@ -134,18 +135,20 @@ async function main() {
   })
 
   await stage('pos-phase0', async () => {
-    // P0-1 GINPay 台帳照合ガード（全経路・監査が残ること）／P0-2 お客様提示 QR トークン／P0-3 操作者認証・承認
+    // P0-1 GINPay 台帳照合ガード（全経路・監査が残ること）／P0-2 お客様提示 QR トークン／P0-3 操作者認証・承認／P0-4 価格・見積もりエンジン
     runCommand('node', ['scripts/pos-regression.mjs'], 'POS presence token client guard')
     if (skipDb) return 'client guard ok; DB skipped'
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_ginpay_reconcile.sql'), 'POS P0-1 GINPay reconcile guard')
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_presence_token.sql'), 'POS P0-2 presence token')
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_operator_approval.sql'), 'POS P0-3 operator authentication and approval')
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_pricing_engine.sql'), 'POS P0-4 server-side pricing engine')
     if (baselineDbUrl) {
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_ginpay_reconcile.sql'), 'baseline POS P0-1 GINPay reconcile guard')
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_presence_token.sql'), 'baseline POS P0-2 presence token')
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_operator_approval.sql'), 'baseline POS P0-3 operator authentication and approval')
+      runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_pricing_engine.sql'), 'baseline POS P0-4 server-side pricing engine')
     }
-    return `reconcile guard + presence token + operator approval ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
+    return `reconcile guard + presence token + operator approval + pricing engine ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
   })
 
   await stage('concurrency', async () => {
@@ -169,7 +172,10 @@ async function main() {
     runPsqlFile(dbUrl, join(testsDir, 'ginpay_mismatch_concurrency_setup.sql'), 'GINPay mismatch concurrency setup')
     runPgbench(dbUrl, join(testsDir, 'ginpay_mismatch_concurrency_worker.sql'), 'GINPay mismatch concurrency')
     runPsqlFile(dbUrl, join(testsDir, 'ginpay_mismatch_concurrency_verify.sql'), 'GINPay mismatch concurrency verify')
-    return 'booking + checkout + GINPay + POS presence + POS approval + GINPay mismatch concurrency ok'
+    runPsqlFile(dbUrl, join(testsDir, 'pos_pricing_concurrency_setup.sql'), 'POS pricing concurrency setup')
+    runPgbench(dbUrl, join(testsDir, 'pos_pricing_concurrency_worker.sql'), 'POS pricing concurrency')
+    runPsqlFile(dbUrl, join(testsDir, 'pos_pricing_concurrency_verify.sql'), 'POS pricing concurrency verify')
+    return 'booking + checkout + GINPay + POS presence + POS approval + GINPay mismatch + POS pricing concurrency ok'
   })
 
   await stage('frontend', async () => {

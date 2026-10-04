@@ -5,7 +5,7 @@ import { idempotencyKey } from '../../utils/ginpayApi'
 import type { ClientCandidate, CustomerApi } from '../../utils/customerApi'
 import {
   checkoutErrorMessage, saleTotals, TICKET_BLOCK_LABEL,
-  type Catalog, type CatalogItem, type CheckoutApi, type CheckoutContext, type PaymentMethod, type Sale, type SaleLine,
+  type Catalog, type CatalogItem, type CheckoutApi, type CheckoutContext, type PaymentMethod, type Sale, type SaleLine, type QuoteResult,
 } from '../../utils/checkoutApi'
 import { PrimaryButton } from './ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
@@ -76,7 +76,34 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   const tickets = clientInfo ? ctx?.tickets ?? [] : []
   const chosenTickets = tickets.filter(t => ticketIds.includes(t.id))
   const manualAmount = manual ? Math.max(0, parseInt(manual.amount || '0', 10) || 0) : 0
-  const totals = useMemo(() => saleTotals(lines, chosenTickets, manualAmount), [lines, chosenTickets, manualAmount])
+  const localTotals = useMemo(() => saleTotals(lines, chosenTickets, manualAmount), [lines, chosenTickets, manualAmount])
+  const [quote, setQuote] = useState<QuoteResult | null>(null)
+
+  useEffect(() => {
+    if (!ctx || lines.length === 0) {
+      setQuote(null)
+      return
+    }
+    let alive = true
+    api.quote({
+      reservation_id: ctx.reservation?.id,
+      client_id: ctx.reservation ? undefined : client?.id,
+      items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, quantity: l.quantity, unit_price: l.unit_price })),
+      ticket_ids: ticketIds,
+      manual_discount: manualAmount > 0 && manual ? { amount: manualAmount, label: manual.label.trim() } : undefined,
+    }).then(res => {
+      if (alive && !('error' in res)) {
+        setQuote(res)
+      }
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [api, ctx, client, lines, ticketIds, manualAmount, manual])
+
+  const totals = useMemo(() => {
+    if (quote) return { subtotal: quote.subtotal, discount: quote.discount_total, total: quote.total }
+    return localTotals
+  }, [quote, localTotals])
+
   const paid = !!ctx?.paid_sale_id
   const customerReady = !!ctx?.reservation || anonymous || !!client
   // GINPay：顧客の口座（統合顧客で複数あるときは選ぶ。合算しない）
@@ -109,6 +136,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
         stylist_id: stylistId, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
         manual_discount: manualAmount > 0 ? { amount: manualAmount, label: manual!.label.trim() } : undefined,
         payment_method: method, expected_total: totals.total, idempotency_key: saleKey,
+        quote_hash: quote?.quote_hash,
         ginpay_account_id: method === 'ginpay' ? ginpayAccount?.id : undefined,
       })
       if ('error' in res) setError(checkoutErrorMessage(res.error))

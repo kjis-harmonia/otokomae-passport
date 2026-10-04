@@ -55,10 +55,57 @@ export interface SaleInput {
   manual_discount?: { amount: number; label: string }
   payment_method: PaymentMethod
   expected_total: number
+  /** サーバー生成の見積もりハッシュ（改ざん防止・価格変更検知） */
+  quote_hash?: string
   /** 会計画面ごとの一意キー。同じキーの再送は同じ会計を返す（二重タップで二重会計・二重決済しない） */
   idempotency_key: string
   /** GINPay 払いで支払う口座 */
   ginpay_account_id?: string
+}
+
+export interface QuoteInput {
+  reservation_id?: string
+  client_id?: string
+  scan_session_id?: string
+  items: {
+    source: ItemSource
+    ref_id?: string
+    name?: string
+    category?: ItemCategory
+    quantity?: number
+    unit_price?: number
+    price_override?: { price: number; reason: string }
+  }[]
+  ticket_ids?: string[]
+  maintenance?: { use: boolean }
+  manual_discount?: { amount: number; label: string }
+}
+
+export interface QuoteResult {
+  ok: boolean
+  quote_hash: string
+  subtotal: number
+  discount_total: number
+  total: number
+  items: {
+    source: ItemSource
+    ref_id: string | null
+    name: string
+    category: ItemCategory
+    quantity: number
+    unit_price: number
+    list_price: number | null
+    line_discount: number
+    line_total: number
+    price_source: string
+  }[]
+  discounts: {
+    ticket_discount: number
+    maintenance_discount: number
+    manual_discount: number
+    manual_discount_label: string
+    ticket_ids: string[]
+  }
 }
 
 export interface Sale {
@@ -100,6 +147,7 @@ export type CheckoutResult<T> = T | { error: string }
 export interface CheckoutApi {
   context(reservationId: string | null, clientId: string | null): Promise<CheckoutContext>
   catalog(): Promise<Catalog>
+  quote(input: QuoteInput): Promise<CheckoutResult<QuoteResult>>
   finalize(input: SaleInput): Promise<CheckoutResult<Sale>>
 }
 export interface SalesApi {
@@ -140,6 +188,10 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   invalid_amount: '0円の会計はGINPayで支払えません。',
   ginpay_account_not_active: 'GINPay口座が停止中のため取消できません。本部で口座の状態を確認してください。',
   ginpay_already_reversed: 'GINPayの支払いはすでに取り消されています。',
+  quote_mismatch: '価格または条件が更新されました。最新の計算を確認してください。',
+  idempotency_conflict: '同じキーで異なる内容の会計が送信されました。',
+  below_base_price: '基準価格未満の金額は設定できません。',
+  operator_required_for_override: '価格の変更には担当者の本人確認が必要です。',
 }
 
 export function checkoutErrorMessage(code: string): string {
@@ -173,6 +225,7 @@ export function createStaffCheckoutApi(actor: () => string): CheckoutApi {
   return {
     context: (reservationId, clientId) => callStaffRpc<CheckoutContext>('staff_checkout_context', { p_reservation_id: reservationId, p_client_id: clientId }),
     catalog: () => callStaffRpc<Catalog>('staff_checkout_catalog'),
+    quote: input => asResult(() => callStaffRpc<QuoteResult>('staff_pos_quote', { p_operator_token: null, p_scan_session: null, p_request: input })),
     finalize: input => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', { p: input, p_staff_name: actor() })),
   }
 }
