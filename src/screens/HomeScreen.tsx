@@ -6,6 +6,7 @@ import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage } from '../components/StyleCardPlaceholder'
 import { StyleDetailModal } from '../components/StyleDetailModal'
 import { FreshnessWidget } from '../components/FreshnessWidget'
+import { HomeGinpayCard } from '../components/ginpay/HomeGinpayCard'
 import { HERO_SLIDE_IMAGES, resolveStyleImageUrl, resolveStyleImagePosition } from '../data/styleImages'
 import { resolveStyleLibraryImageUrl } from '../data/styleLibraryImages'
 import type { StyleCard } from '../data/styleCard'
@@ -22,6 +23,7 @@ import {
 } from '../utils/pushNotification'
 import { getUserId } from '../utils/userId'
 import { getStoredValue } from '../utils/storage'
+import { GINPAY_HOME_ENABLED } from '../utils/ginpayHomeFlag'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -385,7 +387,10 @@ function MaintenanceScheduleSection() {
     setLastVisitDate(local[userId] ?? null)
   }
 
-  useEffect(() => { void fetchVisit() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fetchVisit() }, 0)
+    return () => window.clearTimeout(timer)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (lastVisitDate) triggerMaintenanceNotification(lastVisitDate)
@@ -733,6 +738,15 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
         <HeroSlider slides={heroSlides} onPick={setSelectedStyle} />
 
         <div className="space-y-10 pt-5 pb-16">
+          {GINPAY_HOME_ENABLED && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.02, duration: 0.42, ease: EASE_OUT }}
+            >
+              <HomeGinpayCard />
+            </motion.div>
+          )}
 
           {/* ① PICK UP MENU — 推しスタイル */}
           <motion.div
