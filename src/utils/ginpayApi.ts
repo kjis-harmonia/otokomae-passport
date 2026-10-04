@@ -12,7 +12,10 @@ export interface GinpayAccount {
   is_current_client: boolean
   status: 'active' | 'suspended' | 'closed'
   currency: 'JPY'
+  /** 台帳合計（正本） */
   balance: number
+  /** 照合用のキャッシュ */
+  cached_balance: number
   ledger_balance: number
   consistent: boolean
   created_at: string
@@ -48,7 +51,9 @@ export interface GinpayLedger {
   client_id: string
   client_name: string | null
   app_linked: boolean
+  /** 台帳合計（正本） */
   balance: number
+  cached_balance: number
   ledger_balance: number
   consistent: boolean
   multiple_accounts: boolean
@@ -90,6 +95,7 @@ export const GINPAY_ERROR_MESSAGE: Record<string, string> = {
   idempotency_key_required: '二重送信防止キーがありません。',
   idempotency_conflict: '同じ操作が別の内容で記録済みです。画面を開き直してください。',
   insufficient_balance: '残高が不足しています。',
+  ledger_mismatch_blocked: '残高の照合が取れていないため処理を止めました。本部に連絡してください。',
   invalid_amount: '金額が正しくありません。',
   invalid_payment_method: '支払方法が正しくありません。',
   invalid_transaction: 'この取引は対象外です。',

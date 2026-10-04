@@ -28,6 +28,8 @@ const MIGRATION_ORDER = [
   '20261006000000_service_master.sql',
   '20261007000000_client_visit_model.sql',
   '20261008000000_johnny_phase1.sql',
+  '20261009000000_ginpay_reconcile_guard.sql',
+  '20261009000100_customer_presence_token.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
@@ -130,6 +132,18 @@ async function main() {
     return `JOHNNY audit/RLS/tool facade/intent lifecycle/snapshot ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
   })
 
+  await stage('pos-phase0', async () => {
+    // P0-1 GINPay 台帳照合ガード（全経路・監査が残ること）／P0-2 お客様提示 QR トークン
+    if (skipDb) return 'skipped'
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_ginpay_reconcile.sql'), 'POS P0-1 GINPay reconcile guard')
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_presence_token.sql'), 'POS P0-2 presence token')
+    if (baselineDbUrl) {
+      runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_ginpay_reconcile.sql'), 'baseline POS P0-1 GINPay reconcile guard')
+      runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_presence_token.sql'), 'baseline POS P0-2 presence token')
+    }
+    return `reconcile guard + presence token ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
+  })
+
   await stage('concurrency', async () => {
     if (skipDb) return 'skipped'
     requireCommand('pgbench')
@@ -142,7 +156,10 @@ async function main() {
     runPsqlFile(dbUrl, join(testsDir, 'ginpay_concurrency_setup.sql'), 'GINPay concurrency setup')
     runPgbench(dbUrl, join(testsDir, 'ginpay_concurrency_worker.sql'), 'GINPay concurrency')
     runPsqlFile(dbUrl, join(testsDir, 'ginpay_concurrency_verify.sql'), 'GINPay concurrency verify')
-    return 'booking + checkout + GINPay concurrency ok'
+    runPsqlFile(dbUrl, join(testsDir, 'pos_presence_concurrency_setup.sql'), 'POS presence token concurrency setup')
+    runPgbench(dbUrl, join(testsDir, 'pos_presence_concurrency_worker.sql'), 'POS presence token concurrency')
+    runPsqlFile(dbUrl, join(testsDir, 'pos_presence_concurrency_verify.sql'), 'POS presence token concurrency verify')
+    return 'booking + checkout + GINPay + POS presence token concurrency ok'
   })
 
   await stage('frontend', async () => {

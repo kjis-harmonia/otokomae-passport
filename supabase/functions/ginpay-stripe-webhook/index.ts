@@ -135,6 +135,10 @@ Deno.serve(async (req) => {
   if (error) {
     return new Response(JSON.stringify({ error: 'database_error' }), { status: 500 })
   }
+  // 台帳の不一致で入金を止めたとき（イベントは未確定）：503 で Stripe に再送させ、台帳の修復後に反映する
+  if (data && typeof data === 'object' && (data as { retryable?: boolean }).retryable === true) {
+    return new Response(JSON.stringify({ error: 'ledger_mismatch_blocked', retryable: true }), { status: 503 })
+  }
   return new Response(JSON.stringify(data), {
     status: 200,
     headers: { 'content-type': 'application/json' },

@@ -25,7 +25,8 @@ export interface CheckoutContext {
   client: { id: string; name: string; app_linked: boolean } | null
   tickets: CheckoutTicket[]
   /** 顧客（統合された顧客を含む）の有効な GINPay 口座。口座は合算しない */
-  ginpay_accounts: { id: string; client_name: string; balance: number; is_current_client: boolean }[]
+  /** balance は台帳合計。consistent=false（台帳と照合が取れない）の口座では支払えない */
+  ginpay_accounts: { id: string; client_name: string; balance: number; consistent: boolean; is_current_client: boolean }[]
   /** 停止中の口座がある（新規の支払いには使えない） */
   ginpay_suspended: boolean
   staff: { id: string; name: string }[]
@@ -131,6 +132,7 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   not_found: '見つかりません。',
   reason_required: '取消の理由を入力してください。',
   insufficient_balance: 'GINPayの残高が不足しています。',
+  ledger_mismatch_blocked: 'GINPayの残高の照合が取れていないため処理を止めました。本部に連絡してください。',
   ginpay_requires_client: 'GINPayは顧客を選んだ会計でのみ使えます。',
   ginpay_account_not_found: 'GINPay口座がありません。顧客台帳のGINPayで口座を開設・チャージしてください。',
   account_selection_required: '支払うGINPay口座を選んでください。',

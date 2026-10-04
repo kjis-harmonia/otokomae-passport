@@ -82,8 +82,10 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   // GINPay：顧客の口座（統合顧客で複数あるときは選ぶ。合算しない）
   const ginpayAccounts = clientInfo ? ctx?.ginpay_accounts ?? [] : []
   const ginpayAccount = ginpayAccounts.length === 1 ? ginpayAccounts[0] : ginpayAccounts.find(a => a.id === ginpayAccountId) ?? null
+  // 残高は台帳合計。台帳と一致しない口座では支払えない（DB 側でも止める）
+  const ginpayMismatch = method === 'ginpay' && !!ginpayAccount && !ginpayAccount.consistent
   const ginpayShort = method === 'ginpay' && !!ginpayAccount && ginpayAccount.balance < totals.total
-  const ginpayOk = method !== 'ginpay' || (!!ginpayAccount && totals.total > 0 && !ginpayShort)
+  const ginpayOk = method !== 'ginpay' || (!!ginpayAccount && totals.total > 0 && !ginpayShort && !ginpayMismatch)
   const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && !!method && totals.total >= 0
     && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy
 
@@ -239,7 +241,10 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
                           </span>
                         </div>
                       )}
-                      {ginpayAccount && (
+                      {ginpayAccount && !ginpayAccount.consistent && (
+                        <p style={{ fontSize: 14, color: C.danger, lineHeight: 1.7 }}>この口座は残高の照合が取れていないため支払えません。本部に連絡してください。</p>
+                      )}
+                      {ginpayAccount && ginpayAccount.consistent && (
                         <>
                           <Sum label="現在の残高" value={yen(ginpayAccount.balance)} />
                           <Sum label="今回のお支払い" value={`−${yen(Math.max(0, totals.total))}`} />
@@ -261,7 +266,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
       {ctx && (
         <div style={{ flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div style={{ maxWidth: 640, margin: '0 auto' }}>
-            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : ginpayMismatch ? 'GINPayは利用できません' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
       )}

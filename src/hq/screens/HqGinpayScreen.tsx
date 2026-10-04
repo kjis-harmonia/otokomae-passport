@@ -63,7 +63,7 @@ export function HqGinpayScreen() {
           <div style={{ marginTop: 14, borderTop: `1px solid ${HQ_COLORS.panelBorder}`, paddingTop: 10 }}>
             {reconcile.accounts.map((a) => (
               <p key={a.id} style={{ margin: '4px 0', color: HQ_COLORS.redHi, fontSize: 13 }}>
-                {a.client_name ?? a.client_id}：残高 {yen(a.balance)} / 台帳 {yen(a.ledger_balance)}
+                {a.client_name ?? a.client_id}：キャッシュ {yen(a.cached_balance)} / 台帳 {yen(a.ledger_balance)}
               </p>
             ))}
           </div>
