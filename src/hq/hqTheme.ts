@@ -1,22 +1,25 @@
-// 銀二郎本部 共通テーマ — 黒×金 / Netflix × Bloomberg Terminal
+// 銀二郎本部 共通テーマ — 本部業務画面向けの白い作業面 + 濃紺サイドバー
 
 export const HQ_SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 export const HQ_SANS = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Sans", sans-serif'
 export const HQ_MONO = '"SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace'
 
 export const HQ_COLORS = {
-  bg: '#050403',
-  panel: 'rgba(20,16,12,0.86)',
-  panelBorder: 'rgba(201,162,74,0.18)',
-  panelBorderStrong: 'rgba(201,162,74,0.38)',
-  gold: '#C9A24A',
-  goldHi: '#E5C063',
-  goldDim: '#8A6E3C',
-  red: '#8C1F1A',
-  redHi: '#C23B3B',
-  textPrimary: '#EFE6D6',
-  textSecondary: '#B8AC93',
-  textMute: '#6E6557',
-  positive: '#7BC97B',
-  negative: '#D86B5C',
+  bg: '#F5F7FA',
+  sidebar: '#07111F',
+  sidebarSoft: '#0C1828',
+  panel: '#FFFFFF',
+  panelSubtle: '#F8FAFC',
+  panelBorder: '#E3E8EF',
+  panelBorderStrong: '#C8D2DD',
+  gold: '#2563EB',
+  goldHi: '#1D4ED8',
+  goldDim: '#64748B',
+  red: '#B42318',
+  redHi: '#D92D20',
+  textPrimary: '#111827',
+  textSecondary: '#475467',
+  textMute: '#8A95A5',
+  positive: '#138A4A',
+  negative: '#C2410C',
 }

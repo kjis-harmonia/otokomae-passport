@@ -1,185 +1,180 @@
-import { useEffect, useState } from 'react'
-import { HQ_TABS } from './hqMockData'
-import type { HqTab } from './hqMockData'
-import { HQ_COLORS, HQ_MONO, HQ_SANS, HQ_SERIF } from './hqTheme'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { BarChart3, CalendarDays, Menu, MessageSquare, Search, Settings, Users, X } from 'lucide-react'
+import { HQ_PRIMARY_TABS, HQ_ROUTE_LABELS, type HqNavigate, type HqPrimaryTab, type HqRoute, type HqSalesPreset, type HqBookingTab } from './hqMockData'
+import { HQ_COLORS, HQ_MONO, HQ_SANS } from './hqTheme'
 import { useIsMobile } from './useIsMobile'
-import { HqDashboardScreen } from './screens/HqDashboardScreen'
+import { HqTodayScreen } from './screens/HqTodayScreen'
 import { HqSalesScreen } from './screens/HqSalesScreen'
 import { HqStylistScreen } from './screens/HqStylistScreen'
-import { HqMembersScreen } from './screens/HqMembersScreen'
 import { HqClientsScreen } from './screens/HqClientsScreen'
 import { HqSalesLedgerScreen } from './screens/HqSalesLedgerScreen'
 import { HqGinpayScreen } from './screens/HqGinpayScreen'
 import { HqBookingScreen } from './screens/HqBookingScreen'
 import { HqServiceMasterScreen } from './screens/HqServiceMasterScreen'
 import { HqJohnnyScreen } from './screens/HqJohnnyScreen'
+import { HqInventoryScreen } from './screens/HqInventoryScreen'
+import { HqDailyReportScreen } from './screens/HqDailyReportScreen'
+import { HqSettingsScreen } from './screens/HqSettingsScreen'
+import { HqManagementScreen } from './screens/HqManagementScreen'
 import { JOHNNY_UI_ENABLED } from '../utils/johnnyFlag'
 import { ReservationLedger } from '../components/booking/ReservationLedger'
 import { hqBookingApi } from '../utils/bookingApi'
 import { hqCustomerApi } from '../utils/customerApi'
 import { hqGinpayApi } from '../utils/ginpayApi'
-import { HqInventoryScreen } from './screens/HqInventoryScreen'
-import { HqDailyReportScreen } from './screens/HqDailyReportScreen'
-import { HqSettingsScreen } from './screens/HqSettingsScreen'
 
 function fmtClock(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function fmtDate(d: Date): string {
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
+  return new Intl.DateTimeFormat('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  }).format(d)
+}
+
+function primaryFor(route: HqRoute): HqPrimaryTab {
+  if (route === 'today' || route === 'customers' || route === 'sales' || route === 'johnny' || route === 'admin') return route
+  if (route === 'ledger') return 'today'
+  if (route === 'stylist') return 'sales'
+  return 'admin'
+}
+
+const ICONS: Record<HqPrimaryTab, typeof CalendarDays> = {
+  today: CalendarDays,
+  customers: Users,
+  sales: BarChart3,
+  johnny: MessageSquare,
+  admin: Settings,
 }
 
 export function HeadquartersApp() {
-  const [tab, setTab] = useState<HqTab>('dashboard')
+  const [route, setRoute] = useState<HqRoute>('today')
+  const [salesPreset, setSalesPreset] = useState<HqSalesPreset>('today')
+  const [bookingTab, setBookingTab] = useState<HqBookingTab>('shifts')
   const [now, setNow] = useState(() => new Date())
   const [menuOpen, setMenuOpen] = useState(false)
   const isMobile = useIsMobile()
+  const safeRoute: HqRoute = route === 'johnny' && !JOHNNY_UI_ENABLED ? 'today' : route
+  const activePrimary = primaryFor(safeRoute)
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(t)
+    const t = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(t)
   }, [])
 
-  function selectTab(t: HqTab) {
-    setTab(t)
+  const navigate = useCallback<HqNavigate>((next, options) => {
+    if (options?.salesPreset) setSalesPreset(options.salesPreset)
+    if (options?.bookingTab) setBookingTab(options.bookingTab)
+    setRoute(next)
     setMenuOpen(false)
-  }
+  }, [])
 
-  const currentLabel = HQ_TABS.find(t => t.id === tab)?.label
+  const screen = useMemo(() => {
+    switch (safeRoute) {
+      case 'today':
+        return <HqTodayScreen onNavigate={navigate} />
+      case 'customers':
+        return <HqClientsScreen />
+      case 'sales':
+        return <HqSalesScreen key={salesPreset} initialPreset={salesPreset} onNavigate={navigate} />
+      case 'johnny':
+        return JOHNNY_UI_ENABLED ? <HqJohnnyScreen /> : <HqTodayScreen onNavigate={navigate} />
+      case 'admin':
+        return <HqManagementScreen onNavigate={navigate} />
+      case 'ledger':
+        return <ReservationLedger api={hqBookingApi} customers={hqCustomerApi} ginpay={hqGinpayApi} bottomGap={isMobile ? 32 : 28} />
+      case 'ginpay':
+        return <HqGinpayScreen />
+      case 'register':
+        return <HqSalesLedgerScreen />
+      case 'menus':
+        return <HqServiceMasterScreen />
+      case 'booking':
+        return <HqBookingScreen key={bookingTab} initialTab={bookingTab} />
+      case 'inventory':
+        return <HqInventoryScreen />
+      case 'reports':
+        return <HqDailyReportScreen />
+      case 'settings':
+        return <HqSettingsScreen />
+      case 'stylist':
+        return <HqStylistScreen />
+      default:
+        return <HqManagementScreen onNavigate={navigate} />
+    }
+  }, [bookingTab, isMobile, navigate, safeRoute, salesPreset])
 
-  const screen = (
-    <>
-      {tab === 'dashboard' && <HqDashboardScreen />}
-      {tab === 'sales' && <HqSalesScreen />}
-      {tab === 'stylist' && <HqStylistScreen />}
-      {tab === 'members' && <HqMembersScreen />}
-      {tab === 'customers' && <HqClientsScreen />}
-      {tab === 'ledger' && <ReservationLedger api={hqBookingApi} customers={hqCustomerApi} ginpay={hqGinpayApi} bottomGap={isMobile ? 32 : 28} />}
-      {tab === 'ginpay' && <HqGinpayScreen />}
-      {tab === 'register' && <HqSalesLedgerScreen />}
-      {tab === 'menus' && <HqServiceMasterScreen />}
-      {tab === 'booking' && <HqBookingScreen />}
-      {JOHNNY_UI_ENABLED && tab === 'johnny' && <HqJohnnyScreen />}
-      {tab === 'inventory' && <HqInventoryScreen />}
-      {tab === 'reports' && <HqDailyReportScreen />}
-      {tab === 'settings' && <HqSettingsScreen />}
-    </>
+  const nav = (
+    <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 12px' }} aria-label="本部ナビゲーション">
+      {HQ_PRIMARY_TABS.map((item) => {
+        const active = item.id === activePrimary
+        const Icon = ICONS[item.id as HqPrimaryTab]
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => navigate(item.id)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              minHeight: 42,
+              padding: '0 12px',
+              border: 'none',
+              borderRadius: 7,
+              background: active ? '#2563EB' : 'transparent',
+              color: active ? '#FFFFFF' : '#B8C4D4',
+              fontFamily: HQ_SANS,
+              fontSize: 14,
+              fontWeight: active ? 700 : 500,
+              cursor: 'pointer',
+              textAlign: 'left',
+              width: '100%',
+            }}
+          >
+            <Icon size={18} strokeWidth={2} aria-hidden="true" />
+            <span style={{ flex: '1 1 auto' }}>{item.label}</span>
+          </button>
+        )
+      })}
+    </nav>
   )
 
   if (isMobile) {
     return (
-      <div style={{
-        minHeight: '100dvh',
-        background: `radial-gradient(circle at 12% 0%, rgba(139,26,26,0.10), transparent 38%), radial-gradient(circle at 90% 10%, rgba(201,162,74,0.07), transparent 30%), ${HQ_COLORS.bg}`,
-        color: HQ_COLORS.textPrimary,
-        display: 'flex', flexDirection: 'column',
-      }}>
-        {/* ── モバイル用トップバー ── */}
-        <header style={{
-          position: 'sticky', top: 0, zIndex: 200,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-          padding: '12px 14px',
-          background: HQ_COLORS.bg,
-          borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
-        }}>
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            aria-label="メニュー"
-            style={{
-              flexShrink: 0, width: 38, height: 38, borderRadius: 8,
-              background: 'rgba(201,162,74,0.10)', border: `1px solid ${HQ_COLORS.panelBorderStrong}`,
-              color: HQ_COLORS.goldHi, fontSize: 16, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            ☰
+      <div style={appStyle}>
+        <header style={mobileHeaderStyle}>
+          <button type="button" onClick={() => setMenuOpen(true)} aria-label="メニューを開く" style={mobileIconButtonStyle}>
+            <Menu size={20} />
           </button>
-          <h2 style={{
-            flex: '1 1 auto', minWidth: 0, fontFamily: HQ_SERIF, fontSize: 16, fontWeight: 700,
-            letterSpacing: '0.04em', color: HQ_COLORS.textPrimary, margin: 0,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {currentLabel}
-          </h2>
-          <span style={{ flexShrink: 0, fontFamily: HQ_MONO, fontSize: 12, color: HQ_COLORS.goldHi, letterSpacing: '0.02em' }}>
-            {fmtClock(now)}
-          </span>
+          <div style={{ minWidth: 0 }}>
+            <p style={smallLabelStyle}>GINJIRO HQ</p>
+            <h1 style={mobileTitleStyle}>{HQ_ROUTE_LABELS[safeRoute]}</h1>
+          </div>
+          <span style={{ fontFamily: HQ_MONO, fontSize: 12, color: HQ_COLORS.textSecondary }}>{fmtClock(now)}</span>
         </header>
 
-        {/* ── コンテンツ ── */}
-        <main style={{ flex: '1 1 auto', overflowY: 'auto', padding: '14px 12px 32px', minWidth: 0 }}>
+        <main style={{ flex: '1 1 auto', overflowY: 'auto', padding: 14 }}>
           {screen}
         </main>
 
-        {/* ── タブ選択メニュー（全画面オーバーレイ） ── */}
         {menuOpen && (
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.92)' }}
-            onClick={() => setMenuOpen(false)}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: '100%', maxWidth: 360, height: '100%', overflowY: 'auto',
-                background: HQ_COLORS.bg, borderRight: `1px solid ${HQ_COLORS.panelBorder}`,
-                padding: '20px 0',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px', marginBottom: 28 }}>
+          <div role="presentation" onClick={() => setMenuOpen(false)} style={drawerBackdropStyle}>
+            <aside onClick={(e) => e.stopPropagation()} style={drawerStyle}>
+              <div style={brandBlockStyle}>
                 <div>
-                  <p style={{ fontFamily: HQ_SANS, fontSize: 9, letterSpacing: '0.28em', color: HQ_COLORS.goldDim, margin: 0, marginBottom: 6 }}>
-                    OTOKOMAE PASSPORT
-                  </p>
-                  <h1 style={{ fontFamily: HQ_SERIF, fontSize: 19, fontWeight: 700, letterSpacing: '0.06em', color: HQ_COLORS.goldHi, margin: 0 }}>
-                    銀二郎本部
-                  </h1>
+                  <p style={sidebarEyebrowStyle}>GINJIRO HQ</p>
+                  <h2 style={sidebarTitleStyle}>銀二郎 本部</h2>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setMenuOpen(false)}
-                  aria-label="閉じる"
-                  style={{
-                    width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.05)',
-                    border: `1px solid ${HQ_COLORS.panelBorder}`, color: HQ_COLORS.textSecondary,
-                    fontSize: 16, cursor: 'pointer',
-                  }}
-                >
-                  ×
+                <button type="button" onClick={() => setMenuOpen(false)} aria-label="メニューを閉じる" style={closeButtonStyle}>
+                  <X size={18} />
                 </button>
               </div>
-              <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 12px' }}>
-                {HQ_TABS.map((t) => {
-                  const active = t.id === tab
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => selectTab(t.id)}
-                      style={{
-                        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                        padding: '15px 14px',
-                        background: active ? 'rgba(201,162,74,0.10)' : 'transparent',
-                        border: 'none',
-                        borderLeft: active ? `2px solid ${HQ_COLORS.gold}` : '2px solid transparent',
-                        borderRadius: 2,
-                        color: active ? HQ_COLORS.goldHi : HQ_COLORS.textSecondary,
-                        fontFamily: HQ_SANS, fontSize: 15, fontWeight: active ? 600 : 400,
-                        letterSpacing: '0.04em',
-                        cursor: 'pointer', textAlign: 'left',
-                        WebkitTapHighlightColor: 'transparent',
-                      }}
-                    >
-                      <span>{t.label}</span>
-                      <span style={{ fontFamily: HQ_MONO, fontSize: 9, color: HQ_COLORS.textMute, letterSpacing: '0.08em' }}>
-                        {t.code}
-                      </span>
-                    </button>
-                  )
-                })}
-              </nav>
-            </div>
+              {nav}
+            </aside>
           </div>
         )}
       </div>
@@ -187,101 +182,198 @@ export function HeadquartersApp() {
   }
 
   return (
-    <div style={{
-      minHeight: '100dvh',
-      background: `radial-gradient(circle at 12% 0%, rgba(139,26,26,0.10), transparent 38%), radial-gradient(circle at 90% 10%, rgba(201,162,74,0.07), transparent 30%), ${HQ_COLORS.bg}`,
-      color: HQ_COLORS.textPrimary,
-      display: 'flex',
-    }}>
-      {/* ── サイドバー（デスクトップ） ── */}
-      <aside style={{
-        width: 220, flexShrink: 0,
-        borderRight: `1px solid ${HQ_COLORS.panelBorder}`,
-        display: 'flex', flexDirection: 'column',
-        padding: '24px 0',
-      }}>
-        <div style={{ padding: '0 22px', marginBottom: 36 }}>
-          <p style={{
-            fontFamily: HQ_SANS, fontSize: 9, letterSpacing: '0.28em',
-            color: HQ_COLORS.goldDim, margin: 0, marginBottom: 6,
-          }}>
-            OTOKOMAE PASSPORT
-          </p>
-          <h1 style={{
-            fontFamily: HQ_SERIF, fontSize: 19, fontWeight: 700, letterSpacing: '0.06em',
-            color: HQ_COLORS.goldHi, margin: 0,
-            textShadow: '0 0 18px rgba(201,162,74,0.25)',
-          }}>
-            銀二郎本部
-          </h1>
-        </div>
-
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 12px' }}>
-          {HQ_TABS.map((t) => {
-            const active = t.id === tab
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                style={{
-                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                  padding: '11px 12px',
-                  background: active ? 'rgba(201,162,74,0.10)' : 'transparent',
-                  border: 'none',
-                  borderLeft: active ? `2px solid ${HQ_COLORS.gold}` : '2px solid transparent',
-                  borderRadius: 2,
-                  color: active ? HQ_COLORS.goldHi : HQ_COLORS.textSecondary,
-                  fontFamily: HQ_SANS, fontSize: 13, fontWeight: active ? 600 : 400,
-                  letterSpacing: '0.04em',
-                  cursor: 'pointer', textAlign: 'left',
-                  WebkitTapHighlightColor: 'transparent',
-                }}
-              >
-                <span>{t.label}</span>
-                <span style={{ fontFamily: HQ_MONO, fontSize: 9, color: HQ_COLORS.textMute, letterSpacing: '0.08em' }}>
-                  {t.code}
-                </span>
-              </button>
-            )
-          })}
-        </nav>
-
-        <div style={{ marginTop: 'auto', padding: '0 22px' }}>
-          <div style={{
-            borderTop: `1px solid ${HQ_COLORS.panelBorder}`, paddingTop: 16,
-            fontFamily: HQ_MONO, fontSize: 10, color: HQ_COLORS.textMute, letterSpacing: '0.04em',
-          }}>
-            UI PROTOTYPE — DUMMY DATA
+    <div style={appStyle}>
+      <aside style={sidebarStyle}>
+        <div style={brandBlockStyle}>
+          <div>
+            <p style={sidebarEyebrowStyle}>GINJIRO HQ</p>
+            <h1 style={sidebarTitleStyle}>銀二郎 本部</h1>
           </div>
+        </div>
+        {nav}
+        <div style={{ marginTop: 'auto', padding: '18px 22px 0' }}>
+          <p style={{ margin: 0, color: '#8EA0B8', fontSize: 12, lineHeight: 1.6 }}>
+            単店舗運営用の本部画面です。日常操作は上の5分類から開始します。
+          </p>
         </div>
       </aside>
 
-      {/* ── メインカラム ── */}
       <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* ── トップバー ── */}
-        <header style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '18px 28px',
-          borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
-        }}>
-          <h2 style={{
-            fontFamily: HQ_SERIF, fontSize: 17, fontWeight: 700, letterSpacing: '0.04em',
-            color: HQ_COLORS.textPrimary, margin: 0,
-          }}>
-            {currentLabel}
-          </h2>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, fontFamily: HQ_MONO }}>
-            <span style={{ fontSize: 12, color: HQ_COLORS.textSecondary }}>{fmtDate(now)}</span>
-            <span style={{ fontSize: 13, color: HQ_COLORS.goldHi, letterSpacing: '0.04em' }}>{fmtClock(now)}</span>
+        <header style={topbarStyle}>
+          <button type="button" onClick={() => navigate('customers')} style={searchButtonStyle}>
+            <Search size={17} aria-hidden="true" />
+            <span>顧客検索を開く</span>
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, color: HQ_COLORS.textSecondary, fontSize: 13 }}>
+            <span>{fmtDate(now)}</span>
+            <span style={{ fontFamily: HQ_MONO }}>{fmtClock(now)}</span>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: 30,
+              padding: '0 10px',
+              borderRadius: 999,
+              background: '#EEF2F6',
+              color: HQ_COLORS.textSecondary,
+              fontWeight: 700,
+            }}>
+              管理者
+            </span>
           </div>
         </header>
-
-        {/* ── コンテンツ ── */}
-        <main style={{ flex: '1 1 auto', overflowY: 'auto', padding: 28 }}>
+        <main style={mainStyle}>
           {screen}
         </main>
       </div>
     </div>
   )
+}
+
+const appStyle: CSSProperties = {
+  minHeight: '100dvh',
+  background: HQ_COLORS.bg,
+  color: HQ_COLORS.textPrimary,
+  display: 'flex',
+  fontFamily: HQ_SANS,
+}
+
+const sidebarStyle: CSSProperties = {
+  width: 224,
+  flexShrink: 0,
+  background: HQ_COLORS.sidebar,
+  display: 'flex',
+  flexDirection: 'column',
+  padding: '22px 0',
+  boxShadow: '1px 0 0 rgba(15,23,42,0.12)',
+}
+
+const brandBlockStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '0 22px',
+  marginBottom: 28,
+}
+
+const sidebarEyebrowStyle: CSSProperties = {
+  margin: 0,
+  color: '#8EA0B8',
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: 0,
+}
+
+const sidebarTitleStyle: CSSProperties = {
+  margin: '4px 0 0',
+  color: '#FFFFFF',
+  fontSize: 18,
+  fontWeight: 800,
+  letterSpacing: 0,
+}
+
+const topbarStyle: CSSProperties = {
+  flexShrink: 0,
+  minHeight: 62,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 16,
+  padding: '0 24px',
+  background: '#FFFFFF',
+  borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
+}
+
+const searchButtonStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  minHeight: 38,
+  padding: '0 14px',
+  borderRadius: 7,
+  border: `1px solid ${HQ_COLORS.panelBorder}`,
+  background: '#FFFFFF',
+  color: HQ_COLORS.textSecondary,
+  fontFamily: HQ_SANS,
+  fontSize: 13,
+  cursor: 'pointer',
+}
+
+const mainStyle: CSSProperties = {
+  flex: '1 1 auto',
+  minWidth: 0,
+  overflowY: 'auto',
+  padding: 24,
+}
+
+const mobileHeaderStyle: CSSProperties = {
+  position: 'sticky',
+  top: 0,
+  zIndex: 100,
+  minHeight: 58,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '0 14px',
+  background: '#FFFFFF',
+  borderBottom: `1px solid ${HQ_COLORS.panelBorder}`,
+}
+
+const mobileIconButtonStyle: CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 7,
+  border: `1px solid ${HQ_COLORS.panelBorder}`,
+  background: '#FFFFFF',
+  color: HQ_COLORS.textPrimary,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+}
+
+const smallLabelStyle: CSSProperties = {
+  margin: 0,
+  color: HQ_COLORS.textMute,
+  fontSize: 10,
+  fontWeight: 800,
+  letterSpacing: 0,
+}
+
+const mobileTitleStyle: CSSProperties = {
+  margin: '2px 0 0',
+  fontSize: 16,
+  lineHeight: 1.2,
+  fontWeight: 800,
+  letterSpacing: 0,
+}
+
+const drawerBackdropStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 300,
+  background: 'rgba(15,23,42,0.38)',
+}
+
+const drawerStyle: CSSProperties = {
+  width: 292,
+  maxWidth: '86vw',
+  height: '100%',
+  background: HQ_COLORS.sidebar,
+  padding: '22px 0',
+  boxShadow: '12px 0 30px rgba(15,23,42,0.22)',
+}
+
+const closeButtonStyle: CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 7,
+  border: '1px solid rgba(255,255,255,0.14)',
+  background: 'rgba(255,255,255,0.06)',
+  color: '#FFFFFF',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
 }

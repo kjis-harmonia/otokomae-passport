@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { HQ_COLORS, HQ_SANS } from '../hqTheme'
+import type { HqBookingTab } from '../hqMockData'
 import { getJapanDateString, addDaysToDateString } from '../../utils/dateUtils'
 import {
   getBookingMasters, updateBookingSettings, upsertStaffMember, getSchedule, setShiftTemplate, setDaySchedule,
@@ -14,8 +15,8 @@ const T = {
   text: HQ_COLORS.textPrimary,
   sub: HQ_COLORS.textSecondary,
   mute: HQ_COLORS.textMute,
-  line: 'rgba(255,255,255,0.09)',
-  field: 'rgba(255,255,255,0.04)',
+  line: HQ_COLORS.panelBorder,
+  field: '#FFFFFF',
   accent: HQ_COLORS.gold,
   danger: HQ_COLORS.negative,
 }
@@ -23,7 +24,7 @@ const WEEK = ['日', '月', '火', '水', '木', '金', '土']
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] // 月曜はじまりで表示
 
 // メニュー・価格は本部の「メニュー・価格」で編集する（予約と会計で共通のマスター）
-type Tab = 'shifts' | 'staff' | 'hours' | 'settings'
+type Tab = HqBookingTab
 const TABS: { id: Tab; label: string }[] = [
   { id: 'shifts', label: 'シフト' },
   { id: 'staff', label: 'スタッフ' },
@@ -31,8 +32,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'settings', label: '設定' },
 ]
 
-export function HqBookingScreen() {
-  const [tab, setTab] = useState<Tab>('shifts')
+export function HqBookingScreen({ initialTab = 'shifts' }: { initialTab?: HqBookingTab }) {
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [masters, setMasters] = useState<BookingMasters | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -513,7 +514,7 @@ function SettingsTab({ masters, onSaved }: { masters: BookingMasters; onSaved: (
 
 const fieldStyle: React.CSSProperties = {
   height: 40, boxSizing: 'border-box', padding: '0 10px', borderRadius: 6, fontSize: 15, fontFamily: HQ_SANS,
-  background: T.field, color: T.text, border: `1px solid ${T.line}`, outline: 'none', colorScheme: 'dark', width: '100%',
+  background: T.field, color: T.text, border: `1px solid ${T.line}`, outline: 'none', colorScheme: 'light', width: '100%',
 }
 
 function SubHeading({ children }: { children: ReactNode }) {
@@ -554,7 +555,7 @@ function PrimaryButton({ onClick, disabled, children }: { onClick: () => void; d
       disabled={disabled}
       style={{
         height: 40, padding: '0 18px', borderRadius: 6, fontSize: 14, fontWeight: 600, fontFamily: HQ_SANS,
-        background: disabled ? 'rgba(255,255,255,0.08)' : T.accent, color: disabled ? T.mute : '#14100A',
+        background: disabled ? '#EEF2F6' : T.accent, color: disabled ? T.mute : '#FFFFFF',
         border: 'none', cursor: disabled ? 'default' : 'pointer',
       }}
     >
@@ -577,7 +578,7 @@ function Toggle({ on, onClick, disabled, children }: { on: boolean; onClick: () 
     <button type="button" onClick={onClick} disabled={disabled} aria-pressed={on}
       style={{
         minHeight: 40, padding: '0 12px', borderRadius: 20, fontSize: 13, fontFamily: HQ_SANS, cursor: disabled ? 'default' : 'pointer',
-        background: on ? T.text : 'transparent', color: on ? '#0B0B0B' : T.sub, border: `1px solid ${on ? T.text : T.line}`, opacity: disabled ? 0.5 : 1,
+        background: on ? T.accent : 'transparent', color: on ? '#FFFFFF' : T.sub, border: `1px solid ${on ? T.accent : T.line}`, opacity: disabled ? 0.5 : 1,
       }}>
       {children}
     </button>
