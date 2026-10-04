@@ -12,6 +12,11 @@
 --       - 別の端末・別のセッションからの再利用は already_used で拒否する。
 --       - 期限切れ・無効化・お客様セッションの失効・形式不正は拒否する。
 --   * 発行・読み取り・拒否はすべて pos_scan_events に残す（拒否は例外にせず返すので監査が残る）。
+--     監査には user_id・client_id・名前・残高・券・平文トークンを残さない。誰のトークンかは token_hash / scan_session_id から
+--     app_private の表（service_role のみ）でたどる。
+--   * 総当たり対策は「形式は正しいが存在しない GJC1 トークン」（not_found）だけを数える（端末セッションごと 10 分 20 回）。
+--     他社 QR や誤読（invalid_format）は数えない（店舗端末を止めない）。
+--   * 使われなかったトークンの掃除は、部分インデックスを使う小さなバッチ（SKIP LOCKED・1 回 50 行まで）で、発行のたびに少しずつ行う。
 --   * 既存の会員 QR（ginjiro-member）と既存のフローは変更しない。
 -- ============================================================================
 
@@ -30,6 +35,9 @@ create table if not exists app_private.customer_presence_tokens (
   check ((consumed_at is null) = (scan_session_id is null))
 );
 create index if not exists customer_presence_tokens_user_idx on app_private.customer_presence_tokens (user_id, created_at desc);
+-- 掃除の対象（使われなかったトークン）を作成日時で引く
+create index if not exists customer_presence_tokens_cleanup_idx
+  on app_private.customer_presence_tokens (created_at) where scan_session_id is null;
 -- 同じ会員の有効な（未使用・未失効の）トークンは常に1つだけ
 create unique index if not exists customer_presence_tokens_one_active_uidx
   on app_private.customer_presence_tokens (user_id) where consumed_at is null and revoked_at is null;
@@ -53,13 +61,14 @@ create table if not exists public.pos_scan_events (
   event_type          text not null check (event_type in ('issued', 'scanned', 'retry', 'rejected')),
   reason              text,
   token_hash          text,
-  user_id             text,
   scan_session_id     uuid,
   staff_session_hash  text,
   created_at          timestamptz not null default now()
 );
 create index if not exists pos_scan_events_staff_idx on public.pos_scan_events (staff_session_hash, created_at desc);
-create index if not exists pos_scan_events_user_idx on public.pos_scan_events (user_id, created_at desc);
+-- 総当たりの判定（存在しないトークンの拒否だけを端末セッションごとに数える）
+create index if not exists pos_scan_events_bruteforce_idx on public.pos_scan_events (staff_session_hash, created_at)
+  where event_type = 'rejected' and reason = 'not_found';
 
 alter table public.pos_scan_events enable row level security;
 revoke all on public.pos_scan_events from public, anon, authenticated;
@@ -68,6 +77,26 @@ alter table app_private.customer_presence_tokens enable row level security;
 alter table app_private.pos_scan_sessions enable row level security;
 revoke all on app_private.customer_presence_tokens from public, anon, authenticated;
 revoke all on app_private.pos_scan_sessions from public, anon, authenticated;
+
+/** 30 日を過ぎた未使用トークンを少しずつ消す（部分インデックス・SKIP LOCKED。発行の待ちを作らない）。消した件数を返す */
+create or replace function app_private.cleanup_presence_tokens(p_limit integer default 50)
+returns integer language plpgsql
+set search_path = public, extensions, pg_temp
+as $$
+declare v_n integer;
+begin
+  with doomed as (
+    select token_hash from app_private.customer_presence_tokens
+    where scan_session_id is null and created_at < now() - interval '30 days'
+    order by created_at
+    limit greatest(1, least(coalesce(p_limit, 50), 500))
+    for update skip locked
+  )
+  delete from app_private.customer_presence_tokens t using doomed d where t.token_hash = d.token_hash;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
 
 /**
  * お客様：提示用トークンを発行する（App のセッションが必要）。
@@ -90,7 +119,7 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('ginjiro:presence:' || v_uid, 0));
   -- 発行の上限（1分に10回まで）
   if (select count(*) from app_private.customer_presence_tokens where user_id = v_uid and created_at > now() - interval '1 minute') >= 10 then
-    insert into public.pos_scan_events (event_type, reason, user_id) values ('rejected', 'issue_rate_limited', v_uid);
+    insert into public.pos_scan_events (event_type, reason) values ('rejected', 'issue_rate_limited');
     return json_build_object('error', 'rate_limited');
   end if;
   update app_private.customer_presence_tokens set revoked_at = now()
@@ -100,10 +129,9 @@ begin
   v_hash := app_private.sha256_hex(v_token);
   insert into app_private.customer_presence_tokens (token_hash, user_id, customer_session_hash, expires_at)
   values (v_hash, v_uid, app_private.sha256_hex(p_session), v_expires);
-  insert into public.pos_scan_events (event_type, token_hash, user_id) values ('issued', v_hash, v_uid);
-  -- 使われなかったトークンの掃除（監査は pos_scan_events に残る）
-  delete from app_private.customer_presence_tokens
-  where created_at < now() - interval '30 days' and scan_session_id is null;
+  insert into public.pos_scan_events (event_type, token_hash) values ('issued', v_hash);
+  -- 使われなかったトークンの掃除（小さなバッチ。監査は pos_scan_events に残る）
+  perform app_private.cleanup_presence_tokens(50);
 
   return json_build_object('token', v_token, 'expires_at', v_expires, 'ttl_seconds', 90);
 end;
@@ -128,9 +156,10 @@ begin
   perform app_private.assert_staff(p_staff);
   v_staff_hash := app_private.sha256_hex(p_staff);
 
-  -- 総当たり対策：この端末セッションの直近10分の拒否が20回以上なら止める
+  -- 総当たり対策：この端末セッションで直近10分に「存在しない GJC1 トークン」が20回以上なら止める（形式不正は数えない）
   if (select count(*) from public.pos_scan_events
-      where staff_session_hash = v_staff_hash and event_type = 'rejected' and created_at > now() - interval '10 minutes') >= 20 then
+      where staff_session_hash = v_staff_hash and event_type = 'rejected' and reason = 'not_found'
+        and created_at > now() - interval '10 minutes') >= 20 then
     insert into public.pos_scan_events (event_type, reason, staff_session_hash) values ('rejected', 'scan_rate_limited', v_staff_hash);
     return json_build_object('error', 'rate_limited');
   end if;
@@ -151,8 +180,8 @@ begin
   if t.consumed_at is not null then
     select * into s from app_private.pos_scan_sessions where id = t.scan_session_id;
     if t.consumed_by_staff_session_hash = v_staff_hash and s.id is not null and s.closed_at is null and s.expires_at > now() then
-      insert into public.pos_scan_events (event_type, token_hash, user_id, scan_session_id, staff_session_hash)
-      values ('retry', v_hash, t.user_id, s.id, v_staff_hash);
+      insert into public.pos_scan_events (event_type, token_hash, scan_session_id, staff_session_hash)
+      values ('retry', v_hash, s.id, v_staff_hash);
       return json_build_object('scan_session_id', s.id, 'expires_at', s.expires_at, 'identity_method', s.identity_method,
         'client', (select json_build_object('id', c.id, 'name', c.display_name) from public.clients c where c.id = app_private.client_root(s.client_id)),
         'idempotent', true);
@@ -167,16 +196,16 @@ begin
     v_reason := 'customer_session_revoked';
   end if;
   if v_reason is not null then
-    insert into public.pos_scan_events (event_type, reason, token_hash, user_id, staff_session_hash)
-    values ('rejected', v_reason, v_hash, t.user_id, v_staff_hash);
+    insert into public.pos_scan_events (event_type, reason, token_hash, staff_session_hash)
+    values ('rejected', v_reason, v_hash, v_staff_hash);
     return json_build_object('error', v_reason);
   end if;
 
   -- 顧客の特定（App 会員の顧客。まだなければ作成する＝既存の会員と同じ扱い）
   v_client := app_private.user_client(t.user_id);
   if v_client is null then
-    insert into public.pos_scan_events (event_type, reason, token_hash, user_id, staff_session_hash)
-    values ('rejected', 'customer_not_found', v_hash, t.user_id, v_staff_hash);
+    insert into public.pos_scan_events (event_type, reason, token_hash, staff_session_hash)
+    values ('rejected', 'customer_not_found', v_hash, v_staff_hash);
     return json_build_object('error', 'customer_not_found');
   end if;
 
@@ -186,8 +215,8 @@ begin
   update app_private.customer_presence_tokens
   set consumed_at = now(), consumed_by_staff_session_hash = v_staff_hash, scan_session_id = s.id
   where token_hash = v_hash;
-  insert into public.pos_scan_events (event_type, token_hash, user_id, scan_session_id, staff_session_hash)
-  values ('scanned', v_hash, t.user_id, s.id, v_staff_hash);
+  insert into public.pos_scan_events (event_type, token_hash, scan_session_id, staff_session_hash)
+  values ('scanned', v_hash, s.id, v_staff_hash);
 
   return json_build_object('scan_session_id', s.id, 'expires_at', s.expires_at, 'identity_method', s.identity_method,
     'client', (select json_build_object('id', c.id, 'name', c.display_name) from public.clients c where c.id = v_client),

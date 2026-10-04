@@ -10,16 +10,19 @@ declare
   v_session text := 'preflight-pos-presence-customer-session-0123456789abcdef';
   v_staff_a text := 'preflight-pos-presence-staff-a-0123456789abcdef';
   v_staff_b text := 'preflight-pos-presence-staff-b-0123456789abcdef';
+  v_staff_c text := 'preflight-pos-presence-staff-c-0123456789abcdef';
   v_r jsonb; v_r2 jsonb; v_tok text; v_tok_old text; v_scan uuid; v_client uuid; v_ok boolean; i int;
+  v_all text[] := '{}'; v_plan text; v_n int;
 begin
   insert into public.customers (user_id, name, recovery_code) values (v_uid, v_name, 'PFPOS0001');
   insert into app_private.customer_sessions (token_hash, user_id, created_via) values (app_private.sha256_hex(v_session), v_uid, 'register');
   insert into app_private.staff_sessions (token_hash, expires_at) values
-    (app_private.sha256_hex(v_staff_a), now() + interval '1 hour'), (app_private.sha256_hex(v_staff_b), now() + interval '1 hour');
+    (app_private.sha256_hex(v_staff_a), now() + interval '1 hour'), (app_private.sha256_hex(v_staff_b), now() + interval '1 hour'),
+    (app_private.sha256_hex(v_staff_c), now() + interval '1 hour');
 
   -- 発行：形式・期限・PII なし・DB はハッシュのみ
   v_r := public.customer_issue_presence_token(v_session)::jsonb;
-  v_tok := v_r->>'token';
+  v_tok := v_r->>'token'; v_all := v_all || v_tok;
   if v_tok !~ '^GJC1\.[A-Za-z0-9_-]{43}$' or length(v_tok) <> 48 then raise exception 'token_format: %', v_tok; end if;
   if (v_r->>'ttl_seconds')::int <> 90 or abs(extract(epoch from ((v_r->>'expires_at')::timestamptz - now())) - 90) > 5 then raise exception 'token_ttl: %', v_r; end if;
   if (select array_agg(k order by k) from jsonb_object_keys(v_r) k) <> array['expires_at', 'token', 'ttl_seconds'] then raise exception 'issue_returns_extra: %', v_r; end if;
@@ -36,7 +39,7 @@ begin
 
   -- 再発行で前回分は無効（1会員1つ）
   v_tok_old := v_tok;
-  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token';
+  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token'; v_all := v_all || v_tok;
   if (select count(*) from app_private.customer_presence_tokens where user_id = v_uid and consumed_at is null and revoked_at is null) <> 1 then
     raise exception 'more_than_one_active_token';
   end if;
@@ -64,13 +67,13 @@ begin
   if public.staff_resolve_presence_token(v_staff_a, v_tok)::jsonb->>'error' is distinct from 'scan_session_expired' then raise exception 'expired_scan_session_reused'; end if;
 
   -- 期限切れのトークン
-  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token';
+  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token'; v_all := v_all || v_tok;
   update app_private.customer_presence_tokens set created_at = now() - interval '91 seconds', expires_at = now() - interval '1 second'
   where token_hash = app_private.sha256_hex(v_tok);
   if public.staff_resolve_presence_token(v_staff_a, v_tok)::jsonb->>'error' is distinct from 'expired' then raise exception 'expired_not_rejected'; end if;
 
   -- お客様セッションの失効
-  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token';
+  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token'; v_all := v_all || v_tok;
   update app_private.customer_sessions set revoked_at = now() where token_hash = app_private.sha256_hex(v_session);
   if public.staff_resolve_presence_token(v_staff_a, v_tok)::jsonb->>'error' is distinct from 'customer_session_revoked' then raise exception 'revoked_session_not_rejected'; end if;
   v_ok := false;
@@ -91,23 +94,75 @@ begin
   if not v_ok then raise exception 'resolve_without_staff_session'; end if;
 
   -- 発行の上限（1分に10回）
-  for i in 1..12 loop v_r := public.customer_issue_presence_token(v_session)::jsonb; end loop;
+  for i in 1..12 loop v_r := public.customer_issue_presence_token(v_session)::jsonb; if v_r ? 'token' then v_all := v_all || (v_r->>'token'); end if; end loop;
   if v_r->>'error' is distinct from 'rate_limited' then raise exception 'issue_rate_limit_missing: %', v_r; end if;
 
-  -- 監査：発行・読取・再送・拒否（理由つき）
-  if not exists (select 1 from public.pos_scan_events where user_id = v_uid and event_type = 'issued')
+  -- 監査：発行・読取・再送・拒否（理由つき）。この確認のトランザクション内のイベントは created_at = now()
+  if not exists (select 1 from public.pos_scan_events where token_hash = app_private.sha256_hex(v_tok_old) and event_type = 'issued')
      or (select count(*) from public.pos_scan_events where scan_session_id = v_scan and event_type = 'scanned') <> 1
      or not exists (select 1 from public.pos_scan_events where scan_session_id = v_scan and event_type = 'retry')
-     or (select array_agg(distinct reason order by reason) from public.pos_scan_events where event_type = 'rejected'
-         and (user_id = v_uid or staff_session_hash = app_private.sha256_hex(v_staff_a)))
+     or (select array_agg(distinct reason order by reason) from public.pos_scan_events where event_type = 'rejected' and created_at = now())
         @> array['already_used', 'customer_session_revoked', 'expired', 'invalid_format', 'issue_rate_limited', 'not_found', 'revoked', 'scan_session_expired'] is not true then
     raise exception 'scan_audit_incomplete';
   end if;
-  if exists (select 1 from public.pos_scan_events e where row_to_json(e)::text like '%' || substr(v_tok, 6) || '%') then raise exception 'plaintext_token_in_audit'; end if;
 
-  -- 総当たり対策（拒否が続く端末は止める）
+  -- 形式不正（他社 QR・誤読）は何回読んでも端末を止めない。その後の正しいトークンは通る
+  for i in 1..30 loop
+    v_r := public.staff_resolve_presence_token(v_staff_c, case i % 3 when 0 then 'https://example.com/other-qr' when 1 then '{"type":"ginjiro-member","userId":"x"}' else 'GJC1.too-short' end)::jsonb;
+    if v_r->>'error' is distinct from 'invalid_token' then raise exception 'invalid_format_locked_terminal at %: %', i, v_r; end if;
+  end loop;
+  update app_private.customer_presence_tokens set revoked_at = now() where user_id = v_uid and consumed_at is null and revoked_at is null;
+  delete from app_private.customer_presence_tokens where user_id = v_uid and created_at = now() and consumed_at is null;  -- 発行上限を外す（テストだけ）
+  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token'; v_all := v_all || v_tok;
+  v_r := public.staff_resolve_presence_token(v_staff_c, v_tok)::jsonb;
+  if v_r ? 'error' then raise exception 'valid_token_rejected_after_invalid_formats: %', v_r; end if;
+
+  -- 総当たり（形式は正しいが存在しない GJC1 トークン）は 20 回で止める。止まった端末は正しいトークンも受け付けない
   for i in 1..25 loop v_r := public.staff_resolve_presence_token(v_staff_b, 'GJC1.' || repeat('B', 43))::jsonb; end loop;
   if v_r->>'error' is distinct from 'rate_limited' then raise exception 'scan_rate_limit_missing: %', v_r; end if;
+  if (select count(*) from public.pos_scan_events where staff_session_hash = app_private.sha256_hex(v_staff_b) and reason = 'not_found') <> 20 then
+    raise exception 'bruteforce_count_not_20';
+  end if;
+  delete from app_private.customer_presence_tokens where user_id = v_uid and consumed_at is null;   -- 発行上限を外す（テストだけ）
+  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token'; v_all := v_all || v_tok;
+  if public.staff_resolve_presence_token(v_staff_b, v_tok)::jsonb->>'error' is distinct from 'rate_limited' then raise exception 'locked_terminal_accepted_token'; end if;
+  -- 止まるのはその端末セッションだけ（別の端末は読める）
+  v_r := public.staff_resolve_presence_token(v_staff_a, v_tok)::jsonb;
+  if v_r ? 'error' then raise exception 'other_terminal_blocked: %', v_r; end if;
+
+  -- 監査に生トークン・user_id・client_id・名前が残らない（列にも値にも）
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'pos_scan_events'
+             and column_name in ('user_id', 'client_id', 'customer_id', 'name', 'token', 'balance')) then
+    raise exception 'audit_has_identity_columns';
+  end if;
+  if cardinality(v_all) < 8 then raise exception 'token_tracking_incomplete: %', cardinality(v_all); end if;
+  if exists (select 1 from public.pos_scan_events e, unnest(v_all) tk
+             where position(substr(tk, 6) in row_to_json(e)::text) > 0) then raise exception 'plaintext_token_in_audit'; end if;
+  if exists (select 1 from public.pos_scan_events e
+             where position(v_uid in row_to_json(e)::text) > 0 or position(v_client::text in row_to_json(e)::text) > 0
+                or position(v_name in row_to_json(e)::text) > 0) then
+    raise exception 'identity_in_audit';
+  end if;
+
+  -- 掃除：部分インデックスを使い、1 回の発行で消すのは最大 50 行（古い未使用トークンが大量でも発行が重くならない）
+  insert into app_private.customer_presence_tokens (token_hash, user_id, customer_session_hash, created_at, expires_at, revoked_at)
+  select 'cleanup-old-' || g, 'cleanup-user-' || g, 'x', now() - interval '40 days', now() - interval '40 days' + interval '90 seconds', now() - interval '40 days'
+  from generate_series(1, 20000) g;
+  insert into app_private.customer_presence_tokens (token_hash, user_id, customer_session_hash, created_at, expires_at, revoked_at)
+  select 'cleanup-new-' || g, 'cleanup-user-' || g, 'x', now() - interval '1 day', now() - interval '1 day' + interval '90 seconds', now() - interval '1 day'
+  from generate_series(1, 20000) g;
+  analyze app_private.customer_presence_tokens;
+  execute 'explain (format json) select token_hash from app_private.customer_presence_tokens
+           where scan_session_id is null and created_at < now() - interval ''30 days'' order by created_at limit 50 for update skip locked'
+    into v_plan;
+  if position('customer_presence_tokens_cleanup_idx' in v_plan) = 0 then raise exception 'cleanup_not_using_partial_index: %', v_plan; end if;
+  delete from app_private.customer_presence_tokens where user_id = v_uid and consumed_at is null;
+  v_tok := public.customer_issue_presence_token(v_session)::jsonb->>'token'; v_all := v_all || v_tok;
+  select count(*) into v_n from app_private.customer_presence_tokens where token_hash like 'cleanup-old-%';
+  if v_n <> 20000 - 50 then raise exception 'cleanup_batch_not_bounded: % left', v_n; end if;
+  if exists (select 1 from app_private.customer_presence_tokens where token_hash like 'cleanup-new-%' having count(*) <> 20000) then raise exception 'cleanup_deleted_recent'; end if;
+  if app_private.cleanup_presence_tokens(1000) <> 500 then raise exception 'cleanup_limit_not_capped'; end if;
+  if has_function_privilege('anon', 'app_private.cleanup_presence_tokens(integer)', 'EXECUTE') then raise exception 'cleanup_executable_by_client'; end if;
 
   -- 権限：RPC は anon / authenticated から実行可（セッションで保護）、表・内部関数は不可、SECURITY DEFINER と search_path 固定
   if not has_function_privilege('anon', 'public.customer_issue_presence_token(text)', 'EXECUTE')

@@ -133,8 +133,9 @@ async function main() {
   })
 
   await stage('pos-phase0', async () => {
-    // P0-1 GINPay 台帳照合ガード（全経路・監査が残ること）／P0-2 お客様提示 QR トークン
-    if (skipDb) return 'skipped'
+    // P0-1 GINPay 台帳照合ガード（全経路・監査が残ること）／P0-2 お客様提示 QR トークン（画面側の形式チェックを含む）
+    runCommand('node', ['scripts/pos-regression.mjs'], 'POS presence token client guard')
+    if (skipDb) return 'client guard ok; DB skipped'
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_ginpay_reconcile.sql'), 'POS P0-1 GINPay reconcile guard')
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_presence_token.sql'), 'POS P0-2 presence token')
     if (baselineDbUrl) {
@@ -159,7 +160,10 @@ async function main() {
     runPsqlFile(dbUrl, join(testsDir, 'pos_presence_concurrency_setup.sql'), 'POS presence token concurrency setup')
     runPgbench(dbUrl, join(testsDir, 'pos_presence_concurrency_worker.sql'), 'POS presence token concurrency')
     runPsqlFile(dbUrl, join(testsDir, 'pos_presence_concurrency_verify.sql'), 'POS presence token concurrency verify')
-    return 'booking + checkout + GINPay + POS presence token concurrency ok'
+    runPsqlFile(dbUrl, join(testsDir, 'ginpay_mismatch_concurrency_setup.sql'), 'GINPay mismatch concurrency setup')
+    runPgbench(dbUrl, join(testsDir, 'ginpay_mismatch_concurrency_worker.sql'), 'GINPay mismatch concurrency')
+    runPsqlFile(dbUrl, join(testsDir, 'ginpay_mismatch_concurrency_verify.sql'), 'GINPay mismatch concurrency verify')
+    return 'booking + checkout + GINPay + POS presence token + GINPay mismatch concurrency ok'
   })
 
   await stage('frontend', async () => {
