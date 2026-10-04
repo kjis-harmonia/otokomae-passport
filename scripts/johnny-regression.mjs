@@ -190,10 +190,11 @@ check('frontend flag OFF hides JOHNNY UI surfaces', () => {
   assertIncludes(app, "JOHNNY_UI_ENABLED ? () => handleTabChange('reserve') : undefined", 'App TryOn gate')
   assertIncludes(reserve, 'JOHNNY_UI_ENABLED &&', 'Reserve JOHNNY gate')
   assertIncludes(styles, 'JOHNNY_UI_ENABLED &&', 'StyleLibrary JOHNNY gate')
-  assertIncludes(hq, "JOHNNY_UI_ENABLED && tab === 'johnny'", 'HQ JOHNNY gate')
+  assertIncludes(hq, "route === 'johnny' && !JOHNNY_UI_ENABLED", 'HQ JOHNNY gate')
+  assertIncludes(hq, 'JOHNNY_UI_ENABLED ? <HqJohnnyScreen />', 'HQ JOHNNY screen gate')
   assertIncludes(hqTabs, 'HQ_TABS', 'HQ tab export')
   assertIncludes(hqTabs, 'JOHNNY_UI_ENABLED', 'HQ tab flag gate')
-  assertIncludes(hqTabs, "? BASE_HQ_TABS.flatMap", 'HQ JOHNNY tab must be added only when flag is ON')
+  assertIncludes(hqTabs, '? BASE_PRIMARY_TABS.flatMap', 'HQ JOHNNY tab must be added only when flag is ON')
 })
 
 check('frontend flag OFF keeps TryOn HOT PEPPER path', () => {
