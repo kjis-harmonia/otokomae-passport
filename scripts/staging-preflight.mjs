@@ -26,6 +26,7 @@ const MIGRATION_ORDER = [
   '20261004000000_ginpay_ledger.sql',
   '20261005000000_checkout.sql',
   '20261006000000_service_master.sql',
+  '20261007000000_client_visit_model.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
@@ -101,8 +102,10 @@ async function main() {
   })
 
   await stage('clients', async () => {
-    if (skipDb) return 'covered by booking/client smoke; skipped without DB'
-    return 'client search + merge/unmerge covered by booking/client smoke'
+    if (skipDb) return 'skipped'
+    // 来店モデル：予約に紐づく会計は予約日の1来店、予約なしは店頭来店、同日の未会計の完了予約1件だけに突き合わせ
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_visit_model.sql'), 'client visit model')
+    return 'client search + merge/unmerge (booking/client smoke) + visit model ok'
   })
 
   await stage('checkout', async () => {
