@@ -12,7 +12,7 @@ select public.staff_finalize_sale(
   jsonb_build_object(
     'client_id', c.client_id,
     'stylist_id', c.stylist_id,
-    'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', 'ginpay-concurrency-700', 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', ai.id::text, 'quantity', 1)),
     'payment_method', 'ginpay',
     'expected_total', c.amount,
     'idempotency_key', c.idempotency_key
@@ -21,4 +21,5 @@ select public.staff_finalize_sale(
 )
 from public.__ginpay_concurrency_cases c
 join public.__ginpay_concurrency_latest l on l.run_id = c.run_id
+cross join lateral (select id from public.accounting_items where name = 'ginpay-concurrency-700' limit 1) ai
 where c.worker_no = :client_id;

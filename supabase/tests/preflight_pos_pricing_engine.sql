@@ -557,6 +557,131 @@ begin
     raise exception 'Check 22-5 failed: invalid source not rejected: %', v_quote;
   end if;
 
+  -- ── 23. Check 23: accounting_item UUID 参照 → 正常に価格解決 ────────────────
+  declare
+    v_ai_id1 uuid;
+    v_ai_id2 uuid;
+    v_ai_cut_id uuid;
+    v_item_saved record;
+  begin
+    select id into v_ai_cut_id from public.accounting_items where name = 'カット' and is_active limit 1;
+    if v_ai_cut_id is null then
+      raise exception 'Check 23 setup failed: accounting_item カット not found';
+    end if;
+
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+      'client_id', v_client_a,
+      'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', v_ai_cut_id::text, 'quantity', 1))
+    ))::jsonb;
+    if v_quote ? 'error' or (v_quote->>'total')::int <> 3300 then
+      raise exception 'Check 23 failed: accounting_item by UUID failed: %', v_quote;
+    end if;
+    if (v_quote->'items'->0->>'unit_price')::int <> 3300 or v_quote->'items'->0->>'name' <> 'カット' then
+      raise exception 'Check 23 failed: price or name mismatch for accounting_item: %', v_quote;
+    end if;
+
+    -- ── 24. Check 24: accounting_item name のみ指定（非UUID） → reject (invalid_items) ──
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+      'client_id', v_client_a,
+      'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', 'カット', 'quantity', 1))
+    ))::jsonb;
+    if v_quote->>'error' <> 'invalid_items' then
+      raise exception 'Check 24 failed: accounting_item by name was not rejected with invalid_items: %', v_quote;
+    end if;
+
+    -- ── 25. Check 25: 同名 accounting_items が存在しても UUID で一意に特定（曖昧選択されない） ──
+    -- テスト用に一時的に同名品目を2件作成 (unique 制約を一時解除)
+    alter table public.accounting_items drop constraint accounting_items_name_key;
+
+    insert into public.accounting_items (name, category, price, is_active)
+    values ('同名テスト品目', 'menu', 3000, true)
+    returning id into v_ai_id1;
+
+    insert into public.accounting_items (name, category, price, is_active)
+    values ('同名テスト品目', 'menu', 5000, true)
+    returning id into v_ai_id2;
+
+    -- ID1 指定時は確実に 3,000円
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+      'client_id', v_client_a,
+      'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', v_ai_id1::text, 'quantity', 1))
+    ))::jsonb;
+    if v_quote ? 'error' or (v_quote->>'total')::int <> 3000 then
+      raise exception 'Check 25-1 failed: ai_id1 (3000) not uniquely resolved: %', v_quote;
+    end if;
+
+    -- ID2 指定時は確実に 5,000円
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+      'client_id', v_client_a,
+      'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', v_ai_id2::text, 'quantity', 1))
+    ))::jsonb;
+    if v_quote ? 'error' or (v_quote->>'total')::int <> 5000 then
+      raise exception 'Check 25-2 failed: ai_id2 (5000) not uniquely resolved: %', v_quote;
+    end if;
+
+    -- 同名文字列 '同名テスト品目' では曖昧照合されず invalid_items で拒否
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+      'client_id', v_client_a,
+      'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', '同名テスト品目', 'quantity', 1))
+    ))::jsonb;
+    if v_quote->>'error' <> 'invalid_items' then
+      raise exception 'Check 25-3 failed: duplicate name lookup not rejected with invalid_items: %', v_quote;
+    end if;
+
+    -- ── 26. Check 26: フロント改ざん name 無視 & DB正本 name 強制 ────────────
+    -- 見積もり (quote)
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+      'client_id', v_client_a,
+      'items', jsonb_build_array(jsonb_build_object(
+        'source', 'accounting_item',
+        'ref_id', v_ai_id1::text,
+        'name', '悪意の改ざん品名（100円）',
+        'unit_price', 100,
+        'quantity', 1
+      ))
+    ))::jsonb;
+    if v_quote ? 'error' then
+      raise exception 'Check 26 quote failed: %', v_quote;
+    end if;
+    if v_quote->'items'->0->>'name' <> '同名テスト品目' then
+      raise exception 'Check 26 failed: tampered name was not ignored in quote: %', v_quote;
+    end if;
+    if (v_quote->'items'->0->>'unit_price')::int <> 3000 then
+      raise exception 'Check 26 failed: tampered price was not overridden in quote: %', v_quote;
+    end if;
+
+    -- 会計確定 (finalize_sale)
+    v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
+      'client_id', v_client_a,
+      'stylist_id', v_stylist,
+      'operator_token', v_op_token,
+      'quote_hash', v_quote->>'quote_hash',
+      'items', jsonb_build_array(jsonb_build_object(
+        'source', 'accounting_item',
+        'ref_id', v_ai_id1::text,
+        'name', '悪意の改ざん品名（100円）',
+        'unit_price', 100,
+        'quantity', 1
+      )),
+      'payment_method', 'cash',
+      'expected_total', 3000,
+      'idempotency_key', 'test-ai-tampered-name-ok'
+    ), 'Preflight')::jsonb;
+    if v_sale ? 'error' then
+      raise exception 'Check 26 sale failed: %', v_sale;
+    end if;
+
+    -- 保存された明細 (accounting_session_items) が DB 正本名であることを検証
+    select * into v_item_saved from public.accounting_session_items
+    where session_id = (v_sale->>'id')::uuid;
+    if v_item_saved.item_name <> '同名テスト品目' then
+      raise exception 'Check 26 failed: session item saved tampered name: %', v_item_saved.item_name;
+    end if;
+    if v_item_saved.price <> 3000 then
+      raise exception 'Check 26 failed: session item price not 3000: %', v_item_saved.price;
+    end if;
+  end;
+
 end;
 $$;
 rollback;

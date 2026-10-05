@@ -85,7 +85,7 @@ begin
     ends_at = app_private.jst_ts(app_private.today_jst(), time '06:30'), occupied_until = app_private.jst_ts(app_private.today_jst(), time '06:30')
   where id = v_res2;
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_client2, 'stylist_id', v_gin,
-    'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', 'カット', 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', (select id::text from public.accounting_items where name = 'カット' limit 1), 'quantity', 1)),
     'payment_method', 'cash', 'expected_total', 3300, 'idempotency_key', 'preflight-visit-3'), 'Preflight');
   v_ledger := app_private.client_ledger_json(v_client2);
   if (v_ledger->'stats'->>'visit_count')::int <> 1 or (v_ledger->'stats'->>'total_sales')::int <> 3300 then

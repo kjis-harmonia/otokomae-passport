@@ -403,10 +403,13 @@ begin
         declare
           ai public.accounting_items;
         begin
-          if v_ref_id is null then return jsonb_build_object('error', 'invalid_items'); end if;
+          -- accounting_item は stable UUID のみ許可。名前による曖昧検索や非UUIDは即時 reject
+          if v_ref_id is null or v_ref_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+            return jsonb_build_object('error', 'invalid_items');
+          end if;
 
           select * into ai from public.accounting_items
-          where (id::text = v_ref_id or name = v_ref_id)
+          where id = v_ref_id::uuid
             and is_active and category in ('menu', 'option');
 
           if ai.id is null or ai.price is null then
