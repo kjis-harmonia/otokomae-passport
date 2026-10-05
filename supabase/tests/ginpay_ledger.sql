@@ -59,13 +59,13 @@ begin
 
   -- 会計支払い（GINPay 払いは会計の確定の中でだけ記録される） / 残高不足
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_non_app_client, 'stylist_id', v_stylist,
-    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 3000, 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'cut-kids-skin-fade', 'quantity', 1)),
     'payment_method', 'ginpay', 'expected_total', 3000, 'idempotency_key', 'test-payment-1'), 'Tester');
   if v_sale->>'error' is not null then raise exception 'payment failed: %', v_sale; end if;
   v_session := (v_sale->>'id')::uuid;
   v_payment_id := (v_sale->'ginpay'->0->>'id')::uuid;
   v_tx := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_non_app_client, 'stylist_id', v_stylist,
-    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 9000, 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'perm-negro', 'quantity', 1)),
     'payment_method', 'ginpay', 'expected_total', 9000, 'idempotency_key', 'test-payment-insufficient'), 'Tester');
   if v_tx->>'error' <> 'insufficient_balance' then raise exception 'insufficient balance was not blocked: %', v_tx; end if;
 

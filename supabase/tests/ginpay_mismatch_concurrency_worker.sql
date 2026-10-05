@@ -3,8 +3,8 @@
 select case c.op
   when 'sale' then public.staff_finalize_sale(c.staff_token, jsonb_build_object(
       'client_id', c.client_id, 'stylist_id', c.stylist_id,
-      'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 700, 'quantity', 1)),
-      'payment_method', 'ginpay', 'expected_total', 700, 'idempotency_key', c.idempotency_key), 'Concurrency')
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'opt-shampoo', 'quantity', 1)),
+      'payment_method', 'ginpay', 'expected_total', 1000, 'idempotency_key', c.idempotency_key), 'Concurrency')
   when 'charge' then public.staff_ginpay_charge_store(c.staff_token, c.client_id, 1000, 'cash', 'Concurrency', null, c.idempotency_key)
   else public.staff_ginpay_adjustment(c.staff_token, c.client_id, -100, 'Concurrency', 'test', c.idempotency_key)
   end

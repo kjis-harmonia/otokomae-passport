@@ -40,6 +40,11 @@ begin
 
   v_client := app_private.create_client('GINPay Concurrency ' || v_run::text, 'staff', 'staff', 'Concurrency');
 
+  -- テスト専用の会計品目を一時作成（正式マスターは改変しない）
+  insert into public.accounting_items (name, category, price, is_active)
+  values ('ginpay-concurrency-700', 'menu', 700, true)
+  on conflict (name) do update set price = 700, is_active = true;
+
   perform public.staff_ginpay_charge_store(
     v_staff,
     v_client,

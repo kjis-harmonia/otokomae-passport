@@ -268,7 +268,10 @@ begin
 
   for v_item in select * from jsonb_array_elements(v_raw_items) loop
     v_i := v_i + 1;
-    v_source := coalesce(v_item->>'source', case when p_is_pos then 'manual' else 'legacy' end);
+    v_source := nullif(btrim(coalesce(v_item->>'source', '')), '');
+    if v_source is null or v_source not in ('reservation', 'service_menu', 'accounting_item', 'product', 'manual') then
+      return jsonb_build_object('error', 'invalid_items');
+    end if;
     v_ref_id := nullif(btrim(coalesce(v_item->>'ref_id', '')), '');
     v_item_name := btrim(coalesce(v_item->>'name', ''));
     v_cat := coalesce(v_item->>'category', 'menu');
@@ -279,8 +282,7 @@ begin
       return jsonb_build_object('error', 'invalid_items');
     end;
 
-    if v_qty < 1 or v_qty > 99 or v_cat not in ('menu', 'option', 'retail')
-       or v_source not in ('reservation', 'service_menu', 'accounting_item', 'product', 'manual', 'legacy') then
+    if v_qty < 1 or v_qty > 99 or v_cat not in ('menu', 'option', 'retail') then
       return jsonb_build_object('error', 'invalid_items');
     end if;
 
@@ -404,7 +406,7 @@ begin
           if v_ref_id is null then return jsonb_build_object('error', 'invalid_items'); end if;
 
           select * into ai from public.accounting_items
-          where (id::text = v_ref_id or code = v_ref_id)
+          where (id::text = v_ref_id or name = v_ref_id)
             and is_active and category in ('menu', 'option');
 
           if ai.id is null or ai.price is null then
@@ -420,26 +422,12 @@ begin
           v_list_price := ai.price;
           v_unit_price := ai.price;
           v_price_source := 'accounting_master';
+          v_ref_id := ai.id::text;
         end;
 
       when 'manual' then
         -- P0-5 前は手入力品目を一律拒否 (BLOCKER 3)
         return jsonb_build_object('error', 'l2_authorization_not_enabled');
-
-      when 'legacy' then
-        begin
-          v_unit_price := coalesce((v_item->>'unit_price')::int, (v_item->>'price')::int);
-        exception when others then
-          return jsonb_build_object('error', 'invalid_price');
-        end;
-        if v_unit_price is null or v_unit_price < 0 or v_unit_price > 1000000 then
-          return jsonb_build_object('error', 'invalid_price');
-        end if;
-        if btrim(v_item_name) = '' or length(v_item_name) > 80 then
-          return jsonb_build_object('error', 'invalid_items');
-        end if;
-        v_list_price := v_unit_price;
-        v_price_source := 'legacy_item';
     end case;
 
     v_subtotal := v_subtotal + (v_unit_price * v_qty);
@@ -884,7 +872,7 @@ begin
       line_discount, line_total, tax_mode, tax_rate, sort_order)
     values (
       v_id,
-      case when v_item->>'source' in ('accounting_item', 'product') then nullif(v_item->>'ref_id', '')::uuid end,
+      case when v_item->>'source' in ('accounting_item', 'product') and (v_item->>'ref_id') ~ '^[0-9a-fA-F-]{36}$' then (v_item->>'ref_id')::uuid end,
       btrim(v_item->>'name'),
       v_item->>'category',
       (v_item->>'unit_price')::int,

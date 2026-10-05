@@ -61,7 +61,7 @@ begin
 
   -- 予約なしの店頭会計（今日）は1回の来店として増える
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_client, 'stylist_id', v_tei,
-    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 3000, 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'cut-kids-skin-fade', 'quantity', 1)),
     'payment_method', 'cash', 'expected_total', 3000, 'idempotency_key', 'preflight-visit-2'), 'Preflight');
   v_ledger := app_private.client_ledger_json(v_client);
   if (v_ledger->'stats'->>'visit_count')::int <> 2 or (v_ledger->'stats'->>'total_sales')::int <> 18000 then
@@ -85,7 +85,7 @@ begin
     ends_at = app_private.jst_ts(app_private.today_jst(), time '06:30'), occupied_until = app_private.jst_ts(app_private.today_jst(), time '06:30')
   where id = v_res2;
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_client2, 'stylist_id', v_gin,
-    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 3300, 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', 'カット', 'quantity', 1)),
     'payment_method', 'cash', 'expected_total', 3300, 'idempotency_key', 'preflight-visit-3'), 'Preflight');
   v_ledger := app_private.client_ledger_json(v_client2);
   if (v_ledger->'stats'->>'visit_count')::int <> 1 or (v_ledger->'stats'->>'total_sales')::int <> 3300 then

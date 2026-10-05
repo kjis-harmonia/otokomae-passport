@@ -28,7 +28,7 @@ begin
 
   -- 正常：GINPay 払いの会計（後で取消の照合に使う）
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_client, 'stylist_id', v_stylist,
-    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 1000, 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'opt-shampoo', 'quantity', 1)),
     'payment_method', 'ginpay', 'expected_total', 1000, 'idempotency_key', 'pos-reconcile-sale-1'), 'Preflight')::jsonb;
   if v_sale ? 'error' then raise exception 'ginpay sale failed: %', v_sale; end if;
 
@@ -75,7 +75,7 @@ begin
   v_r := public.staff_ginpay_void(v_staff, (v_charge->>'id')::uuid, 'Preflight', 'test', 'pos-reconcile-void-1')::jsonb;
   if v_r->>'error' is distinct from 'ledger_mismatch_blocked' then raise exception 'staff_void_not_blocked: %', v_r; end if;
   v_r := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_client, 'stylist_id', v_stylist,
-    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 500, 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'cut-bangs', 'quantity', 1)),
     'payment_method', 'ginpay', 'expected_total', 500, 'idempotency_key', 'pos-reconcile-sale-2'), 'Preflight')::jsonb;
   if v_r->>'error' is distinct from 'ledger_mismatch_blocked' then raise exception 'finalize_not_blocked: %', v_r; end if;
   if exists (select 1 from public.accounting_sessions where idempotency_key = 'pos-reconcile-sale-2') then raise exception 'finalize_wrote_sale'; end if;
@@ -125,8 +125,8 @@ select public.staff_ginpay_adjustment('preflight-pos-reconcile-commit-staff-0123
   'pos-reconcile-commit-adj') ->> 'error' as adj_error \gset
 select public.staff_finalize_sale('preflight-pos-reconcile-commit-staff-0123456789', jsonb_build_object('client_id', :'client_id',
   'stylist_id', (select id from public.staff_members where is_active order by sort_order limit 1),
-  'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 100, 'quantity', 1)),
-  'payment_method', 'ginpay', 'expected_total', 100, 'idempotency_key', 'pos-reconcile-commit-sale'), 'Preflight') ->> 'error' as sale_error \gset
+  'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'opt-shampoo', 'quantity', 1)),
+  'payment_method', 'ginpay', 'expected_total', 1000, 'idempotency_key', 'pos-reconcile-commit-sale'), 'Preflight') ->> 'error' as sale_error \gset
 
 -- 別のトランザクションから確認（psql 変数は DO の中で展開されないため、セッション設定で渡す）
 select set_config('pf.account_id', :'account_id', false), set_config('pf.client_id', :'client_id', false),

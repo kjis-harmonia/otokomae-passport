@@ -36,7 +36,7 @@ begin
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
     'client_id', v_client,
     'stylist_id', v_stylist,
-    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 1000, 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'opt-shampoo', 'quantity', 1)),
     'ticket_ids', jsonb_build_array(v_ticket),
     'payment_method', 'cash',
     'expected_total', 700,

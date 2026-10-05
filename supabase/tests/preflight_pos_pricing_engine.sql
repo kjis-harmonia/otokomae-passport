@@ -461,8 +461,100 @@ begin
     )),
     'expected_total', 1
   ))::jsonb;
-  if (v_quote->>'total')::int <> 5000 or (v_quote->'items'->0->>'unit_price')::int <> 5000 then
-    raise exception 'Check 19 failed: frontend tampered unit_price/discount was not overridden by DB master: %', v_quote;
+  -- ── 20. Check 20: legacy_item fallback 完全排除（source 省略 + 1円 は即時拒否） ──
+  -- 旧呼び出し形式（POS項目全省略）で source なし item を渡す
+  v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
+    'client_id', v_client_a,
+    'stylist_id', v_stylist,
+    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 1, 'quantity', 1)),
+    'payment_method', 'cash',
+    'expected_total', 1,
+    'idempotency_key', 'test-sale-source-omitted-1'
+  ), 'Preflight')::jsonb;
+  if v_sale->>'error' <> 'invalid_items' then
+    raise exception 'Check 20 failed: item without source was not rejected with invalid_items: %', v_sale;
+  end if;
+
+  -- staff_pos_quote でも source なし item は拒否
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    'client_id', v_client_a,
+    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 1, 'quantity', 1))
+  ))::jsonb;
+  if v_quote->>'error' <> 'invalid_items' then
+    raise exception 'Check 20 failed: staff_pos_quote without source was not rejected: %', v_quote;
+  end if;
+
+  -- ── 21. Check 21: POS項目全省略でも価格バイパス不可（DBマスター価格強制） ──
+  -- POS項目全省略（旧形式）だが source 指定あり。unit_price: 1 と偽装
+  v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
+    'client_id', v_client_a,
+    'stylist_id', v_stylist,
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'unit_price', 1, 'quantity', 1)),
+    'payment_method', 'cash',
+    'expected_total', 1,
+    'idempotency_key', 'test-sale-bypass-attempt-1'
+  ), 'Preflight')::jsonb;
+  if v_sale->>'error' <> 'total_mismatch' or (v_sale->>'total')::int <> 5000 then
+    raise exception 'Check 21 failed: DB master price was not enforced on legacy call: %', v_sale;
+  end if;
+
+  -- 正しい expected_total: 5000 であれば確定成功し、売上金額は DB 正本の 5,000円 となること
+  v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
+    'client_id', v_client_a,
+    'stylist_id', v_stylist,
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'unit_price', 1, 'quantity', 1)),
+    'payment_method', 'cash',
+    'expected_total', 5000,
+    'idempotency_key', 'test-sale-legacy-db-price-ok'
+  ), 'Preflight')::jsonb;
+  if v_sale ? 'error' or (v_sale->>'total')::int <> 5000 then
+    raise exception 'Check 21 failed: legacy call with valid DB total failed: %', v_sale;
+  end if;
+
+  -- ── 22. Check 22: 不正 source / 偽装 ref_id の拒否（source自体も信用しない） ──
+  -- 22-1: source = manual は P0-5 前のため例外なく l2_authorization_not_enabled
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    'client_id', v_client_a,
+    'items', jsonb_build_array(jsonb_build_object('source', 'manual', 'name', '手入力品', 'unit_price', 3000, 'quantity', 1))
+  ))::jsonb;
+  if v_quote->>'error' <> 'l2_authorization_not_enabled' then
+    raise exception 'Check 22-1 failed: manual item was not rejected: %', v_quote;
+  end if;
+
+  -- 22-2: source = service_menu だが存在しない ref_id
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    'client_id', v_client_a,
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'non-existent-menu-999'))
+  ))::jsonb;
+  if v_quote->>'error' <> 'service_menu_not_found_or_inactive' then
+    raise exception 'Check 22-2 failed: non-existent service_menu not rejected: %', v_quote;
+  end if;
+
+  -- 22-3: source = service_menu だが product の ID を偽装指定
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    'client_id', v_client_a,
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_product_id::text))
+  ))::jsonb;
+  if v_quote->>'error' <> 'service_menu_not_found_or_inactive' then
+    raise exception 'Check 22-3 failed: product id spoofed as service_menu not rejected: %', v_quote;
+  end if;
+
+  -- 22-4: source = product だが service_menu の code を偽装指定
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    'client_id', v_client_a,
+    'items', jsonb_build_array(jsonb_build_object('source', 'product', 'ref_id', v_service_code))
+  ))::jsonb;
+  if v_quote->>'error' <> 'product_not_found_or_inactive' then
+    raise exception 'Check 22-4 failed: service_menu code spoofed as product not rejected: %', v_quote;
+  end if;
+
+  -- 22-5: 未知の不正 source
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    'client_id', v_client_a,
+    'items', jsonb_build_array(jsonb_build_object('source', 'hacked_source', 'ref_id', v_service_code))
+  ))::jsonb;
+  if v_quote->>'error' <> 'invalid_items' then
+    raise exception 'Check 22-5 failed: invalid source not rejected: %', v_quote;
   end if;
 
 end;

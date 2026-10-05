@@ -55,6 +55,9 @@ begin
   if v_res->>'error' is not null then raise exception 'reservation setup failed: %', v_res; end if;
   v_reservation := (v_res->>'id')::uuid;
 
+  -- 予約スナップショット価格を 1,000 円に設定（正式マスター service_menus は一切改変しない）
+  update public.reservation_items set price = 1000 where reservation_id = v_reservation;
+
   for i in 0..9 loop
     insert into public.__preflight_checkout_concurrency_cases (run_id, worker_no, staff_token, reservation_id, stylist_id, idempotency_key)
     values (v_run, i, v_staff, v_reservation, v_staff_id, 'preflight-checkout-concurrency:' || v_run::text || ':' || i::text);

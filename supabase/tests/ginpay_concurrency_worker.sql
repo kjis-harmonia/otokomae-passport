@@ -12,7 +12,7 @@ select public.staff_finalize_sale(
   jsonb_build_object(
     'client_id', c.client_id,
     'stylist_id', c.stylist_id,
-    'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', c.amount, 'quantity', 1)),
+    'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', 'ginpay-concurrency-700', 'quantity', 1)),
     'payment_method', 'ginpay',
     'expected_total', c.amount,
     'idempotency_key', c.idempotency_key
