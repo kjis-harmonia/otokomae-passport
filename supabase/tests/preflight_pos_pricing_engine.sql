@@ -155,7 +155,7 @@ begin
     'client_id', v_client_a,
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code))
   ))::jsonb;
-  if v_quote->>'error' <> 'invalid_operator_session' then
+  if v_quote->>'error' <> 'operator_session_invalid' then
     raise exception 'Check 4 failed: cross-staff operator token not rejected in quote: %', v_quote;
   end if;
 

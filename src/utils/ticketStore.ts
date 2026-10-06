@@ -14,6 +14,9 @@ import { removeStoredValue } from './storage'
 import { supabase } from '../lib/supabase'
 import { callRpc, callStaffRpc, isMissingRpc, RpcError } from './staffSession'
 import { callCustomerRpc, hasCustomerSession, readAsCustomer, saveCustomerSession } from './customerSession'
+import type { OperatorSession } from './posOperatorSession'
+import type { PosActionError } from './checkoutApi'
+
 
 const ACTIVE_TICKET_KEY = 'ginjiro_active_ticket'
 
@@ -137,49 +140,47 @@ export async function getTicketsForStaff(userId: string): Promise<TicketRow[]> {
   return r.tickets ?? []
 }
 
+export type TicketIssueResult =
+  | { tickets: TicketRow[] }
+  | PosActionError
+
 export interface IssueTicketsInput {
   userId:       string
   type:         Extract<TicketType, 'otoku' | 'discount'>
   amount:       number
   quantity:     number
-  staffName:    string
   customerName: string
+  idempotencyKey: string
 }
 
 /** チケット一括発行。全件成功で発行済みチケットを返し、1枚でも失敗すれば何も発行されない。 */
-export async function issueTickets(input: IssueTicketsInput): Promise<TicketRow[]> {
-  const r = await callStaffRpc<{ tickets: TicketRow[] }>('staff_issue_tickets', {
-    p_user_id:       input.userId,
-    p_type:          input.type,
-    p_amount:        input.amount,
-    p_quantity:      input.quantity,
-    p_staff_name:    input.staffName,
-    p_customer_name: input.customerName,
-  })
-  return r.tickets ?? []
+export async function issueTickets(
+  input: IssueTicketsInput,
+  operator: OperatorSession,
+  approvalToken?: string | null
+): Promise<TicketIssueResult> {
+  try {
+    const r = await callStaffRpc<{ tickets: TicketRow[] }>('staff_issue_tickets', {
+      p_operator_token: operator.operatorToken,
+      p_customer_name: input.customerName,
+      p_user_id:       input.userId,
+      p_type:          input.type,
+      p_amount:        input.amount,
+      p_quantity:      input.quantity,
+      p_staff_name:    operator.memberName,
+      p_idempotency_key: input.idempotencyKey,
+      p_approval_token: approvalToken ?? null,
+    })
+    return { tickets: r.tickets ?? [] }
+  } catch (err) {
+    if (err instanceof RpcError) {
+      const detail = (typeof err.detail === 'object' && err.detail !== null) ? err.detail : {}
+      return { error: err.code, ...(detail as object) }
+    }
+    throw err
+  }
 }
 
-export interface UseTicketsInput {
-  userId:       string
-  ticketIds:    string[]
-  staffName:    string
-  customerName: string
-}
-
-/**
- * チケット使用確定（複数枚も1トランザクション）。
- * サーバー側で本人・未使用・同一種別・当日の併用ルール・Welcome平日限定を検証し、
- * used化・使用ログ・来店日更新をまとめて行う。失敗時は RpcError。
- */
-export async function redeemTickets(input: UseTicketsInput): Promise<{ tickets: TicketRow[]; visitDate: string }> {
-  const r = await callStaffRpc<{ tickets: TicketRow[]; visit_date: string }>('staff_use_tickets', {
-    p_user_id:       input.userId,
-    p_ticket_ids:    input.ticketIds,
-    p_staff_name:    input.staffName,
-    p_customer_name: input.customerName,
-  })
-  return { tickets: r.tickets ?? [], visitDate: r.visit_date }
-}
 
 // ── Transfer（顧客セッション必須） ─────────────────────────────────────────────
 

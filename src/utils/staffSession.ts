@@ -8,92 +8,94 @@
  */
 
 import { supabase } from '../lib/supabase'
+import {
+  RpcError,
+  callRpc,
+  callStaffRpc,
+  getStaffToken,
+  STAFF_AUTH_REQUIRED_EVENT,
+} from './staffRpc'
+import {
+  type OperatorSession,
+  setCurrentOperator,
+  clearCurrentOperator,
+  getCurrentOperator,
+  isCurrentOperatorValid,
+} from './posOperatorSession'
+
+export {
+  RpcError,
+  callRpc,
+  callStaffRpc,
+  getStaffToken,
+  STAFF_AUTH_REQUIRED_EVENT,
+  type OperatorSession,
+  setCurrentOperator,
+  clearCurrentOperator,
+  getCurrentOperator,
+  isCurrentOperatorValid,
+}
 
 const STAFF_TOKEN_KEY = 'ginjiro_staff_session'
 /** PIN 成功時にサーバーが発行する端末キー。ロック判定を端末ごとに分けるために使う（単体では認証にならない） */
 const STAFF_DEVICE_KEY = 'ginjiro_staff_device_key'
 /** スタッフPINの桁数 */
 export const STAFF_PIN_LENGTH = 6
-export const STAFF_AUTH_REQUIRED_EVENT = 'ginjiro:staff-auth-required'
-
-interface StoredSession { token: string; expiresAt: string }
-
-/** RPC が返した業務エラー（{ error: code }）または通信・DBエラー */
-export class RpcError extends Error {
-  readonly code: string
-  readonly detail?: unknown
-  constructor(code: string, message?: string, detail?: unknown) {
-    super(message ?? code)
-    this.name = 'RpcError'
-    this.code = code
-    this.detail = detail
-  }
-}
 
 // ── セッション保存 ────────────────────────────────────────────────────────────
 
-function readSession(): StoredSession | null {
-  try {
-    const raw = localStorage.getItem(STAFF_TOKEN_KEY)
-    if (!raw) return null
-    const s = JSON.parse(raw) as StoredSession
-    if (!s.token || !s.expiresAt || new Date(s.expiresAt) <= new Date()) return null
-    return s
-  } catch {
-    return null
-  }
-}
-
-export function getStaffToken(): string | null {
-  return readSession()?.token ?? null
-}
-
 export function clearStaffSession(): void {
+  clearCurrentOperator()
   try { localStorage.removeItem(STAFF_TOKEN_KEY) } catch { /* ignore */ }
 }
 
-function notifyAuthRequired(): void {
-  clearStaffSession()
-  window.dispatchEvent(new Event(STAFF_AUTH_REQUIRED_EVENT))
+// ── POS Operator 認証 (L1) ───────────────────────────────────────────────────
+
+export interface OperatorCandidate {
+  id: string
+  name: string
 }
 
-// ── RPC ───────────────────────────────────────────────────────────────────────
+/** 現在有効な Operator 資格を持つスタッフ候補一覧（予約枠に依存しない） */
+export async function getStaffOperatorCandidates(): Promise<OperatorCandidate[]> {
+  const r = await callStaffRpc<{ staff: OperatorCandidate[] }>('staff_pos_operator_candidates')
+  return r.staff ?? []
+}
 
 /**
- * Supabase RPC を呼び、結果を返す。
- * 通信・DBエラー、または戻り値が { error } の場合は RpcError を投げる。
+ * POS オペレーター本人確認 (L1)
+ * サーバー側で PIN を照合し、30分有効の operator_token を取得してメモリ上に保存する。
  */
-export async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.rpc(fn, params)
-  if (error) {
-    if ((error.message ?? '').includes('staff_auth_required')) {
-      notifyAuthRequired()
-      throw new RpcError('staff_auth_required', 'スタッフ認証の有効期限が切れました。PINを入力し直してください。', error)
-    }
-    throw new RpcError(error.code ?? 'rpc_failed', error.message || '通信に失敗しました。', error)
+export async function verifyOperator(staffMemberId: string, pin: string): Promise<OperatorSession> {
+  const r = await callStaffRpc<{
+    operator_token: string
+    staff_member_id: string
+    staff_name: string
+    role: 'staff' | 'manager'
+    expires_at: string
+  }>('staff_operator_verify', {
+    p_staff_member_id: staffMemberId,
+    p_pin: pin,
+  })
+
+  const session: OperatorSession = {
+    operatorToken: r.operator_token,
+    staffMemberId: r.staff_member_id,
+    memberName: r.staff_name,
+    role: r.role,
+    expiresAt: r.expires_at,
   }
-  if (data && typeof data === 'object' && !Array.isArray(data) && typeof (data as { error?: unknown }).error === 'string') {
-    const code = (data as { error: string }).error
-    throw new RpcError(code, code, data)
-  }
-  return data as T
+  setCurrentOperator(session)
+  return session
 }
 
-/** スタッフ専用 RPC（p_staff にセッショントークンを付与） */
-export async function callStaffRpc<T>(fn: string, params: Record<string, unknown> = {}): Promise<T> {
-  const token = getStaffToken()
-  if (!token) {
-    notifyAuthRequired()
-    throw new RpcError('staff_auth_required', 'スタッフ認証が必要です。PINを入力してください。')
-  }
-  return callRpc<T>(fn, { p_staff: token, ...params })
-}
 
 // ── ログイン / ログアウト ─────────────────────────────────────────────────────
 
 export type StaffLoginResult = { ok: true } | { ok: false; reason: 'invalid_pin' | 'locked' | 'not_configured' | 'network' }
 
 export async function staffLogin(pin: string): Promise<StaffLoginResult> {
+  clearCurrentOperator()
   try {
     let deviceKey: string | null = null
     try { deviceKey = localStorage.getItem(STAFF_DEVICE_KEY) } catch { /* ignore */ }
@@ -102,6 +104,7 @@ export async function staffLogin(pin: string): Promise<StaffLoginResult> {
     if (error) return { ok: false, reason: error.code === 'PGRST202' ? 'not_configured' : 'network' }
     const r = data as { token?: string; expires_at?: string; device_key?: string | null; error?: string }
     if (r.token && r.expires_at) {
+      clearCurrentOperator()
       localStorage.setItem(STAFF_TOKEN_KEY, JSON.stringify({ token: r.token, expiresAt: r.expires_at }))
       if (r.device_key) localStorage.setItem(STAFF_DEVICE_KEY, r.device_key)
       return { ok: true }
@@ -156,6 +159,13 @@ const MESSAGES: Record<string, string> = {
   invalid_amount:      '金額が正しくありません。',
   invalid_quantity:    '枚数が正しくありません（1〜30枚）。',
   staff_name_required: '担当者を選択してください。',
+  operator_auth_required: '操作者の認証が必要です。',
+  operator_session_invalid: '操作者セッションが無効です。もう一度PINを入力してください。',
+  approval_required:   'この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。',
+  invalid_pin:         'PINが正しくありません。',
+  locked:              'アカウントが一時的にロックされています。',
+  not_configured:      'PINが設定されていません。管理者に問い合わせてください。',
+  credential_revoked:  '資格が無効化されています。',
 }
 
 export function rpcErrorMessage(err: unknown, fallback = '処理に失敗しました。通信環境を確認して再度お試しください。'): string {

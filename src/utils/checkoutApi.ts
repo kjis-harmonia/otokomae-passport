@@ -1,8 +1,10 @@
 // 会計のクライアント。売上は「会計を確定」でだけ発生する（予約の金額は予定売上）。
 // 確定は DB の1トランザクション（会計・明細・値引き・支払・GINPay 支払い・クーポン消費・予約の完了）。テーブルへは直接アクセスしない。
-import { callStaffRpc } from './staffSession'
+import { callStaffRpc, RpcError } from './staffSession'
 import { callHqRpc } from '../hq/hqSession'
 import type { Reservation } from './bookingApi'
+import type { OperatorSession } from './posOperatorSession'
+
 
 export type ItemCategory = 'menu' | 'option' | 'retail'
 export type ItemSource = 'reservation' | 'service_menu' | 'accounting_item' | 'product' | 'manual'
@@ -142,13 +144,20 @@ export interface SalesDay {
   rows: { id: string; status: 'completed' | 'voided'; completed_at: string; customer_name: string | null; stylist_name: string | null; payment_method: string | null; total: number; items: string | null; has_reservation: boolean }[]
 }
 
-export type CheckoutResult<T> = T | { error: string }
+export interface PosActionError {
+  error: string
+  action?: string
+  request_hash?: string
+  [key: string]: unknown
+}
+
+export type CheckoutResult<T> = T | PosActionError
 
 export interface CheckoutApi {
   context(reservationId: string | null, clientId: string | null): Promise<CheckoutContext>
   catalog(): Promise<Catalog>
-  quote(input: QuoteInput): Promise<CheckoutResult<QuoteResult>>
-  finalize(input: SaleInput): Promise<CheckoutResult<Sale>>
+  quote(input: QuoteInput, operator: OperatorSession): Promise<CheckoutResult<QuoteResult>>
+  finalize(input: SaleInput, operator: OperatorSession, approvalToken?: string | null): Promise<CheckoutResult<Sale>>
 }
 export interface SalesApi {
   day(date: string): Promise<SalesDay>
@@ -176,6 +185,9 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   stylist_required: '担当を選んでください。',
   invalid_payment_method: '支払方法を選んでください。',
   operator_required: '操作者を選んでください。',
+  operator_auth_required: '操作者の認証が必要です。',
+  operator_session_invalid: '操作者セッションが無効です。もう一度PINを入力してください。',
+  approval_required: 'この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。',
   client_not_found: '顧客が見つかりません。',
   not_found: '見つかりません。',
   reason_required: '取消の理由を入力してください。',
@@ -216,22 +228,35 @@ async function asResult<T>(fn: () => Promise<T>): Promise<CheckoutResult<T>> {
   try {
     return await fn()
   } catch (err) {
-    // 業務エラー（{error}）は code、確定・取消の途中で DB が取り消した場合は message に理由が入る
+    if (err instanceof RpcError) {
+      const detail = (typeof err.detail === 'object' && err.detail !== null) ? err.detail : {}
+      return { error: err.code, ...(detail as object) }
+    }
     const code = (err as { code?: string }).code
-    if (code && CHECKOUT_ERROR_MESSAGE[code]) return { error: code }
+    if (code) return { error: code }
     const message = (err as { message?: string }).message
-    if (message && CHECKOUT_ERROR_MESSAGE[message]) return { error: message }
+    if (message) return { error: message }
     throw err
   }
 }
 
-/** 店舗端末用。会計の記録に残る操作者名を都度渡す */
-export function createStaffCheckoutApi(actor: () => string): CheckoutApi {
+/** 店舗端末用。会計操作は検証済み OperatorSession が必須 */
+export function createStaffCheckoutApi(_actor?: () => string): CheckoutApi {
   return {
     context: (reservationId, clientId) => callStaffRpc<CheckoutContext>('staff_checkout_context', { p_reservation_id: reservationId, p_client_id: clientId }),
     catalog: () => callStaffRpc<Catalog>('staff_checkout_catalog'),
-    quote: input => asResult(() => callStaffRpc<QuoteResult>('staff_pos_quote', { p_operator_token: null, p_scan_session: null, p_request: input })),
-    finalize: input => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', { p: input, p_staff_name: actor() })),
+    quote: (input, operator) => asResult(() => callStaffRpc<QuoteResult>('staff_pos_quote', {
+      p_operator_token: operator.operatorToken,
+      p_scan_session: null,
+      p_request: input,
+      p_approval_token: null,
+    })),
+    finalize: (input, operator, approvalToken) => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', {
+      p: input,
+      p_staff_name: operator.memberName,
+      p_operator_token: operator.operatorToken,
+      p_approval_token: approvalToken ?? null,
+    })),
   }
 }
 

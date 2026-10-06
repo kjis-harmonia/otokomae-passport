@@ -732,7 +732,7 @@ begin
     v_result := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', null, null)::jsonb;
     if v_result->>'error' is distinct from 'operator_auth_required' then raise exception 'Replay missing operator accepted: %', v_result; end if;
     v_result := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', 'invalid-operator-0123456789abcdef', null)::jsonb;
-    if v_result->>'error' is distinct from 'invalid_operator_session' then raise exception 'Replay invalid operator accepted: %', v_result; end if;
+    if v_result->>'error' is distinct from 'operator_session_invalid' then raise exception 'Replay invalid operator accepted: %', v_result; end if;
     v_result := public.staff_finalize_sale(v_staff_a, v_payload - 'quote_hash', 'P05担当者', v_retry_op, null)::jsonb;
     if v_result->>'error' is distinct from 'quote_required' then raise exception 'Replay missing QTE1 accepted: %', v_result; end if;
     v_result := public.staff_finalize_sale(v_staff_a, v_payload || jsonb_build_object('quote_hash', repeat('a', 64)), 'P05担当者', v_retry_op, null)::jsonb;
@@ -1945,8 +1945,495 @@ begin
     end if;
   end;
 
+  -- ── Group 19: Round 2-A Hardening Verification (Tests 81 - 87) ───────────────
+  declare
+    v_r81 jsonb;
+    v_bal81_before integer;
+    v_bal81_after integer;
+    v_tickets81_before integer;
+    v_tickets81_after integer;
+    v_res_b_id uuid;
+    v_res_b_rec public.reservations;
+    v_scan_82 uuid;
+    v_quote_82 jsonb;
+    v_sale_82 jsonb;
+  begin
+    -- ── Test 81: A1 Cross-Terminal Operator Binding 拒否 ──
+    -- 端末 A で発行した v_op_token を、端末 B (v_staff_b) から使用した場合の厳格遮断
+
+    -- 81a: staff_ginpay_charge_store (terminal A op + terminal B staff)
+    select balance_cached into v_bal81_before from public.ginpay_accounts where id = v_account_a;
+    v_r81 := public.staff_ginpay_charge_store(
+      v_staff_b, v_op_token, v_client_a, 1000, 'cash', 'P05担当者', '不正端末チャージ', 'p05-cross-term-charge', null, null
+    )::jsonb;
+    if v_r81->>'error' <> 'operator_session_invalid' then
+      raise exception 'Test 81a failed: cross-terminal charge was not rejected with operator_session_invalid: %', v_r81;
+    end if;
+    select balance_cached into v_bal81_after from public.ginpay_accounts where id = v_account_a;
+    if v_bal81_before <> v_bal81_after then
+      raise exception 'Test 81a failed: balance altered on cross-terminal charge';
+    end if;
+
+    -- 81b: staff_ginpay_refund (terminal A op + terminal B staff)
+    -- 副作用検証: GINPay transaction件数増加なし、対象account balance不変、original transaction不変
+    declare
+      v_tx81_count_before integer;
+      v_tx81_count_after integer;
+      v_orig_tx_before public.ginpay_transactions;
+      v_orig_tx_after public.ginpay_transactions;
+    begin
+      select count(*) into v_tx81_count_before from public.ginpay_transactions;
+      select balance_cached into v_bal81_before from public.ginpay_accounts where id = v_account_a;
+      select * into v_orig_tx_before from public.ginpay_transactions where id = v_charge_id;
+
+      v_r81 := public.staff_ginpay_refund(
+        v_staff_b, v_op_token, v_charge_id, 1000, 'P05担当者', '不正端末返金', 'p05-cross-term-refund', null
+      )::jsonb;
+      if v_r81->>'error' <> 'operator_session_invalid' then
+        raise exception 'Test 81b failed: cross-terminal refund was not rejected with operator_session_invalid: %', v_r81;
+      end if;
+
+      select count(*) into v_tx81_count_after from public.ginpay_transactions;
+      if v_tx81_count_before <> v_tx81_count_after then
+        raise exception 'Test 81b failed: ginpay_transactions count altered on cross-terminal refund';
+      end if;
+
+      select balance_cached into v_bal81_after from public.ginpay_accounts where id = v_account_a;
+      if v_bal81_before <> v_bal81_after then
+        raise exception 'Test 81b failed: account balance altered on cross-terminal refund';
+      end if;
+
+      select * into v_orig_tx_after from public.ginpay_transactions where id = v_charge_id;
+      if to_jsonb(v_orig_tx_before) is distinct from to_jsonb(v_orig_tx_after) then
+        raise exception 'Test 81b failed: original transaction mutated on cross-terminal refund';
+      end if;
+    end;
+
+    -- 81c: staff_void_sale (terminal A op + terminal B staff: replay 含む)
+    -- 副作用検証: sale status不変、reversal transaction増加なし、GINPay balance不変、ticket used不変
+    declare
+      v_sale81_before public.accounting_sessions;
+      v_sale81_after public.accounting_sessions;
+      v_tx81_count_before integer;
+      v_tx81_count_after integer;
+      v_ticket81_used_before integer;
+      v_ticket81_used_after integer;
+    begin
+      select * into v_sale81_before from public.accounting_sessions where id = v_sale_id;
+      select count(*) into v_tx81_count_before from public.ginpay_transactions;
+      select balance_cached into v_bal81_before from public.ginpay_accounts where id = v_account_a;
+      select count(*) into v_ticket81_used_before from public.tickets where used = true;
+
+      v_r81 := public.staff_void_sale(
+        v_staff_b, v_op_token, v_sale_id, '不正端末取消', 'p05-void-key-replay-test', null
+      )::jsonb;
+      if v_r81->>'error' <> 'operator_session_invalid' then
+        raise exception 'Test 81c failed: cross-terminal void replay was not rejected with operator_session_invalid: %', v_r81;
+      end if;
+
+      select * into v_sale81_after from public.accounting_sessions where id = v_sale_id;
+      if to_jsonb(v_sale81_before) is distinct from to_jsonb(v_sale81_after) then
+        raise exception 'Test 81c failed: sale mutated on cross-terminal void replay: %', v_sale81_after.status;
+      end if;
+
+      select count(*) into v_tx81_count_after from public.ginpay_transactions;
+      if v_tx81_count_before <> v_tx81_count_after then
+        raise exception 'Test 81c failed: reversal transaction created on cross-terminal void replay';
+      end if;
+
+      select balance_cached into v_bal81_after from public.ginpay_accounts where id = v_account_a;
+      if v_bal81_before <> v_bal81_after then
+        raise exception 'Test 81c failed: ginpay balance altered on cross-terminal void replay';
+      end if;
+
+      select count(*) into v_ticket81_used_after from public.tickets where used = true;
+      if v_ticket81_used_before <> v_ticket81_used_after then
+        raise exception 'Test 81c failed: tickets used count altered on cross-terminal void replay';
+      end if;
+    end;
+
+    -- 81d: staff_issue_tickets (terminal A op + terminal B staff)
+    select count(*) into v_tickets81_before from public.tickets;
+    v_r81 := public.staff_issue_tickets(
+      v_staff_b, v_op_token, 'P05顧客A', v_user_a, 'discount', 500, 1, 'P05担当者', 'p05-cross-term-issue', null
+    )::jsonb;
+    if v_r81->>'error' <> 'operator_session_invalid' then
+      raise exception 'Test 81d failed: cross-terminal ticket issue was not rejected with operator_session_invalid: %', v_r81;
+    end if;
+    select count(*) into v_tickets81_after from public.tickets;
+    if v_tickets81_before <> v_tickets81_after then
+      raise exception 'Test 81d failed: tickets created on cross-terminal issue';
+    end if;
+
+    -- ── Test 82 - 85: A2 Scan / Reservation Consistency Hardening ──
+    -- テスト用フィクスチャのセットアップ
+    -- 1. 顧客 B の予約 (正本schema必須列をすべて網羅)
+    insert into public.reservations (
+      client_id, staff_id, starts_at, ends_at, occupied_until, customer_name, status, source
+    ) values (
+      v_client_b, v_stylist, now() + interval '2 day', now() + interval '2 day 1 hour', now() + interval '2 day 1 hour', 'P05顧客B', 'confirmed', 'staff'
+    ) returning id into v_res_b_id;
+
+    -- 2. 顧客 A の QR スキャンセッション作成
+    declare
+      v_pres_issue jsonb;
+      v_pres_tok text;
+      v_s_res jsonb;
+    begin
+      insert into app_private.customer_sessions (token_hash, user_id, created_via)
+      values (app_private.sha256_hex('p05-cust-sess-82-0123456789abcdef'), v_user_a, 'register');
+
+      v_pres_issue := public.customer_issue_presence_token('p05-cust-sess-82-0123456789abcdef')::jsonb;
+      if v_pres_issue ? 'error' or v_pres_issue->>'token' is null or btrim(v_pres_issue->>'token') = '' then
+        raise exception 'Test 82 setup failed: presence token generation failed: %', v_pres_issue;
+      end if;
+      v_pres_tok := v_pres_issue->>'token';
+
+      v_s_res := public.staff_resolve_presence_token(v_staff_a, v_pres_tok)::jsonb;
+      if v_s_res ? 'error' or v_s_res->>'scan_session_id' is null or btrim(v_s_res->>'scan_session_id') = '' then
+        raise exception 'Test 82 setup failed: presence token resolve failed: %', v_s_res;
+      end if;
+
+      begin
+        v_scan_82 := (v_s_res->>'scan_session_id')::uuid;
+      exception when others then
+        raise exception 'Test 82 setup failed: scan_session_id UUID cast failed: %', v_s_res->>'scan_session_id';
+      end;
+      if v_scan_82 is null then
+        raise exception 'Test 82 setup failed: resolved scan_session_id is null';
+      end if;
+    end;
+
+    -- Test 82: Reservation B + request client_id NULL → 正常成立 & canonical customer 解決
+    v_quote_82 := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
+      'reservation_id', v_res_b_id,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
+    ))::jsonb;
+
+    if v_quote_82 ? 'error' then
+      raise exception 'Test 82 failed: reservation B quote returned error: %', v_quote_82;
+    end if;
+    if (v_quote_82->>'total') is null then
+      raise exception 'Test 82 failed: reservation B quote total is null: %', v_quote_82;
+    end if;
+    if v_quote_82->>'quote_hash' is null or v_quote_82->>'quote_hash' !~ '^QTE1\.[a-f0-9]{64}$' then
+      raise exception 'Test 82 failed: reservation B quote_hash invalid format: %', v_quote_82;
+    end if;
+    if (v_quote_82->'facts'->>'client_id')::uuid is distinct from app_private.client_root(v_client_b) then
+      raise exception 'Test 82 failed: facts.client_id does not match reservation canonical client: % vs %',
+        v_quote_82->'facts'->>'client_id', app_private.client_root(v_client_b);
+    end if;
+
+    -- Test 83: Reservation B + arbitrary Client A → customer_context_mismatch & mutation なし
+    declare
+      v_sales83_before integer;
+      v_sales83_after integer;
+      v_pay83_before integer;
+      v_pay83_after integer;
+    begin
+      select count(*) into v_sales83_before from public.accounting_sessions;
+      select count(*) into v_pay83_before from public.accounting_payments;
+
+      v_quote_82 := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
+        'reservation_id', v_res_b_id,
+        'client_id', v_client_a,
+        'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
+      ))::jsonb;
+      if v_quote_82->>'error' is distinct from 'customer_context_mismatch' then
+        raise exception 'Test 83 failed: reservation B with arbitrary client A was not rejected with customer_context_mismatch: %', v_quote_82;
+      end if;
+
+      select count(*) into v_sales83_after from public.accounting_sessions;
+      if v_sales83_before <> v_sales83_after then
+        raise exception 'Test 83 failed: accounting_session created on reservation client mismatch';
+      end if;
+
+      select count(*) into v_pay83_after from public.accounting_payments;
+      if v_pay83_before <> v_pay83_after then
+        raise exception 'Test 83 failed: accounting_payments created on reservation client mismatch';
+      end if;
+    end;
+
+    -- Test 84: Scan A + Reservation B — Quote → customer_context_mismatch
+    v_quote_82 := public.staff_pos_quote(v_staff_a, v_op_token, v_scan_82, jsonb_build_object(
+      'reservation_id', v_res_b_id,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
+    ))::jsonb;
+    if v_quote_82->>'error' is distinct from 'customer_context_mismatch' then
+      raise exception 'Test 84 failed: scan A + reservation B quote was not rejected with customer_context_mismatch: %', v_quote_82;
+    end if;
+
+    -- Test 85: Scan A + Reservation B — Finalize → customer_context_mismatch & 副作用ゼロ検証
+    declare
+      v_sales85_before integer;
+      v_sales85_after integer;
+      v_pay85_before integer;
+      v_pay85_after integer;
+      v_gp85_before integer;
+      v_gp85_after integer;
+      v_bal85_before integer;
+      v_bal85_after integer;
+      v_ticket85_used_before integer;
+      v_ticket85_used_after integer;
+    begin
+      select count(*) into v_sales85_before from public.accounting_sessions;
+      select count(*) into v_pay85_before from public.accounting_payments;
+      select count(*) into v_gp85_before from public.ginpay_transactions;
+      select balance_cached into v_bal85_before from public.ginpay_accounts where id = v_account_a;
+      select count(*) into v_ticket85_used_before from public.tickets where used = true;
+
+      v_sale_82 := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+        'scan_session_id', v_scan_82,
+        'reservation_id', v_res_b_id,
+        'stylist_id', v_stylist,
+        'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+        'payment_method', 'cash',
+        'expected_total', 5000,
+        'quote_hash', 'QTE1.' || repeat('0', 64),
+        'idempotency_key', 'p05-scan-a-res-b-mismatch'
+      ), 'P05担当者', v_op_token, null)::jsonb;
+
+      if v_sale_82->>'error' is distinct from 'customer_context_mismatch' then
+        raise exception 'Test 85 failed: finalize scan A + reservation B was not rejected with customer_context_mismatch: %', v_sale_82;
+      end if;
+
+      -- 予約 B のステータスが confirmed のまま未変更であることを確認
+      select * into v_res_b_rec from public.reservations where id = v_res_b_id;
+      if v_res_b_rec.status <> 'confirmed' then
+        raise exception 'Test 85 failed: reservation B status altered on mismatch: %', v_res_b_rec.status;
+      end if;
+
+      -- accounting_sessions 増加なし
+      select count(*) into v_sales85_after from public.accounting_sessions;
+      if v_sales85_before <> v_sales85_after then
+        raise exception 'Test 85 failed: accounting_session created on scan/reservation mismatch';
+      end if;
+
+      -- accounting_payments 増加なし
+      select count(*) into v_pay85_after from public.accounting_payments;
+      if v_pay85_before <> v_pay85_after then
+        raise exception 'Test 85 failed: accounting_payments created on scan/reservation mismatch';
+      end if;
+
+      -- GINPay transaction 増加なし
+      select count(*) into v_gp85_after from public.ginpay_transactions;
+      if v_gp85_before <> v_gp85_after then
+        raise exception 'Test 85 failed: ginpay_transactions created on scan/reservation mismatch';
+      end if;
+
+      -- GINPay balance 不変
+      select balance_cached into v_bal85_after from public.ginpay_accounts where id = v_account_a;
+      if v_bal85_before is distinct from v_bal85_after then
+        raise exception 'Test 85 failed: ginpay balance altered on scan/reservation mismatch';
+      end if;
+
+      -- ticket used 不変
+      select count(*) into v_ticket85_used_after from public.tickets where used = true;
+      if v_ticket85_used_before <> v_ticket85_used_after then
+        raise exception 'Test 85 failed: tickets used count altered on scan/reservation mismatch';
+      end if;
+    end;
+
+    -- ── Test 86 - 87: A3 public.staff_use_tickets 完全廃止検証 ──
+    -- Test 86: pg_proc (public schema) および routine_privileges (public schema) に不存在
+    if exists (
+      select 1 from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'staff_use_tickets'
+    ) then
+      raise exception 'Test 86 failed: public.staff_use_tickets exists in pg_proc';
+    end if;
+
+    if exists (
+      select 1 from information_schema.routine_privileges
+      where routine_schema = 'public' and routine_name = 'staff_use_tickets'
+    ) then
+      raise exception 'Test 86 failed: public.staff_use_tickets has routine privileges';
+    end if;
+
+    -- Test 87: 旧 5引数 call shape が 42883 で失敗
+    begin
+      execute 'select public.staff_use_tickets($1, $2, $3, $4, $5)'
+      using v_staff_a, v_user_a, array[gen_random_uuid()], 'P05担当者', 'P05顧客A';
+      raise exception 'Test 87 failed: legacy staff_use_tickets unexpectedly succeeded';
+    exception
+      when sqlstate '42883' then
+        null;
+      when others then
+        raise exception 'Test 87 failed: unexpected sqlstate % (%): %', sqlstate, sqlerrm, 'staff_use_tickets';
+    end;
+
+    -- ── Test 88: staff_pos_operator_candidates の安全性・資格フィルタ検証 ──
+    declare
+      v_nonbookable_staff uuid;
+      v_candidates_res jsonb;
+      v_candidate jsonb;
+      v_has_op boolean := false;
+      v_has_mgr boolean := false;
+      v_has_stylist boolean := false;
+      v_has_inactive boolean := false;
+      v_has_nonbookable boolean := false;
+      v_c_id text;
+    begin
+      -- 88e 用 fixture: is_active = true, is_bookable = false, credential active, role = staff
+      insert into public.staff_members (display_name, is_bookable, is_active, sort_order)
+      values ('P05_非予約専任スタッフ', false, true, 305)
+      returning id into v_nonbookable_staff;
+
+      perform app_private.set_staff_operator_credentials(v_nonbookable_staff, '9999', 'staff');
+
+      -- 88f: 不正な p_staff による呼び出しは staff_auth_required 例外
+      begin
+        perform public.staff_pos_operator_candidates('invalid-token-p05');
+        raise exception 'Test 88f failed: expected staff_auth_required not raised';
+      exception
+        when sqlstate '28000' then
+          if sqlerrm <> 'staff_auth_required' then
+            raise exception 'Test 88f failed: unexpected sqlerrm: %', sqlerrm;
+          end if;
+      end;
+
+      -- 正常取得
+      v_candidates_res := public.staff_pos_operator_candidates(v_staff_a);
+      if not (v_candidates_res ? 'staff') or jsonb_typeof(v_candidates_res->'staff') <> 'array' then
+        raise exception 'Test 88 failed: invalid candidates response shape: %', v_candidates_res;
+      end if;
+
+      -- 候補の存在判定 & 88g: 情報漏洩検証
+      for v_candidate in select * from jsonb_array_elements(v_candidates_res->'staff') loop
+        v_c_id := v_candidate->>'id';
+
+        -- 88g: pin_hash, role, failed_count, locked_until 等の機密情報が含まれていないこと
+        if v_candidate ? 'pin_hash'
+           or v_candidate ? 'role'
+           or v_candidate ? 'failed_count'
+           or v_candidate ? 'locked_until'
+           or v_candidate ? 'pin'
+           or v_candidate ? 'credentials' then
+          raise exception 'Test 88g failed: private fields leaked in candidate: %', v_candidate;
+        end if;
+
+        if v_c_id = v_op_member::text then v_has_op := true; end if;
+        if v_c_id = v_mgr_member::text then v_has_mgr := true; end if;
+        if v_c_id = v_stylist::text then v_has_stylist := true; end if;
+        if v_c_id = v_inactive_member::text then v_has_inactive := true; end if;
+        if v_c_id = v_nonbookable_staff::text then v_has_nonbookable := true; end if;
+      end loop;
+
+      -- 88a: active + credential active + role staff が含まれること
+      if not v_has_op then
+        raise exception 'Test 88a failed: active operator staff missing from candidates';
+      end if;
+
+      -- 88b: active + credential active + role manager が含まれること
+      if not v_has_mgr then
+        raise exception 'Test 88b failed: active manager missing from operator candidates';
+      end if;
+
+      -- 88c: credential 未設定スタッフが含まれないこと
+      if v_has_stylist then
+        raise exception 'Test 88c failed: staff without credentials unexpectedly included';
+      end if;
+
+      -- 88d: inactive スタッフが含まれないこと
+      if v_has_inactive then
+        raise exception 'Test 88d failed: inactive staff unexpectedly included';
+      end if;
+
+      -- 88e (最重要): is_bookable = false の active operator が含まれること (booking staff 分離証明)
+      if not v_has_nonbookable then
+        raise exception 'Test 88e failed: non-bookable operator staff missing from candidates';
+      end if;
+    end;
+  end;
+
+  -- ── Group 23: Operator Error Normalization (Test 89) ──────────────────────
+  declare
+    v_invalid_op_tok text := 'OPS1.' || repeat('e', 64);
+    v_c_sessions_before int;
+    v_c_payments_before int;
+    v_c_tx_before int;
+    v_c_tickets_before int;
+    v_c_used_tickets_before int;
+    v_test_res_id uuid;
+    v_res_status_before text;
+    v_r_89 jsonb;
+  begin
+    -- テスト用予約フィクスチャ (confirmed)
+    insert into public.reservations (
+      client_id, staff_id, starts_at, ends_at, occupied_until, customer_name, status, source
+    ) values (
+      v_client_b, v_stylist, now() + interval '5 day', now() + interval '5 day 1 hour', now() + interval '5 day 1 hour', 'P05テスト89顧客', 'confirmed', 'staff'
+    ) returning id into v_test_res_id;
+
+    -- 事前カウント記録
+    select count(*) into v_c_sessions_before from public.accounting_sessions;
+    select count(*) into v_c_payments_before from public.accounting_payments;
+    select count(*) into v_c_tx_before from public.ginpay_transactions;
+    select count(*) into v_c_tickets_before from public.tickets;
+    select count(*) into v_c_used_tickets_before from public.tickets where used_at is not null;
+    select status into v_res_status_before from public.reservations where id = v_test_res_id;
+
+    -- Test 89a: staff_pos_quote with valid p_staff + invalid OPS1 operator token
+    -- 期待値: 厳密に 'operator_session_invalid' のみ (invalid_operator_session / staff_auth_required / operator_auth_required 等はすべて禁止)
+    v_r_89 := public.staff_pos_quote(v_staff_a, v_invalid_op_tok, null, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
+    ))::jsonb;
+
+    if v_r_89->>'error' is distinct from 'operator_session_invalid' then
+      raise exception 'Test 89a failed: staff_pos_quote did not normalize to operator_session_invalid (got: %)', v_r_89;
+    end if;
+
+    -- 副作用ゼロアサーション (quote rejection)
+    if (select count(*) from public.accounting_sessions) <> v_c_sessions_before
+       or (select count(*) from public.accounting_payments) <> v_c_payments_before
+       or (select count(*) from public.ginpay_transactions) <> v_c_tx_before then
+      raise exception 'Test 89a failed: unexpected side-effects during quote rejection';
+    end if;
+
+    -- Test 89b: staff_finalize_sale with valid p_staff + invalid OPS1 operator token
+    -- operator validation must precede quote validation (operator validationがquote validationより先行する契約を証明する)
+    -- あえてダミーの quote_hash ('QTE1.' || repeat('0', 64)) を渡し、quote_hash 不正よりも先に operator_session_invalid で弾かれることを検証する
+    v_r_89 := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'reservation_id', v_test_res_id,
+      'stylist_id', v_stylist,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'unit_price', 5000, 'quantity', 1, 'discount', 0)),
+      'payment_method', 'cash',
+      'expected_total', 5000,
+      'quote_hash', 'QTE1.' || repeat('0', 64),
+      'idempotency_key', 'test-idem-89b-invalid-op'
+    ), 'P05テスト担当', v_invalid_op_tok, null)::jsonb;
+
+    if v_r_89->>'error' is distinct from 'operator_session_invalid' then
+      raise exception 'Test 89b failed: staff_finalize_sale did not normalize to operator_session_invalid (got: %)', v_r_89;
+    end if;
+
+    -- 副作用アサーション (finalize rejection):
+    -- reservation status不変
+    -- accounting_sessions増加なし
+    -- accounting_payments増加なし
+    -- ginpay_transactions増加なし
+    -- ticket used state不変
+    if (select status from public.reservations where id = v_test_res_id) <> v_res_status_before then
+      raise exception 'Test 89b failed: reservation status mutated';
+    end if;
+    if (select count(*) from public.accounting_sessions) <> v_c_sessions_before then
+      raise exception 'Test 89b failed: accounting_sessions mutated';
+    end if;
+    if (select count(*) from public.accounting_payments) <> v_c_payments_before then
+      raise exception 'Test 89b failed: accounting_payments mutated';
+    end if;
+    if (select count(*) from public.ginpay_transactions) <> v_c_tx_before then
+      raise exception 'Test 89b failed: ginpay_transactions mutated';
+    end if;
+    if (select count(*) from public.tickets) <> v_c_tickets_before
+       or (select count(*) from public.tickets where used_at is not null) <> v_c_used_tickets_before then
+      raise exception 'Test 89b failed: ticket state mutated';
+    end if;
+  end;
+
   raise notice '================================================================';
-  raise notice '  GINJIRO POS Phase 0 / P0-5: ALL 80 TESTS PASSED PERFECTLY     ';
+  raise notice '  GINJIRO POS Phase 0 / P0-5: ALL 89 TESTS PASSED PERFECTLY     ';
   raise notice '================================================================';
 end $$;
 rollback;

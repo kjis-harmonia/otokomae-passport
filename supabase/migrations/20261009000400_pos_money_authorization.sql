@@ -575,13 +575,16 @@ declare
   v_staff_hash text;
   v_ss app_private.pos_scan_sessions;
   v_res public.reservations;
+  v_canonical_scan uuid := null;
+  v_canonical_res uuid := null;
   v_canonical_client uuid := null;
+  v_request_client uuid := null;
   v_member uuid := null;
   v_user text := null;
   v_name text := null;
   v_scan_id uuid := null;
 begin
-  -- 1. scan_session が指定されている場合 (最優先・trusted QR scan)
+  -- 1. scan_session が指定されている場合 (trusted QR scan)
   if p_scan_session is not null then
     if p_staff_token is null or btrim(p_staff_token) = '' then
       return jsonb_build_object('error', 'staff_auth_required');
@@ -597,32 +600,55 @@ begin
       return jsonb_build_object('error', 'invalid_scan_session');
     end if;
 
-    v_canonical_client := app_private.client_root(v_ss.client_id);
-    if v_canonical_client is null then
+    v_canonical_scan := app_private.client_root(v_ss.client_id);
+    if v_canonical_scan is null then
       return jsonb_build_object('error', 'invalid_scan_session');
     end if;
 
-    -- request の client_id が存在する場合、照合して不一致なら拒否
-    if p_client_id is not null and app_private.client_root(p_client_id) <> v_canonical_client then
-      return jsonb_build_object('error', 'customer_context_mismatch');
-    end if;
-
     v_scan_id := v_ss.id;
+  end if;
 
-  -- 2. reservation_id が指定されている場合 (trusted reservation)
-  elsif p_reservation_id is not null then
+  -- 2. reservation_id が指定されている場合 (trusted reservation: 正本パイプライン)
+  if p_reservation_id is not null then
     select * into v_res from public.reservations where id = p_reservation_id;
     if v_res.id is null then return jsonb_build_object('error', 'not_found'); end if;
     if v_res.status in ('cancelled', 'no_show') then return jsonb_build_object('error', 'invalid_status'); end if;
-    v_canonical_client := app_private.client_root(v_res.client_id);
-    if p_client_id is not null and app_private.client_root(p_client_id) <> v_canonical_client then
+
+    v_canonical_res := app_private.client_root(v_res.client_id);
+    v_name := coalesce(v_res.customer_name, '');
+  end if;
+
+  -- request の client_id が指定されている場合、事前解決
+  if p_client_id is not null then
+    v_request_client := app_private.client_root(p_client_id);
+  end if;
+
+  -- 3. 統合照合と canonical client の確定
+  if p_scan_session is not null and p_reservation_id is not null then
+    -- スキャンと予約が両方ある場合: 予約が匿名 (v_canonical_res is null) または 顧客 root 不一致なら遮断
+    if v_canonical_res is null or v_canonical_scan is distinct from v_canonical_res then
       return jsonb_build_object('error', 'customer_context_mismatch');
     end if;
-    v_name := coalesce(v_res.customer_name, '');
+    if p_client_id is not null and v_request_client is distinct from v_canonical_scan then
+      return jsonb_build_object('error', 'customer_context_mismatch');
+    end if;
+    v_canonical_client := v_canonical_scan;
 
-  -- 3. scan_session も reservation_id もない場合 (anonymous walk-in)
-  -- クライアントから任意の client_id を渡されても trusted customer とはみなさず canonical client = NULL とする
+  elsif p_scan_session is not null then
+    if p_client_id is not null and v_request_client is distinct from v_canonical_scan then
+      return jsonb_build_object('error', 'customer_context_mismatch');
+    end if;
+    v_canonical_client := v_canonical_scan;
+
+  elsif p_reservation_id is not null then
+    if p_client_id is not null and (v_canonical_res is null or v_request_client is distinct from v_canonical_res) then
+      return jsonb_build_object('error', 'customer_context_mismatch');
+    end if;
+    v_canonical_client := v_canonical_res;
+
   else
+    -- scan_session も reservation_id もない場合 (walk-in)
+    -- request の client_id は信用せず無視し、anonymous として扱う
     v_canonical_client := null;
   end if;
 
@@ -1194,9 +1220,19 @@ begin
     begin
       select * into v_op from app_private.resolve_pos_operator(p_staff, p_operator_token);
       v_op_staff_id := v_op.operator_staff_id;
-    exception when others then
-      return json_build_object('error', 'invalid_operator_session');
+    exception
+      when sqlstate 'P0001' then
+        if sqlerrm = 'invalid_operator_session' then
+          return json_build_object('error', 'operator_session_invalid');
+        elsif sqlerrm = 'staff_auth_required' then
+          return json_build_object('error', 'staff_auth_required');
+        else
+          raise;
+        end if;
     end;
+    if v_op_staff_id is null then
+      return json_build_object('error', 'operator_session_invalid');
+    end if;
   end if;
 
   -- 2. Customer context 解決
@@ -1630,11 +1666,18 @@ begin
 
   begin
     select operator_staff_id into v_op_staff_id from app_private.resolve_pos_operator(p_staff, v_op_token);
-  exception when others then
-    return json_build_object('error', 'invalid_operator_session');
+  exception
+    when sqlstate 'P0001' then
+      if sqlerrm = 'invalid_operator_session' then
+        return json_build_object('error', 'operator_session_invalid');
+      elsif sqlerrm = 'staff_auth_required' then
+        return json_build_object('error', 'staff_auth_required');
+      else
+        raise;
+      end if;
   end;
   if v_op_staff_id is null then
-    return json_build_object('error', 'invalid_operator_session');
+    return json_build_object('error', 'operator_session_invalid');
   end if;
 
   v_final_p := v_final_p || jsonb_build_object('operator_token', v_op_token);
@@ -2041,9 +2084,21 @@ begin
   if p_operator_token is null or btrim(p_operator_token) = '' then
     return json_build_object('error', 'operator_auth_required');
   end if;
-  select staff_member_id into v_op_member_id
-  from app_private.pos_operator_sessions
-  where token_hash = app_private.sha256_hex(p_operator_token) and revoked_at is null and expires_at > now();
+
+  begin
+    select operator_staff_id into v_op_member_id
+    from app_private.resolve_pos_operator(p_staff, p_operator_token);
+  exception
+    when sqlstate 'P0001' then
+      if sqlerrm = 'invalid_operator_session' then
+        return json_build_object('error', 'operator_session_invalid');
+      elsif sqlerrm = 'staff_auth_required' then
+        return json_build_object('error', 'staff_auth_required');
+      else
+        raise;
+      end if;
+  end;
+
   if v_op_member_id is null then
     return json_build_object('error', 'operator_session_invalid');
   end if;
@@ -2150,9 +2205,21 @@ begin
   if p_operator_token is null or btrim(p_operator_token) = '' then
     return json_build_object('error', 'operator_auth_required');
   end if;
-  select staff_member_id into v_op_member_id
-  from app_private.pos_operator_sessions
-  where token_hash = app_private.sha256_hex(p_operator_token) and revoked_at is null and expires_at > now();
+
+  begin
+    select operator_staff_id into v_op_member_id
+    from app_private.resolve_pos_operator(p_staff, p_operator_token);
+  exception
+    when sqlstate 'P0001' then
+      if sqlerrm = 'invalid_operator_session' then
+        return json_build_object('error', 'operator_session_invalid');
+      elsif sqlerrm = 'staff_auth_required' then
+        return json_build_object('error', 'staff_auth_required');
+      else
+        raise;
+      end if;
+  end;
+
   if v_op_member_id is null then
     return json_build_object('error', 'operator_session_invalid');
   end if;
@@ -2270,9 +2337,21 @@ begin
   if p_operator_token is null or btrim(p_operator_token) = '' then
     return json_build_object('error', 'operator_auth_required');
   end if;
-  select staff_member_id into v_op_member_id
-  from app_private.pos_operator_sessions
-  where token_hash = app_private.sha256_hex(p_operator_token) and revoked_at is null and expires_at > now();
+
+  begin
+    select operator_staff_id into v_op_member_id
+    from app_private.resolve_pos_operator(p_staff, p_operator_token);
+  exception
+    when sqlstate 'P0001' then
+      if sqlerrm = 'invalid_operator_session' then
+        return json_build_object('error', 'operator_session_invalid');
+      elsif sqlerrm = 'staff_auth_required' then
+        return json_build_object('error', 'staff_auth_required');
+      else
+        raise;
+      end if;
+  end;
+
   if v_op_member_id is null then
     return json_build_object('error', 'operator_session_invalid');
   end if;
@@ -2385,9 +2464,21 @@ begin
   if p_operator_token is null or btrim(p_operator_token) = '' then
     return json_build_object('error', 'operator_auth_required');
   end if;
-  select staff_member_id into v_op_member_id
-  from app_private.pos_operator_sessions
-  where token_hash = app_private.sha256_hex(p_operator_token) and revoked_at is null and expires_at > now();
+
+  begin
+    select operator_staff_id into v_op_member_id
+    from app_private.resolve_pos_operator(p_staff, p_operator_token);
+  exception
+    when sqlstate 'P0001' then
+      if sqlerrm = 'invalid_operator_session' then
+        return json_build_object('error', 'operator_session_invalid');
+      elsif sqlerrm = 'staff_auth_required' then
+        return json_build_object('error', 'staff_auth_required');
+      else
+        raise;
+      end if;
+  end;
+
   if v_op_member_id is null then
     return json_build_object('error', 'operator_session_invalid');
   end if;
@@ -2471,6 +2562,42 @@ drop function if exists public.staff_issue_tickets(text, text, text, text, text,
 drop function if exists public.staff_ginpay_adjustment(text, uuid, integer, text, text, text, uuid);
 drop function if exists public.staff_ginpay_adjustment(text, uuid, integer, text, text, text);
 
+-- ── 13-B. staff_use_tickets の完全廃止 (POS会計 staff_finalize_sale 内でのみチケット消費を許可) ───
+drop function if exists public.staff_use_tickets(text, text, uuid[], text, text);
+
+-- ── 13-C. staff_pos_operator_candidates (予約枠独立・資格検証済みOperator候補一覧) ──
+create or replace function public.staff_pos_operator_candidates(
+  p_staff text
+) returns jsonb language plpgsql security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_staff jsonb;
+begin
+  -- 1. 店舗端末セッション検証 (未認証は即時拒否)
+  perform app_private.assert_staff(p_staff);
+
+  -- 2. 有効な Operator 資格を持つ現役スタッフのみ抽出 (is_bookable に依存しない)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', m.id,
+        'name', m.display_name
+      ) order by m.sort_order, m.display_name
+    ),
+    '[]'::jsonb
+  ) into v_staff
+  from public.staff_members m
+  inner join app_private.staff_operator_credentials c
+    on c.staff_member_id = m.id
+  where m.is_active = true
+    and c.is_active = true
+    and c.role in ('staff', 'manager');
+
+  return jsonb_build_object('staff', v_staff);
+end;
+$$;
+
 -- ── 14. 権限設定 (GRANT / REVOKE の境界明確化: 正本シグネチャのみ公開) ──────────
 
 do $$
@@ -2484,7 +2611,8 @@ begin
     'public.staff_ginpay_charge_store(text, text, uuid, integer, text, text, text, text, text, uuid)',
     'public.staff_ginpay_refund(text, text, uuid, integer, text, text, text, text)',
     'public.staff_void_sale(text, text, uuid, text, text, text)',
-    'public.staff_issue_tickets(text, text, text, text, text, integer, integer, text, text, text)'
+    'public.staff_issue_tickets(text, text, text, text, text, integer, integer, text, text, text)',
+    'public.staff_pos_operator_candidates(text)'
   ] loop
     execute format('revoke all on function %s from public', f);
     execute format('grant execute on function %s to anon, authenticated', f);

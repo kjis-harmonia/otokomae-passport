@@ -9,6 +9,13 @@ import {
 } from '../../utils/checkoutApi'
 import { PrimaryButton } from './ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
+import {
+  getCurrentOperator,
+  isCurrentOperatorValid,
+  type OperatorSession,
+} from '../../utils/posOperatorSession'
+import { OperatorAuthModal } from '../pos/PosAuthModals'
+
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
 // 「会計を確定」で初めて売上になる（確定は DB の1トランザクション。予約は完了になる）。毎日何十回も使うので、文字と金額だけで構成する。
@@ -46,6 +53,10 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   // 会計画面ごとの一意キー（二重タップ・再送で二重会計・二重決済しない）
   const [saleKey] = useState(() => idempotencyKey('checkout'))
 
+  // POS Operator 認証セッション (メモリのみ、画面開始時に未認証なら要求)
+  const [operator, setOperator] = useState<OperatorSession | null>(() => getCurrentOperator())
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(() => !isCurrentOperatorValid())
+
   // 予約から：予約の顧客・担当・メニュー・予約時価格を引き継ぐ
   useEffect(() => {
     let alive = true
@@ -82,7 +93,9 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   const [quoteLoading, setQuoteLoading] = useState(false)
 
   useEffect(() => {
-    if (!ctx || lines.length === 0) {
+    const current = getCurrentOperator()
+    if (!ctx || lines.length === 0 || !current) {
+      if (!current && operator) setOperator(null)
       setQuote(null)
       setQuoteError(null)
       setQuoteLoading(false)
@@ -97,12 +110,19 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
       items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, quantity: l.quantity, unit_price: l.unit_price })),
       ticket_ids: ticketIds,
       manual_discount: manualAmount > 0 && manual ? { amount: manualAmount, label: manual.label.trim() } : undefined,
-    }).then(res => {
+    }, current).then(res => {
       if (!alive) return
       setQuoteLoading(false)
       if ('error' in res) {
         setQuote(null)
-        setQuoteError(checkoutErrorMessage(res.error))
+        if (res.error === 'operator_session_invalid' || res.error === 'staff_auth_required') {
+          setOperator(null)
+        }
+        if (res.error === 'approval_required') {
+          setQuoteError('この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。')
+        } else {
+          setQuoteError(checkoutErrorMessage(res.error))
+        }
       } else {
         setQuote(res)
         setQuoteError(null)
@@ -114,7 +134,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
       setQuoteError('最新の見積もり計算に失敗しました')
     })
     return () => { alive = false }
-  }, [api, ctx, client, lines, ticketIds, manualAmount, manual])
+  }, [api, ctx, client, lines, ticketIds, manualAmount, manual, operator])
 
   const totals = useMemo(() => {
     if (quote) return { subtotal: quote.subtotal, discount: quote.discount_total, total: quote.total }
@@ -146,6 +166,12 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
 
   async function confirm() {
     if (!ctx || !stylistId || !method || !ensureActor()) return
+    const current = getCurrentOperator()
+    if (!current) {
+      setOperator(null)
+      setShowAuthModal(true)
+      return
+    }
     setBusy(true); setError(null)
     try {
       const res = await api.finalize({
@@ -155,11 +181,22 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
         payment_method: method, expected_total: totals.total, idempotency_key: saleKey,
         quote_hash: quote?.quote_hash,
         ginpay_account_id: method === 'ginpay' ? ginpayAccount?.id : undefined,
-      })
-      if ('error' in res) setError(checkoutErrorMessage(res.error))
-      else onDone(res)
+      }, current)
+      if ('error' in res) {
+        if (res.error === 'operator_session_invalid' || res.error === 'staff_auth_required') {
+          setOperator(null)
+        }
+        if (res.error === 'approval_required') {
+          setError('この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。')
+        } else {
+          setError(checkoutErrorMessage(res.error))
+        }
+      } else {
+        onDone(res)
+      }
     } catch (err) { setError(rpcErrorMessage(err)) } finally { setBusy(false) }
   }
+
 
   return (
     <div role="dialog" aria-modal="true" aria-label="会計" style={{ position: 'fixed', inset: 0, zIndex: 950, background: C.bg, color: C.text, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
@@ -315,6 +352,15 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
             <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : quoteLoading ? '計算中…' : quoteError ? '見積もりエラー' : !quote && lines.length > 0 ? '見積もり未取得' : ginpayMismatch ? 'GINPayは利用できません' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
+      )}
+      {showAuthModal && (
+        <OperatorAuthModal
+          onSuccess={op => {
+            setOperator(op)
+            setShowAuthModal(false)
+          }}
+          onCancel={onClose}
+        />
       )}
     </div>
   )

@@ -10,6 +10,11 @@ import {
 } from '../../utils/ginpayApi'
 import { rpcErrorMessage } from '../../utils/staffSession'
 import { C, SANS, inputStyle, linkStyle } from '../booking/ledgerTheme'
+import {
+  getCurrentOperator,
+  type OperatorSession,
+} from '../../utils/posOperatorSession'
+import { OperatorAuthModal } from '../pos/PosAuthModals'
 import { Field, PrimaryButton, SecondaryButton } from '../booking/ledgerUi'
 
 const STORE_PAYMENT_METHODS = [
@@ -40,6 +45,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
   const [chargeKey, setChargeKey] = useState<string | null>(null)
   const [chargeAccountId, setChargeAccountId] = useState<string | null>(null)
   const [reverse, setReverse] = useState<ReverseState | null>(null)
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false)
 
   const load = useCallback(async () => {
     try {
@@ -67,16 +73,25 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
       setMessage(null)
       return
     }
+    const op = getCurrentOperator()
+    if (!op) {
+      setShowAuthModal(true)
+      return
+    }
     if (!ensureActor()) return
     setLoading(true)
     setMessage(null)
     try {
       const res = await api.chargeStore({
         clientId, amount: parsedAmount, paymentMethod: method, memo: memo.trim() || undefined,
-        accountId: needsAccountChoice ? chargeAccount?.id : undefined, idempotencyKey: chargeKey ?? undefined,
-      })
+        accountId: needsAccountChoice ? chargeAccount?.id : undefined, idempotencyKey: chargeKey ?? idempotencyKey('staff-store-charge'),
+      }, op)
       if (!res.ok) {
-        setMessage(ginpayErrorMessage(res.error))
+        if (res.error === 'approval_required') {
+          setMessage('この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。')
+        } else {
+          setMessage(ginpayErrorMessage(res.error))
+        }
         return
       }
       setAmount('')
@@ -100,15 +115,27 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
       setReverse({ ...reverse, error: '理由を入力してください。' })
       return
     }
+    let op: OperatorSession | null = null
+    if (reverse.kind === 'refund') {
+      op = getCurrentOperator()
+      if (!op) {
+        setShowAuthModal(true)
+        return
+      }
+    }
     if (!ensureActor()) return
     setLoading(true)
     try {
-      const res = reverse.kind === 'refund'
-        ? await api.refund?.({ transactionId: reverse.transaction.id, amount: parseYenInput(reverse.amount) ?? 0, reason: reverse.reason.trim() })
+      const res = reverse.kind === 'refund' && op
+        ? await api.refund?.({ transactionId: reverse.transaction.id, amount: parseYenInput(reverse.amount) ?? 0, reason: reverse.reason.trim(), idempotencyKey: idempotencyKey('staff-refund') }, op)
         : await api.void?.({ transactionId: reverse.transaction.id, reason: reverse.reason.trim() })
       if (!res) return
       if (!res.ok) {
-        setReverse({ ...reverse, error: ginpayErrorMessage(res.error) })
+        if (res.error === 'approval_required') {
+          setReverse({ ...reverse, error: 'この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。' })
+        } else {
+          setReverse({ ...reverse, error: ginpayErrorMessage(res.error) })
+        }
         return
       }
       setReverse(null)
@@ -241,6 +268,12 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
             </div>
           </div>
         </div>
+      )}
+      {showAuthModal && (
+        <OperatorAuthModal
+          onSuccess={() => setShowAuthModal(false)}
+          onCancel={() => setShowAuthModal(false)}
+        />
       )}
     </section>
   )
