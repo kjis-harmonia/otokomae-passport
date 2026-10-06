@@ -87,10 +87,10 @@ begin
   returning id into v_product_id;
 
   -- GINPay 口座開設 & チャージ (A: 10,000円, B: 10,000円)
-  v_r := public.staff_ginpay_charge_store(v_staff, v_client_a, 10000, 'cash', 'Aチャージ', null, 'charge-a-1')::jsonb;
+  v_r := public.staff_ginpay_charge_store(v_staff, v_op_token, v_client_a, 10000, 'cash', 'P04_オペレーター', null, 'charge-a-1', null, null)::jsonb;
   v_account_a := (v_r->>'account_id')::uuid;
 
-  v_r := public.staff_ginpay_charge_store(v_staff, v_client_b, 10000, 'cash', 'Bチャージ', null, 'charge-b-1')::jsonb;
+  v_r := public.staff_ginpay_charge_store(v_staff, v_op_token, v_client_b, 10000, 'cash', 'P04_オペレーター', null, 'charge-b-1', null, null)::jsonb;
   v_account_b := (v_r->>'account_id')::uuid;
 
   -- 顧客 A の presence token 発行 & スキャン
@@ -187,13 +187,13 @@ begin
     raise exception 'Check 5 failed: missing quote_hash not rejected with quote_required: %', v_sale;
   end if;
 
-  -- ── 6. Check 6: BLOCKER 3 manual_item → P0-5 前は reject ────────────────────
+  -- ── 6. Check 6: BLOCKER 3 manual_item → P0-5 前は reject (approval_required / l2_not_enabled) ──
   v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
     'client_id', v_client_a,
     'items', jsonb_build_array(jsonb_build_object('source', 'manual', 'name', '手入力品', 'unit_price', 3000))
   ))::jsonb;
-  if v_quote->>'error' <> 'l2_authorization_not_enabled' then
-    raise exception 'Check 6 failed: manual_item not rejected with l2_authorization_not_enabled: %', v_quote;
+  if v_quote->>'error' not in ('l2_authorization_not_enabled', 'approval_required') then
+    raise exception 'Check 6 failed: manual_item not rejected: %', v_quote;
   end if;
 
   -- ── 7. Check 7: BLOCKER 3 manual_discount → P0-5 前は reject ────────────────
@@ -202,11 +202,11 @@ begin
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code)),
     'manual_discount', jsonb_build_object('amount', 500, 'label', '値引き')
   ))::jsonb;
-  if v_quote->>'error' <> 'l2_authorization_not_enabled' then
-    raise exception 'Check 7 failed: manual_discount not rejected with l2_authorization_not_enabled: %', v_quote;
+  if v_quote->>'error' <> 'approval_required' then
+    raise exception 'Check 7 failed: manual_discount not rejected with approval_required: %', v_quote;
   end if;
 
-  -- ── 8. Check 8: BLOCKER 3 fixed price override → P0-5 前は reject ───────────
+  -- ── 8. Check 8: BLOCKER 3 fixed price override → P0-5 累積schemaでは approval_required ───
   v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
     'client_id', v_client_a,
     'items', jsonb_build_array(jsonb_build_object(
@@ -214,11 +214,11 @@ begin
       'price_override', jsonb_build_object('price', 4000, 'reason', '特別割引')
     ))
   ))::jsonb;
-  if v_quote->>'error' <> 'l2_authorization_not_enabled' then
-    raise exception 'Check 8 failed: fixed price override not rejected with l2_authorization_not_enabled: %', v_quote;
+  if v_quote->>'error' <> 'approval_required' then
+    raise exception 'Check 8 failed: fixed price override not rejected with approval_required: %', v_quote;
   end if;
 
-  -- ── 9. Check 9: BLOCKER 3 price_from base 超過指定 → P0-5 前は reject ───────
+  -- ── 9. Check 9: BLOCKER 3 price_from base 超過指定 → P0-5 累積schemaでは approval_required ───
   v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
     'client_id', v_client_a,
     'items', jsonb_build_array(jsonb_build_object(
@@ -226,8 +226,8 @@ begin
       'unit_price', 15000
     ))
   ))::jsonb;
-  if v_quote->>'error' <> 'l2_authorization_not_enabled' then
-    raise exception 'Check 9 failed: price_from > base not rejected with l2_authorization_not_enabled: %', v_quote;
+  if v_quote->>'error' <> 'approval_required' then
+    raise exception 'Check 9 failed: price_from > base not rejected with approval_required: %', v_quote;
   end if;
 
   -- price_from base 未満指定は below_base_price
@@ -304,69 +304,160 @@ begin
   end if;
 
   -- ── 14. Check 14: HIGH 2 Ticket TOCTOU (transfer 状態変化で finalize 拒否) ─
+  declare
+    v_sale_count bigint;
+    v_payment_count bigint;
+    v_usage_count bigint;
+    v_ticket_before jsonb;
+    v_transfer_before jsonb;
+    v_ginpay_before jsonb;
+    v_ginpay_after jsonb;
+  begin
   insert into public.tickets (user_id, type, title, amount, used, issued_by)
   values (v_user_a, 'discount', 'Aの譲渡テスト券', 1000, false, 'system')
   returning id into v_ticket_2;
 
   -- Quote 時は有効
-  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, v_scan_id_a, jsonb_build_object(
     'client_id', v_client_a,
+    'scan_session_id', v_scan_id_a,
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code)),
     'ticket_ids', jsonb_build_array(v_ticket_2)
-  ))::jsonb;
+  ), null)::jsonb;
   v_qhash := v_quote->>'quote_hash';
+  if v_scan_id_a is null or v_quote ? 'error'
+     or (v_quote->>'total')::int is distinct from 4000
+     or v_qhash is null or v_qhash !~ '^QTE1\.[a-f0-9]{64}$' then
+    raise exception 'Check 14 setup failed: valid ticket quote required: %', v_quote;
+  end if;
+
+  select count(*) into v_sale_count from public.accounting_sessions;
+  select count(*) into v_payment_count from public.accounting_payments;
+  select count(*) into v_usage_count from public.ticket_usage_logs where ticket_id = v_ticket_2::text;
+  select to_jsonb(t) into v_ticket_before from public.tickets t where id = v_ticket_2;
+  select jsonb_build_object(
+    'accounts', (select coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb) from public.ginpay_accounts a),
+    'transactions', (select coalesce(jsonb_agg(to_jsonb(t) order by t.id), '[]'::jsonb) from public.ginpay_transactions t)
+  ) into v_ginpay_before;
 
   -- Quote 後にチケットが他者へ譲渡手続き中 (pending) になる
   insert into public.ticket_transfers (token, ticket_id, from_user_id, status, expires_at)
   values ('test-transfer-token', v_ticket_2, v_user_a, 'pending', now() + interval '1 hour');
+  select to_jsonb(t) into v_transfer_before from public.ticket_transfers t where ticket_id = v_ticket_2;
 
   -- Finalize で TOCTOU ロック後に検出されて拒否されること
-  v_sale := app_private.finalize_sale(jsonb_build_object(
+  v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
     'client_id', v_client_a,
+    'scan_session_id', v_scan_id_a,
     'stylist_id', v_stylist,
-    'operator_token', v_op_token,
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code)),
     'ticket_ids', jsonb_build_array(v_ticket_2),
     'payment_method', 'cash',
     'expected_total', 4000,
     'quote_hash', v_qhash,
     'idempotency_key', 'test-toctou-transfer-1'
-  ), 'staff', 'P04_オペレーター', v_staff);
+  ), 'P04_オペレーター', v_op_token, null)::jsonb;
 
-  if v_sale->>'error' <> 'transfer_pending' then
+  if v_sale->>'error' is distinct from 'transfer_pending' then
     raise exception 'Check 14 failed: ticket transfer pending not rejected during finalize: %', v_sale;
+  end if;
+
+  if (select count(*) from public.accounting_sessions) <> v_sale_count
+     or exists (select 1 from public.accounting_sessions where idempotency_key = 'test-toctou-transfer-1') then
+    raise exception 'Check 14 failed: sale created while transfer pending';
+  end if;
+  if (select count(*) from public.accounting_payments) <> v_payment_count then
+    raise exception 'Check 14 failed: payment created while transfer pending';
+  end if;
+  select jsonb_build_object(
+    'accounts', (select coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb) from public.ginpay_accounts a),
+    'transactions', (select coalesce(jsonb_agg(to_jsonb(t) order by t.id), '[]'::jsonb) from public.ginpay_transactions t)
+  ) into v_ginpay_after;
+  if v_ginpay_after is distinct from v_ginpay_before then
+    raise exception 'Check 14 failed: GINPay mutated while transfer pending';
+  end if;
+  if (select to_jsonb(t) from public.tickets t where id = v_ticket_2) is distinct from v_ticket_before
+     or (select count(*) from public.ticket_usage_logs where ticket_id = v_ticket_2::text) <> v_usage_count then
+    raise exception 'Check 14 failed: ticket mutated or consumed while transfer pending';
+  end if;
+  if (select to_jsonb(t) from public.ticket_transfers t where ticket_id = v_ticket_2) is distinct from v_transfer_before then
+    raise exception 'Check 14 failed: pending transfer mutated during finalize';
   end if;
 
   -- 譲渡レコードを削除
   delete from public.ticket_transfers where ticket_id = v_ticket_2;
+  raise notice 'pos pricing Check 14 ok (transfer_pending, no sale/payment/GINPay/ticket mutation)';
+  end;
 
   -- ── 15. Check 15: HIGH 2 Ticket 異種併用拒否 (mixed_types) ─────────────────
-  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+  declare
+    v_coupon_ticket uuid;
+    v_sale_count bigint;
+    v_payment_count bigint;
+    v_tickets_before jsonb;
+    v_coupon_before jsonb;
+    v_ginpay_before jsonb;
+    v_ginpay_after jsonb;
+    v_usage_before jsonb;
+  begin
+  select count(*) into v_sale_count from public.accounting_sessions;
+  select count(*) into v_payment_count from public.accounting_payments;
+  select jsonb_agg(to_jsonb(t) order by t.id) into v_tickets_before
+  from public.tickets t where id in (v_ticket_1, v_ticket_2);
+  select coalesce(jsonb_agg(to_jsonb(u) order by u.id), '[]'::jsonb) into v_usage_before
+  from public.ticket_usage_logs u;
+  select jsonb_build_object(
+    'accounts', (select coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb) from public.ginpay_accounts a),
+    'transactions', (select coalesce(jsonb_agg(to_jsonb(t) order by t.id), '[]'::jsonb) from public.ginpay_transactions t)
+  ) into v_ginpay_before;
+
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, v_scan_id_a, jsonb_build_object(
     'client_id', v_client_a,
+    'scan_session_id', v_scan_id_a,
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code)),
     'ticket_ids', jsonb_build_array(v_ticket_1, v_ticket_2)
-  ))::jsonb;
+  ), null)::jsonb;
   -- v_ticket_1, v_ticket_2 共に discount なので正常
+  if v_scan_id_a is null or v_quote is null or v_quote ? 'error' or v_quote->>'total' is null then
+    raise exception 'Check 15 setup failed: successful quote with non-null total required: %', v_quote;
+  end if;
   if (v_quote->>'total')::int <> 3500 then
     raise exception 'Check 15 setup failed: %', v_quote;
   end if;
 
   -- coupon 種別のチケットを追加して mixed_types 検証
-  declare
-    v_coupon_ticket uuid;
-  begin
     insert into public.tickets (user_id, type, title, amount, used, issued_by)
     values (v_user_a, 'coupon', 'Aのクーポン券', 500, false, 'system')
     returning id into v_coupon_ticket;
+    select to_jsonb(t) into v_coupon_before from public.tickets t where id = v_coupon_ticket;
 
-    v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, v_scan_id_a, jsonb_build_object(
       'client_id', v_client_a,
+      'scan_session_id', v_scan_id_a,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code)),
       'ticket_ids', jsonb_build_array(v_ticket_1, v_coupon_ticket)
-    ))::jsonb;
-    if v_quote->>'error' <> 'mixed_types' then
+    ), null)::jsonb;
+    if v_quote->>'error' is distinct from 'mixed_types' then
       raise exception 'Check 15 failed: mixed ticket types not rejected: %', v_quote;
     end if;
+
+    if (select jsonb_agg(to_jsonb(t) order by t.id) from public.tickets t where id in (v_ticket_1, v_ticket_2)) is distinct from v_tickets_before
+       or (select to_jsonb(t) from public.tickets t where id = v_coupon_ticket) is distinct from v_coupon_before
+       or (select coalesce(jsonb_agg(to_jsonb(u) order by u.id), '[]'::jsonb) from public.ticket_usage_logs u) is distinct from v_usage_before then
+      raise exception 'Check 15 failed: quote mutated or consumed tickets';
+    end if;
+    if (select count(*) from public.accounting_sessions) <> v_sale_count
+       or (select count(*) from public.accounting_payments) <> v_payment_count then
+      raise exception 'Check 15 failed: quote created sale or payment';
+    end if;
+    select jsonb_build_object(
+      'accounts', (select coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb) from public.ginpay_accounts a),
+      'transactions', (select coalesce(jsonb_agg(to_jsonb(t) order by t.id), '[]'::jsonb) from public.ginpay_transactions t)
+    ) into v_ginpay_after;
+    if v_ginpay_after is distinct from v_ginpay_before then
+      raise exception 'Check 15 failed: quote mutated GINPay';
+    end if;
+    raise notice 'pos pricing Check 15 ok (single type total 3500, mixed_types, no money/ticket mutation)';
   end;
 
   -- ── 16. Check 16: Product identity (ref_id 必須、名前のみ指定は拒否) ───────
@@ -429,8 +520,9 @@ begin
   end if;
 
   -- ── 18. Check 18: GINPay 正常決済 & P0-1 回帰検証 ───────────────────────────
-  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, v_scan_id_a, jsonb_build_object(
     'client_id', v_client_a,
+    'scan_session_id', v_scan_id_a,
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code))
   ))::jsonb;
   v_qhash := v_quote->>'quote_hash';
@@ -438,14 +530,14 @@ begin
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
     'client_id', v_client_a,
     'stylist_id', v_stylist,
-    'operator_token', v_op_token,
+    'scan_session_id', v_scan_id_a,
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code)),
     'payment_method', 'ginpay',
     'ginpay_account_id', v_account_a,
     'expected_total', 5000,
     'quote_hash', v_qhash,
     'idempotency_key', 'test-sale-ginpay-success-1'
-  ), 'P04_オペレーター')::jsonb;
+  ), 'P04_オペレーター', v_op_token, null)::jsonb;
 
   if v_sale ? 'error' then raise exception 'Check 18 failed: GINPay sale failed: %', v_sale; end if;
   if (select balance_cached from public.ginpay_accounts where id = v_account_a) <> 5000 then
@@ -462,15 +554,16 @@ begin
     'expected_total', 1
   ))::jsonb;
   -- ── 20. Check 20: legacy_item fallback 完全排除（source 省略 + 1円 は即時拒否） ──
-  -- 旧呼び出し形式（POS項目全省略）で source なし item を渡す
+  -- 旧呼び出し形式（POS項目全省略）で source なし item を渡す (ダミー quote_hash による repricing 到達検証)
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
     'client_id', v_client_a,
     'stylist_id', v_stylist,
     'items', jsonb_build_array(jsonb_build_object('name', 'カット', 'category', 'menu', 'unit_price', 1, 'quantity', 1)),
     'payment_method', 'cash',
     'expected_total', 1,
+    'quote_hash', 'QTE1.' || repeat('a', 64),
     'idempotency_key', 'test-sale-source-omitted-1'
-  ), 'Preflight')::jsonb;
+  ), 'Preflight', v_op_token, null)::jsonb;
   if v_sale->>'error' <> 'invalid_items' then
     raise exception 'Check 20 failed: item without source was not rejected with invalid_items: %', v_sale;
   end if;
@@ -485,15 +578,23 @@ begin
   end if;
 
   -- ── 21. Check 21: POS項目全省略でも価格バイパス不可（DBマスター価格強制） ──
-  -- POS項目全省略（旧形式）だが source 指定あり。unit_price: 1 と偽装
+  -- 正規の見積もり (5000円)
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    'client_id', v_client_a,
+    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code))
+  ))::jsonb;
+  v_qhash := v_quote->>'quote_hash';
+
+  -- unit_price: 1 と偽装し expected_total: 1 を渡すが、quote_hash と照合されて total_mismatch 拒否
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object(
     'client_id', v_client_a,
     'stylist_id', v_stylist,
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'unit_price', 1, 'quantity', 1)),
     'payment_method', 'cash',
     'expected_total', 1,
+    'quote_hash', v_qhash,
     'idempotency_key', 'test-sale-bypass-attempt-1'
-  ), 'Preflight')::jsonb;
+  ), 'Preflight', v_op_token, null)::jsonb;
   if v_sale->>'error' <> 'total_mismatch' or (v_sale->>'total')::int <> 5000 then
     raise exception 'Check 21 failed: DB master price was not enforced on legacy call: %', v_sale;
   end if;
@@ -505,19 +606,20 @@ begin
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'unit_price', 1, 'quantity', 1)),
     'payment_method', 'cash',
     'expected_total', 5000,
+    'quote_hash', v_qhash,
     'idempotency_key', 'test-sale-legacy-db-price-ok'
-  ), 'Preflight')::jsonb;
+  ), 'Preflight', v_op_token, null)::jsonb;
   if v_sale ? 'error' or (v_sale->>'total')::int <> 5000 then
     raise exception 'Check 21 failed: legacy call with valid DB total failed: %', v_sale;
   end if;
 
   -- ── 22. Check 22: 不正 source / 偽装 ref_id の拒否（source自体も信用しない） ──
-  -- 22-1: source = manual は P0-5 前のため例外なく l2_authorization_not_enabled
+  -- 22-1: source = manual は未承認の場合例外なく拒否 (approval_required / l2_not_enabled)
   v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
     'client_id', v_client_a,
     'items', jsonb_build_array(jsonb_build_object('source', 'manual', 'name', '手入力品', 'unit_price', 3000, 'quantity', 1))
   ))::jsonb;
-  if v_quote->>'error' <> 'l2_authorization_not_enabled' then
+  if v_quote->>'error' not in ('l2_authorization_not_enabled', 'approval_required') then
     raise exception 'Check 22-1 failed: manual item was not rejected: %', v_quote;
   end if;
 
@@ -666,7 +768,7 @@ begin
       'payment_method', 'cash',
       'expected_total', 3000,
       'idempotency_key', 'test-ai-tampered-name-ok'
-    ), 'Preflight')::jsonb;
+    ), 'Preflight', v_op_token, null)::jsonb;
     if v_sale ? 'error' then
       raise exception 'Check 26 sale failed: %', v_sale;
     end if;

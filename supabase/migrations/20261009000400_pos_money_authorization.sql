@@ -8,15 +8,46 @@
 alter table app_private.pos_approvals
   add column if not exists issued_for_staff_session_hash text;
 
--- accounting_sessions に request_hash および void_idempotency_key を追加
+-- accounting_sessions に request_hash, void_idempotency_key, void_request_hash を追加
 alter table public.accounting_sessions
   add column if not exists request_hash text;
 alter table public.accounting_sessions
   add column if not exists void_idempotency_key text;
+alter table public.accounting_sessions
+  add column if not exists void_request_hash text;
 
 create unique index if not exists accounting_sessions_void_idempotency_uidx
   on public.accounting_sessions (void_idempotency_key)
   where void_idempotency_key is not null;
+
+-- 確定後・取消後の会計の不変性ガード (void_idempotency_key, void_request_hash も保護)
+create or replace function app_private.guard_accounting_session()
+returns trigger language plpgsql
+set search_path = public, extensions, pg_temp
+as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.status in ('completed', 'voided') then raise exception 'accounting_immutable'; end if;
+    return old;
+  end if;
+  if old.status in ('completed', 'voided') then
+    if (new.user_id, new.customer_name, new.staff_name, new.stylist_name, new.stylist_id, new.payment_method, new.subtotal,
+        new.discount_total, new.total, new.used_ticket_ids, new.created_at, new.completed_at, new.reservation_id, new.tax_mode, new.tax_rate,
+        new.idempotency_key, new.request_hash, new.quote_hash)
+       is distinct from
+       (old.user_id, old.customer_name, old.staff_name, old.stylist_name, old.stylist_id, old.payment_method, old.subtotal,
+        old.discount_total, old.total, old.used_ticket_ids, old.created_at, old.completed_at, old.reservation_id, old.tax_mode, old.tax_rate,
+        old.idempotency_key, old.request_hash, old.quote_hash) then
+      raise exception 'accounting_immutable';
+    end if;
+    if old.status = 'voided' and (new.status, new.voided_at, new.voided_by, new.void_reason, new.void_idempotency_key, new.void_request_hash) is distinct from (old.status, old.voided_at, old.voided_by, old.void_reason, old.void_idempotency_key, old.void_request_hash) then
+      raise exception 'accounting_immutable';
+    end if;
+    if old.status = 'completed' and new.status not in ('completed', 'voided') then raise exception 'accounting_immutable'; end if;
+  end if;
+  return new;
+end;
+$$;
 
 -- ginpay_transactions に request_hash を追加 & チャージ返金対応の金額符号制約更新
 alter table public.ginpay_transactions
@@ -524,6 +555,94 @@ begin
     'operator_staff_id', v_op.staff_member_id,
     'approver_staff_id', v_app.approver_staff_id,
     'consumed_at', now()
+  );
+end;
+$$;
+
+-- ── 5-B. resolve_pos_client_context の更新 (anonymous walk-in & arbitrary client_id 防御) ──
+
+create or replace function app_private.resolve_pos_client_context(
+  p_staff_token text,
+  p_scan_session uuid,
+  p_client_id uuid,
+  p_reservation_id uuid
+)
+returns jsonb
+language plpgsql security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_staff_hash text;
+  v_ss app_private.pos_scan_sessions;
+  v_res public.reservations;
+  v_canonical_client uuid := null;
+  v_member uuid := null;
+  v_user text := null;
+  v_name text := null;
+  v_scan_id uuid := null;
+begin
+  -- 1. scan_session が指定されている場合 (最優先・trusted QR scan)
+  if p_scan_session is not null then
+    if p_staff_token is null or btrim(p_staff_token) = '' then
+      return jsonb_build_object('error', 'staff_auth_required');
+    end if;
+    v_staff_hash := app_private.sha256_hex(p_staff_token);
+
+    select * into v_ss
+    from app_private.pos_scan_sessions
+    where id = p_scan_session;
+
+    if v_ss.id is null or v_ss.closed_at is not null or v_ss.expires_at <= now()
+       or v_ss.staff_session_hash <> v_staff_hash then
+      return jsonb_build_object('error', 'invalid_scan_session');
+    end if;
+
+    v_canonical_client := app_private.client_root(v_ss.client_id);
+    if v_canonical_client is null then
+      return jsonb_build_object('error', 'invalid_scan_session');
+    end if;
+
+    -- request の client_id が存在する場合、照合して不一致なら拒否
+    if p_client_id is not null and app_private.client_root(p_client_id) <> v_canonical_client then
+      return jsonb_build_object('error', 'customer_context_mismatch');
+    end if;
+
+    v_scan_id := v_ss.id;
+
+  -- 2. reservation_id が指定されている場合 (trusted reservation)
+  elsif p_reservation_id is not null then
+    select * into v_res from public.reservations where id = p_reservation_id;
+    if v_res.id is null then return jsonb_build_object('error', 'not_found'); end if;
+    if v_res.status in ('cancelled', 'no_show') then return jsonb_build_object('error', 'invalid_status'); end if;
+    v_canonical_client := app_private.client_root(v_res.client_id);
+    if p_client_id is not null and app_private.client_root(p_client_id) <> v_canonical_client then
+      return jsonb_build_object('error', 'customer_context_mismatch');
+    end if;
+    v_name := coalesce(v_res.customer_name, '');
+
+  -- 3. scan_session も reservation_id もない場合 (anonymous walk-in)
+  -- クライアントから任意の client_id を渡されても trusted customer とはみなさず canonical client = NULL とする
+  else
+    v_canonical_client := null;
+  end if;
+
+  if v_canonical_client is not null then
+    if v_name is null or v_name = '' then
+      select display_name into v_name from public.clients where id = v_canonical_client;
+    end if;
+    v_member := (app_private.client_members(app_private.client_family(v_canonical_client)))[1];
+    if v_member is not null then
+      select user_id into v_user from public.customers where id = v_member;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'client_id', v_canonical_client,
+    'customer_id', v_user,
+    'customer_name', v_name,
+    'scan_session_id', v_scan_id,
+    'reservation_id', p_reservation_id
   );
 end;
 $$;
@@ -1130,29 +1249,371 @@ $$;
 revoke all on function public.staff_pos_quote(text, text, uuid, jsonb, text) from public;
 grant execute on function public.staff_pos_quote(text, text, uuid, jsonb, text) to anon, authenticated;
 
+-- One whitelist of server-priced business facts for initial writes, retries and insert races.
+create or replace function app_private.pos_sale_request_hash(
+  p jsonb,
+  p_quote jsonb,
+  p_operator_staff_id uuid
+) returns text language sql immutable
+set search_path = public, extensions, pg_temp
+as $$
+  select 'REQ1.' || app_private.sha256_hex(jsonb_build_object(
+    'version', 'pos-sale-v1',
+    'client_id', p_quote->'facts'->'client_id',
+    'reservation_id', p_quote->'facts'->'reservation_id',
+    'operator_staff_id', p_operator_staff_id,
+    'stylist_id', nullif(p->>'stylist_id', '')::uuid,
+    'payment_method', p->>'payment_method',
+    'expected_total', nullif(p->>'expected_total', '')::bigint,
+    'ginpay_account_id', case when p->>'payment_method' = 'ginpay'
+      then nullif(p->>'ginpay_account_id', '')::uuid else null end,
+    'items', (select coalesce(jsonb_agg(item - 'index' order by (item - 'index')::text), '[]'::jsonb)
+      from jsonb_array_elements(p_quote->'items') item),
+    'discounts', (p_quote->'discounts') - 'ticket_ids' - 'tickets' || jsonb_build_object(
+      'ticket_ids', (select coalesce(jsonb_agg(id order by id::text), '[]'::jsonb)
+        from jsonb_array_elements(p_quote->'discounts'->'ticket_ids') id),
+      'tickets', (select coalesce(jsonb_agg(ticket order by ticket->>'id'), '[]'::jsonb)
+        from jsonb_array_elements(p_quote->'discounts'->'tickets') ticket)),
+    'subtotal', p_quote->'subtotal',
+    'total', p_quote->'total',
+    'tax', p_quote->'tax',
+    'pricing_approval_facts_hash', p_quote->>'request_hash'
+  )::text);
+$$;
+revoke all on function app_private.pos_sale_request_hash(jsonb, jsonb, uuid) from public, anon, authenticated;
+
+create or replace function app_private.finalize_sale(
+  p jsonb,
+  p_actor_type text,
+  p_actor_name text,
+  p_staff_token text default null
+)
+returns jsonb language plpgsql
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  r public.reservations;
+  v_staff_token text := coalesce(p_staff_token, nullif(p->>'_staff_token', ''), nullif(p->>'staff_token', ''));
+  v_client_ctx jsonb;
+  v_client uuid;
+  v_user text;
+  v_name text;
+  v_stylist public.staff_members;
+  v_item jsonb;
+  v_items jsonb;
+  v_subtotal bigint;
+  v_disc_total bigint;
+  v_ticket_disc bigint := 0;
+  v_total bigint;
+  v_tids uuid[] := '{}'::uuid[];
+  v_method text := p->>'payment_method';
+  v_legacy text;
+  v_tax public.accounting_settings;
+  v_id uuid;
+  t record;
+  v_key text := nullif(btrim(coalesce(p->>'idempotency_key', '')), '');
+  v_req_hash text;
+  v_existing uuid;
+  v_existing_req_hash text;
+  v_gp jsonb;
+  v_account public.ginpay_accounts;
+  v_mismatch jsonb;
+  v_op record;
+  v_op_staff_id uuid := null;
+  v_price_res jsonb;
+  v_quote_hash text;
+  v_is_pos_path boolean;
+begin
+  if p_actor_name is null or btrim(p_actor_name) = '' then return jsonb_build_object('error', 'operator_required'); end if;
+  if v_method is null or v_method not in ('cash', 'card', 'qr', 'ginpay', 'other') then return jsonb_build_object('error', 'invalid_payment_method'); end if;
+  if v_key is not null and length(v_key) > 100 then return jsonb_build_object('error', 'invalid_idempotency_key'); end if;
+  if v_method = 'ginpay' and v_key is null then return jsonb_build_object('error', 'idempotency_key_required'); end if;
+
+  -- 1. Operator session 検証 (BLOCKER 4)
+  if nullif(p->>'operator_token', '') is not null then
+    begin
+      select * into v_op from app_private.resolve_pos_operator(v_staff_token, p->>'operator_token');
+      v_op_staff_id := v_op.operator_staff_id;
+    exception when others then
+      return jsonb_build_object('error', 'invalid_operator_session');
+    end;
+  end if;
+
+  v_legacy := case v_method when 'card' then 'credit' else v_method end;
+
+  -- 3. Customer Context 解決 (CRITICAL 1)
+  v_client_ctx := app_private.resolve_pos_client_context(
+    v_staff_token,
+    nullif(p->>'scan_session_id', '')::uuid,
+    nullif(p->>'client_id', '')::uuid,
+    nullif(p->>'reservation_id', '')::uuid
+  );
+  if v_client_ctx ? 'error' then
+    return v_client_ctx;
+  end if;
+
+  v_client := (v_client_ctx->>'client_id')::uuid;
+  v_user := v_client_ctx->>'customer_id';
+  v_name := v_client_ctx->>'customer_name';
+
+  -- Authenticate and resolve identity before pricing or hashing; both paths use the same business facts.
+  v_is_pos_path := (p ? 'quote_hash' or p ? 'scan_session_id' or p ? 'operator_token');
+  v_price_res := app_private.pos_price(p, p_operator_staff_id => v_op_staff_id, p_client_context => v_client_ctx, p_is_pos => v_is_pos_path);
+  if v_price_res ? 'error' then return v_price_res; end if;
+  v_req_hash := app_private.pos_sale_request_hash(p, v_price_res, v_op_staff_id);
+
+  if v_key is not null then
+    select id, request_hash into v_existing, v_existing_req_hash
+    from public.accounting_sessions
+    where idempotency_key = v_key and status in ('completed', 'voided');
+    if v_existing is not null then
+      if v_existing_req_hash is distinct from v_req_hash then
+        return jsonb_build_object('error', 'idempotency_conflict');
+      end if;
+      if v_is_pos_path and p->>'quote_hash' is distinct from v_price_res->>'quote_hash' then
+        return jsonb_build_object('error', 'quote_mismatch');
+      end if;
+      return app_private.sale_json(v_existing) || jsonb_build_object('idempotent', true);
+    end if;
+  end if;
+
+
+  -- 4. 予約の行ロック
+  if nullif(p->>'reservation_id', '') is not null then
+    select * into r from public.reservations where id = (p->>'reservation_id')::uuid for update;
+    if r.id is null then return jsonb_build_object('error', 'not_found'); end if;
+    if r.status in ('cancelled', 'no_show') then return jsonb_build_object('error', 'invalid_status'); end if;
+    if exists (select 1 from public.accounting_sessions where reservation_id = r.id and status = 'completed') then
+      return jsonb_build_object('error', 'already_paid');
+    end if;
+  end if;
+
+  -- 担当スタイリスト
+  select * into v_stylist from public.staff_members where id = nullif(p->>'stylist_id', '')::uuid;
+  if v_stylist.id is null then return jsonb_build_object('error', 'stylist_required'); end if;
+
+  -- 5. チケットの行ロック & TOCTOU 再検証 (HIGH 2)
+  if p ? 'ticket_ids' and p->'ticket_ids' is not null and jsonb_array_length(p->'ticket_ids') > 0 then
+    select coalesce(array_agg(x::uuid), '{}') into v_tids
+    from jsonb_array_elements_text(p->'ticket_ids') x;
+
+    if cardinality(v_tids) > 0 then
+      if v_client is null then return jsonb_build_object('error', 'invalid_tickets'); end if;
+
+      perform 1 from public.tickets where id = any(v_tids) order by id for update;
+
+      declare
+        v_uids text[];
+        v_types text[];
+        v_tuser text;
+        v_locked_count int;
+      begin
+        v_uids := app_private.member_user_ids(app_private.client_members(app_private.client_family(v_client)));
+        if v_uids is null or cardinality(v_uids) = 0 then
+          return jsonb_build_object('error', 'invalid_tickets');
+        end if;
+
+        select count(*), array_agg(distinct type), (array_agg(distinct user_id))[1]
+        into v_locked_count, v_types, v_tuser
+        from public.tickets
+        where id = any(v_tids) and user_id = any(v_uids) and not used and (expires_at is null or expires_at > now());
+
+        if v_locked_count <> cardinality(v_tids) then
+          return jsonb_build_object('error', 'invalid_tickets');
+        end if;
+        if cardinality(v_types) <> 1 then
+          return jsonb_build_object('error', 'mixed_types');
+        end if;
+        if exists (select 1 from public.ticket_transfers where ticket_id = any(v_tids) and status = 'pending' and expires_at > now()) then
+          return jsonb_build_object('error', 'transfer_pending');
+        end if;
+        if extract(isodow from (now() at time zone 'Asia/Tokyo')) in (6, 7)
+           and exists (select 1 from public.tickets t2 where t2.id = any(v_tids) and app_private.is_welcome(t2)) then
+          return jsonb_build_object('error', 'welcome_weekend');
+        end if;
+        if not app_private.can_use_type(app_private.today_used_type(v_tuser), v_types[1]) then
+          return jsonb_build_object('error', 'daily_rule');
+        end if;
+      end;
+    end if;
+  end if;
+
+  -- 6. POS 経路判定 & 価格・見積もり再計算 (ロック取得後 & canonical client context で実行)
+  v_is_pos_path := (p ? 'quote_hash' or p ? 'scan_session_id' or p ? 'operator_token');
+
+  v_price_res := app_private.pos_price(p, p_operator_staff_id => v_op_staff_id, p_client_context => v_client_ctx, p_is_pos => v_is_pos_path);
+  if v_price_res ? 'error' then return v_price_res; end if;
+  v_req_hash := app_private.pos_sale_request_hash(p, v_price_res, v_op_staff_id);
+
+  v_quote_hash := v_price_res->>'quote_hash';
+  v_subtotal := (v_price_res->>'subtotal')::bigint;
+  v_disc_total := (v_price_res->>'discount_total')::bigint;
+  v_total := (v_price_res->>'total')::bigint;
+  v_items := v_price_res->'items';
+  v_ticket_disc := (v_price_res->'discounts'->>'ticket_discount')::bigint;
+
+  -- 7. quote_hash 照合 (BLOCKER 5: POS 経路では必須)
+  if v_is_pos_path then
+    if nullif(btrim(coalesce(p->>'quote_hash', '')), '') is null then
+      return jsonb_build_object('error', 'quote_required');
+    end if;
+    if p->>'quote_hash' <> v_quote_hash then
+      return jsonb_build_object('error', 'quote_mismatch');
+    end if;
+  end if;
+
+  -- 8. expected_total 照合
+  if nullif(p->>'expected_total', '') is null or (p->>'expected_total')::bigint <> v_total then
+    return jsonb_build_object('error', 'total_mismatch', 'total', v_total);
+  end if;
+
+  select * into v_tax from public.accounting_settings where id = 1;
+
+  -- 9. GINPay 払い (CRITICAL 1: 口座が canonical client に属しているか検証)
+  if v_method = 'ginpay' then
+    if v_client is null then return jsonb_build_object('error', 'ginpay_requires_client'); end if;
+    if v_total <= 0 then return jsonb_build_object('error', 'invalid_amount'); end if;
+
+    -- 渡された口座の所有者照合 (CRITICAL 1)
+    if nullif(p->>'ginpay_account_id', '') is not null then
+      select * into v_account from public.ginpay_accounts where id = (p->>'ginpay_account_id')::uuid;
+      if v_account.id is null or app_private.client_root(v_account.client_id) <> v_client then
+        return jsonb_build_object('error', 'customer_context_mismatch');
+      end if;
+    end if;
+
+    v_gp := app_private.ginpay_resolve_account(v_client, nullif(p->>'ginpay_account_id', '')::uuid, false, p_actor_type, btrim(p_actor_name));
+    if v_gp ? 'error' then
+      if v_gp->>'error' = 'account_not_found' and exists (select 1 from public.ginpay_accounts a
+           where a.client_id = any(app_private.client_family(app_private.client_root(v_client))) and a.status = 'suspended') then
+        return jsonb_build_object('error', 'ginpay_account_suspended');
+      end if;
+      return jsonb_build_object('error', case v_gp->>'error' when 'account_not_found' then 'ginpay_account_not_found' else v_gp->>'error' end);
+    end if;
+    select * into v_account from public.ginpay_accounts where id = (v_gp->>'account_id')::uuid for update;
+    if v_account.status <> 'active' then return jsonb_build_object('error', 'ginpay_account_suspended'); end if;
+    -- 書き込み前に台帳と照合
+    v_mismatch := app_private.ginpay_check_reconciled(v_account.id, jsonb_build_object(
+      'operation', 'sale_payment', 'amount', v_total, 'idempotency_key', v_key, 'reservation_id', r.id), p_actor_type, btrim(p_actor_name));
+    if v_mismatch is not null then return v_mismatch; end if;
+    if v_account.balance_cached < v_total then
+      return jsonb_build_object('error', 'insufficient_balance', 'balance', v_account.balance_cached);
+    end if;
+  end if;
+
+  -- 10. 会計レコード作成 (以後の失敗は例外で全体を取り消す)
+  begin
+    insert into public.accounting_sessions (user_id, customer_name, staff_name, stylist_name, stylist_id, payment_method, status,
+      subtotal, discount_total, total, used_ticket_ids, client_id, reservation_id, tax_mode, tax_rate, idempotency_key,
+      request_hash, quote_hash)
+    values (v_user, coalesce(v_name, r.customer_name, ''), btrim(p_actor_name), v_stylist.display_name, v_stylist.id, v_legacy, 'pending',
+      v_subtotal, v_disc_total, v_total, (select array_agg(x::text) from unnest(v_tids) x),
+      v_client, r.id, v_tax.tax_mode, v_tax.tax_rate, v_key,
+      v_req_hash, v_quote_hash)
+    returning id into v_id;
+  exception when unique_violation then
+    if v_key is not null then
+      select id, request_hash into v_existing, v_existing_req_hash
+      from public.accounting_sessions
+      where idempotency_key = v_key and status in ('completed', 'voided');
+
+      if v_existing is not null then
+        if v_existing_req_hash is not null and v_existing_req_hash <> v_req_hash then
+          return jsonb_build_object('error', 'idempotency_conflict');
+        end if;
+        return app_private.sale_json(v_existing) || jsonb_build_object('idempotent', true);
+      end if;
+    end if;
+    return jsonb_build_object('error', 'already_paid');
+  end;
+
+  -- 明細保存 (サーバー正規化 items)
+  for v_item in select * from jsonb_array_elements(v_items) loop
+    insert into public.accounting_session_items (session_id, item_id, item_name, category, price, quantity, source, ref_id, list_price,
+      line_discount, line_total, tax_mode, tax_rate, sort_order)
+    values (
+      v_id,
+      case when v_item->>'source' in ('accounting_item', 'product') and (v_item->>'ref_id') ~ '^[0-9a-fA-F-]{36}$' then (v_item->>'ref_id')::uuid end,
+      btrim(v_item->>'name'),
+      v_item->>'category',
+      (v_item->>'unit_price')::int,
+      coalesce((v_item->>'quantity')::int, 1),
+      case when v_item->>'source' = 'legacy' then null else v_item->>'source' end,
+      v_item->>'ref_id',
+      (v_item->>'list_price')::int,
+      0,
+      (v_item->>'line_total')::int,
+      v_tax.tax_mode,
+      v_tax.tax_rate,
+      (v_item->>'index')::int
+    );
+  end loop;
+
+  -- チケット割引明細
+  for t in select id, type, title, amount from public.tickets where id = any(v_tids) order by id loop
+    insert into public.accounting_discounts (session_id, kind, label, amount, ticket_id, ticket_type)
+    values (v_id, 'ticket', t.title, t.amount, t.id, t.type);
+  end loop;
+
+  -- 支払レコード
+  insert into public.accounting_payments (session_id, method, amount)
+  values (v_id, v_legacy, v_total);
+
+  -- GINPay 支払い
+  if v_method = 'ginpay' then
+    v_gp := app_private.ginpay_pay(v_client, v_account.id, v_total::int, v_id, p_actor_type, btrim(p_actor_name), 'sale:' || v_key);
+    if v_gp ? 'error' then raise exception '%', v_gp->>'error'; end if;
+  end if;
+
+  -- チケット消費
+  if cardinality(v_tids) > 0 then
+    update public.tickets set used = true, used_at = now() where id = any(v_tids);
+    insert into public.ticket_usage_logs (usage_date, staff_name, customer_name, user_id, ticket_id, ticket_type, amount, terminal, status)
+    select app_private.today_jst(), btrim(p_actor_name), coalesce(v_name, ''), t2.user_id, t2.id::text, t2.type, t2.amount, 'ginjiro-os', 'used'
+    from public.tickets t2 where t2.id = any(v_tids);
+  end if;
+
+  if v_user is not null then perform app_private.touch_visit(v_user); end if;
+
+  update public.accounting_sessions set status = 'completed', completed_at = now() where id = v_id;
+  insert into public.accounting_events (session_id, event_type, actor_type, actor_name, detail)
+  values (v_id, 'completed', p_actor_type, btrim(p_actor_name), jsonb_build_object('total', v_total, 'payment_method', v_method, 'quote_hash', v_quote_hash));
+
+  -- 予約の完了
+  if r.id is not null and r.status <> 'completed' then
+    if (app_private.set_reservation_status(r.id, 'completed', p_actor_type, btrim(p_actor_name), null)) ? 'error' then
+      raise exception 'reservation_not_completed';
+    end if;
+  end if;
+
+  return app_private.sale_json(v_id);
+end;
+$$;
+revoke all on function app_private.finalize_sale(jsonb, text, text, text) from public, anon, authenticated;
+
 -- ── 8. staff_finalize_sale の更新 (Idempotency先行 & アトミック承認消費) ───────
 
 drop function if exists public.staff_finalize_sale(text, jsonb, text);
+drop function if exists public.staff_finalize_sale(text, jsonb, text, text);
 drop function if exists public.staff_finalize_sale(text, jsonb, text, text, text);
 
 create or replace function public.staff_finalize_sale(
   p_staff text,
   p jsonb,
   p_staff_name text,
-  p_operator_token text default null,
-  p_approval_token text default null
+  p_operator_token text,
+  p_approval_token text
 ) returns json language plpgsql security definer
 set search_path = public, extensions, pg_temp
 as $$
 declare
   v_op_token text := coalesce(p_operator_token, p->>'operator_token');
   v_app_token text := coalesce(p_approval_token, p->>'approval_token');
-  v_is_pos boolean := (v_op_token is not null or p ? 'operator_token' or p ? 'scan_session_id' or p ? 'quote_hash');
   v_quote_hash text;
   v_idem_key text := btrim(coalesce(p->>'idempotency_key', ''));
   v_existing public.accounting_sessions;
   v_req_hash text;
-  v_canon_req jsonb;
+  v_client_ctx jsonb;
   v_quote jsonb;
   v_consume jsonb;
   v_sale jsonb;
@@ -1162,53 +1623,52 @@ declare
 begin
   perform app_private.assert_staff(p_staff);
 
-  -- POS確定経路: quote_hash 必須かつ QTE1.<64hex> 形式必須 (自動生成・補完禁止)
-  if v_is_pos then
-    v_quote_hash := nullif(btrim(coalesce(p->>'quote_hash', '')), '');
-    if v_quote_hash is null then
-      return json_build_object('error', 'quote_required');
-    end if;
-    if v_quote_hash !~ '^QTE1.[a-f0-9]{64}$' then
-      return json_build_object('error', 'quote_mismatch');
-    end if;
+  -- 1. オペレーター検証 (全リクエストで必須。operatorなしは fail-closed)
+  if v_op_token is null or btrim(v_op_token) = '' then
+    return json_build_object('error', 'operator_auth_required');
   end if;
 
-  if v_op_token is not null and btrim(v_op_token) <> '' then
-    v_final_p := v_final_p || jsonb_build_object('operator_token', v_op_token);
-    begin
-      select operator_staff_id into v_op_staff_id from app_private.resolve_pos_operator(p_staff, v_op_token);
-    exception when others then
-      return json_build_object('error', 'invalid_operator_session');
-    end;
+  begin
+    select operator_staff_id into v_op_staff_id from app_private.resolve_pos_operator(p_staff, v_op_token);
+  exception when others then
+    return json_build_object('error', 'invalid_operator_session');
+  end;
+  if v_op_staff_id is null then
+    return json_build_object('error', 'invalid_operator_session');
   end if;
+
+  v_final_p := v_final_p || jsonb_build_object('operator_token', v_op_token);
 
   if v_app_token is not null and btrim(v_app_token) <> '' then
     v_final_p := v_final_p || jsonb_build_object('approval_token', v_app_token);
   end if;
 
-  -- 1. Idempotency 先行評価
-  if v_idem_key <> '' then
-    select * into v_existing from public.accounting_sessions where idempotency_key = v_idem_key;
-    if v_existing.id is not null then
-      v_canon_req := p - 'idempotency_key' - 'operator_token' - 'approval_token' - 'staff_token' - '_staff_token' - 'presence_token' - 'request_hash';
-      if v_op_staff_id is not null then
-        v_canon_req := v_canon_req || jsonb_build_object('operator_staff_id', v_op_staff_id);
-      end if;
-      v_req_hash := 'REQ1.' || app_private.sha256_hex(v_canon_req::text);
-
-      if v_existing.request_hash is not null and v_existing.request_hash <> v_req_hash then
-        return json_build_object('error', 'idempotency_conflict');
-      end if;
-      return (app_private.sale_json(v_existing.id) || jsonb_build_object('idempotent', true))::json;
-    end if;
+  -- 2. quote_hash 検証 (全リクエストで必須かつ QTE1.<64hex> 形式必須)
+  v_quote_hash := nullif(btrim(coalesce(p->>'quote_hash', '')), '');
+  if v_quote_hash is null then
+    return json_build_object('error', 'quote_required');
+  end if;
+  if v_quote_hash !~ '^QTE1\.[a-f0-9]{64}$' then
+    return json_build_object('error', 'quote_mismatch');
   end if;
 
-  -- 2. 価格計算エンジン (server-side 再計算)
+  -- Resolve trusted identity first; request client_id never supplies anonymous identity.
+  v_client_ctx := app_private.resolve_pos_client_context(
+    p_staff, nullif(p->>'scan_session_id', '')::uuid,
+    nullif(p->>'client_id', '')::uuid, nullif(p->>'reservation_id', '')::uuid
+  );
+  if v_client_ctx ? 'error' then return v_client_ctx::json; end if;
+  v_final_p := v_final_p - 'client_id' - 'customer_name' - 'user_id';
+  if v_client_ctx->>'client_id' is not null then
+    v_final_p := v_final_p || jsonb_build_object('client_id', v_client_ctx->>'client_id');
+  end if;
+
+  -- 3. 価格計算エンジン (server-side repricing)
   v_quote := app_private.pos_price(
-    p_request := p,
+    p_request := v_final_p,
     p_operator_staff_id := v_op_staff_id,
-    p_client_context := null,
-    p_is_pos := v_is_pos,
+    p_client_context := v_client_ctx,
+    p_is_pos := true,
     p_staff := p_staff,
     p_operator_token := v_op_token,
     p_approval_token := v_app_token
@@ -1217,14 +1677,38 @@ begin
     return v_quote::json;
   end if;
 
-  -- 3. POS 経路での quote_hash 照合
-  if v_is_pos then
-    if v_quote->>'quote_hash' <> v_quote_hash then
-      return json_build_object('error', 'quote_mismatch');
+  if p->>'payment_method' = 'ginpay' then
+    if v_client_ctx->>'client_id' is null then return json_build_object('error', 'ginpay_requires_client'); end if;
+    if nullif(p->>'ginpay_account_id', '') is not null and not exists (
+      select 1 from public.ginpay_accounts a where a.id = (p->>'ginpay_account_id')::uuid
+        and app_private.client_root(a.client_id) = (v_client_ctx->>'client_id')::uuid
+    ) then
+      return json_build_object('error', 'customer_context_mismatch');
     end if;
   end if;
 
-  -- 4. L2 承認が必要な場合のアトミック消費
+  -- Whitelisted business facts exclude scan IDs, tokens and caller-provided hashes.
+  v_req_hash := app_private.pos_sale_request_hash(v_final_p, v_quote, v_op_staff_id);
+
+  -- 6. Idempotency 評価 (before fresh approval; identity and current pricing were verified)
+  if v_idem_key <> '' then
+    select * into v_existing from public.accounting_sessions where idempotency_key = v_idem_key;
+    if v_existing.id is not null then
+      if v_existing.request_hash is distinct from v_req_hash then
+        return json_build_object('error', 'idempotency_conflict');
+      end if;
+      if v_quote->>'quote_hash' is distinct from v_quote_hash then
+        return json_build_object('error', 'quote_mismatch');
+      end if;
+      return (app_private.sale_json(v_existing.id) || jsonb_build_object('idempotent', true))::json;
+    end if;
+  end if;
+
+  if v_quote->>'quote_hash' is distinct from v_quote_hash then
+    return json_build_object('error', 'quote_mismatch');
+  end if;
+
+  -- 7. L2 承認が必要な場合のアトミック消費
   if (v_quote->>'has_l2_overrides')::boolean is true then
     if v_app_token is null or btrim(v_app_token) = '' then
       return json_build_object('error', 'approval_required', 'action', 'checkout_pricing_override', 'request_hash', v_quote->>'request_hash');
@@ -1240,7 +1724,7 @@ begin
     v_approval_consumed := true;
   end if;
 
-  -- 5. 会計確定 (mutation)
+  -- 8. 会計確定 (mutation)
   v_sale := app_private.finalize_sale(v_final_p, 'staff', p_staff_name, p_staff);
 
   if v_sale ? 'error' then
@@ -1530,8 +2014,8 @@ create or replace function public.staff_ginpay_charge_store(
   p_staff_name text,
   p_memo text,
   p_idempotency_key text,
-  p_approval_token text default null,
-  p_account_id uuid default null
+  p_approval_token text,
+  p_account_id uuid
 ) returns json language plpgsql security definer
 set search_path = public, extensions, pg_temp
 as $$
@@ -1619,65 +2103,13 @@ begin
 end;
 $$;
 
--- 既存テスト互換用 staff_ginpay_charge_store オーバーロード
-create or replace function public.staff_ginpay_charge_store(
-  p_staff text,
-  p_client_id uuid,
-  p_amount integer,
-  p_payment_method text,
-  p_staff_name text,
-  p_memo text,
-  p_idempotency_key text,
-  p_account_id uuid default null
-) returns json language plpgsql security definer
-set search_path = public, extensions, pg_temp
-as $$
-declare
-  v_existing public.ginpay_transactions;
-  v_acc_res jsonb;
-  v_account_id uuid;
-  v_policy public.pos_policy;
-begin
-  perform app_private.assert_staff(p_staff);
+-- -- ── 9-B. staff_ginpay_void の完全廃止 (BLOCKER 2: 新規作成せず明示DROP) ───────
+drop function if exists public.staff_ginpay_void(text, uuid, text, text, text);
+drop function if exists public.staff_ginpay_void(text, text, uuid, text, text, text, text);
 
-  -- 1. Idempotency 先行評価
-  if p_idempotency_key is not null and btrim(p_idempotency_key) <> '' then
-    select * into v_existing
-    from public.ginpay_transactions
-    where idempotency_key = p_idempotency_key;
-
-    if v_existing.id is not null then
-      if v_existing.amount <> p_amount or v_existing.client_id <> p_client_id then
-        return json_build_object('error', 'idempotency_conflict');
-      end if;
-      return (app_private.ginpay_tx_json(v_existing) || jsonb_build_object('idempotent', true, 'balance', (select balance_cached from public.ginpay_accounts where id = v_existing.account_id)))::json;
-    end if;
-  end if;
-
-  -- 2. 基本引数検証
-  if p_staff_name is null or btrim(p_staff_name) = '' then return json_build_object('error', 'created_by_required'); end if;
-  if p_amount is null or p_amount <= 0 then return json_build_object('error', 'invalid_amount'); end if;
-  if coalesce(p_payment_method, '') not in ('cash', 'credit', 'qr', 'other') then return json_build_object('error', 'invalid_payment_method'); end if;
-
-  -- 3. GINPay 口座解決 & 台帳照合
-  v_acc_res := app_private.ginpay_resolve_account(p_client_id, p_account_id, true, 'staff', p_staff_name);
-  if v_acc_res ? 'error' then return v_acc_res::json; end if;
-  v_account_id := (v_acc_res->>'account_id')::uuid;
-
-  -- 4. 50,000円超は承認必須 (レガシー経路でも高額チャージはブロック)
-  select * into v_policy from public.pos_policy where id = 1;
-  if p_amount > coalesce(v_policy.ginpay_charge_l1_limit, 50000) then
-    return json_build_object('error', 'approval_required', 'action', 'ginpay_charge');
-  end if;
-
-  -- 5. チャージ実行
-  return app_private.ginpay_record_transaction(
-    v_account_id, 'charge_store', p_amount, 'posted', null, null, null, null, null,
-    'staff', p_staff_name, p_payment_method, p_memo, p_idempotency_key, null,
-    jsonb_build_object('store_payment_method', p_payment_method)
-  )::json;
-end;
-$$;
+-- ── 9-C. staff_ginpay_adjustment の完全廃止 (HQ/L3専用化) ────────────────────
+drop function if exists public.staff_ginpay_adjustment(text, uuid, integer, text, text, text, uuid);
+drop function if exists public.staff_ginpay_adjustment(text, uuid, integer, text, text, text);
 
 -- ── 10. staff_ginpay_refund の強化 ───────────────────────────────────────────
 
@@ -1692,7 +2124,7 @@ create or replace function public.staff_ginpay_refund(
   p_staff_name text,
   p_reason text,
   p_idempotency_key text,
-  p_approval_token text default null
+  p_approval_token text
 ) returns json language plpgsql security definer
 set search_path = public, extensions, pg_temp
 as $$
@@ -1795,52 +2227,19 @@ begin
     v_req_hash
   );
 
+  if v_res ? 'error' then
+    -- 例外化してトランザクションをロールバック (承認消費もすべて巻き戻る)
+    raise exception 'refund_failed: %', v_res;
+  end if;
+
   return v_res::json;
 end;
 $$;
 
--- 既存テスト互換用 staff_ginpay_refund オーバーロード
-create or replace function public.staff_ginpay_refund(
-  p_staff text,
-  p_transaction_id uuid,
-  p_amount integer,
-  p_staff_name text,
-  p_reason text,
-  p_idempotency_key text
-) returns json language plpgsql security definer
-set search_path = public, extensions, pg_temp
-as $$
-declare
-  v_original public.ginpay_transactions;
-  v_effect integer;
-  v_refundable integer;
-begin
-  perform app_private.assert_staff(p_staff);
-
-  select * into v_original from public.ginpay_transactions where id = p_transaction_id and status = 'posted';
-  if v_original.id is null then return json_build_object('error', 'transaction_not_found'); end if;
-
-  -- 確定済み会計の支払いは会計取消へ誘導
-  if v_original.type = 'payment' and exists (
-       select 1 from public.accounting_sessions s where s.id = v_original.accounting_session_id and s.status = 'completed') then
-    return json_build_object('error', 'use_sale_void');
-  end if;
-
-  select coalesce(sum(t.amount), 0) into v_effect
-  from public.ginpay_transactions t
-  where t.original_transaction_id = v_original.id and t.status = 'posted' and t.type in ('refund', 'void');
-
-  v_refundable := abs(v_original.amount) - abs(v_effect);
-  if v_refundable <= 0 or p_amount > v_refundable then
-    return json_build_object('error', 'amount_exceeds_refundable', 'refundable_amount', v_refundable);
-  end if;
-
-  -- レガシー呼出でも返金実行には L2 承認が必要 (Fail-Closed)
-  return json_build_object('error', 'approval_required', 'action', 'refund');
-end;
-$$;
-
 -- ── 11. staff_void_sale の新設 ────────────────────────────────────────────────
+
+drop function if exists public.staff_void_sale(text, text, uuid, text, text);
+drop function if exists public.staff_void_sale(text, text, uuid, text, text, text);
 
 create or replace function public.staff_void_sale(
   p_staff text,
@@ -1848,7 +2247,7 @@ create or replace function public.staff_void_sale(
   p_id uuid,
   p_reason text,
   p_idempotency_key text,
-  p_approval_token text default null
+  p_approval_token text
 ) returns json language plpgsql security definer
 set search_path = public, extensions, pg_temp
 as $$
@@ -1861,26 +2260,13 @@ declare
   v_consume jsonb;
   v_res jsonb;
 begin
+  -- 1. 店舗端末セッション検証
   perform app_private.assert_staff(p_staff);
-
-  -- 1. Idempotency 先行評価
-  if p_idempotency_key is not null and btrim(p_idempotency_key) <> '' then
-    select * into v_existing
-    from public.accounting_sessions
-    where void_idempotency_key = p_idempotency_key;
-
-    if v_existing.id is not null then
-      if v_existing.id <> p_id then
-        return json_build_object('error', 'idempotency_conflict');
-      end if;
-      return app_private.sale_json(v_existing.id)::json;
-    end if;
-  end if;
 
   -- 2. 基本引数検証
   if p_reason is null or btrim(p_reason) = '' then return json_build_object('error', 'reason_required'); end if;
 
-  -- 3. オペレーター検証
+  -- 3. オペレーター検証 (replay 前に必ず検証。invalid/revoked operator には replay 結果を返さない)
   if p_operator_token is null or btrim(p_operator_token) = '' then
     return json_build_object('error', 'operator_auth_required');
   end if;
@@ -1891,23 +2277,44 @@ begin
     return json_build_object('error', 'operator_session_invalid');
   end if;
 
-  -- 4. 対象会計の検証
+  -- 4. 対象会計の存在確認 & 行ロック
   select * into v_sale from public.accounting_sessions where id = p_id for update;
   if v_sale.id is null then return json_build_object('error', 'not_found'); end if;
-  if v_sale.status <> 'completed' then return json_build_object('error', 'invalid_status'); end if;
 
-  -- 5. L2 承認要求
+  -- 5. stable canonical request_hash 生成
+  -- mutation後の可変状態 (status = voided等) は含めず、元会計の不変値とリクエスト事実のみを正本とする
   v_facts := jsonb_build_object(
     'action', 'void',
     'sale_id', v_sale.id,
     'original_total', v_sale.total,
     'original_payment_method', v_sale.payment_method,
-    'current_sale_status', v_sale.status,
     'reason', btrim(p_reason),
     'operator_staff_id', v_op_member_id
   );
   v_req_hash := app_private.pos_auth_hash('void', v_facts);
 
+  -- 6. Idempotency Replay 評価 (オペレーター認証・ハッシュ照合後の exact replay)
+  if p_idempotency_key is not null and btrim(p_idempotency_key) <> '' then
+    select * into v_existing
+    from public.accounting_sessions
+    where void_idempotency_key = p_idempotency_key;
+
+    if v_existing.id is not null then
+      if v_existing.id <> p_id then
+        return json_build_object('error', 'idempotency_conflict');
+      end if;
+      if v_existing.void_request_hash is not null and v_existing.void_request_hash <> v_req_hash then
+        return json_build_object('error', 'idempotency_conflict');
+      end if;
+      -- 一致: 保存済み結果を返却 (successful retry では fresh approval 不要)
+      return (app_private.sale_json(v_existing.id) || jsonb_build_object('idempotent', true))::json;
+    end if;
+  end if;
+
+  -- 7. 新規取消処理 (未取消であることを確認)
+  if v_sale.status <> 'completed' then return json_build_object('error', 'invalid_status'); end if;
+
+  -- L2 承認要求
   if p_approval_token is null or btrim(p_approval_token) = '' then
     return json_build_object('error', 'approval_required', 'action', 'void', 'request_hash', v_req_hash);
   end if;
@@ -1915,17 +2322,18 @@ begin
   v_consume := app_private.consume_pos_approval(p_staff, p_operator_token, p_approval_token, 'void', v_req_hash);
   if (v_consume->>'ok')::boolean is not true or v_consume ? 'error' then return v_consume::json; end if;
 
-  -- 6. void_idempotency_key の先行記録 (status = completed の行に記録して行ロックと一意性を先行固定)
+  -- void_idempotency_key & void_request_hash の記録
   if p_idempotency_key is not null and btrim(p_idempotency_key) <> '' then
     update public.accounting_sessions
-    set void_idempotency_key = p_idempotency_key
+    set void_idempotency_key = p_idempotency_key,
+        void_request_hash = v_req_hash
     where id = p_id;
   end if;
 
-  -- 7. 会計取消実行 (app_private.void_sale)
+  -- 会計取消実行 (app_private.void_sale)
   v_res := app_private.void_sale(p_id, btrim(p_reason), 'staff', 'スタッフ');
   if v_res ? 'error' then
-    -- 例外化してトランザクションをロールバック (承認消費・void_idempotency_key 記録もすべて巻き戻る)
+    -- 例外化してトランザクションをロールバック (承認消費・void_idempotency_key・void_request_hash 記録もすべて巻き戻る)
     raise exception 'void_sale_failed: %', v_res;
   end if;
 
@@ -1948,8 +2356,8 @@ create or replace function public.staff_issue_tickets(
   p_amount integer,
   p_quantity integer,
   p_staff_name text,
-  p_idempotency_key text default null,
-  p_approval_token text default null
+  p_idempotency_key text,
+  p_approval_token text
 ) returns json language plpgsql security definer
 set search_path = public, extensions, pg_temp
 as $$
@@ -2055,61 +2463,15 @@ begin
 end;
 $$;
 
--- 既存7引数レガシー呼出のフェイルクローズ (承認必須で即時エラー返却)
-create or replace function public.staff_issue_tickets(
-  p_staff text,
-  p_user_id text,
-  p_type text,
-  p_amount integer,
-  p_quantity integer,
-  p_staff_name text,
-  p_customer_name text
-) returns json language plpgsql security definer
-set search_path = public, extensions, pg_temp
-as $$
-begin
-  perform app_private.assert_staff(p_staff);
-  return json_build_object('error', 'approval_required', 'action', 'ticket_issue');
-end;
-$$;
+-- ── 12-B. staff_issue_tickets 旧シグネチャの完全撤廃 ─────────────────────────
+drop function if exists public.staff_issue_tickets(text, text, text, integer, integer, text, text);
+drop function if exists public.staff_issue_tickets(text, text, text, text, text, integer, integer, text, text);
 
--- ── 13. staff_ginpay_adjustment の完全ブロック (L3 / HQ専用 フェイルクローズ) ──
+-- ── 13. staff_ginpay_adjustment の完全廃止 (店舗側RPC全廃 / HQ・L3専用) ───────
+drop function if exists public.staff_ginpay_adjustment(text, uuid, integer, text, text, text, uuid);
+drop function if exists public.staff_ginpay_adjustment(text, uuid, integer, text, text, text);
 
-create or replace function public.staff_ginpay_adjustment(
-  p_staff text,
-  p_client_id uuid,
-  p_amount integer,
-  p_staff_name text,
-  p_reason text,
-  p_idempotency_key text,
-  p_account_id uuid default null
-) returns json language plpgsql security definer
-set search_path = public, extensions, pg_temp
-as $$
-declare
-  v_root uuid := app_private.client_root(p_client_id);
-  v_res jsonb;
-  v_account uuid;
-  v_mismatch jsonb;
-begin
-  perform app_private.assert_staff(p_staff);
-
-  -- 台帳照合ガード: 不一致なら ledger_mismatch_blocked 監査を残して即時ブロック (P0-1 不変契約)
-  if v_root is not null then
-    v_res := app_private.ginpay_resolve_account(v_root, p_account_id, false, 'staff', p_staff_name);
-    if not (v_res ? 'error') then
-      v_account := (v_res->>'account_id')::uuid;
-      v_mismatch := app_private.ginpay_check_reconciled(v_account, jsonb_build_object('operation', 'adjustment', 'amount', p_amount), 'staff', p_staff_name);
-      if v_mismatch is not null then return v_mismatch::json; end if;
-    end if;
-  end if;
-
-  -- スタッフ・POS経路からの調整は一切禁止（HQのみ / P0-5 Fail Closed）
-  return json_build_object('error', 'hq_only');
-end;
-$$;
-
--- ── 14. 権限設定 (GRANT / REVOKE の境界明確化) ───────────────────────────────
+-- ── 14. 権限設定 (GRANT / REVOKE の境界明確化: 正本シグネチャのみ公開) ──────────
 
 do $$
 declare f text;
@@ -2120,12 +2482,9 @@ begin
     'public.staff_pos_quote(text, text, uuid, jsonb, text)',
     'public.staff_finalize_sale(text, jsonb, text, text, text)',
     'public.staff_ginpay_charge_store(text, text, uuid, integer, text, text, text, text, text, uuid)',
-    'public.staff_ginpay_charge_store(text, uuid, integer, text, text, text, text, uuid)',
     'public.staff_ginpay_refund(text, text, uuid, integer, text, text, text, text)',
-    'public.staff_ginpay_refund(text, uuid, integer, text, text, text)',
     'public.staff_void_sale(text, text, uuid, text, text, text)',
-    'public.staff_issue_tickets(text, text, text, text, text, integer, integer, text, text, text)',
-    'public.staff_ginpay_adjustment(text, uuid, integer, text, text, text, uuid)'
+    'public.staff_issue_tickets(text, text, text, text, text, integer, integer, text, text, text)'
   ] loop
     execute format('revoke all on function %s from public', f);
     execute format('grant execute on function %s to anon, authenticated', f);

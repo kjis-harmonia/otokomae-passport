@@ -11,13 +11,18 @@ select public.staff_finalize_sale(
   c.staff_token,
   jsonb_build_object(
     'client_id', c.client_id,
+    'scan_session_id', c.scan_session_id,
     'stylist_id', c.stylist_id,
+    'operator_token', c.operator_token,
     'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', ai.id::text, 'quantity', 1)),
     'payment_method', 'ginpay',
     'expected_total', c.amount,
+    'quote_hash', c.quote_hash,
     'idempotency_key', c.idempotency_key
   ),
-  'Concurrency'
+  'Concurrency',
+  c.operator_token,
+  null
 )
 from public.__ginpay_concurrency_cases c
 join public.__ginpay_concurrency_latest l on l.run_id = c.run_id

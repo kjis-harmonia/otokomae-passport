@@ -11,6 +11,8 @@ declare
   v_hq text := 'preflight-visit-hq';
   v_gin uuid;
   v_tei uuid;
+  v_op_token text;
+  v_quote jsonb;
   v_date date := app_private.today_jst() + 6;
   v_res json;
   v_res_id uuid;
@@ -32,6 +34,11 @@ begin
   if v_gin is null or v_tei is null or not exists (select 1 from public.service_menus where code = 'perm-ginpara-curly' and booking_enabled) then
     raise exception 'seed data missing (stylists / bookable ギンパラカーリー)';
   end if;
+
+  -- オペレーター初期化
+  perform app_private.set_staff_operator_credentials(v_gin, '1234', 'staff');
+  v_op_token := (public.staff_operator_verify(v_staff, v_gin, '1234')->>'operator_token');
+
   insert into public.staff_shift_templates (staff_id, weekday, start_time, end_time)
   values (v_gin, extract(dow from v_date)::int, time '09:00', time '20:00')
   on conflict (staff_id, weekday) do update set start_time = excluded.start_time, end_time = excluded.end_time;
@@ -45,9 +52,16 @@ begin
   foreach st in array array['checked_in', 'in_service', 'awaiting_payment'] loop
     perform public.staff_set_reservation_status(v_staff, v_res_id, st, 'Preflight');
   end loop;
+
+  v_quote := public.staff_pos_quote(v_staff, v_op_token, null, jsonb_build_object(
+    'reservation_id', v_res_id,
+    'items', jsonb_build_array(jsonb_build_object('source', 'reservation', 'ref_id', 'perm-ginpara-curly', 'name', 'ギンパラカーリー', 'category', 'menu', 'unit_price', 15000, 'quantity', 1))
+  ))::jsonb;
+  if v_quote ? 'error' then raise exception 'quote 1 failed: %', v_quote; end if;
+
   v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('reservation_id', v_res_id, 'stylist_id', v_gin,
     'items', jsonb_build_array(jsonb_build_object('source', 'reservation', 'ref_id', 'perm-ginpara-curly', 'name', 'ギンパラカーリー', 'category', 'menu', 'unit_price', 15000, 'quantity', 1)),
-    'payment_method', 'cash', 'expected_total', 15000, 'idempotency_key', 'preflight-visit-1'), 'Preflight');
+    'payment_method', 'cash', 'expected_total', 15000, 'quote_hash', v_quote->>'quote_hash', 'idempotency_key', 'preflight-visit-1'), 'Preflight', v_op_token, null);
   if v_sale->>'status' <> 'completed' then raise exception 'checkout failed: %', v_sale; end if;
   v_sale_id := (v_sale->>'id')::uuid;
   v_ledger := app_private.client_ledger_json(v_client);
@@ -59,38 +73,83 @@ begin
   select r into v_row from jsonb_array_elements(app_private.list_clients_json('Preflight Visit', 'all', 0)->'rows') r where (r->>'id')::uuid = v_client;
   if (v_row->>'visit_count')::int <> 1 then raise exception 'customer list disagrees: %', v_row; end if;
 
-  -- 予約なしの店頭会計（今日）は1回の来店として増える
-  v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_client, 'stylist_id', v_tei,
-    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'cut-kids-skin-fade', 'quantity', 1)),
-    'payment_method', 'cash', 'expected_total', 3000, 'idempotency_key', 'preflight-visit-2'), 'Preflight');
-  v_ledger := app_private.client_ledger_json(v_client);
-  if (v_ledger->'stats'->>'visit_count')::int <> 2 or (v_ledger->'stats'->>'total_sales')::int <> 18000 then
-    raise exception 'walk-in must add one visit: %', v_ledger->'stats';
-  end if;
+  -- 予約なしの店頭会計（今日）は1回の来店として増える (trusted customer context: scan session)
+  declare
+    v_cust1 uuid;
+    v_pres_tok1 text;
+    v_scan1 uuid;
+    v_cust2 uuid;
+    v_pres_tok2 text;
+    v_scan2 uuid;
+  begin
+    insert into public.customers (user_id, name, phone_last4, recovery_code, normalized_name)
+    values ('u-visit-1', 'Preflight Visit', '0001', 'P-VISIT-1', app_private.norm_name('Preflight Visit'))
+    returning id into v_cust1;
 
-  -- 予約の会計を取消：来店（完了した予約）は残り、売上から外れる
-  v_sale := public.hq_void_sale(v_hq, v_sale_id, 'preflight visit');
-  v_ledger := app_private.client_ledger_json(v_client);
-  if v_sale->>'status' <> 'voided' or (v_ledger->'stats'->>'visit_count')::int <> 2 or (v_ledger->'stats'->>'total_sales')::int <> 3000 then
-    raise exception 'void must keep the visit and drop the sale: %', v_ledger->'stats';
-  end if;
+    perform app_private.merge_clients(v_client, app_private.member_client(v_cust1), 'staff', 'staff');
 
-  -- 自動の突き合わせ：同じ顧客・同じ日の「会計が紐づいていない完了予約」が1件だけ → 予約なしの会計はその来店に含める
-  v_res := public.staff_create_reservation(v_staff, jsonb_build_object('starts_at', app_private.jst_ts(v_date, time '15:00'),
-    'menu_codes', jsonb_build_array('perm-ginpara-curly'), 'staff_id', v_gin, 'customer_name', 'Preflight Visit Match', 'source', 'staff'), 'Preflight');
-  if v_res->>'error' is not null then raise exception 'reservation 2 failed: %', v_res; end if;
-  v_res2 := (v_res->>'id')::uuid;
-  v_client2 := (v_res->>'client_id')::uuid;
-  update public.reservations set status = 'completed', starts_at = app_private.jst_ts(app_private.today_jst(), time '06:00'),
-    ends_at = app_private.jst_ts(app_private.today_jst(), time '06:30'), occupied_until = app_private.jst_ts(app_private.today_jst(), time '06:30')
-  where id = v_res2;
-  v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('client_id', v_client2, 'stylist_id', v_gin,
-    'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', (select id::text from public.accounting_items where name = 'カット' limit 1), 'quantity', 1)),
-    'payment_method', 'cash', 'expected_total', 3300, 'idempotency_key', 'preflight-visit-3'), 'Preflight');
-  v_ledger := app_private.client_ledger_json(v_client2);
-  if (v_ledger->'stats'->>'visit_count')::int <> 1 or (v_ledger->'stats'->>'total_sales')::int <> 3300 then
-    raise exception 'one same-day candidate must be matched (one visit): %', v_ledger->'stats';
-  end if;
+    insert into app_private.customer_sessions (token_hash, user_id, created_via)
+    values (app_private.sha256_hex('cust-tok-visit-1-0123456789abcdef'), 'u-visit-1', 'register');
+
+    v_pres_tok1 := (public.customer_issue_presence_token('cust-tok-visit-1-0123456789abcdef')->>'token');
+    v_scan1 := (public.staff_resolve_presence_token(v_staff, v_pres_tok1)->>'scan_session_id')::uuid;
+
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, v_scan1, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'cut-kids-skin-fade', 'quantity', 1))
+    ))::jsonb;
+    if v_quote ? 'error' then raise exception 'quote 2 failed: %', v_quote; end if;
+
+    v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('scan_session_id', v_scan1, 'stylist_id', v_tei,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', 'cut-kids-skin-fade', 'quantity', 1)),
+      'payment_method', 'cash', 'expected_total', 3000, 'quote_hash', v_quote->>'quote_hash', 'idempotency_key', 'preflight-visit-2'), 'Preflight', v_op_token, null);
+    v_ledger := app_private.client_ledger_json(v_client);
+    if (v_ledger->'stats'->>'visit_count')::int <> 2 or (v_ledger->'stats'->>'total_sales')::int <> 18000 then
+      raise exception 'walk-in must add one visit: %', v_ledger->'stats';
+    end if;
+
+    -- 予約の会計を取消：来店（完了した予約）は残り、売上から外れる
+    v_sale := public.hq_void_sale(v_hq, v_sale_id, 'preflight visit');
+    v_ledger := app_private.client_ledger_json(v_client);
+    if v_sale->>'status' <> 'voided' or (v_ledger->'stats'->>'visit_count')::int <> 2 or (v_ledger->'stats'->>'total_sales')::int <> 3000 then
+      raise exception 'void must keep the visit and drop the sale: %', v_ledger->'stats';
+    end if;
+
+    -- 自動の突き合わせ：同じ顧客・同じ日の「会計が紐づいていない完了予約」が1件だけ → 予約なしの会計はその来店に含める
+    v_res := public.staff_create_reservation(v_staff, jsonb_build_object('starts_at', app_private.jst_ts(v_date, time '15:00'),
+      'menu_codes', jsonb_build_array('perm-ginpara-curly'), 'staff_id', v_gin, 'customer_name', 'Preflight Visit Match', 'source', 'staff'), 'Preflight');
+    if v_res->>'error' is not null then raise exception 'reservation 2 failed: %', v_res; end if;
+    v_res2 := (v_res->>'id')::uuid;
+    v_client2 := (v_res->>'client_id')::uuid;
+    update public.reservations set status = 'completed', starts_at = app_private.jst_ts(app_private.today_jst(), time '06:00'),
+      ends_at = app_private.jst_ts(app_private.today_jst(), time '06:30'), occupied_until = app_private.jst_ts(app_private.today_jst(), time '06:30')
+    where id = v_res2;
+
+    -- scan session で client2 を特定するが、sale へ reservation_id は直接設定しない（unlinked sale）
+    insert into public.customers (user_id, name, phone_last4, recovery_code, normalized_name)
+    values ('u-visit-2', 'Preflight Visit Match', '0002', 'P-VISIT-2', app_private.norm_name('Preflight Visit Match'))
+    returning id into v_cust2;
+
+    perform app_private.merge_clients(v_client2, app_private.member_client(v_cust2), 'staff', 'staff');
+
+    insert into app_private.customer_sessions (token_hash, user_id, created_via)
+    values (app_private.sha256_hex('cust-tok-visit-2-0123456789abcdef'), 'u-visit-2', 'register');
+
+    v_pres_tok2 := (public.customer_issue_presence_token('cust-tok-visit-2-0123456789abcdef')->>'token');
+    v_scan2 := (public.staff_resolve_presence_token(v_staff, v_pres_tok2)->>'scan_session_id')::uuid;
+
+    v_quote := public.staff_pos_quote(v_staff, v_op_token, v_scan2, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', (select id::text from public.accounting_items where name = 'カット' limit 1), 'quantity', 1))
+    ))::jsonb;
+    if v_quote ? 'error' then raise exception 'quote 3 failed: %', v_quote; end if;
+
+    v_sale := public.staff_finalize_sale(v_staff, jsonb_build_object('scan_session_id', v_scan2, 'stylist_id', v_gin,
+      'items', jsonb_build_array(jsonb_build_object('source', 'accounting_item', 'ref_id', (select id::text from public.accounting_items where name = 'カット' limit 1), 'quantity', 1)),
+      'payment_method', 'cash', 'expected_total', 3300, 'quote_hash', v_quote->>'quote_hash', 'idempotency_key', 'preflight-visit-3'), 'Preflight', v_op_token, null);
+    v_ledger := app_private.client_ledger_json(v_client2);
+    if (v_ledger->'stats'->>'visit_count')::int <> 1 or (v_ledger->'stats'->>'total_sales')::int <> 3300 then
+      raise exception 'one same-day candidate must be matched (one visit): %', v_ledger->'stats';
+    end if;
+  end;
 end $$;
 
 rollback;

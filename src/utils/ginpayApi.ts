@@ -77,8 +77,8 @@ export interface GinpayClientApi {
   ledger(clientId: string, limit?: number): Promise<GinpayLedger>
   openAccount?(clientId: string): Promise<GinpayLedger>
   /** idempotencyKey はチャージの確認ごとに1つ（再送しても二重にチャージしない）。口座が複数あるときは accountId が必要 */
-  chargeStore?(input: { clientId: string; amount: number; paymentMethod: 'cash' | 'credit' | 'qr' | 'other'; memo?: string; accountId?: string; idempotencyKey?: string }): Promise<GinpayResult>
-  refund?(input: { transactionId: string; amount: number; reason: string }): Promise<GinpayResult>
+  chargeStore?(input: { clientId: string; amount: number; paymentMethod: 'cash' | 'credit' | 'qr' | 'other'; memo?: string; accountId?: string; idempotencyKey?: string; operatorToken?: string; approvalToken?: string }): Promise<GinpayResult>
+  refund?(input: { transactionId: string; amount: number; reason: string; operatorToken?: string; approvalToken?: string }): Promise<GinpayResult>
   void?(input: { transactionId: string; reason: string }): Promise<GinpayResult>
   adjustment?(input: { clientId: string; amount: number; reason: string; accountId?: string }): Promise<GinpayResult>
 }
@@ -103,6 +103,10 @@ export const GINPAY_ERROR_MESSAGE: Record<string, string> = {
   reason_required: '理由を入力してください。',
   transaction_not_found: '取引が見つかりません。',
   use_sale_void: '会計の支払いは、会計の取消から戻してください。',
+  operator_auth_required: '操作者の認証が必要です。',
+  operator_session_invalid: '操作者セッションが無効です。',
+  approval_required: '店長または本部の承認が必要です。',
+  hq_only: 'この操作は本部専用です。',
 }
 
 export const GINPAY_TYPE_LABEL: Record<GinpayTransactionType, string> = {
@@ -147,34 +151,24 @@ export function createStaffGinpayApi(actor: () => string): GinpayClientApi {
     ledger: (clientId, limit = 50) => callStaffRpc<GinpayLedger>('staff_ginpay_ledger', { p_client_id: clientId, p_limit: limit }),
     openAccount: (clientId) => callStaffRpc<GinpayLedger>('staff_ginpay_open_account', { p_client_id: clientId, p_staff_name: actor() }),
     chargeStore: (input) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_charge_store', {
+      p_operator_token: input.operatorToken ?? null,
       p_client_id: input.clientId,
       p_amount: input.amount,
       p_payment_method: input.paymentMethod,
       p_staff_name: actor(),
       p_memo: input.memo ?? null,
       p_idempotency_key: input.idempotencyKey ?? idempotencyKey('staff-store-charge'),
+      p_approval_token: input.approvalToken ?? null,
       p_account_id: input.accountId ?? null,
     })),
     refund: (input) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_refund', {
+      p_operator_token: input.operatorToken ?? null,
       p_transaction_id: input.transactionId,
       p_amount: input.amount,
       p_staff_name: actor(),
       p_reason: input.reason,
       p_idempotency_key: idempotencyKey('staff-refund'),
-    })),
-    void: (input) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_void', {
-      p_transaction_id: input.transactionId,
-      p_staff_name: actor(),
-      p_reason: input.reason,
-      p_idempotency_key: idempotencyKey('staff-void'),
-    })),
-    adjustment: (input) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_adjustment', {
-      p_client_id: input.clientId,
-      p_amount: input.amount,
-      p_staff_name: actor(),
-      p_reason: input.reason,
-      p_idempotency_key: idempotencyKey('staff-adjustment'),
-      p_account_id: input.accountId ?? null,
+      p_approval_token: input.approvalToken ?? null,
     })),
   }
 }

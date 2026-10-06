@@ -32,6 +32,7 @@ const MIGRATION_ORDER = [
   '20261009000100_customer_presence_token.sql',
   '20261009000200_pos_operator_approval.sql',
   '20261009000300_pos_pricing_engine.sql',
+  '20261009000400_pos_money_authorization.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
@@ -142,13 +143,15 @@ async function main() {
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_presence_token.sql'), 'POS P0-2 presence token')
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_operator_approval.sql'), 'POS P0-3 operator authentication and approval')
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_pricing_engine.sql'), 'POS P0-4 server-side pricing engine')
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_money_authorization.sql'), 'POS P0-5 money authorization enforcement')
     if (baselineDbUrl) {
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_ginpay_reconcile.sql'), 'baseline POS P0-1 GINPay reconcile guard')
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_presence_token.sql'), 'baseline POS P0-2 presence token')
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_operator_approval.sql'), 'baseline POS P0-3 operator authentication and approval')
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_pricing_engine.sql'), 'baseline POS P0-4 server-side pricing engine')
+      runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_money_authorization.sql'), 'baseline POS P0-5 money authorization enforcement')
     }
-    return `reconcile guard + presence token + operator approval + pricing engine ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
+    return `reconcile guard + presence token + operator approval + pricing engine + money authorization ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
   })
 
   await stage('concurrency', async () => {

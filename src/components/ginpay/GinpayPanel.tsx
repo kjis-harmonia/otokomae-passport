@@ -207,7 +207,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
           <div style={{ paddingTop: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 6 }}>履歴</h3>
             {ledger.transactions.length === 0 ? <p style={msgStyle(C.mute)}>履歴はありません</p> : ledger.transactions.map((tx) => (
-              <TransactionRow key={tx.id} tx={tx} canReverse={!!api.void || !!api.refund} onReverse={setReverse} />
+              <TransactionRow key={tx.id} tx={tx} refundAvailable={!!api.refund} voidAvailable={!!api.void} onReverse={setReverse} />
             ))}
           </div>
         </>
@@ -254,16 +254,17 @@ interface ReverseState {
   error: string | null
 }
 
-function TransactionRow({ tx, canReverse, onReverse }: {
+function TransactionRow({ tx, refundAvailable, voidAvailable, onReverse }: {
   tx: GinpayTransaction
-  canReverse: boolean
+  refundAvailable: boolean
+  voidAvailable: boolean
   onReverse: (state: ReverseState) => void
 }) {
   const amountColor = tx.amount < 0 ? C.text : C.sub
   // 会計に紐付いた取引（会計の支払いと、その取消の戻し）は、会計の取消で会計と一緒に戻す（GINPay 側だけでは戻さない）
   const saleLinked = !!tx.accounting_session_id
-  const canRefund = canReverse && !saleLinked && tx.status === 'posted' && tx.type === 'payment' && tx.amount < 0
-  const canVoid = canReverse && !saleLinked && tx.status === 'posted' && tx.type !== 'void'
+  const canRefund = refundAvailable && !saleLinked && tx.status === 'posted' && ((tx.type === 'payment' && tx.amount < 0) || tx.type === 'charge_store')
+  const canVoid = voidAvailable && !saleLinked && tx.status === 'posted' && tx.type !== 'void'
   return (
     <div style={txRowStyle}>
       <span style={{ minWidth: 0 }}>

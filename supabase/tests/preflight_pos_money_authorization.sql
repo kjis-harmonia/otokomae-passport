@@ -435,13 +435,42 @@ begin
 
   -- ── Group 6: Finalize Sale Atomic Consumption & Idempotency (Tests 34 - 38) ─
 
+  declare
+    v_group_session text := 'p05-identified-checkout-session-0123456789abcdef';
+    v_group_presence text;
+    v_group_scan uuid;
+    v_replay_sale_count bigint;
+    v_replay_payment_count bigint;
+  begin
+    insert into app_private.customer_sessions (token_hash, user_id, created_via)
+    values (app_private.sha256_hex(v_group_session), v_user_a, 'register');
+    v_group_presence := public.customer_issue_presence_token(v_group_session)->>'token';
+    v_r := public.staff_resolve_presence_token(v_staff_a, v_group_presence)::jsonb;
+    v_group_scan := (v_r->>'scan_session_id')::uuid;
+    if v_r ? 'error' or v_group_scan is null then raise exception 'Group 6 trusted scan failed: %', v_r; end if;
+
+    v_quote := public.staff_pos_quote(v_staff_a, v_op_token, v_group_scan, jsonb_build_object(
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
+      'manual_discount', 500,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
+    ), null)::jsonb;
+    if v_quote->>'error' is distinct from 'approval_required' or v_quote->>'request_hash' is null then
+      raise exception 'Group 6 identified approval facts failed: %', v_quote;
+    end if;
+    v_req_hash := v_quote->>'request_hash';
+    v_r := public.staff_pos_approve(v_staff_a, v_op_token, v_mgr_member, '5678', 'checkout_pricing_override', v_req_hash)::jsonb;
+    v_app_token := v_r->>'approval_token';
+    if v_r ? 'error' or v_app_token is null then raise exception 'Group 6 approval failed: %', v_r; end if;
+
+
   -- 必須追加テスト 1: staff_pos_quote → QTE1.<64hex> を返す
-  v_quote := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
-    'client_id', v_client_a,
+  v_quote := public.staff_pos_quote(v_staff_a, v_op_token, v_group_scan, jsonb_build_object(
+    'client_id', v_client_a, 'scan_session_id', v_group_scan,
     'manual_discount', 500,
     'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
   ), v_app_token)::jsonb;
-  if v_quote ? 'error' or v_quote->>'quote_hash' !~ '^QTE1\.[a-f0-9]{64}$' or (v_quote->>'total')::int <> 4500 then
+  if v_quote ? 'error' or v_quote->>'quote_hash' is null or v_quote->>'quote_hash' !~ '^QTE1\.[a-f0-9]{64}$'
+     or (v_quote->>'total')::int is distinct from 4500 or v_quote->'facts'->>'client_id' is distinct from v_client_a::text then
     raise exception 'Test 1 failed: staff_pos_quote did not return valid QTE1 hash: %', v_quote;
   end if;
 
@@ -450,7 +479,7 @@ begin
   begin
     -- 必須追加テスト 2: staff_finalize_sale quote_hashなし → quote_required
     v_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 500,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -464,7 +493,7 @@ begin
 
     -- 必須追加テスト 3: forged/raw 64hex → reject (quote_mismatch)
     v_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 500,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -479,7 +508,7 @@ begin
 
     -- 必須追加テスト 5: quote後にprice/customer/item変更 → quote_mismatch
     v_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 600,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -494,7 +523,7 @@ begin
 
     -- 必須追加テスト 7: AUTH1 approvalが正しくてもQTE1不一致 → finalize不可 (quote_mismatch)
     v_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 500,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -509,7 +538,7 @@ begin
 
     -- 必須追加テスト 8: QTE1が正しくてもL2 AUTH1なし → approval_required
     v_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 500,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -524,7 +553,7 @@ begin
 
     -- 必須追加テスト 4: valid QTE1 + valid AUTH1 → finalize成功 (Test 34)
     v_sale := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 500,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -546,7 +575,7 @@ begin
 
     -- Test 35: 既に消費された承認トークンの再利用は拒否される (already_consumed)
     v_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 500,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -566,7 +595,7 @@ begin
     -- 意図的に失敗する会計を実行 (存在しない支払い方法)
     begin
       perform public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-        'client_id', v_client_a,
+        'client_id', v_client_a, 'scan_session_id', v_group_scan,
         'stylist_id', v_stylist,
         'manual_discount', 500,
         'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -584,9 +613,12 @@ begin
       raise exception 'Test 36 failed: approval consumption was not rolled back upon finalize failure';
     end if;
 
+    select count(*) into v_replay_sale_count from public.accounting_sessions;
+    select count(*) into v_replay_payment_count from public.accounting_payments;
+
     -- Test 37: Idempotency: 同一キー + 同一リクエストの再送は既存結果を即時返却 (新規承認を要求・消費しない)
     v_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 500,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
@@ -595,13 +627,14 @@ begin
       'quote_hash', v_valid_qhash,
       'idempotency_key', 'p05-sale-finalize-1'
     ), 'P05担当者', v_op_token, null)::jsonb;
-    if v_r ? 'error' or (v_r->>'id')::uuid <> v_sale_id then
+    if v_r ? 'error' or (v_r->>'id')::uuid is distinct from v_sale_id
+       or (v_r->>'idempotent')::boolean is distinct from true or (v_r - 'idempotent') is distinct from v_sale then
       raise exception 'Test 37 failed: idempotency did not return existing sale: %', v_r;
     end if;
 
     -- Test 38: Idempotency: 同一キー + 異なるリクエストは idempotency_conflict を返す
     v_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_a,
+      'client_id', v_client_a, 'scan_session_id', v_group_scan,
       'stylist_id', v_stylist,
       'manual_discount', 500,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 2)),
@@ -610,16 +643,209 @@ begin
       'quote_hash', v_valid_qhash,
       'idempotency_key', 'p05-sale-finalize-1'
     ), 'P05担当者', v_op_token, null)::jsonb;
-    if v_r->>'error' <> 'idempotency_conflict' then
+    if v_r->>'error' is distinct from 'idempotency_conflict' then
       raise exception 'Test 38 failed: idempotency conflict not detected: %', v_r;
     end if;
+    if (select count(*) from public.accounting_sessions) <> v_replay_sale_count
+       or (select count(*) from public.accounting_payments) <> v_replay_payment_count then
+      raise exception 'Group 6 replay/conflict created sale or payment';
+    end if;
+  end;
+  end;
+
+-- Independent identified/anonymous replay checks; every call uses the public canonical RPC.
+  declare
+    v_session text := 'p05-replay-customer-session-0123456789abcdef';
+    v_presence text;
+    v_scan uuid;
+    v_retry_op text;
+    v_payload jsonb;
+    v_changed jsonb;
+    v_result jsonb;
+    v_first jsonb;
+    v_before_sales bigint;
+    v_before_payments bigint;
+    v_first_hash text;
+    v_claim uuid;
+    v_case text;
+    v_other_account uuid;
+    v_other_ticket uuid;
+    v_ginpay_before jsonb;
+    v_ginpay_after jsonb;
+    v_change integer;
+  begin
+    select jsonb_build_object(
+      'accounts', (select coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb) from public.ginpay_accounts a),
+      'transactions', (select coalesce(jsonb_agg(to_jsonb(t) order by t.id), '[]'::jsonb) from public.ginpay_transactions t)
+    ) into v_ginpay_before;
+    insert into app_private.customer_sessions (token_hash, user_id, created_via)
+    values (app_private.sha256_hex(v_session), v_user_a, 'register');
+    v_presence := public.customer_issue_presence_token(v_session)->>'token';
+    v_result := public.staff_resolve_presence_token(v_staff_a, v_presence)::jsonb;
+    v_scan := (v_result->>'scan_session_id')::uuid;
+    if v_result ? 'error' or v_scan is null then raise exception 'Replay trusted scan failed: %', v_result; end if;
+
+    v_payload := jsonb_build_object(
+      'client_id', v_client_a, 'scan_session_id', v_scan, 'stylist_id', v_stylist,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'cash', 'expected_total', 5000, 'idempotency_key', 'p05-identified-replay'
+    );
+    v_quote := public.staff_pos_quote(v_staff_a, v_op_token, v_scan, v_payload, null)::jsonb;
+    if v_quote ? 'error' or v_quote->>'quote_hash' is null
+       or v_quote->'facts'->>'client_id' is distinct from v_client_a::text then
+      raise exception 'Identified replay quote failed: %', v_quote;
+    end if;
+    v_payload := v_payload || jsonb_build_object('quote_hash', v_quote->>'quote_hash');
+    v_first := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', v_op_token, null)::jsonb;
+    if v_first ? 'error' or v_first->>'status' is distinct from 'completed'
+       or (select client_id from public.accounting_sessions where id = (v_first->>'id')::uuid) is distinct from v_client_a then
+      raise exception 'Identified initial sale failed: %', v_first;
+    end if;
+    select request_hash into v_first_hash from public.accounting_sessions where id = (v_first->>'id')::uuid;
+    select count(*) into v_before_sales from public.accounting_sessions;
+    select count(*) into v_before_payments from public.accounting_payments;
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', v_op_token, null)::jsonb;
+    if v_result ? 'error' or (v_result->>'idempotent')::boolean is distinct from true
+       or (v_result - 'idempotent') is distinct from v_first then
+      raise exception 'Identified exact replay failed: %', v_result;
+    end if;
+
+    -- Re-authentication and re-scan change session IDs, but not the customer/operator business identity.
+    v_result := public.staff_operator_verify(v_staff_a, v_op_member, '1234')::jsonb;
+    v_retry_op := v_result->>'operator_token';
+    if v_result ? 'error' or v_retry_op is null then raise exception 'Replay operator verify failed: %', v_result; end if;
+    v_presence := public.customer_issue_presence_token(v_session)->>'token';
+    v_result := public.staff_resolve_presence_token(v_staff_a, v_presence)::jsonb;
+    v_scan := (v_result->>'scan_session_id')::uuid;
+    if v_result ? 'error' or v_scan is null then raise exception 'Replay rescan failed: %', v_result; end if;
+    v_payload := v_payload || jsonb_build_object('scan_session_id', v_scan);
+    v_quote := public.staff_pos_quote(v_staff_a, v_retry_op, v_scan, v_payload, null)::jsonb;
+    if v_quote ? 'error' or v_quote->>'quote_hash' is null then raise exception 'Replay rescan quote failed: %', v_quote; end if;
+    v_payload := v_payload || jsonb_build_object('quote_hash', v_quote->>'quote_hash', 'request_hash', 'caller-hash-is-untrusted');
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', v_retry_op, null)::jsonb;
+    if v_result ? 'error' or (v_result->>'idempotent')::boolean is distinct from true
+       or (v_result - 'idempotent') is distinct from v_first
+       or (select request_hash from public.accounting_sessions where id = (v_first->>'id')::uuid) is distinct from v_first_hash then
+      raise exception 'Identified session rotation changed replay/hash: %', v_result;
+    end if;
+
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', null, null)::jsonb;
+    if v_result->>'error' is distinct from 'operator_auth_required' then raise exception 'Replay missing operator accepted: %', v_result; end if;
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', 'invalid-operator-0123456789abcdef', null)::jsonb;
+    if v_result->>'error' is distinct from 'invalid_operator_session' then raise exception 'Replay invalid operator accepted: %', v_result; end if;
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload - 'quote_hash', 'P05担当者', v_retry_op, null)::jsonb;
+    if v_result->>'error' is distinct from 'quote_required' then raise exception 'Replay missing QTE1 accepted: %', v_result; end if;
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload || jsonb_build_object('quote_hash', repeat('a', 64)), 'P05担当者', v_retry_op, null)::jsonb;
+    if v_result->>'error' is distinct from 'quote_mismatch' then raise exception 'Replay raw quote hash accepted: %', v_result; end if;
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload || jsonb_build_object('quote_hash', 'QTE1.' || repeat('0', 64)), 'P05担当者', v_retry_op, null)::jsonb;
+    if v_result->>'error' is distinct from 'quote_mismatch' then raise exception 'Replay forged QTE1 accepted: %', v_result; end if;
+
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload || jsonb_build_object('client_id', v_client_b), 'P05担当者', v_retry_op, null)::jsonb;
+    if v_result->>'error' is distinct from 'customer_context_mismatch' then raise exception 'Replay scan A/client B accepted: %', v_result; end if;
+    select id into v_other_account from public.ginpay_accounts where client_id = v_client_b and status = 'active';
+    if v_other_account is null then raise exception 'Replay foreign account fixture missing'; end if;
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload || jsonb_build_object('payment_method', 'ginpay', 'ginpay_account_id', v_other_account), 'P05担当者', v_retry_op, null)::jsonb;
+    if v_result->>'error' is distinct from 'customer_context_mismatch' then raise exception 'Replay scan A/account B accepted: %', v_result; end if;
+    insert into public.tickets (user_id, type, title, amount, used, issued_by)
+    values (v_user_b, 'discount', 'Replay foreign customer ticket', 500, false, 'system') returning id into v_other_ticket;
+    v_result := public.staff_finalize_sale(v_staff_a, v_payload || jsonb_build_object('ticket_ids', jsonb_build_array(v_other_ticket)), 'P05担当者', v_retry_op, null)::jsonb;
+    if v_result->>'error' is distinct from 'customer_context_mismatch'
+       or v_result->>'detail' is distinct from 'ticket_not_owned_by_customer' then
+      raise exception 'Replay scan A/ticket B rejection contract mismatch: %', v_result;
+    end if;
+
+    v_changed := v_payload || jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 2)),
+      'expected_total', 10000
+    );
+    v_quote := public.staff_pos_quote(v_staff_a, v_retry_op, v_scan, v_changed, null)::jsonb;
+    if v_quote ? 'error' or v_quote->>'quote_hash' is null then raise exception 'Identified conflict quote failed: %', v_quote; end if;
+    v_changed := v_changed || jsonb_build_object('quote_hash', v_quote->>'quote_hash');
+    v_result := public.staff_finalize_sale(v_staff_a, v_changed, 'P05担当者', v_retry_op, null)::jsonb;
+    if v_result->>'error' is distinct from 'idempotency_conflict' then raise exception 'Identified changed request accepted: %', v_result; end if;
+    if (select count(*) from public.accounting_sessions) <> v_before_sales
+       or (select count(*) from public.accounting_payments) <> v_before_payments then
+      raise exception 'Identified replay/conflict created sale or payment';
+    end if;
+
+    foreach v_claim in array array[null::uuid, v_client_a] loop
+      v_case := case when v_claim is null then 'anonymous' else 'arbitrary-client' end;
+      v_payload := jsonb_build_object(
+        'stylist_id', v_stylist,
+        'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+        'payment_method', 'cash', 'expected_total', 5000, 'idempotency_key', 'p05-replay-' || v_case
+      );
+      if v_claim is not null then
+        v_payload := v_payload || jsonb_build_object('client_id', v_claim, 'customer_name', 'Untrusted name', 'user_id', v_user_a);
+      end if;
+      v_quote := public.staff_pos_quote(v_staff_a, v_retry_op, null, v_payload, null)::jsonb;
+      if v_quote ? 'error' or v_quote->>'quote_hash' is null
+         or v_quote->'facts'->>'client_id' is not null or (v_quote->>'total')::int is distinct from 5000 then
+        raise exception '% replay anonymous quote failed: %', v_case, v_quote;
+      end if;
+      v_payload := v_payload || jsonb_build_object('quote_hash', v_quote->>'quote_hash');
+      v_first := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', v_retry_op, null)::jsonb;
+      if v_first ? 'error' or v_first->>'status' is distinct from 'completed'
+         or not exists (select 1 from public.accounting_sessions where id = (v_first->>'id')::uuid
+           and client_id is null and user_id is null and customer_name = '') then
+        raise exception '% initial anonymous sale/identity failed: %', v_case, v_first;
+      end if;
+      select request_hash into v_first_hash from public.accounting_sessions where id = (v_first->>'id')::uuid;
+      select count(*) into v_before_sales from public.accounting_sessions;
+      select count(*) into v_before_payments from public.accounting_payments;
+      v_result := public.staff_finalize_sale(v_staff_a, v_payload, 'P05担当者', v_retry_op, null)::jsonb;
+      if v_result ? 'error' or (v_result->>'idempotent')::boolean is distinct from true
+         or (v_result - 'idempotent') is distinct from v_first then
+        raise exception '% exact replay failed: %', v_case, v_result;
+      end if;
+      v_changed := (v_payload - 'client_id' - 'customer_name' - 'user_id')
+        || jsonb_build_object('client_id', v_client_b, 'customer_name', 'Another untrusted name', 'user_id', v_user_b);
+      v_result := public.staff_finalize_sale(v_staff_a, v_changed, 'P05担当者', v_retry_op, null)::jsonb;
+      if v_result ? 'error' or (v_result->>'idempotent')::boolean is distinct from true
+         or (v_result - 'idempotent') is distinct from v_first then
+        raise exception '% arbitrary identity changed canonical replay: %', v_case, v_result;
+      end if;
+      v_result := public.staff_finalize_sale(v_staff_a, v_changed - 'client_id' - 'customer_name' - 'user_id', 'P05担当者', v_retry_op, null)::jsonb;
+      if v_result ? 'error' or (v_result->>'idempotent')::boolean is distinct from true
+         or (v_result - 'idempotent') is distinct from v_first then
+        raise exception '% omitted identity changed canonical replay: %', v_case, v_result;
+      end if;
+
+      for v_change in 1..3 loop
+        v_changed := case v_change
+          when 1 then v_payload || jsonb_build_object(
+            'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 2)),
+            'expected_total', 10000)
+          when 2 then v_payload || jsonb_build_object('expected_total', 4999)
+          else v_payload || jsonb_build_object('payment_method', 'card') end;
+        v_quote := public.staff_pos_quote(v_staff_a, v_retry_op, null, v_changed, null)::jsonb;
+        if v_quote ? 'error' or v_quote->>'quote_hash' is null then raise exception '% conflict quote failed: %', v_case, v_quote; end if;
+        v_changed := v_changed || jsonb_build_object('quote_hash', v_quote->>'quote_hash');
+        v_result := public.staff_finalize_sale(v_staff_a, v_changed, 'P05担当者', v_retry_op, null)::jsonb;
+        if v_result->>'error' is distinct from 'idempotency_conflict' then
+          raise exception '% changed business facts (%) accepted: %', v_case, v_change, v_result;
+        end if;
+      end loop;
+      if (select count(*) from public.accounting_sessions) <> v_before_sales
+         or (select count(*) from public.accounting_payments) <> v_before_payments
+         or (select request_hash from public.accounting_sessions where id = (v_first->>'id')::uuid) is distinct from v_first_hash then
+        raise exception '% replay/conflict mutated sales/payments/hash', v_case;
+      end if;
+      raise notice '% replay ok (canonical NULL client, same hash, exact replay, conflicts, no duplicate money)', v_case;
+    end loop;
+    select jsonb_build_object(
+      'accounts', (select coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb) from public.ginpay_accounts a),
+      'transactions', (select coalesce(jsonb_agg(to_jsonb(t) order by t.id), '[]'::jsonb) from public.ginpay_transactions t)
+    ) into v_ginpay_after;
+    if v_ginpay_after is distinct from v_ginpay_before then raise exception 'Cash replay tests mutated GINPay'; end if;
+    raise notice 'identified replay/auth/QTE1/session rotation/cross-customer guards ok';
   end;
 
   -- ── Group 7: GINPay Charge Authorization & Limits (Tests 39 - 42) ───────────
 
   -- Test 39: GINPay チャージ <= 50,000円は L1 オペレーターでパス (L2 承認不要)
   v_charge_res := public.staff_ginpay_charge_store(
-    v_staff_a, v_op_token, v_client_a, 50000, 'cash', 'P05担当者', '5万チャージ', 'p05-charge-l1'
+    v_staff_a, v_op_token, v_client_a, 50000, 'cash', 'P05担当者', '5万チャージ', 'p05-charge-l1', null, null
   )::jsonb;
   if v_charge_res ? 'error' or (v_charge_res->>'amount')::int <> 50000 then
     raise exception 'Test 39 failed: 50,000 yen charge rejected: %', v_charge_res;
@@ -628,7 +854,7 @@ begin
 
   -- Test 40: GINPay チャージ > 50,000円で承認トークンなしは approval_required (ginpay_charge)
   v_charge_res := public.staff_ginpay_charge_store(
-    v_staff_a, v_op_token, v_client_a, 50001, 'cash', 'P05担当者', '超額チャージ', 'p05-charge-l2-req'
+    v_staff_a, v_op_token, v_client_a, 50001, 'cash', 'P05担当者', '超額チャージ', 'p05-charge-l2-req', null, null
   )::jsonb;
   if v_charge_res->>'error' <> 'approval_required' or v_charge_res->>'action' <> 'ginpay_charge' then
     raise exception 'Test 40 failed: >50,000 yen charge did not require approval: %', v_charge_res;
@@ -640,7 +866,7 @@ begin
   v_app_token := v_r->>'approval_token';
 
   v_charge_res := public.staff_ginpay_charge_store(
-    v_staff_a, v_op_token, v_client_a, 50001, 'cash', 'P05担当者', '承認済み超額チャージ', 'p05-charge-l2-req', v_app_token
+    v_staff_a, v_op_token, v_client_a, 50001, 'cash', 'P05担当者', '承認済み超額チャージ', 'p05-charge-l2-req', v_app_token, null
   )::jsonb;
   if v_charge_res ? 'error' or (v_charge_res->>'amount')::int <> 50001 then
     raise exception 'Test 41 failed: approved >50,000 charge failed: %', v_charge_res;
@@ -649,14 +875,14 @@ begin
 
   -- Test 42: GINPay チャージの Idempotency: 同一キー同一内容は既存返却、内容変更は conflict
   v_r := public.staff_ginpay_charge_store(
-    v_staff_a, v_op_token, v_client_a, 50000, 'cash', 'P05担当者', '5万チャージ', 'p05-charge-l1'
+    v_staff_a, v_op_token, v_client_a, 50000, 'cash', 'P05担当者', '5万チャージ', 'p05-charge-l1', null, null
   )::jsonb;
   if v_r ? 'error' or (v_r->>'id')::uuid <> (select id from public.ginpay_transactions where idempotency_key = 'p05-charge-l1') then
     raise exception 'Test 42 failed: charge idempotency replay: %', v_r;
   end if;
 
   v_r := public.staff_ginpay_charge_store(
-    v_staff_a, v_op_token, v_client_a, 1000, 'cash', 'P05担当者', '変更チャージ', 'p05-charge-l1'
+    v_staff_a, v_op_token, v_client_a, 1000, 'cash', 'P05担当者', '変更チャージ', 'p05-charge-l1', null, null
   )::jsonb;
   if v_r->>'error' <> 'idempotency_conflict' then
     raise exception 'Test 42 failed: charge idempotency conflict: %', v_r;
@@ -665,7 +891,7 @@ begin
   -- ── Group 8: Sale Void Authorization (Tests 43 - 45) ────────────────────────
 
   -- Test 43: 会計取消 (staff_void_sale) は L2 承認トークンなしで拒否 (approval_required)
-  v_void_res := public.staff_void_sale(v_staff_a, v_op_token, v_sale_id, '誤登録', 'p05-void-1')::jsonb;
+  v_void_res := public.staff_void_sale(v_staff_a, v_op_token, v_sale_id, '誤登録', 'p05-void-1', null)::jsonb;
   if v_void_res->>'error' <> 'approval_required' or v_void_res->>'action' <> 'void' then
     raise exception 'Test 43 failed: void without approval: %', v_void_res;
   end if;
@@ -689,39 +915,151 @@ begin
   -- ── Group 9: GINPay Standalone Refund Authorization (Tests 46 - 49) ─────────
 
   -- Test 46: 単独チャージ返金 (staff_ginpay_refund) は L2 承認トークンなしで拒否 (approval_required)
-  v_refund_res := public.staff_ginpay_refund(v_staff_a, v_op_token, v_charge_id, 1000, 'P05担当者', '一部返金', 'p05-refund-1')::jsonb;
+  v_refund_res := public.staff_ginpay_refund(v_staff_a, v_op_token, v_charge_id, 1000, 'P05担当者', '一部返金', 'p05-refund-1', null)::jsonb;
   if v_refund_res->>'error' <> 'approval_required' or v_refund_res->>'action' <> 'refund' then
     raise exception 'Test 46 failed: refund without approval: %', v_refund_res;
   end if;
   v_req_hash := v_refund_res->>'request_hash';
 
   -- Test 47: 確定済み会計内の GINPay 支払いは staff_ginpay_refund でなく staff_void_sale へ誘導 (use_sale_void)
-  -- まず GINPay 払いで会計作成
-  v_quote := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
-    'client_id', v_client_a,
-    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
-  ))::jsonb;
-  if v_quote ? 'error' then raise exception 'Test 47 setup quote failed: %', v_quote; end if;
+  declare
+    v_session text := 'p05-sale-linked-refund-session-0123456789abcdef';
+    v_presence text;
+    v_scan uuid;
+    v_scan_result jsonb;
+    v_request jsonb;
+    v_sale_47 uuid;
+    v_original public.ginpay_transactions;
+    v_account_47 uuid;
+    v_ledger_before bigint;
+    v_tx_count_before bigint;
+    v_operator_47 uuid;
+    v_refundable_47 integer;
+    v_refund_facts_47 jsonb;
+    v_refund_hash_47 text;
+    v_refund_approval_47 text;
+    v_approval_result_47 jsonb;
+    v_approval_check_47 jsonb;
+    v_approval_before_47 jsonb;
+    v_money_before_47 jsonb;
+    v_money_after_47 jsonb;
+  begin
+    insert into app_private.customer_sessions (token_hash, user_id, created_via)
+    values (app_private.sha256_hex(v_session), v_user_a, 'register');
+    v_presence := public.customer_issue_presence_token(v_session)->>'token';
+    v_scan_result := public.staff_resolve_presence_token(v_staff_a, v_presence)::jsonb;
+    v_scan := (v_scan_result->>'scan_session_id')::uuid;
+    if v_scan_result ? 'error' or v_scan is null
+       or v_scan_result->>'identity_method' is distinct from 'token'
+       or (v_scan_result->'client'->>'id')::uuid is distinct from v_client_a then
+      raise exception 'Test 47 trusted scan failed: %', v_scan_result;
+    end if;
 
-  v_sale := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-    'client_id', v_client_a,
-    'stylist_id', v_stylist,
-    'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
-    'payment_method', 'ginpay',
-    'expected_total', 5000,
-    'quote_hash', v_quote->>'quote_hash',
-    'idempotency_key', 'p05-sale-gp-pay'
-  ), 'P05担当者', v_op_token)::jsonb;
-  if v_sale ? 'error' then raise exception 'Test 47 setup finalize failed: %', v_sale; end if;
-  v_payment_id := (v_sale->'ginpay'->0->>'id')::uuid;
+    select id into v_account_47 from public.ginpay_accounts where client_id = v_client_a and status = 'active';
+    if v_account_47 is null then raise exception 'Test 47 account fixture missing'; end if;
+    v_ledger_before := app_private.ginpay_posted_sum(v_account_47);
+    if (select balance_cached from public.ginpay_accounts where id = v_account_47) is distinct from v_ledger_before then
+      raise exception 'Test 47 account fixture is not reconciled';
+    end if;
+    select count(*) into v_tx_count_before from public.ginpay_transactions where account_id = v_account_47;
+    v_request := jsonb_build_object(
+      'client_id', v_client_a, 'scan_session_id', v_scan, 'stylist_id', v_stylist,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'ginpay', 'ginpay_account_id', v_account_47,
+      'expected_total', 5000, 'idempotency_key', 'p05-sale-gp-pay'
+    );
+    v_quote := public.staff_pos_quote(v_staff_a, v_op_token, v_scan, v_request, null)::jsonb;
+    if v_quote ? 'error' or v_quote->>'quote_hash' is null or v_quote->>'quote_hash' !~ '^QTE1\.[a-f0-9]{64}$'
+       or (v_quote->>'total')::int is distinct from 5000
+       or (v_quote->'facts'->>'client_id')::uuid is distinct from v_client_a then
+      raise exception 'Test 47 setup quote failed: %', v_quote;
+    end if;
+    v_sale := public.staff_finalize_sale(v_staff_a,
+      v_request || jsonb_build_object('quote_hash', v_quote->>'quote_hash'), 'P05担当者', v_op_token, null)::jsonb;
+    v_sale_47 := (v_sale->>'id')::uuid;
+    if v_sale ? 'error' or v_sale_47 is null or v_sale->>'status' is distinct from 'completed'
+       or not exists (select 1 from public.accounting_sessions where id = v_sale_47
+         and client_id = v_client_a and user_id = v_user_a and status = 'completed'
+         and payment_method = 'ginpay' and total = 5000 and quote_hash = v_quote->>'quote_hash') then
+      raise exception 'Test 47 setup finalize failed: %', v_sale;
+    end if;
+    if (select count(*) from public.accounting_payments where session_id = v_sale_47) <> 1
+       or not exists (select 1 from public.accounting_payments where session_id = v_sale_47 and method = 'ginpay' and amount = 5000) then
+      raise exception 'Test 47 finalized payment fixture invalid';
+    end if;
+    v_payment_id := (v_sale->'ginpay'->0->>'id')::uuid;
+    select * into v_original from public.ginpay_transactions where id = v_payment_id;
+    if v_original.id is null or v_original.account_id is distinct from v_account_47
+       or v_original.client_id is distinct from v_client_a or v_original.root_client_id is distinct from v_client_a
+       or v_original.accounting_session_id is distinct from v_sale_47
+       or v_original.type is distinct from 'payment' or v_original.status is distinct from 'posted'
+       or v_original.amount is distinct from -5000 then
+      raise exception 'Test 47 payment ledger linkage invalid';
+    end if;
+    if app_private.ginpay_posted_sum(v_account_47) is distinct from v_ledger_before - 5000
+       or (select balance_cached from public.ginpay_accounts where id = v_account_47) is distinct from v_ledger_before - 5000
+       or (select count(*) from public.ginpay_transactions where account_id = v_account_47) <> v_tx_count_before + 1 then
+      raise exception 'Test 47 sale changed GINPay beyond its payment';
+    end if;
 
-  v_r := public.staff_ginpay_refund(v_staff_a, v_op_token, v_payment_id, 1000, 'P05担当者', '返金試行', 'p05-refund-sale-pay')::jsonb;
-  if v_r->>'error' <> 'use_sale_void' then
-    raise exception 'Test 47 failed: sale payment refund not blocked with use_sale_void: %', v_r;
-  end if;
+    select operator_staff_id into v_operator_47 from app_private.resolve_pos_operator(v_staff_a, v_op_token);
+    select abs(v_original.amount) - abs(coalesce(sum(t.amount), 0)) into v_refundable_47
+    from public.ginpay_transactions t where t.original_transaction_id = v_original.id
+      and t.status = 'posted' and t.type in ('refund', 'void');
+    v_refund_facts_47 := jsonb_build_object(
+      'action', 'refund', 'account_id', v_original.account_id, 'client_id', v_original.client_id,
+      'target_transaction_id', v_original.id, 'refundable_amount', v_refundable_47,
+      'requested_refund_amount', 1000, 'reason', '返金試行', 'operator_staff_id', v_operator_47
+    );
+    v_refund_hash_47 := app_private.pos_auth_hash('refund', v_refund_facts_47);
+    v_approval_result_47 := public.staff_pos_approve(v_staff_a, v_op_token, v_mgr_member, '5678', 'refund', v_refund_hash_47)::jsonb;
+    v_refund_approval_47 := v_approval_result_47->>'approval_token';
+    if v_approval_result_47 ? 'error' or v_refund_approval_47 is null or v_refund_hash_47 !~ '^AUTH1\.[a-f0-9]{64}$' then
+      raise exception 'Test 47 refund approval failed: %', v_approval_result_47;
+    end if;
+    v_approval_check_47 := app_private.verify_pos_approval(v_staff_a, v_op_token, v_refund_approval_47, 'refund', v_refund_hash_47);
+    if v_approval_check_47 ? 'error' or (v_approval_check_47->>'ok')::boolean is distinct from true then
+      raise exception 'Test 47 exact refund approval verification failed: %', v_approval_check_47;
+    end if;
+    select to_jsonb(a) into v_approval_before_47 from app_private.pos_approvals a
+    where approval_hash = app_private.sha256_hex(v_refund_approval_47);
+
+    select jsonb_build_object(
+      'accounts', (select jsonb_agg(to_jsonb(a) order by a.id) from public.ginpay_accounts a),
+      'ledger', (select jsonb_agg(to_jsonb(t) order by t.id) from public.ginpay_transactions t),
+      'sale', (select to_jsonb(s) from public.accounting_sessions s where id = v_sale_47),
+      'payments', (select jsonb_agg(to_jsonb(p) order by p.id) from public.accounting_payments p),
+      'discounts', (select jsonb_agg(to_jsonb(d) order by d.id) from public.accounting_discounts d),
+      'tickets', (select jsonb_agg(to_jsonb(t) order by t.id) from public.tickets t),
+      'usage', (select jsonb_agg(to_jsonb(u) order by u.id) from public.ticket_usage_logs u),
+      'transfers', (select jsonb_agg(to_jsonb(t) order by t.id) from public.ticket_transfers t)
+    ) into v_money_before_47;
+    v_r := public.staff_ginpay_refund(v_staff_a, v_op_token, v_payment_id, 1000, 'P05担当者', '返金試行', 'p05-refund-sale-pay', v_refund_approval_47)::jsonb;
+    if v_r->>'error' is distinct from 'use_sale_void' then
+      raise exception 'Test 47 failed: sale payment refund not blocked with use_sale_void: %', v_r;
+    end if;
+    select jsonb_build_object(
+      'accounts', (select jsonb_agg(to_jsonb(a) order by a.id) from public.ginpay_accounts a),
+      'ledger', (select jsonb_agg(to_jsonb(t) order by t.id) from public.ginpay_transactions t),
+      'sale', (select to_jsonb(s) from public.accounting_sessions s where id = v_sale_47),
+      'payments', (select jsonb_agg(to_jsonb(p) order by p.id) from public.accounting_payments p),
+      'discounts', (select jsonb_agg(to_jsonb(d) order by d.id) from public.accounting_discounts d),
+      'tickets', (select jsonb_agg(to_jsonb(t) order by t.id) from public.tickets t),
+      'usage', (select jsonb_agg(to_jsonb(u) order by u.id) from public.ticket_usage_logs u),
+      'transfers', (select jsonb_agg(to_jsonb(t) order by t.id) from public.ticket_transfers t)
+    ) into v_money_after_47;
+    if v_money_after_47 is distinct from v_money_before_47 then
+      raise exception 'Test 47 rejected standalone refund mutated money or entitlements';
+    end if;
+    if not exists (select 1 from app_private.pos_approvals where approval_hash = app_private.sha256_hex(v_refund_approval_47) and consumed_at is null)
+       or (select to_jsonb(a) from app_private.pos_approvals a where approval_hash = app_private.sha256_hex(v_refund_approval_47)) is distinct from v_approval_before_47 then
+      raise exception 'Test 47 rejected refund left approval consumption';
+    end if;
+    raise notice 'Test 47 ok (trusted GINPay sale, verified L2 refund, use_sale_void, no money/rights/approval mutation)';
+  end;
 
   -- Test 48: 返金可能額 (refundable_amount) を超える金額の返金要求は拒否 (amount_exceeds_refundable)
-  v_r := public.staff_ginpay_refund(v_staff_a, v_op_token, v_charge_id, 999999, 'P05担当者', '超過返金', 'p05-refund-over')::jsonb;
+  v_r := public.staff_ginpay_refund(v_staff_a, v_op_token, v_charge_id, 999999, 'P05担当者', '超過返金', 'p05-refund-over', null)::jsonb;
   if v_r->>'error' <> 'amount_exceeds_refundable' then
     raise exception 'Test 48 failed: over refund not rejected: %', v_r;
   end if;
@@ -739,7 +1077,7 @@ begin
 
   -- Test 50: 店舗チケット発行 (staff_issue_tickets) は L2 承認なしで拒否 (approval_required)
   v_ticket_res := public.staff_issue_tickets(
-    v_staff_a, v_op_token, 'P05顧客A', v_user_a, 'discount', 500, 2, 'P05担当者', 'p05-ticket-1'
+    v_staff_a, v_op_token, 'P05顧客A', v_user_a, 'discount', 500, 2, 'P05担当者', 'p05-ticket-1', null
   )::jsonb;
   if v_ticket_res->>'error' <> 'approval_required' or v_ticket_res->>'action' <> 'ticket_issue' then
     raise exception 'Test 50 failed: ticket issue without approval: %', v_ticket_res;
@@ -763,14 +1101,14 @@ begin
 
   -- Test 52: チケット発行の Idempotency: 同一キーは既存を返却、異なる内容は conflict
   v_r := public.staff_issue_tickets(
-    v_staff_a, v_op_token, 'P05顧客A', v_user_a, 'discount', 500, 2, 'P05担当者', 'p05-ticket-1'
+    v_staff_a, v_op_token, 'P05顧客A', v_user_a, 'discount', 500, 2, 'P05担当者', 'p05-ticket-1', null
   )::jsonb;
   if v_r ? 'error' or not coalesce((v_r->>'idempotent')::boolean, false) then
     raise exception 'Test 52 failed: ticket issue idempotency replay: %', v_r;
   end if;
 
   v_r := public.staff_issue_tickets(
-    v_staff_a, v_op_token, 'P05顧客A', v_user_a, 'discount', 1000, 2, 'P05担当者', 'p05-ticket-1'
+    v_staff_a, v_op_token, 'P05顧客A', v_user_a, 'discount', 1000, 2, 'P05担当者', 'p05-ticket-1', null
   )::jsonb;
   if v_r->>'error' <> 'idempotency_conflict' then
     raise exception 'Test 52 failed: ticket issue conflict not detected: %', v_r;
@@ -778,16 +1116,25 @@ begin
 
   -- ── Group 11: Fail-Closed Safeguards (Tests 53 - 54) ────────────────────────
 
-  -- Test 53: staff_ginpay_adjustment は POS/Staff からは完全禁止 (hq_only)
-  v_r := public.staff_ginpay_adjustment(v_staff_a, v_client_a, 500, 'P05担当者', '調整テスト', 'p05-adj-block')::jsonb;
-  if v_r->>'error' <> 'hq_only' then
-    raise exception 'Test 53 failed: staff adjustment was not blocked with hq_only: %', v_r;
+  -- Test 53: staff_ginpay_adjustment は POS/Staff からは完全廃止 (pg_proc に存在せず 42883)
+  if exists (select 1 from pg_proc where proname = 'staff_ginpay_adjustment') then
+    raise exception 'Test 53 failed: staff_ginpay_adjustment still exists in pg_proc';
   end if;
+  begin
+    execute 'select public.staff_ginpay_adjustment($1, $2, $3, $4, $5, $6)'
+    using v_staff_a, v_client_a, 500, 'P05担当者', '調整テスト', 'p05-adj-block';
+    raise exception 'Test 53 failed: staff_ginpay_adjustment unexpectedly succeeded';
+  exception
+    when sqlstate '42883' then
+      null;
+    when others then
+      raise exception 'Test 53 failed: unexpected sqlstate % (%): %', sqlstate, sqlerrm, 'staff_ginpay_adjustment';
+  end;
 
   -- Test 54: 存在しない顧客へのチケット発行は例外でフェイルクローズ
   begin
     perform public.staff_issue_tickets(
-      v_staff_a, v_op_token, '不明', 'non-existent-user-id', 'discount', 500, 1, 'P05担当者', 'p05-ticket-fail'
+      v_staff_a, v_op_token, '不明', 'non-existent-user-id', 'discount', 500, 1, 'P05担当者', 'p05-ticket-fail', null
     );
     raise exception 'Test 54 failed: non-existent customer ticket issue succeeded';
   exception when others then
@@ -890,10 +1237,51 @@ begin
   end if;
 
   -- Test 60: 完了 (completed) 以外の会計の取消試行 → invalid_status
-  v_r := public.staff_void_sale(v_staff_a, v_op_token, v_sale_id, '再取消', 'p05-void-repeat')::jsonb;
-  if v_r->>'error' not in ('invalid_status', 'idempotency_conflict') then
-    raise exception 'Test 60 failed: void on voided sale not rejected with invalid_status: %', v_r;
-  end if;
+  declare
+    v_operator_60 uuid;
+    v_before_60 jsonb;
+    v_after_60 jsonb;
+  begin
+    select operator_staff_id into v_operator_60 from app_private.resolve_pos_operator(v_staff_a, v_op_token);
+    if v_operator_60 is distinct from v_op_member
+       or not exists (select 1 from public.accounting_sessions where id = v_sale_id and status = 'voided')
+       or exists (select 1 from public.accounting_sessions where void_idempotency_key = 'p05-void-repeat') then
+      raise exception 'Test 60 setup requires valid operator, voided sale and a new void key';
+    end if;
+    select jsonb_build_object(
+      'sale', (select to_jsonb(s) from public.accounting_sessions s where id = v_sale_id),
+      'accounts', (select jsonb_agg(to_jsonb(a) || jsonb_build_object('ledger_balance', app_private.ginpay_posted_sum(a.id)) order by a.id) from public.ginpay_accounts a),
+      'ledger', (select jsonb_agg(to_jsonb(t) order by t.id) from public.ginpay_transactions t),
+      'events', (select jsonb_agg(to_jsonb(e) order by e.id) from public.accounting_events e),
+      'payments', (select jsonb_agg(to_jsonb(p) order by p.id) from public.accounting_payments p),
+      'discounts', (select jsonb_agg(to_jsonb(d) order by d.id) from public.accounting_discounts d),
+      'tickets', (select jsonb_agg(to_jsonb(t) order by t.id) from public.tickets t),
+      'usage', (select jsonb_agg(to_jsonb(u) order by u.id) from public.ticket_usage_logs u),
+      'approvals', (select jsonb_agg(to_jsonb(a) order by a.approval_hash) from app_private.pos_approvals a)
+    ) into v_before_60;
+
+    -- Status validation precedes L2 consumption in the canonical RPC.
+    v_r := public.staff_void_sale(v_staff_a, v_op_token, v_sale_id, '再取消', 'p05-void-repeat', null)::jsonb;
+    if v_r->>'error' is distinct from 'invalid_status' then
+      raise exception 'Test 60 failed: void on voided sale not rejected with invalid_status: %', v_r;
+    end if;
+    select jsonb_build_object(
+      'sale', (select to_jsonb(s) from public.accounting_sessions s where id = v_sale_id),
+      'accounts', (select jsonb_agg(to_jsonb(a) || jsonb_build_object('ledger_balance', app_private.ginpay_posted_sum(a.id)) order by a.id) from public.ginpay_accounts a),
+      'ledger', (select jsonb_agg(to_jsonb(t) order by t.id) from public.ginpay_transactions t),
+      'events', (select jsonb_agg(to_jsonb(e) order by e.id) from public.accounting_events e),
+      'payments', (select jsonb_agg(to_jsonb(p) order by p.id) from public.accounting_payments p),
+      'discounts', (select jsonb_agg(to_jsonb(d) order by d.id) from public.accounting_discounts d),
+      'tickets', (select jsonb_agg(to_jsonb(t) order by t.id) from public.tickets t),
+      'usage', (select jsonb_agg(to_jsonb(u) order by u.id) from public.ticket_usage_logs u),
+      'approvals', (select jsonb_agg(to_jsonb(a) order by a.approval_hash) from app_private.pos_approvals a)
+    ) into v_after_60;
+    if v_after_60 is distinct from v_before_60
+       or v_after_60->'sale'->>'status' is distinct from 'voided' then
+      raise exception 'Test 60 failed: rejected repeat void mutated sale/money/events/rights/approvals';
+    end if;
+    raise notice 'Test 60 ok (canonical 6 args, invalid_status, no duplicate reversal/event/restore/approval mutation)';
+  end;
 
   -- Test 61: 正規ハッシュ形式 AUTH1.<64hex> の厳格なバリデーション
   if app_private.pos_auth_hash('test', '{"k":"v"}'::jsonb) !~ '^AUTH1\.[a-f0-9]{64}$' then
@@ -923,6 +1311,10 @@ begin
     v_ticket_fam uuid;
     v_ticket_unrelated uuid;
     v_ticket_unknown uuid;
+    v_scan_a uuid;
+    v_pres_res jsonb;
+    v_pres_tok text;
+    v_s_res jsonb;
   begin
     -- 家族顧客を作成して v_client_a へ統合
     insert into public.customers (user_id, name, phone_last4, recovery_code, normalized_name)
@@ -930,6 +1322,25 @@ begin
     returning id into v_cust_fam;
     v_client_fam := app_private.member_client(v_cust_fam);
     perform app_private.merge_clients(v_client_a, v_client_fam, 'staff', 'Tester');
+
+    -- 本人顧客 A の trusted scan session を取得 (P0-2 正式フロー & 明示的検証)
+    insert into app_private.customer_sessions (token_hash, user_id, created_via)
+    values (app_private.sha256_hex('p05-cust-sess-grp15-0123456789abcdef'), v_user_a, 'register');
+
+    v_pres_res := public.customer_issue_presence_token('p05-cust-sess-grp15-0123456789abcdef')::jsonb;
+    if v_pres_res ? 'error' or v_pres_res->>'token' is null then
+      raise exception 'Group 15 setup failed: customer_issue_presence_token failed: %', v_pres_res;
+    end if;
+    v_pres_tok := v_pres_res->>'token';
+
+    v_s_res := public.staff_resolve_presence_token(v_staff_a, v_pres_tok)::jsonb;
+    if v_s_res ? 'error' or v_s_res->>'scan_session_id' is null then
+      raise exception 'Group 15 setup failed: staff_resolve_presence_token failed: %', v_s_res;
+    end if;
+    v_scan_a := (v_s_res->>'scan_session_id')::uuid;
+    if v_scan_a is null then
+      raise exception 'Group 15 setup failed: scan_session_id is not a valid UUID: %', v_s_res;
+    end if;
 
     -- チケット作成
     insert into public.tickets (user_id, type, title, amount, used, issued_by)
@@ -945,8 +1356,8 @@ begin
     values ('unknown-non-existent-user-id', 'discount', '不明者券', 500, false, 'Tester') returning id into v_ticket_unknown;
 
     -- Test 63: unknown ticket user_id → reject (customer_context_mismatch)
-    v_r := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
-      'client_id', v_client_a,
+    v_r := public.staff_pos_quote(v_staff_a, v_op_token, v_scan_a, jsonb_build_object(
+      'scan_session_id', v_scan_a,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
       'ticket_ids', jsonb_build_array(v_ticket_unknown)
     ))::jsonb;
@@ -955,8 +1366,8 @@ begin
     end if;
 
     -- Test 64: unrelated customer ticket → reject (customer_context_mismatch)
-    v_r := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
-      'client_id', v_client_a,
+    v_r := public.staff_pos_quote(v_staff_a, v_op_token, v_scan_a, jsonb_build_object(
+      'scan_session_id', v_scan_a,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
       'ticket_ids', jsonb_build_array(v_ticket_unrelated)
     ))::jsonb;
@@ -965,23 +1376,29 @@ begin
     end if;
 
     -- Test 65: 本人 ticket → success
-    v_r := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
-      'client_id', v_client_a,
+    v_r := public.staff_pos_quote(v_staff_a, v_op_token, v_scan_a, jsonb_build_object(
+      'scan_session_id', v_scan_a,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
       'ticket_ids', jsonb_build_array(v_ticket_own)
     ))::jsonb;
-    if v_r ? 'error' or (v_r->>'total')::int <> 4500 then
+    if v_r ? 'error' or (v_r->>'total') is null or (v_r->>'total')::int <> 4500 then
       raise exception 'Test 65 failed: own ticket quote failed: %', v_r;
+    end if;
+    if v_r->>'quote_hash' is null or v_r->>'quote_hash' !~ '^QTE1\.[a-f0-9]{64}$' then
+      raise exception 'Test 65 failed: valid QTE1 quote_hash not generated: %', v_r;
     end if;
 
     -- Test 66: 正式 family ticket → success
-    v_r := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
-      'client_id', v_client_a,
+    v_r := public.staff_pos_quote(v_staff_a, v_op_token, v_scan_a, jsonb_build_object(
+      'scan_session_id', v_scan_a,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
       'ticket_ids', jsonb_build_array(v_ticket_fam)
     ))::jsonb;
-    if v_r ? 'error' or (v_r->>'total')::int <> 4500 then
+    if v_r ? 'error' or (v_r->>'total') is null or (v_r->>'total')::int <> 4500 then
       raise exception 'Test 66 failed: family ticket quote failed: %', v_r;
+    end if;
+    if v_r->>'quote_hash' is null or v_r->>'quote_hash' !~ '^QTE1\.[a-f0-9]{64}$' then
+      raise exception 'Test 66 failed: valid QTE1 quote_hash not generated for family: %', v_r;
     end if;
 
     -- Test 66b: A scan + B customer/GINPay → customer_context_mismatch
@@ -1012,7 +1429,7 @@ begin
         'expected_total', 5000,
         'quote_hash', v_q_res->>'quote_hash',
         'idempotency_key', 'p05-test-cross-ginpay-1'
-      ), 'P05担当者', v_op_token)::jsonb;
+      ), 'P05担当者', v_op_token, null)::jsonb;
 
       if v_r->>'error' <> 'customer_context_mismatch' then
         raise exception 'Test 66b failed: A scan + B GINPay not rejected with customer_context_mismatch: %', v_r;
@@ -1044,7 +1461,7 @@ begin
       'expected_total', 5000,
       'quote_hash', v_quote->>'quote_hash',
       'idempotency_key', 'p05-sale-atomicity-test'
-    ), 'P05担当者', v_op_token)::jsonb;
+    ), 'P05担当者', v_op_token, null)::jsonb;
     if v_sale ? 'error' then raise exception 'Test 67 setup finalize failed: %', v_sale; end if;
     v_sale_fail_id := (v_sale->>'id')::uuid;
 
@@ -1056,7 +1473,6 @@ begin
       'sale_id', v_sale_fail_id,
       'original_total', v_sale_before.total,
       'original_payment_method', v_sale_before.payment_method,
-      'current_sale_status', v_sale_before.status,
       'reason', repeat('A', 250),
       'operator_staff_id', v_op_member
     );
@@ -1117,6 +1533,9 @@ begin
     v_client_low uuid;
     v_user_low text := 'p05-user-low-balance';
     v_quote_low jsonb;
+    v_pres_low text;
+    v_s_low jsonb;
+    v_scan_low uuid;
   begin
     -- テスト用顧客作成 (残高 1,000円)
     insert into public.customers (user_id, name, phone_last4, recovery_code, normalized_name)
@@ -1124,28 +1543,35 @@ begin
     returning id into v_cust_low;
     v_client_low := app_private.member_client(v_cust_low);
 
+    -- 顧客セッション & QR scan session 作成 (trusted customer context)
+    insert into app_private.customer_sessions (token_hash, user_id, created_via)
+    values (app_private.sha256_hex('p05-cust-sess-low-0123456789abcdef'), v_user_low, 'register');
+
+    v_pres_low := (public.customer_issue_presence_token('p05-cust-sess-low-0123456789abcdef')->>'token');
+    v_s_low := public.staff_resolve_presence_token(v_staff_a, v_pres_low)::jsonb;
+    v_scan_low := (v_s_low->>'scan_session_id')::uuid;
+
     -- 1,000円チャージ (残高 1,000円 < 通常メニュー 5,000円)
     perform public.staff_ginpay_charge_store(
-      v_staff_a, v_op_token, v_client_low, 1000, 'cash', 'P05担当者', '初期チャージ', 'p05-charge-low-init'
+      v_staff_a, v_op_token, v_client_low, 1000, 'cash', 'P05担当者', '初期チャージ', 'p05-charge-low-init', null, null
     );
 
-    -- 正規の1品・quantity=1 (5,000円) を quote
-    v_quote_low := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
-      'client_id', v_client_low,
+    -- 正規の1品・quantity=1 (5,000円) を quote (trusted scan session 付き)
+    v_quote_low := public.staff_pos_quote(v_staff_a, v_op_token, v_scan_low, jsonb_build_object(
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
     ))::jsonb;
     if v_quote_low ? 'error' then raise exception 'Test 68 quote failed: %', v_quote_low; end if;
 
-    -- Test 68: L1通常会計 + GINPay残高不足 → exception ではなく {"error":"insufficient_balance", ...} を返し、部分書き込みなし
+    -- Test 68: L1通常会計 + GINPay残高不足 → exception ではなく {"error":"insufficient_balance"} を返し、部分書き込みなし
     v_l1_err := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
-      'client_id', v_client_low,
+      'scan_session_id', v_scan_low,
       'stylist_id', v_stylist,
       'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
       'payment_method', 'ginpay',
       'expected_total', 5000,
       'quote_hash', v_quote_low->>'quote_hash',
       'idempotency_key', v_l1_key
-    ), 'P05担当者', v_op_token)::jsonb;
+    ), 'P05担当者', v_op_token, null)::jsonb;
 
     if v_l1_err->>'error' <> 'insufficient_balance' then
       raise exception 'Test 68 failed: L1 insufficient balance did not return error JSON: %', v_l1_err;
@@ -1161,8 +1587,366 @@ begin
     end if;
   end;
 
+  -- ── Group 18: P0-5 Remediation Verification (Tests 70 - 80) ──────────────────
+  declare
+    v_rem_r jsonb;
+    v_rem_quote jsonb;
+    v_rem_sale jsonb;
+    v_rem_sale_id uuid;
+    v_rem_sale_rec public.accounting_sessions;
+    v_rem_facts jsonb;
+    v_rem_req_hash text;
+    v_rem_app_token text;
+    v_bal_before integer;
+    v_bal_after integer;
+    v_sales_before integer;
+    v_sales_after integer;
+    v_tickets_before integer;
+    v_tickets_after integer;
+    v_expired_op_token text := 'p05-op-expired-0123456789abcdef';
+  begin
+    -- The removed five-argument void shape must fail at function resolution, not business validation.
+    declare
+      v_legacy_sale_before jsonb;
+    begin
+      select to_jsonb(s) into v_legacy_sale_before from public.accounting_sessions s where id = v_sale_id;
+      begin
+        execute 'select public.staff_void_sale($1, $2, $3, $4, $5)'
+        using v_staff_a, v_op_token, v_sale_id, '再取消', 'p05-void-repeat';
+        raise exception 'Group 18 failed: legacy staff_void_sale 5-arg shape succeeded';
+      exception when sqlstate '42883' then
+        null;
+      end;
+      if (select to_jsonb(s) from public.accounting_sessions s where id = v_sale_id) is distinct from v_legacy_sale_before then
+        raise exception 'Group 18 failed: legacy void call mutated sale';
+      end if;
+      raise notice 'Group 18 legacy staff_void_sale 5-arg shape rejected with 42883';
+    end;
+
+    -- セットアップ: 失効済みオペレーターセッション (NOT NULL 列・CHECK 制約充足)
+    insert into app_private.pos_operator_sessions (
+      token_hash, staff_session_hash, staff_member_id, role, created_at, expires_at, revoked_at
+    ) values (
+      app_private.sha256_hex(v_expired_op_token),
+      v_staff_a_hash,
+      v_op_member,
+      'staff',
+      now() - interval '2 hours',
+      now() - interval '1 hour',
+      now() - interval '1 hour'
+    );
+
+    -- Test 70: staff_ginpay_void は pg_proc に存在せず、旧 5引数 call も 42883 で失敗し、残高不変
+    if exists (select 1 from pg_proc where proname = 'staff_ginpay_void') then
+      raise exception 'Test 70 failed: staff_ginpay_void still exists in pg_proc';
+    end if;
+
+    select balance_cached into v_bal_before from public.ginpay_accounts where id = v_account_a;
+    begin
+      execute 'select public.staff_ginpay_void($1, $2, $3, $4, $5)'
+      using v_staff_a, v_client_a, 'void', '理由', 'p05-legacy-void-call';
+      raise exception 'Test 70 failed: legacy staff_ginpay_void unexpectedly succeeded';
+    exception
+      when sqlstate '42883' then
+        null;
+      when others then
+        raise exception 'Test 70 failed: unexpected sqlstate % (%): %', sqlstate, sqlerrm, 'staff_ginpay_void';
+    end;
+    select balance_cached into v_bal_after from public.ginpay_accounts where id = v_account_a;
+    if v_bal_before is distinct from v_bal_after then
+      raise exception 'Test 70 failed: ginpay balance altered on legacy void call';
+    end if;
+
+    -- Test 71: staff_ginpay_charge_store 旧 8引数 overload は pg_proc に存在せず、旧 call shape も 42883 で失敗し残高不変
+    if exists (select 1 from pg_proc where proname = 'staff_ginpay_charge_store' and pronargs = 8) then
+      raise exception 'Test 71 failed: staff_ginpay_charge_store 8-arg overload still exists in pg_proc';
+    end if;
+
+    select balance_cached into v_bal_before from public.ginpay_accounts where id = v_account_a;
+    begin
+      execute 'select public.staff_ginpay_charge_store($1, $2, $3, $4, $5, $6, $7, $8)'
+      using v_staff_a, v_client_a, 1000, 'cash', 'P05担当者', 'メモ', 'p05-legacy-charge-call', v_account_a;
+      raise exception 'Test 71 failed: legacy staff_ginpay_charge_store 8-arg unexpectedly succeeded';
+    exception
+      when sqlstate '42883' then
+        null;
+      when others then
+        raise exception 'Test 71 failed: unexpected sqlstate % (%): %', sqlstate, sqlerrm, 'staff_ginpay_charge_store';
+    end;
+    select balance_cached into v_bal_after from public.ginpay_accounts where id = v_account_a;
+    if v_bal_before is distinct from v_bal_after then
+      raise exception 'Test 71 failed: ginpay balance altered on legacy charge call';
+    end if;
+
+    -- Test 72: staff_finalize_sale 旧 3引数 overload は存在せず、旧 call shape は 42883 で失敗し、会計レコード増加なし
+    if exists (select 1 from pg_proc where proname = 'staff_finalize_sale' and pronargs = 3) then
+      raise exception 'Test 72 failed: staff_finalize_sale 3-arg overload still exists in pg_proc';
+    end if;
+
+    select count(*) into v_sales_before from public.accounting_sessions;
+    begin
+      execute 'select public.staff_finalize_sale($1, $2, $3)'
+      using v_staff_a, jsonb_build_object('payment_method', 'cash'), 'P05担当者';
+      raise exception 'Test 72 failed: legacy staff_finalize_sale 3-arg unexpectedly succeeded';
+    exception
+      when sqlstate '42883' then
+        null;
+      when others then
+        raise exception 'Test 72 failed: unexpected sqlstate % (%): %', sqlstate, sqlerrm, 'staff_finalize_sale 3-arg';
+    end;
+    select count(*) into v_sales_after from public.accounting_sessions;
+    if v_sales_before <> v_sales_after then
+      raise exception 'Test 72 failed: accounting_session written on legacy finalize call';
+    end if;
+
+    -- Test 72b: staff_finalize_sale 旧 4引数 call shape は 42883 で失敗し (DEFAULT NULL なし)、会計レコード増加なし
+    if exists (
+      select 1 from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'staff_finalize_sale' and p.pronargs = 4
+    ) then
+      raise exception 'Test 72b failed: public.staff_finalize_sale 4-arg overload exists in pg_proc';
+    end if;
+
+    if (
+      select coalesce(p.pronargdefaults, 0)
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'staff_finalize_sale' and p.pronargs = 5
+    ) <> 0 then
+      raise exception 'Test 72b failed: public.staff_finalize_sale must have 0 default arguments';
+    end if;
+
+    select count(*) into v_sales_before from public.accounting_sessions;
+    begin
+      execute 'select public.staff_finalize_sale($1, $2, $3, $4)'
+      using v_staff_a, jsonb_build_object('payment_method', 'cash'), 'P05担当者', v_op_token;
+      raise exception 'Test 72b failed: legacy staff_finalize_sale 4-arg unexpectedly succeeded';
+    exception
+      when sqlstate '42883' then
+        null;
+      when others then
+        raise exception 'Test 72b failed: unexpected sqlstate % (%): %', sqlstate, sqlerrm, 'staff_finalize_sale 4-arg';
+    end;
+    select count(*) into v_sales_after from public.accounting_sessions;
+    if v_sales_before <> v_sales_after then
+      raise exception 'Test 72b failed: accounting_session written on legacy finalize 4-arg call';
+    end if;
+
+    -- Test 73: Anonymous walk-in (現金) の正常完了 & 必須前提条件の検証
+    -- 73a: operator なし → operator_auth_required
+    v_rem_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'cash',
+      'expected_total', 5000,
+      'quote_hash', 'QTE1.' || repeat('0', 64),
+      'idempotency_key', 'p05-walkin-no-op'
+    ), 'P05担当者', '', null)::jsonb;
+    if v_rem_r->>'error' <> 'operator_auth_required' then
+      raise exception 'Test 73a failed: missing operator was not rejected with operator_auth_required: %', v_rem_r;
+    end if;
+
+    -- 73b: quote なし → quote_required
+    v_rem_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'cash',
+      'expected_total', 5000,
+      'idempotency_key', 'p05-walkin-no-qte'
+    ), 'P05担当者', v_op_token, null)::jsonb;
+    if v_rem_r->>'error' <> 'quote_required' then
+      raise exception 'Test 73b failed: missing quote was not rejected with quote_required: %', v_rem_r;
+    end if;
+
+    -- 73c: valid server quote (client = null, anonymous)
+    v_rem_quote := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
+    ))::jsonb;
+    if v_rem_quote ? 'error' then raise exception 'Test 73c quote failed: %', v_rem_quote; end if;
+
+    -- 73d: quote_hash mismatch → quote_mismatch
+    v_rem_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'cash',
+      'expected_total', 5000,
+      'quote_hash', 'QTE1.' || repeat('f', 64),
+      'idempotency_key', 'p05-walkin-mismatch-qte'
+    ), 'P05担当者', v_op_token, null)::jsonb;
+    if v_rem_r->>'error' <> 'quote_mismatch' then
+      raise exception 'Test 73d failed: quote mismatch was not rejected: %', v_rem_r;
+    end if;
+
+    -- 73e: valid anonymous cash sale 正常完了 (accounting_sessions.client_id = NULL)
+    v_rem_sale := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'stylist_id', v_stylist,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'cash',
+      'expected_total', 5000,
+      'quote_hash', v_rem_quote->>'quote_hash',
+      'idempotency_key', 'p05-walkin-cash-success'
+    ), 'P05担当者', v_op_token, null)::jsonb;
+    if v_rem_sale ? 'error' or (v_rem_sale->>'status') <> 'completed' then
+      raise exception 'Test 73e failed: valid anonymous cash sale failed: %', v_rem_sale;
+    end if;
+    select * into v_rem_sale_rec from public.accounting_sessions where id = (v_rem_sale->>'id')::uuid;
+    if v_rem_sale_rec.client_id is not null then
+      raise exception 'Test 73e failed: anonymous sale stored non-null client_id: %', v_rem_sale_rec.client_id;
+    end if;
+
+    -- Test 74: Anonymous walk-in における GINPay / チケットの厳格拒否
+    -- 74a: GINPay → ginpay_requires_client
+    v_rem_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'stylist_id', v_stylist,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'ginpay',
+      'expected_total', 5000,
+      'quote_hash', v_rem_quote->>'quote_hash',
+      'idempotency_key', 'p05-walkin-ginpay-fail'
+    ), 'P05担当者', v_op_token, null)::jsonb;
+    if v_rem_r->>'error' <> 'ginpay_requires_client' then
+      raise exception 'Test 74a failed: anonymous GINPay not rejected with ginpay_requires_client: %', v_rem_r;
+    end if;
+
+    -- 74b: Ticket 利用 → customer_context_mismatch
+    v_rem_r := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'ticket_ids', jsonb_build_array(gen_random_uuid())
+    ))::jsonb;
+    if v_rem_r->>'error' <> 'customer_context_mismatch' then
+      raise exception 'Test 74b failed: anonymous ticket quote not rejected with customer_context_mismatch: %', v_rem_r;
+    end if;
+
+    -- Test 75: 任意 client_id 指定のフェイルクローズ & 顧客権利遮断
+    -- scan/reservation なしでクライアントが任意に client_id = v_client_a を送出
+    v_rem_quote := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
+      'client_id', v_client_a,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
+    ))::jsonb;
+    if v_rem_quote ? 'error' then raise exception 'Test 75 quote setup failed: %', v_rem_quote; end if;
+    if v_rem_quote->'facts'->>'client_id' is not null then
+      raise exception 'Test 75 failed: arbitrary client_id was accepted into quote facts: %', v_rem_quote;
+    end if;
+
+    -- 75a: 任意 client_id による GINPay は ginpay_requires_client で遮断
+    v_rem_r := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'client_id', v_client_a,
+      'stylist_id', v_stylist,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'ginpay',
+      'expected_total', 5000,
+      'quote_hash', v_rem_quote->>'quote_hash',
+      'idempotency_key', 'p05-arbitrary-client-ginpay'
+    ), 'P05担当者', v_op_token, null)::jsonb;
+    if v_rem_r->>'error' <> 'ginpay_requires_client' then
+      raise exception 'Test 75a failed: arbitrary client GINPay was not blocked: %', v_rem_r;
+    end if;
+
+    -- 75b: 現金会計しても accounting_sessions.client_id は NULL (権利付与されない)
+    v_rem_sale := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'client_id', v_client_a,
+      'stylist_id', v_stylist,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'cash',
+      'expected_total', 5000,
+      'quote_hash', v_rem_quote->>'quote_hash',
+      'idempotency_key', 'p05-arbitrary-client-cash'
+    ), 'P05担当者', v_op_token, null)::jsonb;
+    if v_rem_sale ? 'error' then raise exception 'Test 75b finalize failed: %', v_rem_sale; end if;
+    select * into v_rem_sale_rec from public.accounting_sessions where id = (v_rem_sale->>'id')::uuid;
+    if v_rem_sale_rec.client_id is not null then
+      raise exception 'Test 75b failed: client_id was persisted from arbitrary client input: %', v_rem_sale_rec.client_id;
+    end if;
+
+    -- Test 76 - 78: staff_void_sale Replay, Idempotency & Conflict 厳格検証
+    -- 取消テスト用会計を作成
+    v_rem_quote := public.staff_pos_quote(v_staff_a, v_op_token, null, jsonb_build_object(
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1))
+    ))::jsonb;
+    v_rem_sale := public.staff_finalize_sale(v_staff_a, jsonb_build_object(
+      'stylist_id', v_stylist,
+      'items', jsonb_build_array(jsonb_build_object('source', 'service_menu', 'ref_id', v_service_code, 'quantity', 1)),
+      'payment_method', 'cash',
+      'expected_total', 5000,
+      'quote_hash', v_rem_quote->>'quote_hash',
+      'idempotency_key', 'p05-void-replay-sale'
+    ), 'P05担当者', v_op_token, null)::jsonb;
+    v_rem_sale_id := (v_rem_sale->>'id')::uuid;
+
+    -- L2 承認を取得して取消実行
+    select * into v_rem_sale_rec from public.accounting_sessions where id = v_rem_sale_id;
+    v_rem_facts := jsonb_build_object(
+      'action', 'void',
+      'sale_id', v_rem_sale_id,
+      'original_total', v_rem_sale_rec.total,
+      'original_payment_method', v_rem_sale_rec.payment_method,
+      'reason', '正常取消',
+      'operator_staff_id', v_op_member
+    );
+    v_rem_req_hash := app_private.pos_auth_hash('void', v_rem_facts);
+    v_rem_r := public.staff_pos_approve(v_staff_a, v_op_token, v_mgr_member, '5678', 'void', v_rem_req_hash)::jsonb;
+    v_rem_app_token := v_rem_r->>'approval_token';
+
+    v_rem_r := public.staff_void_sale(v_staff_a, v_op_token, v_rem_sale_id, '正常取消', 'p05-void-key-replay-test', v_rem_app_token)::jsonb;
+    if v_rem_r ? 'error' or v_rem_r->>'status' <> 'voided' then
+      raise exception 'Test 76 setup void failed: %', v_rem_r;
+    end if;
+
+    -- Test 76: Replay 時に無効/失効オペレーターを指定した場合、Replay を返さず operator_session_invalid で拒否
+    v_rem_r := public.staff_void_sale(v_staff_a, v_expired_op_token, v_rem_sale_id, '正常取消', 'p05-void-key-replay-test', null)::jsonb;
+    if v_rem_r->>'error' <> 'operator_session_invalid' then
+      raise exception 'Test 76 failed: replay with expired operator was not rejected: %', v_rem_r;
+    end if;
+
+    -- Test 77: 同一会計・同一リクエストの Exact Replay は fresh approval 不要で既存結果 (idempotent: true) を返却
+    v_rem_r := public.staff_void_sale(v_staff_a, v_op_token, v_rem_sale_id, '正常取消', 'p05-void-key-replay-test', null)::jsonb;
+    if v_rem_r ? 'error' or not coalesce((v_rem_r->>'idempotent')::boolean, false) or (v_rem_r->>'id')::uuid <> v_rem_sale_id then
+      raise exception 'Test 77 failed: exact void replay failed: %', v_rem_r;
+    end if;
+
+    -- Test 78: Idempotency Conflict 検証
+    -- 78a: 同一会計 + 異なる理由 (reason) → idempotency_conflict
+    v_rem_r := public.staff_void_sale(v_staff_a, v_op_token, v_rem_sale_id, '別の理由', 'p05-void-key-replay-test', null)::jsonb;
+    if v_rem_r->>'error' <> 'idempotency_conflict' then
+      raise exception 'Test 78a failed: altered void reason was not rejected with idempotency_conflict: %', v_rem_r;
+    end if;
+
+    -- 78b: 異なる会計 + 同一 void_idempotency_key → idempotency_conflict
+    v_rem_r := public.staff_void_sale(v_staff_a, v_op_token, v_sale_id, '正常取消', 'p05-void-key-replay-test', null)::jsonb;
+    if v_rem_r->>'error' <> 'idempotency_conflict' then
+      raise exception 'Test 78b failed: cross-sale reuse of void_idempotency_key was not rejected with idempotency_conflict: %', v_rem_r;
+    end if;
+
+    -- Test 79: staff_ginpay_adjustment の完全廃止確認 (pg_proc に 0 件)
+    if exists (select 1 from pg_proc where proname = 'staff_ginpay_adjustment') then
+      raise exception 'Test 79 failed: staff_ginpay_adjustment exists in pg_proc';
+    end if;
+
+    -- Test 80: staff_issue_tickets 旧 7引数 overload 廃止 & 旧 call shape は 42883 で失敗しチケット不変
+    if exists (select 1 from pg_proc where proname = 'staff_issue_tickets' and pronargs = 7) then
+      raise exception 'Test 80 failed: staff_issue_tickets 7-arg overload still exists in pg_proc';
+    end if;
+    if (select count(*) from pg_proc where proname = 'staff_issue_tickets') <> 1 then
+      raise exception 'Test 80 failed: staff_issue_tickets does not have exactly 1 canonical signature';
+    end if;
+
+    select count(*) into v_tickets_before from public.tickets;
+    begin
+      execute 'select public.staff_issue_tickets($1, $2, $3, $4, $5, $6, $7)'
+      using v_staff_a, 'P05顧客A', v_user_a, 'discount', 500, 1, now() + interval '30 days';
+      raise exception 'Test 80 failed: legacy staff_issue_tickets 7-arg unexpectedly succeeded';
+    exception
+      when sqlstate '42883' then
+        null;
+      when others then
+        raise exception 'Test 80 failed: unexpected sqlstate % (%): %', sqlstate, sqlerrm, 'staff_issue_tickets 7-arg';
+    end;
+    select count(*) into v_tickets_after from public.tickets;
+    if v_tickets_before <> v_tickets_after then
+      raise exception 'Test 80 failed: tickets written on legacy issue call';
+    end if;
+  end;
+
   raise notice '================================================================';
-  raise notice '  GINJIRO POS Phase 0 / P0-5: ALL 69 TESTS PASSED PERFECTLY     ';
+  raise notice '  GINJIRO POS Phase 0 / P0-5: ALL 80 TESTS PASSED PERFECTLY     ';
   raise notice '================================================================';
 end $$;
 rollback;
