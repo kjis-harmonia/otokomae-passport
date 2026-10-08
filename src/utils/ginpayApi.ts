@@ -151,9 +151,12 @@ async function asGinpayResult(fn: () => Promise<GinpayTransaction>): Promise<Gin
   try {
     return { ok: true, value: await fn() }
   } catch (err) {
-    if (err instanceof RpcError) {
+    if (err instanceof RpcError && err.source === 'rpc_result') {
       const detail = (typeof err.detail === 'object' && err.detail !== null) ? err.detail : {}
       return { ok: false, error: err.code, ...(detail as object) }
+    }
+    if (err instanceof RpcError && err.source === 'local_precondition') {
+      return { ok: false, error: err.code }
     }
     throw err
   }

@@ -156,7 +156,7 @@ export type CheckoutResult<T> = T | PosActionError
 export interface CheckoutApi {
   context(reservationId: string | null, clientId: string | null): Promise<CheckoutContext>
   catalog(): Promise<Catalog>
-  quote(input: QuoteInput, operator: OperatorSession): Promise<CheckoutResult<QuoteResult>>
+  quote(input: QuoteInput, operator: OperatorSession, approvalToken?: string | null): Promise<CheckoutResult<QuoteResult>>
   finalize(input: SaleInput, operator: OperatorSession, approvalToken?: string | null): Promise<CheckoutResult<Sale>>
 }
 export interface SalesApi {
@@ -245,11 +245,11 @@ export function createStaffCheckoutApi(_actor?: () => string): CheckoutApi {
   return {
     context: (reservationId, clientId) => callStaffRpc<CheckoutContext>('staff_checkout_context', { p_reservation_id: reservationId, p_client_id: clientId }),
     catalog: () => callStaffRpc<Catalog>('staff_checkout_catalog'),
-    quote: (input, operator) => asResult(() => callStaffRpc<QuoteResult>('staff_pos_quote', {
+    quote: (input, operator, approvalToken) => asResult(() => callStaffRpc<QuoteResult>('staff_pos_quote', {
       p_operator_token: operator.operatorToken,
       p_scan_session: null,
       p_request: input,
-      p_approval_token: null,
+      p_approval_token: approvalToken ?? null,
     })),
     finalize: (input, operator, approvalToken) => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', {
       p: input,

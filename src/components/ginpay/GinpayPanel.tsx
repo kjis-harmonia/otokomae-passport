@@ -9,12 +9,14 @@ import {
   yen,
 } from '../../utils/ginpayApi'
 import { rpcErrorMessage } from '../../utils/staffSession'
+import { RpcError } from '../../utils/staffRpc'
 import { C, SANS, inputStyle, linkStyle } from '../booking/ledgerTheme'
 import {
   getCurrentOperator,
   type OperatorSession,
 } from '../../utils/posOperatorSession'
 import { OperatorAuthModal } from '../pos/PosAuthModals'
+import { ManagerApprovalModal } from '../pos/ManagerApprovalModal'
 import { Field, PrimaryButton, SecondaryButton } from '../booking/ledgerUi'
 
 const STORE_PAYMENT_METHODS = [
@@ -45,7 +47,44 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
   const [chargeKey, setChargeKey] = useState<string | null>(null)
   const [chargeAccountId, setChargeAccountId] = useState<string | null>(null)
   const [reverse, setReverse] = useState<ReverseState | null>(null)
+  const [refundKey, setRefundKey] = useState<string | null>(null)
+  const [refundResultUnknown, setRefundResultUnknown] = useState(false)
+  const [refundUnknownSnapshot, setRefundUnknownSnapshot] = useState<{
+    transactionId: string
+    amount: number
+    reason: string
+    idempotencyKey: string
+  } | null>(null)
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false)
+
+  interface PendingChargeApproval {
+    kind: 'charge'
+    action: string
+    requestHash: string
+    input: {
+      clientId: string
+      amount: number
+      paymentMethod: StorePaymentMethod
+      memo?: string
+      accountId?: string
+      idempotencyKey: string
+    }
+  }
+
+  interface PendingRefundApproval {
+    kind: 'refund'
+    action: string
+    requestHash: string
+    input: {
+      transactionId: string
+      amount: number
+      reason: string
+      idempotencyKey: string
+    }
+  }
+
+  type PendingGinpayApproval = PendingChargeApproval | PendingRefundApproval
+  const [pendingApproval, setPendingApproval] = useState<PendingGinpayApproval | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -81,14 +120,39 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
     if (!ensureActor()) return
     setLoading(true)
     setMessage(null)
+    const effectiveChargeKey = chargeKey ?? idempotencyKey('staff-store-charge')
+    if (!chargeKey) {
+      setChargeKey(effectiveChargeKey)
+    }
+    const chargeInput = {
+      clientId,
+      amount: parsedAmount,
+      paymentMethod: method,
+      memo: memo.trim() || undefined,
+      accountId: needsAccountChoice ? chargeAccount?.id : undefined,
+      idempotencyKey: effectiveChargeKey,
+    }
     try {
-      const res = await api.chargeStore({
-        clientId, amount: parsedAmount, paymentMethod: method, memo: memo.trim() || undefined,
-        accountId: needsAccountChoice ? chargeAccount?.id : undefined, idempotencyKey: chargeKey ?? idempotencyKey('staff-store-charge'),
-      }, op)
+      const res = await api.chargeStore(chargeInput, op)
+
+
+
       if (!res.ok) {
         if (res.error === 'approval_required') {
-          setMessage('この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。')
+          if (!res.action || !res.request_hash) {
+            setMessage('管理者承認情報を取得できませんでした。最初からやり直してください。')
+            setChargeKey(null)
+            return
+          }
+          setPendingApproval({
+            kind: 'charge',
+            action: res.action,
+            requestHash: res.request_hash,
+            input: chargeInput,
+
+
+
+          })
         } else {
           setMessage(ginpayErrorMessage(res.error))
         }
@@ -111,6 +175,51 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
 
   async function submitReverse() {
     if (!reverse) return
+    if (reverse.kind === 'refund' && refundResultUnknown && refundUnknownSnapshot) {
+      const op = getCurrentOperator()
+      if (!op) {
+        setShowAuthModal(true)
+        return
+      }
+      setLoading(true)
+      try {
+        const res = await api.refund?.(refundUnknownSnapshot, op)
+        if (!res) return
+        if (!res.ok) {
+          // RESULT_UNKNOWN retry 失敗時は unknown state / snapshot / refundKey を維持する
+          if (res.error === 'approval_required') {
+            if (!res.action || !res.request_hash) {
+              setReverse({ ...reverse, error: '管理者承認情報を取得できませんでした。再試行してください。' })
+              return
+            }
+            setPendingApproval({
+              kind: 'refund',
+              action: res.action,
+              requestHash: res.request_hash,
+              input: refundUnknownSnapshot,
+            })
+            return
+          }
+          setReverse({ ...reverse, error: ginpayErrorMessage(res.error) })
+          return
+        }
+        setRefundResultUnknown(false)
+        setRefundUnknownSnapshot(null)
+        setReverse(null)
+        setRefundKey(null)
+        setMessage('返金を記録しました。')
+        await load()
+      } catch (err) {
+        setRefundResultUnknown(true)
+        setReverse({
+          ...reverse,
+          error: `通信結果が確認できませんでした。二重返金を防ぐため、入力を変更せず「再試行」を押すか、取引履歴を確認してください。(${rpcErrorMessage(err)})`,
+        })
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
     if (!reverse.reason.trim()) {
       setReverse({ ...reverse, error: '理由を入力してください。' })
       return
@@ -125,24 +234,149 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
     }
     if (!ensureActor()) return
     setLoading(true)
+    const effectiveRefundKey = refundKey ?? idempotencyKey('staff-refund')
+    if (reverse.kind === 'refund' && !refundKey) {
+      setRefundKey(effectiveRefundKey)
+    }
     try {
       const res = reverse.kind === 'refund' && op
-        ? await api.refund?.({ transactionId: reverse.transaction.id, amount: parseYenInput(reverse.amount) ?? 0, reason: reverse.reason.trim(), idempotencyKey: idempotencyKey('staff-refund') }, op)
+        ? await api.refund?.({ transactionId: reverse.transaction.id, amount: parseYenInput(reverse.amount) ?? 0, reason: reverse.reason.trim(), idempotencyKey: effectiveRefundKey }, op)
         : await api.void?.({ transactionId: reverse.transaction.id, reason: reverse.reason.trim() })
       if (!res) return
       if (!res.ok) {
+        setRefundResultUnknown(false)
+        setRefundUnknownSnapshot(null)
         if (res.error === 'approval_required') {
-          setReverse({ ...reverse, error: 'この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。' })
+          if (!res.action || !res.request_hash) {
+            setReverse({ ...reverse, error: '管理者承認情報を取得できませんでした。最初からやり直してください。' })
+            setRefundKey(null)
+            return
+          }
+          setPendingApproval({
+            kind: 'refund',
+            action: res.action,
+            requestHash: res.request_hash,
+            input: {
+              transactionId: reverse.transaction.id,
+              amount: parseYenInput(reverse.amount) ?? 0,
+              reason: reverse.reason.trim(),
+              idempotencyKey: effectiveRefundKey,
+            },
+          })
         } else {
           setReverse({ ...reverse, error: ginpayErrorMessage(res.error) })
         }
         return
       }
+      setRefundResultUnknown(false)
+      setRefundUnknownSnapshot(null)
       setReverse(null)
+      setRefundKey(null)
       setMessage(reverse.kind === 'refund' ? '返金を記録しました。' : '取消を記録しました。')
       await load()
     } catch (err) {
-      setReverse({ ...reverse, error: rpcErrorMessage(err, '処理に失敗しました。') })
+      if (reverse.kind === 'refund') {
+        const isTransportError = err instanceof RpcError && err.source === 'supabase_error'
+        if (isTransportError) {
+          setRefundResultUnknown(true)
+          setRefundUnknownSnapshot({
+            transactionId: reverse.transaction.id,
+            amount: parseYenInput(reverse.amount) ?? 0,
+            reason: reverse.reason.trim(),
+            idempotencyKey: effectiveRefundKey,
+          })
+          setReverse({
+            ...reverse,
+            error: `通信結果が確認できませんでした。二重返金を防ぐため、入力を変更せず「再試行」を押すか、取引履歴を確認してください。(${rpcErrorMessage(err)})`,
+          })
+        } else {
+          setReverse({ ...reverse, error: rpcErrorMessage(err, '処理に失敗しました。') })
+        }
+      } else {
+        setReverse({ ...reverse, error: rpcErrorMessage(err, '処理に失敗しました。') })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleManagerApproved(approvalToken: string) {
+    if (!pendingApproval) return
+    const op = getCurrentOperator()
+    if (!op) {
+      setShowAuthModal(true)
+      setPendingApproval(null)
+      return
+    }
+
+    setLoading(true)
+    const snapshot = pendingApproval
+    setPendingApproval(null)
+
+    try {
+      if (snapshot.kind === 'charge') {
+        if (!api.chargeStore) {
+          setMessage('チャージ機能を利用できません。')
+          return
+        }
+        const res = await api.chargeStore(snapshot.input, op, approvalToken)
+        if (!res.ok) {
+          if (res.error === 'approval_expired') {
+            setMessage('承認の有効期限が切れました。最初からやり直してください。')
+          } else {
+            setMessage(ginpayErrorMessage(res.error))
+          }
+          return
+        }
+        setAmount('')
+        setMemo('')
+        setConfirmingCharge(false)
+        setChargeKey(null)
+        setChargeAccountId(null)
+        setChargeOpen(false)
+        setMessage('チャージしました。')
+        await load()
+      } else if (snapshot.kind === 'refund') {
+        const res = await api.refund?.(snapshot.input, op, approvalToken)
+        if (!res || !res.ok) {
+          const errCode = res?.error ?? 'failed'
+          if (errCode === 'approval_expired') {
+            if (reverse) setReverse({ ...reverse, error: '承認の有効期限が切れました。再試行してください。' })
+            else setMessage('承認の有効期限が切れました。再試行してください。')
+          } else {
+            if (reverse) setReverse({ ...reverse, error: ginpayErrorMessage(errCode) })
+            else setMessage(ginpayErrorMessage(errCode))
+          }
+          return
+        }
+        setRefundResultUnknown(false)
+        setRefundUnknownSnapshot(null)
+        setReverse(null)
+        setRefundKey(null)
+        setMessage('返金を記録しました。')
+        await load()
+      }
+    } catch (err) {
+      if (snapshot.kind === 'refund') {
+        const isTransportError = err instanceof RpcError && err.source === 'supabase_error'
+        if (isTransportError || refundResultUnknown) {
+          setRefundResultUnknown(true)
+          setRefundUnknownSnapshot(snapshot.input)
+          if (reverse) {
+            setReverse({
+              ...reverse,
+              error: `通信結果が確認できませんでした。二重返金を防ぐため、入力を変更せず「再試行」を押すか、取引履歴を確認してください。(${rpcErrorMessage(err)})`,
+            })
+          } else {
+            setMessage(`通信結果が確認できませんでした。二重返金を防ぐため、取引履歴を確認してください。(${rpcErrorMessage(err)})`)
+          }
+        } else {
+          if (reverse) setReverse({ ...reverse, error: rpcErrorMessage(err, '処理に失敗しました。') })
+          else setMessage(rpcErrorMessage(err, '処理に失敗しました。'))
+        }
+      } else {
+        setMessage(rpcErrorMessage(err, '処理に失敗しました。'))
+      }
     } finally {
       setLoading(false)
     }
@@ -234,7 +468,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
           <div style={{ paddingTop: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 6 }}>履歴</h3>
             {ledger.transactions.length === 0 ? <p style={msgStyle(C.mute)}>履歴はありません</p> : ledger.transactions.map((tx) => (
-              <TransactionRow key={tx.id} tx={tx} refundAvailable={!!api.refund} voidAvailable={!!api.void} onReverse={setReverse} />
+              <TransactionRow key={tx.id} tx={tx} refundAvailable={!!api.refund} voidAvailable={!!api.void} onReverse={r => { if (refundResultUnknown) return; setRefundKey(null); setReverse(r) }} />
             ))}
           </div>
         </>
@@ -252,18 +486,18 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
             {reverse.kind === 'refund' && (
               <Field label="返金額">
                 <input value={reverse.amount} onChange={e => setReverse({ ...reverse, amount: e.target.value.replace(/[^\d]/g, ''), error: null })}
-                  inputMode="numeric" style={inputStyle} />
+                  inputMode="numeric" style={inputStyle} disabled={loading || refundResultUnknown} />
               </Field>
             )}
             <Field label="理由">
               <input value={reverse.reason} onChange={e => setReverse({ ...reverse, reason: e.target.value, error: null })}
-                maxLength={200} style={inputStyle} autoFocus />
+                maxLength={200} style={inputStyle} autoFocus disabled={loading || refundResultUnknown} />
             </Field>
             {reverse.error && <p style={msgStyle(C.danger)}>{reverse.error}</p>}
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <SecondaryButton onClick={() => setReverse(null)} disabled={loading}>やめる</SecondaryButton>
-              <PrimaryButton danger onClick={() => void submitReverse()} disabled={loading || !reverse.reason.trim() || (reverse.kind === 'refund' && !parseYenInput(reverse.amount))} style={{ flex: 2 }}>
-                {loading ? '処理中…' : reverse.kind === 'refund' ? '返金する' : '取消する'}
+              <SecondaryButton onClick={() => { if (refundResultUnknown) return; setReverse(null); setRefundKey(null) }} disabled={loading || refundResultUnknown}>やめる</SecondaryButton>
+              <PrimaryButton danger onClick={() => void submitReverse()} disabled={loading || (!refundResultUnknown && (!reverse.reason.trim() || (reverse.kind === 'refund' && !parseYenInput(reverse.amount))))} style={{ flex: 2 }}>
+                {loading ? '処理中…' : refundResultUnknown ? '再試行' : reverse.kind === 'refund' ? '返金する' : '取消する'}
               </PrimaryButton>
             </div>
           </div>
@@ -273,6 +507,30 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
         <OperatorAuthModal
           onSuccess={() => setShowAuthModal(false)}
           onCancel={() => setShowAuthModal(false)}
+        />
+      )}
+      {pendingApproval && (
+        <ManagerApprovalModal
+          action={pendingApproval.action}
+          requestHash={pendingApproval.requestHash}
+          onApproved={handleManagerApproved}
+          onCancel={() => {
+            setPendingApproval(null)
+            if (!refundResultUnknown) {
+              setRefundKey(null)
+            }
+            setChargeKey(null)
+            setConfirmingCharge(false)
+          }}
+          onOperatorAuthRequired={() => {
+            setPendingApproval(null)
+            if (!refundResultUnknown) {
+              setRefundKey(null)
+            }
+            setChargeKey(null)
+            setConfirmingCharge(false)
+            setShowAuthModal(true)
+          }}
         />
       )}
     </section>

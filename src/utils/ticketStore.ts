@@ -173,9 +173,12 @@ export async function issueTickets(
     })
     return { tickets: r.tickets ?? [] }
   } catch (err) {
-    if (err instanceof RpcError) {
+    if (err instanceof RpcError && err.source === 'rpc_result') {
       const detail = (typeof err.detail === 'object' && err.detail !== null) ? err.detail : {}
       return { error: err.code, ...(detail as object) }
+    }
+    if (err instanceof RpcError && err.source === 'local_precondition') {
+      return { error: err.code }
     }
     throw err
   }

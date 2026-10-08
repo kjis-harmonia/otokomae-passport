@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { rpcErrorMessage } from '../../utils/staffSession'
 import { yen } from '../../utils/bookingApi'
 import { idempotencyKey } from '../../utils/ginpayApi'
 import type { ClientCandidate, CustomerApi } from '../../utils/customerApi'
 import {
   checkoutErrorMessage, saleTotals, TICKET_BLOCK_LABEL,
-  type Catalog, type CatalogItem, type CheckoutApi, type CheckoutContext, type PaymentMethod, type Sale, type SaleLine, type QuoteResult,
+  type Catalog, type CatalogItem, type CheckoutApi, type CheckoutContext, type PaymentMethod, type Sale, type SaleLine, type QuoteResult, type QuoteInput,
 } from '../../utils/checkoutApi'
 import { PrimaryButton } from './ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
@@ -15,6 +15,7 @@ import {
   type OperatorSession,
 } from '../../utils/posOperatorSession'
 import { OperatorAuthModal } from '../pos/PosAuthModals'
+import { ManagerApprovalModal } from '../pos/ManagerApprovalModal'
 
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
@@ -92,49 +93,332 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   const [quoteError, setQuoteError] = useState<string | null>(null)
   const [quoteLoading, setQuoteLoading] = useState(false)
 
+  // GINPay：顧客の口座
+  const ginpayAccounts = clientInfo ? ctx?.ginpay_accounts ?? [] : []
+  const ginpayAccount = ginpayAccounts.length === 1 ? ginpayAccounts[0] : ginpayAccounts.find(a => a.id === ginpayAccountId) ?? null
+
+  interface PendingQuoteApproval {
+    kind: 'checkout_quote'
+    action: string
+    requestHash: string
+    quoteInput: QuoteInput
+    intentGen: number
+  }
+  interface ApprovedCheckoutSnapshot {
+    quoteInput: QuoteInput
+    items: SaleLine[]
+    ticketIds: string[]
+    manualDiscount?: { amount: number; label: string }
+    reservationId?: string
+    clientId?: string
+    stylistId: string
+    paymentMethod: PaymentMethod
+    ginpayAccountId?: string | null
+    expectedTotal: number
+    quoteHash?: string
+    saleKey: string
+    businessIntentKey: string
+  }
+  const [pendingApproval, setPendingApproval] = useState<PendingQuoteApproval | null>(null)
+  const [showManagerModal, setShowManagerModal] = useState(false)
+  const [approvedToken, setApprovedToken] = useState<string | null>(null)
+  const [approvedSnapshot, setApprovedSnapshot] = useState<ApprovedCheckoutSnapshot | null>(null)
+  const [needsFreshQuote, setNeedsFreshQuote] = useState(false)
+
+  const businessIntentKey = useMemo(() => JSON.stringify({
+    reservation_id: ctx?.reservation?.id,
+    client_id: ctx?.reservation ? undefined : client?.id,
+    stylist_id: stylistId,
+    items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount })),
+    ticket_ids: ticketIds,
+    manual_discount: manualAmount > 0 && manual ? { amount: manualAmount, label: manual.label.trim() } : undefined,
+    payment_method: method,
+    ginpay_account_id: method === 'ginpay' ? (ginpayAccountId ?? ginpayAccount?.id) : undefined,
+  }), [ctx?.reservation?.id, ctx?.reservation, client?.id, stylistId, lines, ticketIds, manualAmount, manual, method, ginpayAccountId, ginpayAccount?.id])
+
+  const needsFreshQuoteRef = useRef(needsFreshQuote)
+  needsFreshQuoteRef.current = needsFreshQuote
+
+  const quoteIntentGenRef = useRef(0)
+  const lastBusinessIntentKeyRef = useRef(businessIntentKey)
+
   useEffect(() => {
     const current = getCurrentOperator()
+    const isIntentChange = lastBusinessIntentKeyRef.current !== businessIntentKey
+    if (isIntentChange) {
+      lastBusinessIntentKeyRef.current = businessIntentKey
+      quoteIntentGenRef.current += 1
+    }
+    const gen = quoteIntentGenRef.current
+
+    if (isIntentChange) {
+      setApprovedToken(null)
+      setApprovedSnapshot(null)
+      setPendingApproval(null)
+      setQuote(null)
+      setQuoteError(null)
+      setQuoteLoading(false)
+
+      if (needsFreshQuoteRef.current) {
+        // 追加条件1: needsFreshQuote === true の場合、自動quoteを開始せず手動再取得を待つ
+        return
+      }
+    }
+
     if (!ctx || lines.length === 0 || !current) {
       if (!current && operator) setOperator(null)
       setQuote(null)
       setQuoteError(null)
       setQuoteLoading(false)
+      setApprovedToken(null)
+      setApprovedSnapshot(null)
+      setPendingApproval(null)
+      setNeedsFreshQuote(false)
       return
     }
+
+    if (needsFreshQuoteRef.current) {
+      setQuoteLoading(false)
+      return
+    }
+
     let alive = true
     setQuoteLoading(true)
     setQuoteError(null)
-    api.quote({
+    const quoteInput: QuoteInput = {
       reservation_id: ctx.reservation?.id,
       client_id: ctx.reservation ? undefined : client?.id,
       items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, quantity: l.quantity, unit_price: l.unit_price })),
       ticket_ids: ticketIds,
       manual_discount: manualAmount > 0 && manual ? { amount: manualAmount, label: manual.label.trim() } : undefined,
-    }, current).then(res => {
-      if (!alive) return
+    }
+    api.quote(quoteInput, current).then(res => {
+      if (!alive || gen !== quoteIntentGenRef.current) return
       setQuoteLoading(false)
       if ('error' in res) {
         setQuote(null)
-        if (res.error === 'operator_session_invalid' || res.error === 'staff_auth_required') {
+        setApprovedSnapshot(null)
+        if (
+          res.error === 'operator_session_invalid' ||
+          res.error === 'invalid_operator_session' ||
+          res.error === 'operator_session_expired' ||
+          res.error === 'staff_auth_required'
+        ) {
           setOperator(null)
+          setShowAuthModal(true)
         }
         if (res.error === 'approval_required') {
-          setQuoteError('この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。')
+          if (!res.action || !res.request_hash) {
+            setPendingApproval(null)
+            setQuoteError('管理者承認情報を取得できませんでした。最初からやり直してください。')
+            setNeedsFreshQuote(true)
+            return
+          }
+          setPendingApproval({
+            kind: 'checkout_quote',
+            action: res.action,
+            requestHash: res.request_hash,
+            quoteInput,
+            intentGen: gen,
+          })
+          setNeedsFreshQuote(false)
+          setQuoteError('この操作には管理者承認が必要です。')
         } else {
+          setPendingApproval(null)
+          setNeedsFreshQuote(true)
           setQuoteError(checkoutErrorMessage(res.error))
         }
       } else {
         setQuote(res)
         setQuoteError(null)
+        setPendingApproval(null)
+        setApprovedSnapshot(null)
+        setNeedsFreshQuote(false)
       }
     }).catch(() => {
-      if (!alive) return
+      if (!alive || gen !== quoteIntentGenRef.current) return
       setQuoteLoading(false)
       setQuote(null)
+      setPendingApproval(null)
+      setApprovedSnapshot(null)
+      setNeedsFreshQuote(true)
       setQuoteError('最新の見積もり計算に失敗しました')
     })
     return () => { alive = false }
-  }, [api, ctx, client, lines, ticketIds, manualAmount, manual, operator])
+  }, [api, businessIntentKey, operator])
+
+  async function handleManagerApproved(token: string) {
+    setShowManagerModal(false)
+    if (!pendingApproval) return
+    const current = getCurrentOperator()
+    if (!current || !isCurrentOperatorValid()) {
+      setOperator(null)
+      setShowAuthModal(true)
+      setPendingApproval(null)
+      return
+    }
+
+    if (pendingApproval.intentGen !== quoteIntentGenRef.current) {
+      setQuoteError('承認待ちの間に入力内容が変更されました。見積もりを再取得してください。')
+      setPendingApproval(null)
+      return
+    }
+
+    const snapshot = pendingApproval
+    setPendingApproval(null)
+    setQuoteLoading(true)
+    setQuoteError(null)
+    const gen = quoteIntentGenRef.current
+    try {
+      const replayQuoteRes = await api.quote(snapshot.quoteInput, current, token)
+      if (gen !== quoteIntentGenRef.current) return
+
+      if ('error' in replayQuoteRes) {
+        if (gen !== quoteIntentGenRef.current) return
+        setQuote(null)
+        setApprovedToken(null)
+        setApprovedSnapshot(null)
+        setPendingApproval(null)
+        setNeedsFreshQuote(true)
+        if (
+          replayQuoteRes.error === 'operator_session_invalid' ||
+          replayQuoteRes.error === 'invalid_operator_session' ||
+          replayQuoteRes.error === 'operator_session_expired' ||
+          replayQuoteRes.error === 'staff_auth_required'
+        ) {
+          setOperator(null)
+          setShowAuthModal(true)
+        }
+        if (replayQuoteRes.error === 'approval_expired') {
+          setQuoteError('承認の有効期限が切れました。見積もりを再取得してください。')
+        } else if (replayQuoteRes.error === 'approval_required') {
+          setQuoteError('管理者承認の検証に失敗しました。見積もりを再取得してください。')
+        } else if (replayQuoteRes.error === 'quote_mismatch') {
+          setQuoteError('価格または条件が更新されました。見積もりを再取得してください。')
+        } else {
+          setQuoteError(checkoutErrorMessage(replayQuoteRes.error))
+        }
+        return
+      }
+
+      setQuote(replayQuoteRes)
+      setApprovedToken(token)
+      setApprovedSnapshot({
+        quoteInput: snapshot.quoteInput,
+        items: lines.map(l => ({
+          source: l.source,
+          ref_id: l.ref_id,
+          name: l.name,
+          category: l.category,
+          unit_price: l.unit_price,
+          quantity: l.quantity,
+          discount: l.discount,
+        })),
+        ticketIds: [...ticketIds],
+        manualDiscount: manualAmount > 0 && manual ? { amount: manualAmount, label: manual.label.trim() } : undefined,
+        reservationId: ctx?.reservation?.id,
+        clientId: ctx?.reservation ? undefined : client?.id,
+        stylistId: stylistId ?? '',
+        paymentMethod: method ?? 'cash',
+        ginpayAccountId: method === 'ginpay' ? (ginpayAccountId ?? ginpayAccount?.id) : undefined,
+        expectedTotal: replayQuoteRes.total,
+        quoteHash: replayQuoteRes.quote_hash,
+        saleKey,
+        businessIntentKey,
+      })
+      setNeedsFreshQuote(false)
+      setQuoteError(null)
+    } catch {
+      if (gen !== quoteIntentGenRef.current) return
+      setQuote(null)
+      setApprovedToken(null)
+      setApprovedSnapshot(null)
+      setPendingApproval(null)
+      setNeedsFreshQuote(true)
+      setQuoteError('最新の見積もり計算に失敗しました。見積もりを再取得してください。')
+    } finally {
+      if (gen === quoteIntentGenRef.current) {
+        setQuoteLoading(false)
+      }
+    }
+  }
+
+  async function fetchFreshQuote() {
+    const current = getCurrentOperator()
+    if (!current || !isCurrentOperatorValid()) {
+      setOperator(null)
+      setShowAuthModal(true)
+      return
+    }
+    if (!ctx || lines.length === 0 || quoteLoading) return
+
+    setApprovedToken(null)
+    setApprovedSnapshot(null)
+    setPendingApproval(null)
+    setQuoteLoading(true)
+    setQuoteError(null)
+    setError(null)
+    const gen = quoteIntentGenRef.current
+    const quoteInput: QuoteInput = {
+      reservation_id: ctx.reservation?.id,
+      client_id: ctx.reservation ? undefined : client?.id,
+      items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, quantity: l.quantity, unit_price: l.unit_price })),
+      ticket_ids: ticketIds,
+      manual_discount: manualAmount > 0 && manual ? { amount: manualAmount, label: manual.label.trim() } : undefined,
+    }
+    try {
+      const res = await api.quote(quoteInput, current)
+      if (gen !== quoteIntentGenRef.current) return
+      if ('error' in res) {
+        setQuote(null)
+        setApprovedSnapshot(null)
+        if (
+          res.error === 'operator_session_invalid' ||
+          res.error === 'invalid_operator_session' ||
+          res.error === 'operator_session_expired' ||
+          res.error === 'staff_auth_required'
+        ) {
+          setOperator(null)
+          setShowAuthModal(true)
+        }
+        if (res.error === 'approval_required') {
+          if (!res.action || !res.request_hash) {
+            setPendingApproval(null)
+            setQuoteError('管理者承認情報を取得できませんでした。最初からやり直してください。')
+            return
+          }
+          setPendingApproval({
+            kind: 'checkout_quote',
+            action: res.action,
+            requestHash: res.request_hash,
+            quoteInput,
+            intentGen: gen,
+          })
+          setNeedsFreshQuote(false)
+          setQuoteError('この操作には管理者承認が必要です。')
+        } else {
+          setPendingApproval(null)
+          setQuoteError(checkoutErrorMessage(res.error))
+        }
+      } else {
+        setQuote(res)
+        setQuoteError(null)
+        setPendingApproval(null)
+        setApprovedSnapshot(null)
+        setNeedsFreshQuote(false)
+      }
+    } catch {
+      if (gen !== quoteIntentGenRef.current) return
+      setQuote(null)
+      setPendingApproval(null)
+      setApprovedSnapshot(null)
+      setQuoteError('最新の見積もり計算に失敗しました。再度お試しください。')
+    } finally {
+      if (gen === quoteIntentGenRef.current) {
+        setQuoteLoading(false)
+      }
+    }
+  }
 
   const totals = useMemo(() => {
     if (quote) return { subtotal: quote.subtotal, discount: quote.discount_total, total: quote.total }
@@ -143,15 +427,12 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
 
   const paid = !!ctx?.paid_sale_id
   const customerReady = !!ctx?.reservation || anonymous || !!client
-  // GINPay：顧客の口座（統合顧客で複数あるときは選ぶ。合算しない）
-  const ginpayAccounts = clientInfo ? ctx?.ginpay_accounts ?? [] : []
-  const ginpayAccount = ginpayAccounts.length === 1 ? ginpayAccounts[0] : ginpayAccounts.find(a => a.id === ginpayAccountId) ?? null
   // 残高は台帳合計。台帳と一致しない口座では支払えない（DB 側でも止める）
   const ginpayMismatch = method === 'ginpay' && !!ginpayAccount && !ginpayAccount.consistent
   const ginpayShort = method === 'ginpay' && !!ginpayAccount && ginpayAccount.balance < totals.total
   const ginpayOk = method !== 'ginpay' || (!!ginpayAccount && totals.total > 0 && !ginpayShort && !ginpayMismatch)
   const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && !!method && totals.total >= 0
-    && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy && !!quote && !quoteLoading && !quoteError
+    && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy && !!quote && !quoteLoading && !quoteError && !needsFreshQuote
 
   function update(key: number, patch: Partial<SaleLine>) { setLines(ls => ls.map(l => l.key === key ? { ...l, ...patch } : l)) }
   function addItem(src: SaleLine['source'], item: CatalogItem) {
@@ -172,29 +453,99 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
       setShowAuthModal(true)
       return
     }
+
+    // 追加条件3: approvedToken / approvedSnapshot pair integrity guard
+    const hasApprovedToken = approvedToken != null
+    const hasApprovedSnapshot = approvedSnapshot != null
+    if (hasApprovedToken !== hasApprovedSnapshot) {
+      setApprovedToken(null)
+      setApprovedSnapshot(null)
+      setPendingApproval(null)
+      setQuote(null)
+      setQuoteLoading(false)
+      setNeedsFreshQuote(true)
+      setError('承認情報に不整合があるため、見積もりを再取得してください。')
+      return
+    }
+
+    // 承認済みflow: businessIntentKey 完全一致guard
+    if (hasApprovedToken && hasApprovedSnapshot) {
+      if (approvedSnapshot.businessIntentKey !== businessIntentKey) {
+        setApprovedToken(null)
+        setApprovedSnapshot(null)
+        setPendingApproval(null)
+        setQuote(null)
+        setQuoteLoading(false)
+        setNeedsFreshQuote(true)
+        setError('会計内容が変更されたため、見積もりを再取得してください。')
+        return
+      }
+    }
+
     setBusy(true); setError(null)
     try {
+      const isApprovedFlow = Boolean(approvedToken && approvedSnapshot)
+      const itemsToFinalize: SaleLine[] = (isApprovedFlow && approvedSnapshot)
+        ? approvedSnapshot.items
+        : lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount }))
+
       const res = await api.finalize({
-        reservation_id: ctx.reservation?.id, client_id: ctx.reservation ? undefined : client?.id,
-        stylist_id: stylistId, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
-        manual_discount: manualAmount > 0 ? { amount: manualAmount, label: manual!.label.trim() } : undefined,
-        payment_method: method, expected_total: totals.total, idempotency_key: saleKey,
-        quote_hash: quote?.quote_hash,
-        ginpay_account_id: method === 'ginpay' ? ginpayAccount?.id : undefined,
-      }, current)
+        reservation_id: (approvedToken && approvedSnapshot) ? approvedSnapshot.reservationId : ctx.reservation?.id,
+        client_id: (approvedToken && approvedSnapshot) ? approvedSnapshot.clientId : (ctx.reservation ? undefined : client?.id),
+        stylist_id: (approvedToken && approvedSnapshot) ? approvedSnapshot.stylistId : stylistId,
+        items: itemsToFinalize,
+        ticket_ids: (approvedToken && approvedSnapshot) ? approvedSnapshot.ticketIds : ticketIds,
+        manual_discount: (approvedToken && approvedSnapshot) ? approvedSnapshot.manualDiscount : (manualAmount > 0 && manual ? { amount: manualAmount, label: manual.label.trim() } : undefined),
+        payment_method: (approvedToken && approvedSnapshot) ? approvedSnapshot.paymentMethod : method,
+        expected_total: (approvedToken && approvedSnapshot) ? approvedSnapshot.expectedTotal : totals.total,
+        idempotency_key: (approvedToken && approvedSnapshot) ? approvedSnapshot.saleKey : saleKey,
+        quote_hash: (approvedToken && approvedSnapshot) ? approvedSnapshot.quoteHash : quote?.quote_hash,
+        ginpay_account_id: (approvedToken && approvedSnapshot) ? (approvedSnapshot.ginpayAccountId ?? undefined) : (method === 'ginpay' ? ginpayAccount?.id : undefined),
+      }, current, approvedToken)
       if ('error' in res) {
-        if (res.error === 'operator_session_invalid' || res.error === 'staff_auth_required') {
+        if (
+          res.error === 'operator_session_invalid' ||
+          res.error === 'invalid_operator_session' ||
+          res.error === 'operator_session_expired' ||
+          res.error === 'staff_auth_required'
+        ) {
           setOperator(null)
+          setShowAuthModal(true)
+        }
+        if (
+          res.error === 'approval_required' ||
+          res.error === 'approval_expired' ||
+          res.error === 'already_consumed' ||
+          res.error === 'request_hash_mismatch' ||
+          res.error === 'action_mismatch' ||
+          res.error === 'quote_mismatch' ||
+          res.error === 'idempotency_conflict'
+        ) {
+          setApprovedToken(null)
+          setApprovedSnapshot(null)
+          setQuote(null)
+          setPendingApproval(null)
+          setNeedsFreshQuote(true)
         }
         if (res.error === 'approval_required') {
-          setError('この操作には管理者承認が必要です。現在、この端末では管理者承認を利用できません。')
+          setError('管理者承認が必要です。見積もりを再取得してください。')
+        } else if (res.error === 'approval_expired') {
+          setError('承認の有効期限が切れました。見積もりを再取得してください。')
+        } else if (res.error === 'quote_mismatch') {
+          setError('価格または条件が更新されました。見積もりを再取得してください。')
         } else {
           setError(checkoutErrorMessage(res.error))
         }
       } else {
+        setApprovedToken(null)
+        setApprovedSnapshot(null)
         onDone(res)
       }
-    } catch (err) { setError(rpcErrorMessage(err)) } finally { setBusy(false) }
+    } catch (err) {
+      setError(`通信エラーが発生しました。会計が成立している可能性があるため、再読み込みまたは履歴を確認してください。(${rpcErrorMessage(err)})`)
+    } finally {
+      setBusy(false)
+    }
   }
 
 
@@ -349,7 +700,49 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
         <div style={{ flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div style={{ maxWidth: 640, margin: '0 auto' }}>
             {quoteError && <p style={{ margin: '0 0 8px', fontSize: 13, color: C.danger }}>{quoteError}</p>}
-            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : quoteLoading ? '計算中…' : quoteError ? '見積もりエラー' : !quote && lines.length > 0 ? '見積もり未取得' : ginpayMismatch ? 'GINPayは利用できません' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            {needsFreshQuote && !quoteLoading && (
+              <button
+                type="button"
+                onClick={() => void fetchFreshQuote()}
+                style={{
+                  width: '100%',
+                  minHeight: 44,
+                  marginBottom: 8,
+                  padding: '10px 16px',
+                  borderRadius: 10,
+                  background: 'rgba(255,255,255,0.08)',
+                  border: `1.5px solid ${C.lineStrong}`,
+                  color: C.text,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                見積もりを再取得
+              </button>
+            )}
+            {pendingApproval && !quoteLoading && (
+              <button
+                type="button"
+                onClick={() => setShowManagerModal(true)}
+                style={{
+                  width: '100%',
+                  minHeight: 44,
+                  marginBottom: 8,
+                  padding: '10px 16px',
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #C9A24A 0%, #9E7D2B 100%)',
+                  border: 'none',
+                  color: '#0B0403',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                管理者承認を入力
+              </button>
+            )}
+            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : quoteLoading ? '計算中…' : needsFreshQuote ? '見積もりの再取得が必要です' : quoteError ? '見積もりエラー' : !quote && lines.length > 0 ? '見積もり未取得' : ginpayMismatch ? 'GINPayは利用できません' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
       )}
@@ -360,6 +753,23 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
             setShowAuthModal(false)
           }}
           onCancel={onClose}
+        />
+      )}
+      {showManagerModal && pendingApproval && (
+        <ManagerApprovalModal
+          action={pendingApproval.action}
+          requestHash={pendingApproval.requestHash}
+          onApproved={handleManagerApproved}
+          onCancel={() => {
+            setShowManagerModal(false)
+            setPendingApproval(null)
+          }}
+          onOperatorAuthRequired={() => {
+            setShowManagerModal(false)
+            setPendingApproval(null)
+            setOperator(null)
+            setShowAuthModal(true)
+          }}
         />
       )}
     </div>

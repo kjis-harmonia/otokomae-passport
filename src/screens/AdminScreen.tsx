@@ -6,6 +6,7 @@ import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
 import { issueTickets, getTicketsForStaff } from '../utils/ticketStore'
 import { getCurrentOperator, isCurrentOperatorValid, type OperatorSession } from '../utils/posOperatorSession'
 import { OperatorAuthModal } from '../components/pos/PosAuthModals'
+import { ManagerApprovalModal } from '../components/pos/ManagerApprovalModal'
 import { idempotencyKey } from '../utils/ginpayApi'
 import {
   registerCustomerWithContext, searchCustomersByName, recoverMember,
@@ -385,6 +386,25 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [, setUseError]                           = useState<string | null>(null)
   const [, setTodayUsedType]                 = useState<string | null>(null)
 
+  // Ticket issuance idempotency & manager approval
+  const [ticketIssueKey, setTicketIssueKey] = useState<string | null>(null)
+  interface TicketIssueInput {
+    userId: string
+    type: Extract<TicketType, 'otoku' | 'discount'>
+    amount: number
+    quantity: number
+    customerName: string
+    idempotencyKey: string
+  }
+  interface PendingTicketApproval {
+    action: string
+    requestHash: string
+    input: TicketIssueInput
+  }
+  const [pendingTicketApproval, setPendingTicketApproval] = useState<PendingTicketApproval | null>(null)
+  const [ticketResultUnknown, setTicketResultUnknown] = useState<boolean>(false)
+  const [resultUnknownSnapshot, setResultUnknownSnapshot] = useState<TicketIssueInput | null>(null)
+
   // Ticket-use QR flow
   const [ticketUseData, setTicketUseData]         = useState<TicketUseQRData | null>(null)
   const [ticketForUse, setTicketForUse]           = useState<TicketRow | null>(null)
@@ -440,7 +460,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const isFirstVisit  = prevLastVisitDate === null
   const elapsedDays   = prevLastVisitDate ? daysSince(prevLastVisitDate) : null
   const isEligible    = !isFirstVisit && prevLastVisitDate !== undefined && elapsedDays !== null && elapsedDays <= 14
-  const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0
+  const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0 && !ticketResultUnknown
   const activeTickets = userTickets.filter(t => !t.used)
   const currentTab    = TICKET_TABS.find(t => t.type === ticketTab) ?? TICKET_TABS[0]
   const tc            = TICKET_TYPE_COLORS[ticketTab]
@@ -448,6 +468,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function handleReset() {
+    if (ticketResultUnknown) return
     setPhase('scan')
     setScannedData(null)
     setPrevLastVisitDate(undefined)
@@ -478,6 +499,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setBindCodeError(null)
     setUseError(null)
     setTodayUsedType(null)
+    setTicketIssueKey(null)
+    setPendingTicketApproval(null)
     setMaintCouponData(null)
     setMaintCouponTodayUsed(false)
     setMaintCouponConfirming(false)
@@ -568,6 +591,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   }, [])
 
   function handleTabChange(type: TicketType) {
+    if (ticketResultUnknown) return
     setTicketTab(type)
     setDiscountAmountInput('')
     setOtokuAmountInput('')
@@ -600,28 +624,58 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setShowConfirm(false)
     setIssueLoading(true)
     setIssueError(null)
+    const key = ticketIssueKey ?? idempotencyKey('ticket-issue')
+    if (!ticketIssueKey) {
+      setTicketIssueKey(key)
+    }
+    const input = {
+      userId:       scannedData.userId,
+      type:         ticketTab === 'otoku' ? ('otoku' as const) : ('discount' as const),
+      amount:       effectiveAmount,
+      quantity,
+      customerName: scannedData.name,
+      idempotencyKey: key,
+    }
     try {
-      const issued = await issueTickets({
-        userId:       scannedData.userId,
-        type:         ticketTab === 'otoku' ? 'otoku' : 'discount',
-        amount:       effectiveAmount,
-        quantity,
-        customerName: scannedData.name,
-        idempotencyKey: idempotencyKey('ticket-issue'),
-      }, current)
+      const issued = await issueTickets(input, current)
 
       if ('error' in issued) {
-        if (issued.error === 'operator_session_invalid' || issued.error === 'staff_auth_required') {
+        setTicketResultUnknown(false)
+        setResultUnknownSnapshot(null)
+        const isOperatorInvalid =
+          issued.error === 'operator_session_invalid' ||
+          issued.error === 'invalid_operator_session' ||
+          issued.error === 'operator_session_expired' ||
+          issued.error === 'staff_auth_required'
+
+        if (isOperatorInvalid) {
           setOperator(null)
+          setPendingTicketApproval(null)
         }
+
         if (issued.error === 'approval_required') {
-          setIssueError('チケット発行には管理者承認が必要です。現在、この端末では管理者承認を利用できません。')
-        } else {
-          setIssueError(`発行に失敗しました。1枚も発行されていません。(${issued.error})`)
+          if (!issued.action || !issued.request_hash) {
+            setIssueError('管理者承認情報を取得できませんでした。最初からやり直してください。')
+            setTicketIssueKey(null)
+            return
+          }
+
+          setPendingTicketApproval({
+            action: issued.action,
+            requestHash: issued.request_hash,
+            input,
+          })
+          setIssueError(null)
+          return
         }
+
+        setIssueError(`発行に失敗しました。1枚も発行されていません。(${issued.error})`)
         return
       }
 
+      setTicketResultUnknown(false)
+      setResultUnknownSnapshot(null)
+      setTicketIssueKey(null)
       setUserTickets(prev => [...issued.tickets, ...prev])
 
       playSuccessSound()
@@ -632,7 +686,145 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       setQuantity(1)
       setTimeout(() => setShowSuccess(false), 1800)
     } catch (err) {
-      setIssueError(`発行に失敗しました。1枚も発行されていません。${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')}`)
+      const isTransportError = err instanceof RpcError && err.source === 'supabase_error'
+      if (isTransportError) {
+        setTicketResultUnknown(true)
+        setResultUnknownSnapshot(input)
+        setIssueError(`通信結果が確認できませんでした。二重発行を防ぐため、入力を変更せず「再試行」を押すか、保有チケット一覧を確認してください。(${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')})`)
+      } else {
+        setIssueError(rpcErrorMessage(err, 'チケット発行に失敗しました。'))
+      }
+    } finally {
+      setIssueLoading(false)
+    }
+  }
+
+  const handleTicketApproved = async (approvalToken: string) => {
+    if (!pendingTicketApproval) return
+    const current = getCurrentOperator()
+    if (!current) {
+      setOperator(null)
+      setShowOperatorModal(true)
+      setPendingTicketApproval(null)
+      return
+    }
+
+    const snapshot = pendingTicketApproval
+    setPendingTicketApproval(null)
+    setIssueLoading(true)
+    setIssueError(null)
+
+    try {
+      const issued = await issueTickets(snapshot.input, current, approvalToken)
+
+      if ('error' in issued) {
+        if (!ticketResultUnknown) {
+          setTicketResultUnknown(false)
+          setResultUnknownSnapshot(null)
+          setTicketIssueKey(null)
+        }
+        const isOperatorInvalid =
+          issued.error === 'operator_session_invalid' ||
+          issued.error === 'invalid_operator_session' ||
+          issued.error === 'operator_session_expired' ||
+          issued.error === 'staff_auth_required'
+
+        if (isOperatorInvalid) {
+          setOperator(null)
+        }
+
+        if (issued.error === 'approval_expired') {
+          setIssueError('承認の有効期限が切れました。再試行してください。')
+        } else if (issued.error === 'approval_required') {
+          setIssueError('管理者承認の検証に失敗しました。再試行してください。')
+        } else {
+          setIssueError(ticketResultUnknown ? `発行の確認が取れませんでした。(${issued.error})` : `発行に失敗しました。1枚も発行されていません。(${issued.error})`)
+        }
+        return
+      }
+
+      setTicketResultUnknown(false)
+      setResultUnknownSnapshot(null)
+      setTicketIssueKey(null)
+      setUserTickets(prev => [...issued.tickets, ...prev])
+
+      playSuccessSound()
+      setSuccessInfo({ name: snapshot.input.customerName, label: currentTab.autoTitle, amount: snapshot.input.amount, qty: snapshot.input.quantity })
+      setShowSuccess(true)
+      setDiscountAmountInput('')
+      setOtokuAmountInput('')
+      setQuantity(1)
+      setTimeout(() => setShowSuccess(false), 1800)
+    } catch (err) {
+      const isTransportError = err instanceof RpcError && err.source === 'supabase_error'
+      if (isTransportError || ticketResultUnknown) {
+        setTicketResultUnknown(true)
+        setResultUnknownSnapshot(snapshot.input)
+        setIssueError(`通信結果が確認できませんでした。二重発行を防ぐため、入力を変更せず「再試行」を押すか、保有チケット一覧を確認してください。(${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')})`)
+      } else {
+        setIssueError(rpcErrorMessage(err, '通信環境を確認して再度お試しください。'))
+      }
+    } finally {
+      setIssueLoading(false)
+    }
+  }
+
+  const handleRetryIssueTicket = async () => {
+    if (!resultUnknownSnapshot || issueLoading) return
+    const current = getCurrentOperator()
+    if (!current) {
+      setOperator(null)
+      setShowOperatorModal(true)
+      return
+    }
+    setIssueLoading(true)
+    setIssueError(null)
+    try {
+      const issued = await issueTickets(resultUnknownSnapshot, current)
+      if ('error' in issued) {
+        // retry 失敗時：ticketResultUnknown, resultUnknownSnapshot, ticketIssueKey は破棄しない
+        const isOperatorInvalid =
+          issued.error === 'operator_session_invalid' ||
+          issued.error === 'invalid_operator_session' ||
+          issued.error === 'operator_session_expired' ||
+          issued.error === 'staff_auth_required'
+
+        if (isOperatorInvalid) {
+          setOperator(null)
+          setPendingTicketApproval(null)
+        }
+
+        if (issued.error === 'approval_required') {
+          if (!issued.action || !issued.request_hash) {
+            setIssueError('管理者承認情報を取得できませんでした。再試行してください。')
+            return
+          }
+          setPendingTicketApproval({
+            action: issued.action,
+            requestHash: issued.request_hash,
+            input: resultUnknownSnapshot,
+          })
+          setIssueError(null)
+          return
+        }
+
+        setIssueError(`発行の確認が取れませんでした。(${issued.error})`)
+        return
+      }
+
+      setTicketResultUnknown(false)
+      setResultUnknownSnapshot(null)
+      setTicketIssueKey(null)
+      setUserTickets(prev => [...issued.tickets, ...prev])
+      playSuccessSound()
+      setSuccessInfo({ name: resultUnknownSnapshot.customerName, label: currentTab.autoTitle, amount: resultUnknownSnapshot.amount, qty: resultUnknownSnapshot.quantity })
+      setShowSuccess(true)
+      setDiscountAmountInput('')
+      setOtokuAmountInput('')
+      setQuantity(1)
+      setTimeout(() => setShowSuccess(false), 1800)
+    } catch (err) {
+      setIssueError(`通信エラーが継続しています。二重発行を防ぐため、入力を変更せず再度「再試行」を押すか、保有チケット一覧を確認してください。(${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')})`)
     } finally {
       setIssueLoading(false)
     }
@@ -1257,6 +1449,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   return (
                     <button
                       key={tab.type}
+                      disabled={ticketResultUnknown}
                       onClick={() => handleTabChange(tab.type)}
                       style={{
                         flex: 1, padding: '15px 4px', borderRadius: 13,
@@ -1264,8 +1457,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                         border: `1.5px solid ${active ? tabTc.border : 'rgba(255,255,255,0.08)'}`,
                         color: active ? tabTc.text : '#b3b3b3',
                         fontSize: 15, fontFamily: SERIF, fontWeight: 700, letterSpacing: '0.06em',
-                        cursor: 'pointer',
-                        animation: active ? 'gj-pulse-gold 2.4s ease-in-out infinite' : 'none',
+                        cursor: ticketResultUnknown ? 'default' : 'pointer',
+                        opacity: ticketResultUnknown ? 0.6 : 1,
+                        animation: (active && !ticketResultUnknown) ? 'gj-pulse-gold 2.4s ease-in-out infinite' : 'none',
                         transition: 'all 0.18s',
                       }}
                     >
@@ -1286,6 +1480,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                         <button
                           key={amount}
                           type="button"
+                          disabled={ticketResultUnknown}
                           onClick={() => setDiscountAmountInput(String(amount))}
                           style={{
                             padding: '12px 4px', borderRadius: 12,
@@ -1293,7 +1488,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                             border: `1.5px solid ${active ? tc.border : 'rgba(255,255,255,0.09)'}`,
                             color: active ? tc.text : '#e5e5e5',
                             fontFamily: SERIF, fontSize: 16, fontWeight: 700,
-                            cursor: 'pointer',
+                            cursor: ticketResultUnknown ? 'default' : 'pointer',
+                            opacity: ticketResultUnknown ? 0.6 : 1,
                             transition: 'all 0.15s',
                           }}
                         >
@@ -1309,8 +1505,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     type="number"
                     inputMode="numeric"
                     min="1"
+                    disabled={ticketResultUnknown}
                     value={ticketTab === 'discount' ? discountAmountInput : otokuAmountInput}
                     onChange={e => {
+                      if (ticketResultUnknown) return
                       const v = e.target.value.replace(/[^\d]/g, '')
                       if (ticketTab === 'discount') {
                         setDiscountAmountInput(v)
@@ -1326,6 +1524,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                       border: `1.5px solid ${effectiveAmount > 0 ? tc.border : 'rgba(255,255,255,0.12)'}`,
                       color: '#F2E6C8', fontFamily: SERIF, fontSize: 28, fontWeight: 700,
                       outline: 'none', letterSpacing: '0.04em',
+                      opacity: ticketResultUnknown ? 0.6 : 1,
                       transition: 'border-color 0.15s, background 0.15s',
                     }}
                   />
@@ -1349,6 +1548,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 {QTY_PRESETS.map(n => (
                   <button
                     key={n}
+                    disabled={ticketResultUnknown}
                     onClick={() => setQuantity(n)}
                     style={{
                       flex: 1, padding: '14px 2px', borderRadius: 11,
@@ -1356,8 +1556,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                       border: `1.5px solid ${quantity === n ? tc.border : 'rgba(255,255,255,0.09)'}`,
                       color: quantity === n ? tc.text : '#e5e5e5',
                       fontFamily: SERIF, fontSize: 16, fontWeight: 700,
-                      cursor: 'pointer',
-                      animation: quantity === n ? 'gj-pulse-gold 2.2s ease-in-out infinite' : 'none',
+                      cursor: ticketResultUnknown ? 'default' : 'pointer',
+                      opacity: ticketResultUnknown ? 0.6 : 1,
+                      animation: (quantity === n && !ticketResultUnknown) ? 'gj-pulse-gold 2.2s ease-in-out infinite' : 'none',
                       transition: 'all 0.15s',
                     }}
                   >
@@ -1367,12 +1568,42 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginBottom: 18 }}>
-                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: '#e5e5e5', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                <button
+                  disabled={ticketResultUnknown}
+                  onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                  style={{
+                    width: 46, height: 46, borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1.5px solid rgba(255,255,255,0.13)',
+                    color: ticketResultUnknown ? '#666666' : '#e5e5e5',
+                    fontSize: 22, fontWeight: 300,
+                    cursor: ticketResultUnknown ? 'default' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    opacity: ticketResultUnknown ? 0.6 : 1,
+                  }}
+                >
+                  −
+                </button>
                 <div style={{ textAlign: 'center', minWidth: 72 }}>
                   <span style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 700, color: '#F2E6C8', letterSpacing: '-0.01em' }}>{quantity}</span>
                   <span style={{ fontSize: 12, color: '#e5e5e5', marginLeft: 4 }}>枚</span>
                 </div>
-                <button onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.13)', color: '#e5e5e5', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
+                <button
+                  disabled={ticketResultUnknown}
+                  onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))}
+                  style={{
+                    width: 46, height: 46, borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1.5px solid rgba(255,255,255,0.13)',
+                    color: ticketResultUnknown ? '#666666' : '#e5e5e5',
+                    fontSize: 22, fontWeight: 300,
+                    cursor: ticketResultUnknown ? 'default' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    opacity: ticketResultUnknown ? 0.6 : 1,
+                  }}
+                >
+                  ＋
+                </button>
               </div>
 
               {/* Summary */}
@@ -1895,37 +2126,39 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             <button
               type="button"
               onClick={handleReset}
+              disabled={ticketResultUnknown}
               style={{
                 flex: '0 0 34%', height: 66, borderRadius: 18,
                 background: 'rgba(255,255,255,0.045)',
                 border: '1.5px solid rgba(255,255,255,0.14)',
-                color: '#e5e5e5',
+                color: ticketResultUnknown ? '#666666' : '#e5e5e5',
                 fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em',
-                cursor: 'pointer',
+                cursor: ticketResultUnknown ? 'default' : 'pointer',
               }}
             >
               次のお客様
             </button>
             <button
-              onClick={handleIssueClick}
-              disabled={!canIssue}
+              type="button"
+              onClick={ticketResultUnknown ? () => void handleRetryIssueTicket() : handleIssueClick}
+              disabled={ticketResultUnknown ? issueLoading : !canIssue}
               style={{
                 flex: 1, height: 66, borderRadius: 18,
-                background: canIssue
+                background: (canIssue || ticketResultUnknown)
                   ? 'linear-gradient(90deg, #800c14 0%, #3a0307 100%)'
                   : 'rgba(255,255,255,0.04)',
-                border: `2px solid ${canIssue ? '#e6ca65' : 'rgba(255,255,255,0.07)'}`,
-                boxShadow: canIssue
+                border: `2px solid ${(canIssue || ticketResultUnknown) ? '#e6ca65' : 'rgba(255,255,255,0.07)'}`,
+                boxShadow: (canIssue || ticketResultUnknown)
                   ? ['0 0 32px rgba(128,12,20,0.72)', '0 0 64px rgba(128,12,20,0.36)', 'inset 0 1px 0 rgba(230,202,101,0.28)', 'inset 0 -1px 0 rgba(230,202,101,0.1)', '0 6px 32px rgba(0,0,0,0.85)'].join(', ')
                   : 'none',
-                color: canIssue ? '#F2E6C8' : '#999999',
+                color: (canIssue || ticketResultUnknown) ? '#F2E6C8' : '#999999',
                 fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.22em',
-                cursor: canIssue ? 'pointer' : 'default',
-                animation: canIssue ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
+                cursor: (canIssue || (ticketResultUnknown && !issueLoading)) ? 'pointer' : 'default',
+                animation: (canIssue || ticketResultUnknown) ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
                 transition: 'background 0.2s, border-color 0.2s',
               }}
             >
-              {issueLoading ? '発行中…' : '発行する'}
+              {issueLoading ? '処理中…' : ticketResultUnknown ? '再試行' : '発行する'}
             </button>
           </div>
         </div>
@@ -2165,6 +2398,28 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             setShowOperatorModal(false)
           }}
           onCancel={() => setShowOperatorModal(false)}
+        />
+      )}
+
+      {pendingTicketApproval && (
+        <ManagerApprovalModal
+          action={pendingTicketApproval.action}
+          requestHash={pendingTicketApproval.requestHash}
+          onApproved={handleTicketApproved}
+          onCancel={() => {
+            setPendingTicketApproval(null)
+            if (!ticketResultUnknown) {
+              setTicketIssueKey(null)
+            }
+          }}
+          onOperatorAuthRequired={() => {
+            setPendingTicketApproval(null)
+            if (!ticketResultUnknown) {
+              setTicketIssueKey(null)
+            }
+            setOperator(null)
+            setShowOperatorModal(true)
+          }}
         />
       )}
 
