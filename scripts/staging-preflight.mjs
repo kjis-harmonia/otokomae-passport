@@ -34,6 +34,7 @@ const MIGRATION_ORDER = [
   '20261009000300_pos_pricing_engine.sql',
   '20261009000400_pos_money_authorization.sql',
   '20261009000500_pos_manager_candidates.sql',
+  '20261009000900_pos_replay_hardening.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
@@ -146,6 +147,7 @@ async function main() {
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_pricing_engine.sql'), 'POS P0-4 server-side pricing engine')
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_money_authorization.sql'), 'POS P0-5 money authorization enforcement')
     runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_manager_approval.sql'), 'POS A4-2 manager approval and candidates')
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_replay_hardening.sql'), 'POS Phase B-1 replay hardening and safety')
     if (baselineDbUrl) {
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_ginpay_reconcile.sql'), 'baseline POS P0-1 GINPay reconcile guard')
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_presence_token.sql'), 'baseline POS P0-2 presence token')
@@ -153,8 +155,9 @@ async function main() {
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_pricing_engine.sql'), 'baseline POS P0-4 server-side pricing engine')
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_money_authorization.sql'), 'baseline POS P0-5 money authorization enforcement')
       runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_manager_approval.sql'), 'baseline POS A4-2 manager approval and candidates')
+      runPsqlFile(baselineDbUrl, join(testsDir, 'preflight_pos_replay_hardening.sql'), 'baseline POS Phase B-1 replay hardening and safety')
     }
-    return `reconcile guard + presence token + operator approval + pricing engine + money authorization + manager approval ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
+    return `reconcile guard + presence token + operator approval + pricing engine + money authorization + manager approval + replay hardening ok${baselineDbUrl ? ' (clean + baseline)' : ''}`
   })
 
   await stage('concurrency', async () => {
@@ -181,7 +184,11 @@ async function main() {
     runPsqlFile(dbUrl, join(testsDir, 'pos_pricing_concurrency_setup.sql'), 'POS pricing concurrency setup')
     runPgbench(dbUrl, join(testsDir, 'pos_pricing_concurrency_worker.sql'), 'POS pricing concurrency')
     runPsqlFile(dbUrl, join(testsDir, 'pos_pricing_concurrency_verify.sql'), 'POS pricing concurrency verify')
-    return 'booking + checkout + GINPay + POS presence + POS approval + GINPay mismatch + POS pricing concurrency ok'
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_replay_concurrency_setup.sql'), 'POS replay hardening concurrency setup')
+    runPgbench(dbUrl, join(testsDir, 'preflight_replay_concurrency_refund_worker.sql'), 'POS replay hardening refund concurrency')
+    runPgbench(dbUrl, join(testsDir, 'preflight_replay_concurrency_sale_worker.sql'), 'POS replay hardening sale concurrency')
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_replay_concurrency_verify.sql'), 'POS replay hardening concurrency verify')
+    return 'booking + checkout + GINPay + POS presence + POS approval + GINPay mismatch + POS pricing + POS replay hardening concurrency ok'
   })
 
   await stage('frontend', async () => {
