@@ -391,12 +391,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   // Ticket-use QR flow
   const [ticketUseData, setTicketUseData]         = useState<TicketUseQRData | null>(null)
-  const [ticketForUse, setTicketForUse]           = useState<TicketRow | null>(null)
   const [ticketQrExpired, setTicketQrExpired]     = useState(false)
-  const [ticketConfirming, setTicketConfirming]   = useState(false)
-  const [ticketConfirmed, setTicketConfirmed]     = useState(false)
   const [ticketBlockMsg, setTicketBlockMsg]       = useState<string | null>(null)
-  const [ticketUsedThisSession, setTicketUsedThisSession] = useState(false)
 
   // Maintenance coupon QR flow
   const [maintCouponData, setMaintCouponData]         = useState<MaintenanceCouponQRData | null>(null)
@@ -446,7 +442,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const elapsedDays   = prevLastVisitDate ? daysSince(prevLastVisitDate) : null
   const isEligible    = !isFirstVisit && prevLastVisitDate !== undefined && elapsedDays !== null && elapsedDays <= 14
   const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0
-  const activeTickets = userTickets.filter(t => !t.used)
+  const activeTickets = userTickets.filter(t =>
+    !t.used && !t.pending_transfer && (!t.expires_at || new Date(t.expires_at) > new Date()),
+  )
   const selectedTickets = activeTickets.filter(t => selectedTicketIds.includes(t.id))
   const selectedTotal   = selectedTickets.reduce((sum, t) => sum + t.amount, 0)
   const selectedType    = selectedTickets[0]?.type ?? null
@@ -475,11 +473,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setUserTickets([])
     setTicketsLoading(false)
     setTicketUseData(null)
-    setTicketForUse(null)
     setTicketQrExpired(false)
-    setTicketConfirmed(false)
     setTicketBlockMsg(null)
-    setTicketUsedThisSession(false)
     setCheckInStatus('idle')
     setCheckInDate(null)
     setBindCode(null)
@@ -510,14 +505,32 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     if (data.type === 'ginjiro-ticket-use') {
       const tuData = data as TicketUseQRData
       setTicketUseData(tuData); setTicketBlockMsg(null)
-      setTicketConfirmed(false); setTicketForUse(null)
+      setSelectedTicketIds([])
+      setSelectNotice(null)
+      setUseError(null)
       setPhase('ticket-loading')
-      if (new Date() > new Date(tuData.expiresAt)) { setTicketQrExpired(true); setPhase('ticket-result'); return }
+      if (!tuData.expiresAt || isQrPayloadExpired(tuData.expiresAt)) { setTicketQrExpired(true); setPhase('ticket-result'); return }
       setTicketQrExpired(false)
       try {
-        const tickets = await getTicketsForStaff(tuData.userId)
-        setTicketForUse(tickets.find(t => t.id === tuData.selectedTicketId) ?? null)
-      } catch { setTicketForUse(null) }
+        const ctx = await getCustomerContextForStaff(tuData.userId)
+        const ticket = ctx.tickets.find(t => t.id === tuData.selectedTicketId)
+        if (!ticket || ticket.used || ticket.pending_transfer || (ticket.expires_at && !(new Date(ticket.expires_at) > new Date()))) {
+          setTicketBlockMsg('このチケットは使用済み・期限切れ・譲渡中、または存在しないため使用できません。')
+        } else {
+          // 個別チケットQRも会員QRと同じ一覧へ進み、同種の券を追加選択できる。
+          setScannedData({ type: 'ginjiro-passport', userId: tuData.userId, name: ctx.customer?.name || 'お客様' })
+          setPrevLastVisitDate(ctx.last_visit_date)
+          setUserTickets(ctx.tickets)
+          setTodayUsedType(ctx.today_used_type)
+          setSelectedTicketIds(canUseDiscountType(ctx.today_used_type, ticket.type) && !isWelcomeCouponBlockedToday(ticket) ? [ticket.id] : [])
+          setCheckInStatus('idle')
+          setCheckInDate(null)
+          setPhase('result')
+          return
+        }
+      } catch (err) {
+        setTicketBlockMsg(rpcErrorMessage(err, 'チケットの確認に失敗しました。通信環境を確認して読み取り直してください。'))
+      }
       setPhase('ticket-result')
       return
     }
@@ -558,6 +571,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     }
 
     const passportData = data as PassportQRData
+    setTicketUseData(null)
+    setSelectedTicketIds([])
+    setSelectNotice(null)
     setScannedData(passportData)
     setPhase('loading')
     // 会員登録（初回登録・名前更新）＋来店日・チケット・当日利用状況をサーバーから一括取得。
@@ -639,6 +655,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   /** 割引券の選択／解除。使えない券は選べない。種別の違う券は混ぜずに選び直す */
   function toggleTicketSelection(ticket: TicketRow) {
+    if (useConfirmLoading || !activeTickets.some(t => t.id === ticket.id)) return
     if (!canUseDiscountType(todayUsedType, ticket.type) || !staffId.trim()) return
     if (isWelcomeCouponBlockedToday(ticket)) return
     setUseError(null)
@@ -668,7 +685,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   }
 
   const handleConfirmUse = async () => {
-    if (selectedTickets.length === 0 || !scannedData || !staffId.trim()) return
+    if (useConfirmLoading || selectedTickets.length === 0 || !scannedData || !staffId.trim()) return
     setUseConfirmLoading(true)
     setUseError(null)
     const ticketIds  = selectedTickets.map(t => t.id)
@@ -676,6 +693,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     const total      = selectedTotal
     const count      = selectedTickets.length
     try {
+      if (ticketUseData && (!ticketUseData.expiresAt || isQrPayloadExpired(ticketUseData.expiresAt))) {
+        setUseError('QRコードの有効期限が切れました。お客様のQRを読み取り直してください。')
+        return
+      }
       if (selectedTickets.some(t => isWelcomeCouponBlockedToday(t))) {
         setUseError(WELCOME_COUPON_WEEKEND_MESSAGE)
         setUseConfirmLoading(false)
@@ -751,26 +772,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       setCheckInStatus('idle')
       setUseError(rpcErrorMessage(err, '来店登録に失敗しました。通信環境を確認してください。'))
     }
-  }
-
-  const handleConfirmTicketUse = async () => {
-    if (!ticketUseData || !ticketForUse || !staffId.trim()) return
-    if (ticketUsedThisSession) { setTicketBlockMsg('このお会計では既にチケットを1枚使用しています。'); return }
-    if (ticketForUse.used) { setTicketBlockMsg('このチケットはすでに使用済みです。'); return }
-    if (isWelcomeCouponBlockedToday(ticketForUse)) { setTicketBlockMsg(WELCOME_COUPON_WEEKEND_MESSAGE); return }
-    setTicketConfirming(true); setTicketBlockMsg(null)
-    try {
-      // 当日の併用ルール（異なる割引種別は不可・同種は複数枚可）・本人確認・used化・使用ログ・
-      // 来店日更新はサーバー側で1トランザクション
-      await redeemTickets({
-        userId: ticketUseData.userId, ticketIds: [ticketForUse.id], staffName: staffId, customerName: '',
-      })
-      setTicketForUse(prev => prev ? { ...prev, used: true, used_at: new Date().toISOString() } : prev)
-      setTicketConfirmed(true); setTicketUsedThisSession(true)
-      playSuccessSound()
-    } catch (err) {
-      setTicketBlockMsg(`使用確定できませんでした。${rpcErrorMessage(err, 'ネットワークを確認してください。')}`)
-    } finally { setTicketConfirming(false) }
   }
 
   const handleConfirmMaintenanceCoupon = async () => {
@@ -1570,96 +1571,11 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#E06040', marginBottom: 10 }}>QRコードの有効期限が切れています</p>
                 <p style={{ fontSize: 12, color: 'rgba(220,120,100,1)', lineHeight: 1.6 }}>お客様に再度「使用する」を押していただいてください。</p>
               </div>
-            ) : ticketForUse === null ? (
-              <div style={{ borderRadius: 18, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', padding: '28px 22px', textAlign: 'center', marginBottom: 16 }}>
-                <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#e5e5e5', marginBottom: 8 }}>チケットが見つかりません</p>
-                <p style={{ fontSize: 12, color: '#e5e5e5', lineHeight: 1.6 }}>すでに使用済みか、存在しないチケットです。</p>
-              </div>
-            ) : ticketConfirmed ? (
-              <div style={{ borderRadius: 18, background: 'linear-gradient(135deg, rgba(15,50,22,0.6), rgba(8,35,15,0.8))', border: '1px solid rgba(80,192,90,0.38)', padding: '28px 22px', textAlign: 'center', marginBottom: 16, boxShadow: '0 4px 36px rgba(80,192,80,0.14)' }}>
-                <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(100,200,100,0.12)', border: '1px solid rgba(100,200,100,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: 24 }}>✓</div>
-                <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#80E060', marginBottom: 10 }}>使用確定しました</p>
-                <p style={{ fontFamily: SERIF, fontSize: 17, color: '#F2E6C8', marginBottom: 4 }}>{ticketForUse.title}</p>
-                {ticketForUse.amount > 0 && (
-                  <p style={{ fontFamily: SERIF, fontSize: 22, color: '#C9A24A', marginBottom: 8 }}>¥{ticketForUse.amount.toLocaleString()}</p>
-                )}
-                <p style={{ fontSize: 12, color: 'rgba(128,224,96,1)', marginTop: 4, lineHeight: 1.6 }}>
-                  来店チェックイン完了<br />
-                  <span style={{ fontSize: 10, color: 'rgba(128,224,96,1)' }}>メンテナンスカウントダウンをリセットしました</span>
-                </p>
-              </div>
             ) : (
-              <>
-                {(() => {
-                  const tktTc     = TICKET_TYPE_COLORS[ticketForUse.type]
-                  const isUsed    = ticketForUse.used
-                  const isExpired = !!ticketForUse.expires_at && new Date(ticketForUse.expires_at) < new Date()
-                  return (
-                    <div style={{ borderRadius: 16, marginBottom: 14, border: `1px solid ${tktTc.border}`, background: 'linear-gradient(160deg, #120A06 0%, #0A0504 100%)', overflow: 'hidden' }}>
-                      <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${tktTc.border}, transparent)` }} />
-                      <div style={{ padding: '16px 18px' }}>
-                        <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 8, fontFamily: SERIF }}>チケット確認</p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tktTc.bg, border: `1px solid ${tktTc.border}`, color: tktTc.text, letterSpacing: '0.1em' }}>
-                            {TICKET_TYPE_LABELS[ticketForUse.type]}
-                          </span>
-                          {isUsed    && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(224,96,80,0.12)', border: '1px solid rgba(224,96,80,0.38)', color: '#E06050' }}>使用済み</span>}
-                          {isExpired && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(255,180,0,0.1)',  border: '1px solid rgba(255,180,0,0.3)',  color: '#FFB400' }}>期限切れ</span>}
-                          {!isUsed && !isExpired && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(100,210,110,0.08)', border: '1px solid rgba(100,210,110,0.3)', color: '#64D26E' }}>未使用</span>}
-                        </div>
-                        <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', marginBottom: ticketForUse.amount > 0 ? 4 : 10 }}>{ticketForUse.title}</p>
-                        {ticketForUse.amount > 0 && (
-                          <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#C9A24A', marginBottom: 10, lineHeight: 1 }}>¥{ticketForUse.amount.toLocaleString()}</p>
-                        )}
-                        <p style={{ fontSize: 9, color: '#e5e5e5', marginTop: 4 }}>
-                          QR有効期限 {new Date(ticketUseData.expiresAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} まで
-                        </p>
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                {ticketBlockMsg && (
-                  <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '10px 14px', marginBottom: 12 }}>
-                    <p style={{ fontSize: 12, color: '#E06060' }}>{ticketBlockMsg}</p>
-                  </div>
-                )}
-                {!staffId.trim() && (
-                  <div style={{ borderRadius: 12, background: 'rgba(224,140,0,0.1)', border: '1px solid rgba(224,140,0,0.3)', padding: '10px 14px', marginBottom: 12 }}>
-                    <p style={{ fontSize: 11, color: '#E08C00' }}>担当者を選択してください</p>
-                  </div>
-                )}
-                {ticketUsedThisSession && (
-                  <div style={{ borderRadius: 12, background: 'rgba(255,180,0,0.08)', border: '1px solid rgba(255,180,0,0.28)', padding: '10px 14px', marginBottom: 12 }}>
-                    <p style={{ fontSize: 11, color: '#FFB400' }}>このお会計では既に1枚使用しています（1会計1枚ルール）</p>
-                  </div>
-                )}
-                {isWelcomeCouponBlockedToday(ticketForUse) && !ticketBlockMsg && (
-                  <div style={{ borderRadius: 12, background: 'rgba(139,26,26,0.15)', border: '1px solid rgba(224,96,96,0.28)', padding: '10px 14px', marginBottom: 12 }}>
-                    <p style={{ fontSize: 12, color: '#E06060' }}>{WELCOME_COUPON_WEEKEND_MESSAGE}</p>
-                  </div>
-                )}
-
-                {!ticketForUse.used && (
-                  <button
-                    onClick={() => { void handleConfirmTicketUse() }}
-                    disabled={ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)}
-                    style={{
-                      width: '100%', padding: '16px', borderRadius: 14, marginBottom: 10,
-                      background: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse))
-                        ? 'rgba(255,255,255,0.04)'
-                        : 'linear-gradient(135deg, #0a3d1a 0%, #145a2a 60%, #1a7a38 100%)',
-                      border: `1px solid ${(ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? 'rgba(255,255,255,0.08)' : 'rgba(100,200,100,0.44)'}`,
-                      boxShadow: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? 'none' : '0 4px 20px rgba(20,90,42,0.45)',
-                      color: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? '#999999' : '#D0F4D8',
-                      fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.18em',
-                      cursor: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? 'default' : 'pointer',
-                    }}
-                  >
-                    {ticketConfirming ? '確定中…' : isWelcomeCouponBlockedToday(ticketForUse) ? '平日のみ利用可' : '使用確定'}
-                  </button>
-                )}
-              </>
+              <div style={{ borderRadius: 18, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', padding: '28px 22px', textAlign: 'center', marginBottom: 16 }}>
+                <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#e5e5e5', marginBottom: 8 }}>チケットを確認できませんでした</p>
+                <p style={{ fontSize: 12, color: '#e5e5e5', lineHeight: 1.6 }}>{ticketBlockMsg}</p>
+              </div>
             )}
 
             <button onClick={handleReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
@@ -2265,11 +2181,11 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       {showUseConfirm && selectedTickets.length > 0 && scannedData && (
         <div
           onClick={() => { if (!useConfirmLoading) closeUseConfirm() }}
-          style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(0,0,0,0.90)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.90)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
         >
           <div
             onClick={e => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 440, borderRadius: 24, background: 'linear-gradient(160deg, #060e07 0%, #040a04 100%)', border: '1px solid rgba(100,200,100,0.28)', boxShadow: '0 32px 80px rgba(0,0,0,0.92)', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 440, maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto', borderRadius: 24, background: 'linear-gradient(160deg, #060e07 0%, #040a04 100%)', border: '1px solid rgba(100,200,100,0.28)', boxShadow: '0 32px 80px rgba(0,0,0,0.92)' }}
           >
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #0a3d1a 30%, #1a7a38 50%, #0a3d1a 70%, transparent)' }} />
             <div style={{ padding: '28px 26px 24px' }}>
@@ -2291,7 +2207,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8' }}>{value}</span>
                   </div>
                 ))}
-                <div style={{ marginBottom: 8 }}>
+                <div style={{ marginBottom: 8, maxHeight: 160, overflowY: 'auto' }}>
                   {selectedTickets.map(t => (
                     <p key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#e5e5e5', lineHeight: 1.7 }}>
                       <span>{t.title}</span>

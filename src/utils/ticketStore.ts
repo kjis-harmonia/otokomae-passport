@@ -172,13 +172,19 @@ export interface UseTicketsInput {
  * used化・使用ログ・来店日更新をまとめて行う。失敗時は RpcError。
  */
 export async function redeemTickets(input: UseTicketsInput): Promise<{ tickets: TicketRow[]; visitDate: string }> {
+  const ticketIds = [...new Set(input.ticketIds)]
+  if (ticketIds.length === 0) throw new RpcError('no_tickets')
   const r = await callStaffRpc<{ tickets: TicketRow[]; visit_date: string }>('staff_use_tickets', {
     p_user_id:       input.userId,
-    p_ticket_ids:    input.ticketIds,
+    p_ticket_ids:    ticketIds,
     p_staff_name:    input.staffName,
     p_customer_name: input.customerName,
   })
-  return { tickets: r.tickets ?? [], visitDate: r.visit_date }
+  const redeemedIds = new Set(r?.tickets?.filter(t => t.used).map(t => t.id))
+  if (!r?.visit_date || redeemedIds.size !== ticketIds.length || ticketIds.some(id => !redeemedIds.has(id))) {
+    throw new Error('使用結果を確認できませんでした。QRを読み取り直してチケットの状態を確認してください。')
+  }
+  return { tickets: r.tickets, visitDate: r.visit_date }
 }
 
 // ── Transfer（顧客セッション必須） ─────────────────────────────────────────────
