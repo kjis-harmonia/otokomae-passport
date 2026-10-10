@@ -968,6 +968,164 @@ async function panelSend(input, kind, sendAccountId = input.accountId) {
   resetPending()
 }
 
+// ── 16. B-2B-1：店長の承認（何を承認するかの表示・モーダルの状態） ──
+const AS = await import(load('src/utils/approvalSummary.ts', {}))
+const SECRETS = /APR1\.|AUTH1\.|QTE1\.|op-token|staff-token|1234/
+{
+  // 送る入力に秘密の値が混ざっていても、表示には出ない（項目を選んで作る）
+  const chargeSent = { ...chargeInput, amount: 60000, approvalToken: 'APR1.' + 'a'.repeat(64), operatorToken: 'op-token', pin: '1234' }
+  const c = AS.chargeApprovalSummary(chargeSent, { customerName: '山田', accountLabel: '統合元 佐藤 の口座' })
+  check('B-2B-1 charge summary: operation, amount, customer, account, payment method from the sent input',
+    c.operation === 'GINPayチャージ' && c.amount === 60000
+    && JSON.stringify(c.details) === JSON.stringify([{ label: '対象', value: '山田 様' }, { label: 'チャージ先', value: '統合元 佐藤 の口座' }, { label: '支払方法', value: '現金' }]))
+  const r = AS.refundApprovalSummary({ ...refundInput, amount: 1500 }, { customerName: '山田', originalLabel: '支払い ¥-3,000（10/9 14:00）' })
+  check('B-2B-1 refund summary: operation, amount, customer, original transaction, reason',
+    r.operation === 'GINPay返金' && r.amount === 1500 && r.details.map((d) => d.label).join() === '対象,元の取引,理由' && r.details[2].value === refundInput.reason)
+  const t = AS.ticketApprovalSummary(ticketInput)
+  check('B-2B-1 ticket summary: total = amount x quantity, type and count shown',
+    t.operation === 'チケット発行' && t.amount === 1000 && t.details.some((d) => d.label === '内容' && d.value === '割引券 ¥500 × 2枚') && t.details[0].value === '山田 様')
+  // 予約メニュー ¥4,000 を数量2で送っても、サーバーは予約明細を数量1で計算する（pos_price: v_qty := 1）。
+  // 承認を求める応答（staff_pos_quote の approval_required）は小計・合計を文字列で返す
+  const resvInput = {
+    reservation_id: 'r-1',
+    items: [
+      { source: 'reservation', ref_id: 'cut', name: 'カット', category: 'menu', quantity: 2, unit_price: 4000 },
+      { source: 'manual', ref_id: null, name: 'ヘッドスパ', category: 'manual', quantity: 1, unit_price: 1000 },
+    ],
+    ticket_ids: [],
+  }
+  const approvalRes = { error: 'approval_required', action: 'checkout_pricing_override', request_hash: 'a'.repeat(64), subtotal: '5000', total: '5000' }
+  const server = AS.quoteApprovalAmounts(approvalRes)
+  const q = AS.checkoutApprovalSummary(resvInput, server, 'a'.repeat(64), { customerName: '山田' })
+  const qText = JSON.stringify(q)
+  check('B-2B-1 M1 reservation item sent as quantity 2 + manual item: the approval shows the server total ¥5,000, not the raw ¥9,000, and does not list the raw lines as settled items',
+    server && server.subtotal === 5000 && server.total === 5000
+    && q.amount === 5000 && q.amountLabel === '会計の合計' && q.details.some((d) => d.label === '小計' && d.value === '¥5,000')
+    && !qText.includes('9,000') && !qText.includes('× 2') && !qText.includes('カット') && !('amountNote' in q))
+  check('B-2B-1 M1 entered changes are shown separately from the server total (added item, discount, explicit price change)',
+    q.changes?.title === AS.CHECKOUT_REQUEST_TITLE && AS.CHECKOUT_REQUEST_TITLE === '申請した内容（金額は上の合計で確定）'
+    && JSON.stringify(q.changes.lines) === JSON.stringify([{ label: '追加：ヘッドスパ', value: '入力単価 ¥1,000' }])
+    && JSON.stringify(AS.checkoutApprovalSummary({ items: [{ source: 'service_menu', name: 'パーマ', quantity: 1, unit_price: 9000, price_override: { price: 8000, reason: '常連' } }, { source: 'manual', name: '物販', quantity: 3, unit_price: 500 }], manual_discount: { amount: 300, label: '端数' } },
+      { requestHash: 'h', subtotal: 9500, total: 9200 }, 'h', { customerName: null }))
+      === JSON.stringify({ operation: '会計の価格変更', amount: 9200, amountLabel: '会計の合計', details: [{ label: '対象', value: '顧客の指定なし' }, { label: '小計', value: '¥9,500' }],
+        changes: { title: AS.CHECKOUT_REQUEST_TITLE, lines: [{ label: 'パーマ', value: '価格変更 ¥8,000' }, { label: '追加：物販', value: '入力単価 ¥500・入力数量 3' }, { label: '値引き：端数', value: '−¥300' }] } }))
+  {
+    // price_from メニューの増額（price_override なし）。サーバーは入力単価が基本価格より高いと承認を求める（pos_price）。
+    // フロントはその判定をせず、送る入力単価を申請内容として出す
+    const perm = AS.checkoutApprovalSummary({ items: [{ source: 'service_menu', ref_id: 'perm', name: 'デザインパーマ', category: 'menu', quantity: 1, unit_price: 10000 }] },
+      { requestHash: 'p', subtotal: 10000, total: 10000 }, 'p', { customerName: '山田' })
+    check('B-2B-1 M1 price_from menu raised without price_override: the entered unit price is shown as a requested item (server total ¥10,000 shown separately)',
+      JSON.stringify(perm) === JSON.stringify({ operation: '会計の価格変更', amount: 10000, amountLabel: '会計の合計',
+        details: [{ label: '対象', value: '山田 様' }, { label: '小計', value: '¥10,000' }],
+        changes: { title: AS.CHECKOUT_REQUEST_TITLE, lines: [{ label: 'デザインパーマ', value: '入力単価 ¥10,000' }] } }))
+    // 複数のメニュー・店販・手入力・値引きを一緒に。どれが例外かは決めず、サーバーが読む価格入力を漏れなく出す。予約の明細（入力単価を使わない）は出さない
+    const multi = AS.checkoutApprovalSummary({
+      reservation_id: 'r-1',
+      items: [
+        { source: 'reservation', ref_id: 'cut', name: 'カット', quantity: 2, unit_price: 4000 },
+        { source: 'service_menu', ref_id: 'perm', name: 'パーマ', quantity: 1, unit_price: 12000 },
+        { source: 'accounting_item', ref_id: 'opt', name: 'トリートメント', quantity: 1, unit_price: 3000 },
+        { source: 'product', ref_id: 'wax', name: 'ワックス', quantity: 3, unit_price: 2000 },
+        { source: 'manual', ref_id: null, name: '持ち込み対応', quantity: 1, unit_price: 500 },
+      ],
+      manual_discount: { amount: 1000, label: '常連' },
+    }, { requestHash: 'm', subtotal: 25500, total: 24500 }, 'm', { customerName: null })
+    const mText = JSON.stringify(multi)
+    check('B-2B-1 M1 several price inputs (menus without price_override, product, manual item, discount) are all listed as requested content; reservation line is not',
+      JSON.stringify(multi.changes.lines) === JSON.stringify([
+        { label: 'パーマ', value: '入力単価 ¥12,000' },
+        { label: 'トリートメント', value: '入力単価 ¥3,000' },
+        { label: 'ワックス', value: '入力単価 ¥2,000・入力数量 3' },
+        { label: '追加：持ち込み対応', value: '入力単価 ¥500' },
+        { label: '値引き：常連', value: '−¥1,000' },
+      ]) && !mText.includes('カット'))
+    check('B-2B-1 M1 server amounts and requested content are separate: amount/小計 come only from the server, never from the entered prices',
+      multi.amount === 24500 && JSON.stringify(multi.details) === JSON.stringify([{ label: '対象', value: '顧客の指定なし' }, { label: '小計', value: '¥25,500' }])
+      && !mText.includes('29,500') && !mText.includes('33,500') && multi.changes.lines.every((l) => l.value.startsWith('入力単価') || l.value.startsWith('−') || l.value.startsWith('価格変更')))
+    check('B-2B-1 M1 raw quantities are never shown as settled quantities: only as 入力数量 on lines the server prices from input, never for reservation lines',
+      !/×/.test(mText) && !/×/.test(qText) && mText.includes('入力数量 3')
+      && !JSON.stringify(AS.checkoutApprovalSummary({ items: [{ source: 'reservation', name: 'カット', quantity: 2, unit_price: 4000, price_override: { price: 3500, reason: 'x' } }] }, { requestHash: 'z', subtotal: 3500, total: 3500 }, 'z', {})).includes('数量'))
+  }
+  check('B-2B-1 M1 fail-closed: an approval response without readable subtotal / total / request_hash yields no amounts (no guessed amount is shown)',
+    [{ ...approvalRes, total: undefined }, { ...approvalRes, subtotal: null }, { ...approvalRes, total: 'abc' }, { ...approvalRes, total: '-1' }, { ...approvalRes, total: 1.5 }, { ...approvalRes, total: '' }, { ...approvalRes, request_hash: '' }]
+      .every((r) => AS.quoteApprovalAmounts(r) === null)
+    && AS.quoteApprovalAmounts({ ...approvalRes, subtotal: 5000, total: 4700 })?.total === 4700)
+  check('B-2B-1 M1 amounts from a response for another request hash are never shown on the current approval',
+    AS.checkoutApprovalSummary(resvInput, { requestHash: 'b'.repeat(64), subtotal: 9000, total: 9000 }, 'a'.repeat(64), { customerName: null }) === null)
+  const longName = 'X'.repeat(30) + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.repeat(3)
+  const ql = AS.checkoutApprovalSummary({ items: [{ source: 'manual', name: longName, quantity: 1, unit_price: 1200 }] }, { requestHash: 'h', subtotal: 1200, total: 1200 }, 'h', { customerName: longName })
+  check('B-2B-1 L2 a long alphanumeric item name is kept whole (not truncated) and its amount stays a separate value',
+    ql.changes.lines[0].label === '追加：' + longName && ql.changes.lines[0].value === '入力単価 ¥1,200' && ql.details[0].value === longName + ' 様')
+  const leaked = [
+    AS.chargeApprovalSummary(chargeSent, { customerName: 'APR1.' + 'b'.repeat(64), accountLabel: 'QTE1.' + 'c'.repeat(64) }),
+    AS.refundApprovalSummary({ amount: 1, reason: 'AUTH1.' + 'd'.repeat(64) }, { customerName: 'staff-token' }),
+    AS.checkoutApprovalSummary({ items: [{ source: 'manual', name: 'op-token', unit_price: 1 }], manual_discount: { amount: 1, label: 'APR1.x' } }, { requestHash: 'h', subtotal: 1, total: 0 }, 'h', { customerName: null }),
+    t, c, r, q,
+  ]
+  check('B-2B-1 summaries never contain PIN / APR1 / AUTH1 / QTE1 / tokens, even if such values reach the inputs', leaked.every((s) => !SECRETS.test(JSON.stringify(s))))
+}
+{
+  const modalSrc = readFileSync(join(root, 'src/components/pos/ManagerApprovalModal.tsx'), 'utf8').replace(/\r\n/g, '\n')
+  const loadEffect = modalSrc.slice(modalSrc.indexOf('// 管理者一覧：開いたときに1回だけ'), modalSrc.indexOf('// 承認対象が変わったら'))
+  check('B-2B-1 manager list loads once per open: effect has no dependencies and reads callbacks through refs (no reload on parent re-render)',
+    /\n  \}, \[\]\)\s*$/.test(loadEffect) && loadEffect.includes('onOperatorAuthRequiredRef.current?.()') && !/onOperatorAuthRequired\(\)/.test(loadEffect)
+    && loadEffect.includes("setSelectedStaffId('') // 自動選択禁止") && loadEffect.includes('if (!alive) return'))
+  check('B-2B-1 an approval returned after the modal closed or the target changed is never handed to the caller',
+    /if \(!mountedRef\.current\) return\n\s+if \(targetRef\.current !== submittedFor\) \{/.test(modalSrc)
+    && modalSrc.indexOf('targetRef.current !== submittedFor') < modalSrc.indexOf('onApprovedRef.current(res.approvalToken)'))
+  check('B-2B-1 PIN is cleared after every failure (auth error, wrong PIN, unknown result) and never shown as digits',
+    (modalSrc.match(/setPin\(''\)/g) ?? []).length >= 6 && modalSrc.includes("'●'.repeat(pin.length)") && !/\{pin\}/.test(modalSrc))
+  check('B-2B-1 modal fits small screens (max height + internal scroll) and every control is at least 44px',
+    modalSrc.includes("maxHeight: '100%', overflowY: 'auto'") && modalSrc.includes("position: 'fixed', inset: 0")
+    && (modalSrc.match(/minHeight: (\d+)/g) ?? []).every((m) => Number(m.split(': ')[1]) >= 44) && /minHeight: 48/.test(modalSrc)
+    && !/linear-gradient|boxShadow|backdropFilter/.test(modalSrc))
+  check('B-2B-1 L2 long names wrap inside the modal: name column minmax(0, 1fr) + overflow-wrap:anywhere, amount column kept on one line',
+    modalSrc.includes("gridTemplateColumns: 'minmax(0, 1fr) auto'") && modalSrc.includes("gridTemplateColumns: 'auto minmax(0, 1fr)'")
+    && (modalSrc.match(/overflowWrap: 'anywhere'/g) ?? []).length >= 4 && modalSrc.includes("<span style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{l.value}</span>")
+    && !modalSrc.includes('amountNote'))
+  const focusEffect = modalSrc.slice(modalSrc.indexOf('// フォーカス：開いたときに1回だけ'), modalSrc.indexOf('// 管理者一覧：開いたときに1回だけ'))
+  check('B-2B-1 L1 focus: initial focus on the panel once per open, Tab / Shift+Tab wrap inside, background made inert, focus returned on close (not on parent re-render)',
+    /\n  \}, \[\]\)\s*$/.test(focusEffect) && focusEffect.includes('panel.focus({ preventScroll: true })') && modalSrc.includes('tabIndex={-1}')
+    && focusEffect.includes("e.key !== 'Tab'") && focusEffect.includes('if (e.shiftKey) last.focus()') && focusEffect.includes('else first.focus()')
+    && focusEffect.includes('const restoreInert = inertOutside(overlay)') && /restoreInert\(\)\n\s+if \(returnTo && returnTo\.isConnected\) returnTo\.focus/.test(focusEffect)
+    && modalSrc.includes('sib.inert = true') && modalSrc.includes('if (sib === node || !(sib instanceof HTMLElement) || sib.inert) continue'))
+  {
+    const co = readFileSync(join(root, 'src/components/booking/Checkout.tsx'), 'utf8').replace(/\r\n/g, '\n')
+    // 承認画面を開く応答の扱い（自動の見積もり・再取得の2か所）
+    const sets = co.split('if (res.error === \'approval_required\') {').slice(1).filter((b) => b.slice(0, 900).includes('setPendingApproval({'))
+    check('B-2B-1 M1 Checkout keeps the server subtotal/total with the request hash, opens the approval only when they are readable, and drops stale responses',
+      sets.length === 2 && sets.every((b) => /const server = quoteApprovalAmounts\(res\)[\s\S]*?\|\| !server \|\| !summary\) \{[\s\S]*?return\n\s+\}\n\s+setPendingApproval\(\{[\s\S]*?quoteInput,\n\s+server,\n\s+summary,\n\s+intentGen: gen,/.test(b.slice(0, 1200)))
+      && (co.match(/if \(!alive \|\| gen !== quoteIntentGenRef\.current\) return\n\s+setQuoteLoading\(false\)\n\s+if \('error' in res\)/g) ?? []).length === 1
+      && /const res = await api\.quote\(quoteInput, current\)\n\s+if \(gen !== quoteIntentGenRef\.current\) return\n\s+if \('error' in res\)/.test(co))
+    check('B-2B-1 M1 the approval summary is built once from the saved snapshot (quoteInput + the same response) and rendered from it, never rebuilt from the live form',
+      (co.match(/checkoutApprovalSummary\(/g) ?? []).length === 2
+      && sets.every((b) => b.slice(0, 600).includes('checkoutApprovalSummary(quoteInput, server, res.request_hash,'))
+      && co.includes('summary={pendingApproval.summary}') && !co.includes('approvalSummary &&')
+      && co.includes('{showManagerModal && pendingApproval && (') && co.includes('{pendingApproval && !quoteLoading && ('))
+    {
+      // 入力が変わったら、保存していた承認（APR1）・承認後の見積もり（QTE1 を持つ snapshot）・承認待ち・見積もりを捨てる
+      const change = co.slice(co.indexOf('if (isIntentChange) {\n      setApprovedToken(null)'), co.indexOf('if (needsFreshQuoteRef.current) {'))
+      check('B-2B-1 M1 after the input changes, the saved APR1 token, the approved snapshot (QTE1 quote hash), the pending approval and the quote are discarded',
+        ['setApprovedToken(null)', 'setApprovedSnapshot(null)', 'setPendingApproval(null)', 'setQuote(null)'].every((x) => change.includes(x))
+        && /quoteIntentGenRef\.current \+= 1/.test(co.slice(co.indexOf('const isIntentChange'), co.indexOf('if (isIntentChange) {\n      setApprovedToken(null)')))
+        && co.includes('quote_hash: (approvedToken && approvedSnapshot) ? approvedSnapshot.quoteHash : quote?.quote_hash')
+        && co.includes('if (pendingApproval.intentGen !== quoteIntentGenRef.current) {'))
+    }
+    check('B-2B-1 M1 after approval, a re-quote whose subtotal/total differ from what the manager saw is not used',
+      /if \(replayQuoteRes\.subtotal !== snapshot\.server\.subtotal \|\| replayQuoteRes\.total !== snapshot\.server\.total\) \{[\s\S]*?setApprovedToken\(null\)[\s\S]*?return\n\s+\}\n\n\s+setQuote\(replayQuoteRes\)\n\s+setApprovedToken\(token\)/.test(co))
+  }
+  const callers = [
+    ['src/components/booking/Checkout.tsx', 'summary={pendingApproval.summary}', 'api.quote(snapshot.quoteInput, current, token)'],
+    ['src/components/ginpay/GinpayPanel.tsx', 'summary={approvalSummaryFor(pendingApproval)}', 'sendCharge(snapshot.input as ChargePendingInput, op, approvalToken)'],
+    ['src/screens/AdminScreen.tsx', 'ticketApprovalSummary(pendingTicketApproval.input)', 'sendIssue(snapshot.input, current, approvalToken)'],
+  ]
+  check('B-2B-1 every caller shows a summary built from the same input it sends after approval, and remounts the modal per approval target (key = requestHash)',
+    callers.every(([f, summary, send]) => {
+      const src = readFileSync(join(root, f), 'utf8')
+      return src.includes(summary) && src.includes(send) && /<ManagerApprovalModal\s+key=\{pending\w*Approval\.requestHash\}/.test(src)
+    }))
+}
+
 console.log(`[pos-b2a] ${passed} passed, ${failed} failed`)
 if (failed) process.exit(1)
 console.log('[pos-b2a] PASS all checks')

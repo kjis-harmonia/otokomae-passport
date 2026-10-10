@@ -16,6 +16,7 @@ import {
 } from '../../utils/posOperatorSession'
 import { OperatorAuthModal } from '../pos/PosAuthModals'
 import { ManagerApprovalModal } from '../pos/ManagerApprovalModal'
+import { checkoutApprovalSummary, quoteApprovalAmounts, type ApprovalSummary, type ServerQuoteAmounts } from '../../utils/approvalSummary'
 import { usePendingView } from '../pos/usePendingView'
 import {
   beginPendingOp, checkoutTargets, findBlockingOp, isPendingInFlight, markPendingUnknown, pendingBlockMessage, pendingErrorMessage,
@@ -122,6 +123,10 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
     action: string
     requestHash: string
     quoteInput: QuoteInput
+    /** 承認を求めた応答の小計・合計（同じ request_hash の計算）。承認画面はこの金額だけを表示する */
+    server: ServerQuoteAmounts
+    /** 承認画面の表示。承認を求めた時点の quoteInput と応答から作って保存する（あとからフォームの状態で作り直さない） */
+    summary: ApprovalSummary
     intentGen: number
   }
   interface ApprovedCheckoutSnapshot {
@@ -228,7 +233,12 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
           setShowAuthModal(true)
         }
         if (res.error === 'approval_required') {
-          if (!res.action || !res.request_hash) {
+          // 金額を読めない応答では承認画面を開かない（推測した金額で承認させない）
+          const server = quoteApprovalAmounts(res)
+          const summary = server && res.request_hash
+            ? checkoutApprovalSummary(quoteInput, server, res.request_hash, { customerName: clientInfo?.name ?? ctx?.reservation?.customer_name ?? null })
+            : null
+          if (!res.action || !res.request_hash || !server || !summary) {
             setPendingApproval(null)
             setQuoteError('管理者承認情報を取得できませんでした。最初からやり直してください。')
             setNeedsFreshQuote(true)
@@ -239,6 +249,8 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
             action: res.action,
             requestHash: res.request_hash,
             quoteInput,
+            server,
+            summary,
             intentGen: gen,
           })
           setNeedsFreshQuote(false)
@@ -318,6 +330,16 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
         } else {
           setQuoteError(checkoutErrorMessage(replayQuoteRes.error))
         }
+        return
+      }
+
+      // 承認画面に出した小計・合計と違う結果は使わない（店長が見た金額と違う会計にしない）
+      if (replayQuoteRes.subtotal !== snapshot.server.subtotal || replayQuoteRes.total !== snapshot.server.total) {
+        setQuote(null)
+        setApprovedToken(null)
+        setApprovedSnapshot(null)
+        setNeedsFreshQuote(true)
+        setQuoteError('承認した金額と最新の見積もりが一致しません。見積もりを再取得してください。')
         return
       }
 
@@ -402,7 +424,11 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
           setShowAuthModal(true)
         }
         if (res.error === 'approval_required') {
-          if (!res.action || !res.request_hash) {
+          const server = quoteApprovalAmounts(res)
+          const summary = server && res.request_hash
+            ? checkoutApprovalSummary(quoteInput, server, res.request_hash, { customerName: clientInfo?.name ?? ctx?.reservation?.customer_name ?? null })
+            : null
+          if (!res.action || !res.request_hash || !server || !summary) {
             setPendingApproval(null)
             setQuoteError('管理者承認情報を取得できませんでした。最初からやり直してください。')
             return
@@ -412,6 +438,8 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
             action: res.action,
             requestHash: res.request_hash,
             quoteInput,
+            server,
+            summary,
             intentGen: gen,
           })
           setNeedsFreshQuote(false)
@@ -858,8 +886,10 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
       )}
       {showManagerModal && pendingApproval && (
         <ManagerApprovalModal
+          key={pendingApproval.requestHash}
           action={pendingApproval.action}
           requestHash={pendingApproval.requestHash}
+          summary={pendingApproval.summary}
           onApproved={handleManagerApproved}
           onCancel={() => {
             setShowManagerModal(false)

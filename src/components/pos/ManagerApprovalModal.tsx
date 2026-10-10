@@ -1,21 +1,23 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   getStaffManagerCandidates,
   approvePosOperation,
   type ManagerCandidate,
 } from '../../utils/posManagerApproval'
 import { getCurrentOperator, isCurrentOperatorValid } from '../../utils/posOperatorSession'
-
-const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+import type { ApprovalSummary } from '../../utils/approvalSummary'
+import { C, SANS } from '../booking/ledgerTheme'
+import { PrimaryButton, SecondaryButton } from '../booking/ledgerUi'
 
 interface ManagerApprovalModalProps {
   action: string
   requestHash: string
+  /** 何を承認するか（承認のあとに送る入力から作る。表示専用） */
+  summary: ApprovalSummary
   onApproved: (approvalToken: string) => void
   onCancel: () => void
   onOperatorAuthRequired?: () => void
   title?: string
-  description?: string
 }
 
 function isOperatorAuthError(code: string): boolean {
@@ -65,14 +67,44 @@ function getErrorMessage(code: string, remaining?: number, lockedUntil?: string)
   }
 }
 
+const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`
+
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** モーダルの外（祖先の兄弟要素）を inert にする。元から inert だった要素は触らない。戻す関数を返す */
+function inertOutside(el: HTMLElement): () => void {
+  const changed: HTMLElement[] = []
+  for (let node: HTMLElement | null = el; node && node !== document.body; node = node.parentElement) {
+    const parent: HTMLElement | null = node.parentElement
+    if (!parent) break
+    for (const sib of Array.from(parent.children)) {
+      if (sib === node || !(sib instanceof HTMLElement) || sib.inert) continue
+      sib.inert = true
+      changed.push(sib)
+    }
+  }
+  return () => { for (const sib of changed) sib.inert = false }
+}
+
+/**
+ * 店長の承認。何を承認するか（summary）を見せてから、管理者を選んで PIN を入力する。
+ *
+ *   - 管理者一覧はモーダルを開いたときに1回だけ読む。親の再描画（コールバックの参照が変わる）では読み直さず、
+ *     選択中の管理者と入力中の PIN を保つ。閉じて開き直せば最初からになる（呼び出し元は閉じるとアンマウントする）。
+ *   - 承認対象（action / requestHash）が変わったら、選択と PIN を消す。送信中に変わった・画面が閉じた場合は、
+ *     返ってきた承認を使わない（古い対象の承認を新しい対象に流用しない）。
+ *   - 管理者は自動で選ばない。PIN・承認トークンは表示しない。
+ *   - フォーカス：開いたらパネルへ移し、Tab / Shift+Tab はモーダルの中だけを回る。背景は inert にして操作させない。
+ *     閉じたら、開く前にフォーカスがあった要素へ戻す（その要素が残っていれば）。
+ */
 export function ManagerApprovalModal({
   action,
   requestHash,
+  summary,
   onApproved,
   onCancel,
   onOperatorAuthRequired,
-  title = '管理者承認 (L2)',
-  description = 'この操作を実行するには店長または管理者の承認が必要です。',
+  title = '店長の承認',
 }: ManagerApprovalModalProps) {
   const [candidates, setCandidates] = useState<ManagerCandidate[]>([])
   const [selectedStaffId, setSelectedStaffId] = useState<string>('')
@@ -82,23 +114,81 @@ export function ManagerApprovalModal({
   const [candidateLoadError, setCandidateLoadError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
+  // 親の再描画で参照が変わるコールバックは ref に置き、読み込みのやり直しの原因にしない
+  const onOperatorAuthRequiredRef = useRef(onOperatorAuthRequired)
+  const onApprovedRef = useRef(onApproved)
+  useEffect(() => {
+    onOperatorAuthRequiredRef.current = onOperatorAuthRequired
+    onApprovedRef.current = onApproved
+  })
+  // 今の承認対象と、画面が開いているか（送信中に変わった・閉じた承認を使わないため）
+  const targetKey = `${action}\n${requestHash}`
+  const targetRef = useRef(targetKey)
+  const mountedRef = useRef(true)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  // フォーカス：開いたときに1回だけ設定し、閉じたら戻す（親の再描画では何もしない）
+  useEffect(() => {
+    const overlay = overlayRef.current
+    const panel = panelRef.current
+    if (!overlay || !panel) return
+    const returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const restoreInert = inertOutside(overlay)
+    panel.focus({ preventScroll: true })
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Tab' || !panel) return
+      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE))
+      if (items.length === 0) { e.preventDefault(); panel.focus({ preventScroll: true }); return }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      const inside = active instanceof Node && panel.contains(active) && active !== panel
+      if (e.shiftKey ? (!inside || active === first) : (!inside || active === last)) {
+        e.preventDefault()
+        if (e.shiftKey) last.focus()
+        else first.focus()
+      }
+    }
+    // inert の付いていない要素（後から追加された要素など）へ移ったときもパネルへ戻す
+    function onFocusIn(e: FocusEvent) {
+      if (panel && overlay && e.target instanceof Node && !overlay.contains(e.target)) panel.focus({ preventScroll: true })
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('focusin', onFocusIn)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('focusin', onFocusIn)
+      restoreInert()
+      if (returnTo && returnTo.isConnected) returnTo.focus({ preventScroll: true })
+    }
+  }, [])
+
+  // 管理者一覧：開いたときに1回だけ
   useEffect(() => {
     let alive = true
     const op = getCurrentOperator()
     if (!op || !isCurrentOperatorValid()) {
-      onOperatorAuthRequired?.()
+      // 呼び出し元は操作者の認証へ切り替える。切り替わるまで「管理者がいない」とは表示しない
+      setCandidateLoadError('操作者の認証が必要です。')
       setLoadingCandidates(false)
+      onOperatorAuthRequiredRef.current?.()
       return
     }
 
-    setLoadingCandidates(true)
     setCandidateLoadError(null)
     getStaffManagerCandidates(op.operatorToken)
       .then(res => {
         if (!alive) return
         if (!res.ok) {
           if (isOperatorAuthError(res.error)) {
-            onOperatorAuthRequired?.()
+            onOperatorAuthRequiredRef.current?.()
             return
           }
           setCandidateLoadError(getErrorMessage(res.error))
@@ -116,18 +206,36 @@ export function ManagerApprovalModal({
       })
 
     return () => { alive = false }
-  }, [onOperatorAuthRequired])
+  }, [])
 
-  async function handleSubmit(e?: FormEvent) {
-    if (e) e.preventDefault()
+  // 承認対象が変わったら、前の対象のための選択・PIN を残さない
+  useEffect(() => {
+    if (targetRef.current === targetKey) return
+    targetRef.current = targetKey
+    setSelectedStaffId('')
+    setPin('')
+    setSubmitError('承認する内容が変わりました。内容を確認して、もう一度入力してください。')
+  }, [targetKey])
+
+  // 照合中は押したボタンが無効になりフォーカスが外れる。終わったらパネルへ戻す
+  useEffect(() => {
+    if (busy) return
+    const panel = panelRef.current
+    const active = document.activeElement
+    if (panel && (!active || active === document.body)) panel.focus({ preventScroll: true })
+  }, [busy])
+
+  async function handleSubmit() {
     if (busy || !selectedStaffId || pin.length < 4 || pin.length > 8) return
 
     const op = getCurrentOperator()
     if (!op || !isCurrentOperatorValid()) {
-      onOperatorAuthRequired?.()
+      setPin('')
+      onOperatorAuthRequiredRef.current?.()
       return
     }
 
+    const submittedFor = targetKey
     setBusy(true)
     setSubmitError(null)
 
@@ -139,24 +247,33 @@ export function ManagerApprovalModal({
         requestHash,
       }, op.operatorToken)
 
+      // 送信中に閉じた・承認対象が変わった：この承認は使わない（期限切れで無効になる）
+      if (!mountedRef.current) return
+      if (targetRef.current !== submittedFor) {
+        setPin('')
+        setSubmitError('承認する内容が変わったため、この承認は使いません。もう一度入力してください。')
+        return
+      }
+
       if (!res.ok) {
+        setPin('')
         if (isOperatorAuthError(res.error)) {
-          onOperatorAuthRequired?.()
+          onOperatorAuthRequiredRef.current?.()
           return
         }
         setSubmitError(getErrorMessage(res.error, res.remaining_attempts, res.locked_until))
-        setPin('')
         return
       }
 
       setPin('')
-      onApproved(res.approvalToken)
+      onApprovedRef.current(res.approvalToken)
     } catch {
+      if (!mountedRef.current) return
       // 承認 API の通信結果不明。発行されていても使われずに期限切れになるため、金銭処理は行われていない
       setSubmitError('通信を確認できませんでした。この承認は使われません。通信状態を確認してからPINを入力してください。')
       setPin('')
     } finally {
-      setBusy(false)
+      if (mountedRef.current) setBusy(false)
     }
   }
 
@@ -171,256 +288,153 @@ export function ManagerApprovalModal({
     }
   }
 
-  function handleBackspace() {
-    setPin(prev => prev.slice(0, -1))
-  }
-
-  function handleClear() {
-    setPin('')
-  }
-
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫']
+  const operatorName = getCurrentOperator()?.memberName ?? null
+  const canSubmit = !busy && !!selectedStaffId && pin.length >= 4 && pin.length <= 8
 
   return (
     <div
+      ref={overlayRef}
       role="dialog"
       aria-modal="true"
+      aria-labelledby="manager-approval-title"
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1000,
-        background: 'rgba(0, 0, 0, 0.78)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0, 0, 0, 0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 12, boxSizing: 'border-box',
       }}
     >
       <div
+        ref={panelRef}
+        tabIndex={-1}
+        data-approval-panel=""
         style={{
-          width: '100%',
-          maxWidth: 420,
-          background: 'linear-gradient(160deg, #180d08 0%, #0c0604 100%)',
-          border: '1px solid rgba(201,162,74,0.4)',
-          borderRadius: 20,
-          boxShadow: '0 20px 50px rgba(0,0,0,0.8), 0 0 30px rgba(201,162,74,0.15)',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
+          width: '100%', maxWidth: 420, maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'contain', outline: 'none',
+          boxSizing: 'border-box', padding: '20px 20px 16px',
+          background: C.bg, color: C.text, fontFamily: SANS,
+          border: `1px solid ${C.line}`, borderRadius: 12,
         }}
       >
-        <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #C9A24A, transparent)' }} />
+        <h2 id="manager-approval-title" style={{ fontSize: 17, fontWeight: 600 }}>{title}</h2>
 
-        <div style={{ padding: '24px 24px 20px' }}>
-          <h2
-            style={{
-              fontFamily: SERIF,
-              fontSize: 20,
-              fontWeight: 700,
-              color: '#F2E6C8',
-              letterSpacing: '0.08em',
-              marginBottom: 6,
-            }}
-          >
-            {title}
-          </h2>
-          <p style={{ fontSize: 12, color: '#b3a088', lineHeight: 1.5, marginBottom: 18 }}>
-            {description}
-          </p>
-
-          {loadingCandidates ? (
-            <p style={{ fontSize: 13, color: '#C9A24A', textAlign: 'center', padding: '20px 0' }}>
-              管理者一覧を読み込み中…
-            </p>
-          ) : candidateLoadError ? (
-            <div style={{ padding: '16px 0', textAlign: 'center' }}>
-              <p style={{ fontSize: 13, color: '#E06060', marginBottom: 16 }}>
-                {candidateLoadError}
-              </p>
-              <button
-                type="button"
-                onClick={onCancel}
-                style={{
-                  minHeight: 44,
-                  padding: '10px 24px',
-                  borderRadius: 10,
-                  background: 'rgba(255,255,255,0.08)',
-                  color: '#e5e5e5',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                }}
-              >
-                戻る
-              </button>
-            </div>
-          ) : candidates.length === 0 ? (
-            <div style={{ padding: '16px 0', textAlign: 'center' }}>
-              <p style={{ fontSize: 13, color: '#E06060', marginBottom: 16 }}>
-                承認可能な管理者が設定されていません。
-              </p>
-              <button
-                type="button"
-                onClick={onCancel}
-                style={{
-                  minHeight: 44,
-                  padding: '10px 24px',
-                  borderRadius: 10,
-                  background: 'rgba(255,255,255,0.08)',
-                  color: '#e5e5e5',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                }}
-              >
-                戻る
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit}>
-              {/* マネージャー選択 */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 11, color: '#C9A24A', letterSpacing: '0.1em', marginBottom: 6 }}>
-                  承認する管理者を選択
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {candidates.map(c => {
-                    const selected = selectedStaffId === c.id
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => { setSelectedStaffId(c.id); setSubmitError(null) }}
-                        style={{
-                          flex: '1 1 calc(50% - 4px)',
-                          minHeight: 44,
-                          padding: '10px 8px',
-                          borderRadius: 10,
-                          background: selected ? 'rgba(201,162,74,0.22)' : 'rgba(255,255,255,0.04)',
-                          border: `1.5px solid ${selected ? '#C9A24A' : 'rgba(255,255,255,0.08)'}`,
-                          color: selected ? '#F2E6C8' : '#a89885',
-                          fontFamily: SERIF,
-                          fontSize: 14,
-                          fontWeight: selected ? 700 : 500,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s',
-                        }}
-                      >
-                        {c.name}
-                      </button>
-                    )
-                  })}
-                </div>
+        {/* 承認する内容 */}
+        <div data-approval-summary="" style={{ marginTop: 12, padding: '12px 0', borderTop: `1px solid ${C.text}`, borderBottom: `1px solid ${C.line}` }}>
+          <p style={{ fontSize: 15, fontWeight: 600 }}>{summary.operation}</p>
+          {summary.amountLabel && <p style={{ marginTop: 6, fontSize: 13, color: C.sub }}>{summary.amountLabel}</p>}
+          <p style={{ marginTop: 2, fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{yen(summary.amount)}</p>
+          <dl style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 12, rowGap: 2, fontSize: 14, lineHeight: 1.6 }}>
+            {summary.details.map((d, k) => (
+              <div key={k} style={{ display: 'contents' }}>
+                <dt style={{ color: C.sub, whiteSpace: 'nowrap' }}>{d.label}</dt>
+                <dd style={{ margin: 0, minWidth: 0, overflowWrap: 'anywhere' }}>{d.value}</dd>
               </div>
-
-              {/* PIN 入力表示 */}
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 11, color: '#C9A24A', letterSpacing: '0.1em', marginBottom: 6 }}>
-                  管理者 PIN（4〜8桁）
-                </label>
-                <div
-                  style={{
-                    height: 48,
-                    background: '#0B0403',
-                    border: '1px solid rgba(201,162,74,0.3)',
-                    borderRadius: 10,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    letterSpacing: '0.4em',
-                    fontSize: 24,
-                    color: '#F2E6C8',
-                  }}
-                >
-                  {pin.length === 0 ? (
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', letterSpacing: 'normal' }}>
-                      数字キーで入力
-                    </span>
-                  ) : (
-                    '●'.repeat(pin.length)
-                  )}
-                </div>
-              </div>
-
-              {/* テンキー */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16 }}>
-                {digits.map(d => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => {
-                      if (d === 'C') handleClear()
-                      else if (d === '⌫') handleBackspace()
-                      else handleDigit(d)
-                    }}
-                    disabled={busy}
-                    style={{
-                      minHeight: 46,
-                      borderRadius: 10,
-                      background: d === 'C' || d === '⌫' ? 'rgba(255,255,255,0.06)' : 'rgba(201,162,74,0.08)',
-                      border: '1px solid rgba(201,162,74,0.2)',
-                      color: '#F2E6C8',
-                      fontSize: 18,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {d}
-                  </button>
+            ))}
+            {operatorName && (
+              <>
+                <dt style={{ color: C.sub, whiteSpace: 'nowrap' }}>操作担当</dt>
+                <dd style={{ margin: 0, minWidth: 0, overflowWrap: 'anywhere' }}>{operatorName}</dd>
+              </>
+            )}
+          </dl>
+          {summary.changes && (
+            <div data-approval-changes="" style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
+              <p style={{ fontSize: 13, color: C.sub }}>{summary.changes.title}</p>
+              <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none', fontSize: 14, lineHeight: 1.6 }}>
+                {summary.changes.lines.map((l, k) => (
+                  <li key={k} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', columnGap: 12, alignItems: 'baseline' }}>
+                    <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{l.label}</span>
+                    <span style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{l.value}</span>
+                  </li>
                 ))}
-              </div>
-
-              {submitError && (
-                <p style={{ fontSize: 12, color: '#E06060', marginBottom: 14, textAlign: 'center', lineHeight: 1.4 }}>
-                  {submitError}
-                </p>
-              )}
-
-              {/* アクションボタン */}
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  disabled={busy}
-                  style={{
-                    flex: 1,
-                    minHeight: 44,
-                    borderRadius: 10,
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    color: '#a89885',
-                    fontSize: 14,
-                    cursor: 'pointer',
-                  }}
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="submit"
-                  disabled={busy || pin.length < 4 || pin.length > 8 || !selectedStaffId}
-                  style={{
-                    flex: 2,
-                    minHeight: 44,
-                    borderRadius: 10,
-                    background: pin.length >= 4 && selectedStaffId && !busy
-                      ? 'linear-gradient(135deg, #C9A24A 0%, #9E7D2B 100%)'
-                      : 'rgba(255,255,255,0.1)',
-                    border: 'none',
-                    color: pin.length >= 4 && selectedStaffId && !busy ? '#0B0403' : 'rgba(255,255,255,0.3)',
-                    fontFamily: SERIF,
-                    fontSize: 15,
-                    fontWeight: 700,
-                    cursor: pin.length >= 4 && selectedStaffId && !busy ? 'pointer' : 'not-allowed',
-                    boxShadow: pin.length >= 4 && selectedStaffId && !busy ? '0 4px 12px rgba(201,162,74,0.3)' : 'none',
-                  }}
-                >
-                  {busy ? '照合中…' : '承認を確定'}
-                </button>
-              </div>
-            </form>
+              </ul>
+            </div>
           )}
         </div>
+
+        {loadingCandidates ? (
+          <p style={{ fontSize: 14, color: C.sub, padding: '20px 0' }}>管理者一覧を読み込み中…</p>
+        ) : candidateLoadError || candidates.length === 0 ? (
+          <div style={{ paddingTop: 16 }}>
+            <p style={{ fontSize: 14, color: C.danger, lineHeight: 1.6, marginBottom: 12 }}>
+              {candidateLoadError ?? '承認できる管理者が設定されていません。'}
+            </p>
+            <SecondaryButton onClick={onCancel}>戻る</SecondaryButton>
+          </div>
+        ) : (
+          <form onSubmit={e => { e.preventDefault(); void handleSubmit() }}>
+            <p style={{ marginTop: 14, fontSize: 13, color: C.sub }}>承認する管理者</p>
+            <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {candidates.map(c => {
+                const selected = selectedStaffId === c.id
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={busy}
+                    onClick={() => { setSelectedStaffId(c.id); setSubmitError(null) }}
+                    style={{
+                      flex: '1 1 calc(50% - 4px)', minWidth: 0, minHeight: 44, padding: '4px 10px', borderRadius: 8, overflowWrap: 'anywhere',
+                      fontFamily: SANS, fontSize: 15, cursor: 'pointer',
+                      background: selected ? C.text : C.bg, color: selected ? C.bg : C.text,
+                      border: `1px solid ${selected ? C.text : C.lineStrong}`,
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                )
+              })}
+            </div>
+
+            <p style={{ marginTop: 14, fontSize: 13, color: C.sub }}>管理者 PIN（4〜8桁）</p>
+            <div
+              aria-live="polite"
+              aria-label={`入力済み ${pin.length} 桁`}
+              style={{
+                marginTop: 6, height: 44, borderRadius: 8, border: `1px solid ${C.lineStrong}`, background: C.surface,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20, letterSpacing: '0.4em', color: C.text,
+              }}
+            >
+              {pin.length === 0 ? <span style={{ fontSize: 13, letterSpacing: 'normal', color: C.mute }}>数字キーで入力</span> : '●'.repeat(pin.length)}
+            </div>
+
+            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {digits.map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  aria-label={d === 'C' ? 'PINを消去' : d === '⌫' ? '1文字消す' : d}
+                  onClick={() => {
+                    if (d === 'C') setPin('')
+                    else if (d === '⌫') setPin(prev => prev.slice(0, -1))
+                    else handleDigit(d)
+                  }}
+                  disabled={busy}
+                  style={{
+                    minHeight: 48, borderRadius: 8, fontFamily: SANS, fontSize: 19, fontWeight: 500,
+                    background: d === 'C' || d === '⌫' ? C.surface : C.bg, color: C.text,
+                    border: `1px solid ${C.line}`, cursor: busy ? 'default' : 'pointer',
+                  }}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+
+            {submitError && (
+              <p role="alert" style={{ marginTop: 10, fontSize: 14, color: C.danger, lineHeight: 1.6 }}>{submitError}</p>
+            )}
+
+            <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
+              <SecondaryButton onClick={onCancel} disabled={busy}>キャンセル</SecondaryButton>
+              <PrimaryButton onClick={() => void handleSubmit()} disabled={!canSubmit} style={{ flex: 2, minHeight: 46 }}>
+                {busy ? '照合中…' : '承認する'}
+              </PrimaryButton>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )

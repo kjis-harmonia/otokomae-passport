@@ -17,6 +17,7 @@ import {
 } from '../../utils/posOperatorSession'
 import { OperatorAuthModal } from '../pos/PosAuthModals'
 import { ManagerApprovalModal } from '../pos/ManagerApprovalModal'
+import { chargeApprovalSummary, refundApprovalSummary, type ApprovalSummary } from '../../utils/approvalSummary'
 import { Field, PrimaryButton, SecondaryButton } from '../booking/ledgerUi'
 import { usePendingView } from '../pos/usePendingView'
 import {
@@ -379,6 +380,24 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
     else await exclusive(() => sendRefund(snapshot.input as RefundPendingInput, op, approvalToken, reverse))
   }
 
+  /** 承認する内容。承認のあとに送る入力（pendingApproval.input）そのものから作る（表示専用） */
+  function approvalSummaryFor(p: PendingGinpayApproval): ApprovalSummary {
+    if (p.kind === 'charge') {
+      const input = p.input as ChargePendingInput
+      const account = (ledger?.accounts ?? []).find(a => a.id === input.accountId)
+      const accountLabel = (ledger?.accounts.length ?? 0) > 1 && account
+        ? (account.is_current_client ? '現在の顧客口座' : `${account.client_name ?? '統合元'} の口座`)
+        : null
+      return chargeApprovalSummary(input, { customerName: ledger?.client_name, accountLabel })
+    }
+    const input = p.input as RefundPendingInput
+    const original = ledger?.transactions.find(t => t.id === input.transactionId)
+    return refundApprovalSummary(input, {
+      customerName: ledger?.client_name,
+      originalLabel: original ? `${GINPAY_TYPE_LABEL[original.type]} ${yen(original.amount)}（${formatDateTime(original.created_at)}）` : null,
+    })
+  }
+
   return (
     <section style={{ marginTop: 28, marginBottom: 28 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, borderBottom: `1px solid ${C.text}`, paddingBottom: 8 }}>
@@ -526,8 +545,10 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
       )}
       {pendingApproval && (
         <ManagerApprovalModal
+          key={pendingApproval.requestHash}
           action={pendingApproval.action}
           requestHash={pendingApproval.requestHash}
+          summary={approvalSummaryFor(pendingApproval)}
           onApproved={handleManagerApproved}
           onCancel={() => {
             // 結果不明の記録の続きなら、記録とキーはそのまま（承認をやめても解除しない）

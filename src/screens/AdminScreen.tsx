@@ -7,6 +7,7 @@ import { issueTickets, getTicketsForStaff } from '../utils/ticketStore'
 import { getCurrentOperator, isCurrentOperatorValid, type OperatorSession } from '../utils/posOperatorSession'
 import { OperatorAuthModal } from '../components/pos/PosAuthModals'
 import { ManagerApprovalModal } from '../components/pos/ManagerApprovalModal'
+import { ticketApprovalSummary } from '../utils/approvalSummary'
 import { idempotencyKey } from '../utils/ginpayApi'
 import { usePendingView } from '../components/pos/usePendingView'
 import {
@@ -2381,8 +2382,11 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
       {pendingTicketApproval && (
         <ManagerApprovalModal
+          key={pendingTicketApproval.requestHash}
           action={pendingTicketApproval.action}
           requestHash={pendingTicketApproval.requestHash}
+          // 承認のあとに送る発行の入力（pendingTicketApproval.input）そのものから表示する
+          summary={ticketApprovalSummary(pendingTicketApproval.input)}
           onApproved={handleTicketApproved}
           onCancel={() => {
             // 結果不明の記録の続きなら、記録とキーはそのまま（承認をやめても解除しない）
