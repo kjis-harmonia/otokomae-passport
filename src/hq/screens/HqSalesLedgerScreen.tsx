@@ -7,10 +7,12 @@ import { Field, SecondaryButton, Sheet } from '../../components/booking/ledgerUi
 import { C, SANS, inputStyle, linkStyle } from '../../components/booking/ledgerTheme'
 import { usePendingView } from '../../components/pos/usePendingView'
 import {
-  beginPendingOp, findBlockingOp, isPendingInFlight, markPendingUnknown, pendingBlockMessage, pendingErrorMessage,
-  pendingStoreMessage, settlePendingOp, target, type PendingOp,
+  beginPendingOp, findBlockingOp, isPendingInFlight, markPendingUnknown, pendingErrorMessage,
+  settlePendingOp, target, type PendingOp,
 } from '../../utils/pendingOps'
-import { confirmPendingOp, draftHqVoid, unresolvedMessage } from '../../utils/pendingConfirm'
+import { confirmPendingOp, draftHqVoid } from '../../utils/pendingConfirm'
+import { pendingNotice, type PendingCheck } from '../../utils/pendingNotice'
+import { PendingOperationNotice } from '../../components/pos/PendingOperationNotice'
 
 // 本部：確定した会計の閲覧（日別の一覧・会計の詳細・取消履歴）と取消。売上 Dashboard ではない。
 // 一覧の合計は確定済みだけ（取消は件数のみ）。会計は確定時点の内容をそのまま表示する。
@@ -104,9 +106,15 @@ function SaleDetail({ id, onClose, onChanged }: { id: string; onClose: () => voi
   // 結果不明の取消は端末の記録（pendingOps）で管理する。シートを閉じても・再読み込みしても残り、
   // 会計が voided になったことを読み取りで確かめるまで、この会計の新しい取消を止める
   const pendingView = usePendingView()
-  const [lockMessage, setLockMessage] = useState<string | null>(null)
+  // 最後の「状態を確認」の結果（どの記録の結果かを持つ。通知の状態に使う）
+  const [lockCheck, setLockCheck] = useState<PendingCheck | null>(null)
   const blockingOp = findBlockingOp(pendingView.ops, 'hq_void', [target.sale(id)])
   const lockOp: PendingOp | null = blockingOp && !isPendingInFlight(blockingOp.id) ? blockingOp : null
+  // 送信中の取消（このシート・閉じる前のシートが送ったもの）。処理中と表示し、取消の操作を出さない（送信ガードは begin のまま）
+  const inFlightOp: PendingOp | null = blockingOp && isPendingInFlight(blockingOp.id) ? blockingOp : null
+  const notice = pendingNotice({
+    failure: pendingView.failure, op: lockOp ?? inFlightOp, inFlight: inFlightOp !== null && lockOp === null, check: lockCheck, confirmLabel: '状態を確認',
+  })
   const sendingRef = useRef(false)
   useEffect(() => { hqSalesApi.detail(id).then(setS).catch(err => setError(rpcErrorMessage(err))) }, [id])
 
@@ -117,14 +125,14 @@ function SaleDetail({ id, onClose, onChanged }: { id: string; onClose: () => voi
   async function checkVoid(op: PendingOp | null = lockOp) {
     if (!op || sendingRef.current) return
     sendingRef.current = true
-    setBusy(true); setLockMessage(null)
+    setBusy(true); setLockCheck(null)
     try {
       const out = await confirmPendingOp(op, { operator: null, sales: hqSalesApi })
       if (out.status === 'confirmed') {
         setS(out.value as Sale); setError(null); setVoiding(false); onChanged()
         return
       }
-      setLockMessage(unresolvedMessage(out))
+      setLockCheck({ opId: op.id, outcome: out })
       hqSalesApi.detail(id).then(setS).catch(() => undefined)
     } finally {
       sendingRef.current = false
@@ -229,16 +237,11 @@ function SaleDetail({ id, onClose, onChanged }: { id: string; onClose: () => voi
             ))}
           </div>
           {error && <p style={{ color: C.danger, fontSize: 14, marginTop: 10 }}>{error}</p>}
-          {lockOp ? (
+          {notice ? (
+            // 未解決の取消（処理中・結果不明・確認できない）／端末の記録を保存できない。新しい取消は出さない
             <div style={{ marginTop: 14 }}>
-              <p role="status" style={{ fontSize: 14, lineHeight: 1.7 }}>{pendingBlockMessage(lockOp)}</p>
-              {lockMessage && <p style={{ color: C.danger, fontSize: 14, marginTop: 6, lineHeight: 1.7 }}>{lockMessage}</p>}
-              <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-                <SecondaryButton onClick={() => void checkVoid()} disabled={busy}>{busy ? '確認中…' : '状態を確認'}</SecondaryButton>
-              </div>
+              <PendingOperationNotice notice={notice} onConfirm={lockOp ? () => void checkVoid() : undefined} confirming={busy} confirmLabel="状態を確認" />
             </div>
-          ) : pendingView.failure ? (
-            <p role="status" style={{ color: C.danger, fontSize: 14, marginTop: 10, lineHeight: 1.7 }}>{pendingStoreMessage(pendingView.failure)}</p>
           ) : s.status === 'completed' && (voiding ? (
             <div style={{ marginTop: 14 }}>
               <Field label="取消の理由（必須）"><input value={reason} onChange={e => setReason(e.target.value)} maxLength={200} style={inputStyle} /></Field>

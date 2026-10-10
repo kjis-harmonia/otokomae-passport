@@ -339,9 +339,10 @@ await sameKey('ticket', () => tickets.issueTickets(ticketInput, operator, null),
   check('result-unknown messages never say 再度お試しください', unknownBlocks.length > 0 && unknownBlocks.every((l) => !l.includes('再度お試しください')))
   const checkoutSrc = readFileSync(join(root, 'src/components/booking/Checkout.tsx'), 'utf8')
   check('checkout keeps one sale key per screen (no key regeneration path)', (checkoutSrc.match(/idempotencyKey\('checkout'\)/g) ?? []).length === 1)
-  check('checkout locks editing and confirm while a pending record blocks it', /<fieldset disabled=\{locked\}/.test(checkoutSrc) && /!needsFreshQuote && !locked/.test(checkoutSrc) && /beginPendingOp\(draftCheckout/.test(checkoutSrc))
+  // B-2B-2: 送信中の記録（inFlightOp）でも編集を止める（locked より厳しくするだけ）
+  check('checkout locks editing and confirm while a pending record blocks it', /<fieldset disabled=\{locked \|\| inFlightOp !== null\}/.test(checkoutSrc) && /!needsFreshQuote && !locked/.test(checkoutSrc) && /beginPendingOp\(draftCheckout/.test(checkoutSrc))
   const ginpaySrc = readFileSync(join(root, 'src/components/ginpay/GinpayPanel.tsx'), 'utf8')
-  check('charge form is disabled while a pending record blocks the client', /<fieldset disabled=\{locked\}/.test(ginpaySrc) && /if \(locked \|\| !api\.chargeStore/.test(ginpaySrc) && /beginPendingOp\(draftCharge/.test(ginpaySrc))
+  check('charge form is disabled while a pending record blocks the client', /<fieldset disabled=\{uiLocked\}/.test(ginpaySrc) && /const uiLocked = locked \|\| inFlightOp !== null/.test(ginpaySrc) && /if \(locked \|\| !api\.chargeStore/.test(ginpaySrc) && /beginPendingOp\(draftCharge/.test(ginpaySrc))
 }
 
 
@@ -1124,6 +1125,306 @@ const SECRETS = /APR1\.|AUTH1\.|QTE1\.|op-token|staff-token|1234/
       const src = readFileSync(join(root, f), 'utf8')
       return src.includes(summary) && src.includes(send) && /<ManagerApprovalModal\s+key=\{pending\w*Approval\.requestHash\}/.test(src)
     }))
+}
+
+// ── 17. B-2B-2：未解決の操作の通知（処理中・結果不明・担当者の認証・確認できない・保存できない）と会計の合計の出所 ──
+const N = await import(load('src/utils/pendingNotice.ts', { './pendingOps': pendingUrlFor('tab-a'), './pendingConfirm': confirmUrlFor('tab-a') }, 'tab-a'))
+const CT = await import(load('src/utils/checkoutTotal.ts', {}))
+{
+  const local = { subtotal: 9000, discount: 0, total: 9000 }
+  const pending = CT.checkoutTotalDisplay({ quote: null, quoteUsable: false, approval: { subtotal: 5000, total: 5000 }, approved: false, quoteLoading: false, local })
+  check('B-2B-2 approval pending: the checkout total is the server amount from the approval response (not the local ¥9,000), labelled as server-calculated',
+    pending.source === 'approval_pending' && pending.total === 5000 && pending.subtotal === 5000 && pending.discount === null && pending.note === '管理者承認待ち（サーバーで計算した金額）')
+  const expired = CT.checkoutTotalDisplay({ quote: { subtotal: 5000, discount_total: 0, total: 5000 }, quoteUsable: false, approval: null, approved: false, quoteLoading: false, local })
+  const none = CT.checkoutTotalDisplay({ quote: null, quoteUsable: false, approval: null, approved: false, quoteLoading: true, local })
+  check('B-2B-2 expired / missing quote: shown as 暫定 with its source, never as the settled quote amount',
+    expired.source === 'provisional' && expired.label === 'お支払い（暫定）' && expired.total === 9000 && expired.note.includes('暫定')
+    && none.source === 'provisional' && none.note === '見積もりを計算中です。表示は暫定の金額です。')
+  const valid = CT.checkoutTotalDisplay({ quote: { subtotal: 5000, discount_total: 300, total: 4700 }, quoteUsable: true, approval: { subtotal: 1, total: 1 }, approved: true, quoteLoading: false, local })
+  check('B-2B-2 valid quote (incl. after approval) wins: its subtotal / discount / total, no 暫定',
+    valid.source === 'quote' && valid.total === 4700 && valid.discount === 300 && valid.label === 'お支払い' && valid.note === '管理者承認済みの見積もりです。')
+  const co = readFileSync(join(root, 'src/components/booking/Checkout.tsx'), 'utf8').replace(/\r\n/g, '\n')
+  check('B-2B-2 Checkout renders the total from checkoutTotalDisplay (quoteUsable = quote without error / fresh-quote need; approval = pendingApproval.server) and keeps finalize conditions unchanged',
+    co.includes('quoteUsable: !!quote && !quoteError && !needsFreshQuote,') && co.includes('approval: pendingApproval ? pendingApproval.server : null,')
+    && co.includes('<span style={{ fontSize: 15, fontWeight: 600 }}>{shownTotal.label}</span>') && co.includes('{yen(shownTotal.total)}</span>')
+    && co.includes('&& ginpayOk && !busy && !!quote && !quoteLoading && !quoteError && !needsFreshQuote && !locked'))
+}
+{
+  resetPending(); requests.length = 0
+  // 送信中（この画面のプロセス）：処理中。画面を開き直しても、記録とメモリから同じ表示になる
+  const rec = await P.beginPendingOp(PC.draftCharge(chargeInput, operator), { ...chargeInput, approvalToken: 'APR1.' + 'e'.repeat(64) }, [operator.operatorToken])
+  const view1 = P.getPendingView()
+  const op1 = P.findBlockingOp(view1.ops, 'ginpay_charge', ['client:c-1'])
+  const n1 = N.pendingNotice({ failure: view1.failure, op: op1, inFlight: P.isPendingInFlight(op1.id) })
+  check('B-2B-2 PROCESSING: an in-flight record shows 処理中です with what is being processed, and no confirm button',
+    n1.status === 'processing' && n1.title === '処理中です' && !n1.canConfirm && n1.next.includes('新しい操作はできません')
+    && JSON.stringify(n1.details.slice(0, 2)) === JSON.stringify([{ label: '処理', value: 'GINPayチャージ' }, { label: '金額', value: '¥3,000' }])
+    && n1.details.some((d) => d.label === '操作担当' && d.value === '担当A') && n1.details.some((d) => d.label === '開始'))
+  // 開き直し：画面の状態は持たず、記録とメモリだけから作り直す
+  const view2 = P.getPendingView()
+  const op2 = P.findBlockingOp(view2.ops, 'ginpay_charge', ['client:c-1'])
+  const n2 = N.pendingNotice({ failure: view2.failure, op: op2, inFlight: P.isPendingInFlight(op2.id), check: null })
+  check('B-2B-2 after re-showing the screen the in-flight record is still shown as processing (derived from the record + in-memory flag only)', n2.status === 'processing' && op2.id === rec.id)
+  const again = await outcome(() => P.beginPendingOp(PC.draftCharge({ ...chargeInput, idempotencyKey: 'staff-store-charge:new' }, operator), chargeInput, []))
+  check('B-2B-2 a new operation cannot start while processing (existing begin guard, new key blocked)', again.error instanceof P.PendingBlockedError && again.error.op.id === rec.id && calls('staff_ginpay_charge_store') === 0)
+  const shown = JSON.stringify([n1, n2])
+  check('B-2B-2 notices never show tokens / PIN / approval or quote hashes / idempotency keys (only kind, amount, start time, operator)',
+    !/APR1|AUTH1|QTE1|op-token|staff-token|1234|staff-store-charge/.test(shown) && n1.details.every((d) => ['処理', '金額', '開始', '操作担当'].includes(d.label)))
+  // 結果不明：時間が経っても失敗にしない
+  await P.markPendingUnknown(rec.id)
+  const old = { ...P.readPendingOps()[0], createdAt: new Date(Date.now() - 3 * 86400_000).toISOString() }
+  const u = N.pendingNotice({ failure: null, op: old, inFlight: P.isPendingInFlight(rec.id) })
+  check('B-2B-2 RESULT_UNKNOWN: 処理結果を確認できません, warns not to redo, offers the existing 結果を確認; age alone never turns it into failure',
+    u.status === 'result_unknown' && u.title === '処理結果を確認できません' && u.canConfirm && u.next.includes('同じ操作をやり直さないでください') && u.next.includes('「結果を確認」')
+    && !/失敗|再送/.test(JSON.stringify(u)))
+  const t = N.pendingNotice({ failure: null, op: old, inFlight: false, check: { opId: rec.id, outcome: { status: 'unresolved', reason: 'transport' } } })
+  check('B-2B-2 RESULT_UNKNOWN after a transport failure keeps the state and adds the existing reason',
+    t.status === 'result_unknown' && t.reason === PC.unresolvedMessage({ status: 'unresolved', reason: 'transport' }))
+  const needs = N.pendingNotice({ failure: null, op: old, inFlight: false, check: { opId: rec.id, outcome: { status: 'operator_required', operatorName: '担当A' } } })
+  check('B-2B-2 NEEDS_OPERATOR: 操作した担当者の認証が必要です, naming the recorded operator',
+    needs.status === 'needs_operator' && needs.title === '操作した担当者の認証が必要です' && needs.next.startsWith('担当A さんが認証してから') && needs.canConfirm)
+  const unv = N.pendingNotice({ failure: null, op: old, inFlight: false, check: { opId: rec.id, outcome: { status: 'unresolved', reason: 'no_snapshot' } } })
+  const legacy = { ...old, id: 'ginpay_charge:legacy', key: 'legacy', targets: ['client:c-9'], snapshot: { clientId: 'c-9', accountId: null, amount: 3000, paymentMethod: 'cash' } }
+  const unvLegacy = N.pendingNotice({ failure: null, op: legacy, inFlight: false })
+  check('B-2B-2 UNVERIFIABLE: この端末では結果を確認できません + 本部へ連絡 (no_snapshot / accountless GINPay record)',
+    unv.status === 'unverifiable' && unv.title === 'この端末では結果を確認できません' && unv.next.startsWith('本部へ連絡してください')
+    && unvLegacy.status === 'unverifiable' && unvLegacy.reason === P.accountlessBlockMessage(legacy))
+  const stale = N.pendingNotice({ failure: null, op: old, inFlight: false, check: { opId: 'other:op', outcome: { status: 'operator_required', operatorName: 'X' } } })
+  check('B-2B-2 a confirm result for another record is never shown on this record', stale.status === 'result_unknown')
+  const se = N.pendingNotice({ failure: 'corrupt', op: null, inFlight: false })
+  check('B-2B-2 STORAGE_ERROR: 操作状態を保存できません + 新しい処理を開始しないでください, no confirm button',
+    se.status === 'storage_error' && se.title === '操作状態を保存できません' && se.next === '新しい処理を開始しないでください。' && !se.canConfirm && se.reason === P.pendingStoreMessage('corrupt'))
+  check('B-2B-2 nothing blocking -> no notice', N.pendingNotice({ failure: null, op: null, inFlight: false }) === null)
+  check('B-2B-2 showing notices never removes or changes the pending record', has(P, rec.id) && P.readPendingOps().find((o) => o.id === rec.id).state === 'unknown')
+  {
+    // 壊れた記録：同じ内容なら同じ view を返す（毎回作り直すと useSyncExternalStore が止まらず画面が描けない）
+    const saved = store.get(KEY)
+    store.set(KEY, '{broken')
+    const a = P.getPendingView(), b = P.getPendingView()
+    check('B-2B-2 corrupt storage: getPendingView is stable (same object) and reports corrupt, so the STORAGE_ERROR notice can render',
+      a === b && a.failure === 'corrupt' && a.ops.length === 0 && N.pendingNotice({ failure: a.failure, op: null, inFlight: false }).status === 'storage_error')
+    store.set(KEY, saved)
+  }
+  resetPending()
+}
+{
+  const noticeSrc = readFileSync(join(root, 'src/utils/pendingNotice.ts'), 'utf8')
+  const compSrc = readFileSync(join(root, 'src/components/pos/PendingOperationNotice.tsx'), 'utf8')
+  check('B-2B-2 notice is display-only: no settle / mark / begin / storage writes, no new idempotency key, no resend',
+    !/settlePendingOp\(|markPendingUnknown\(|beginPendingOp\(|setPendingInFlight\(|localStorage|idempotencyKey\(|confirmPendingOp\(/.test(noticeSrc + compSrc)
+    && !/Date\.now\(\)/.test(noticeSrc))
+  check('B-2B-2 notice UI: white, plain, important text >= 14px, confirm control >= 44px, no gradient / shadow / glow',
+    compSrc.includes('background: C.bg') && !/linear-gradient|boxShadow|textShadow|animation/.test(compSrc)
+    && (compSrc.match(/fontSize: (\d+)/g) ?? []).every((m) => Number(m.split(': ')[1]) >= 14) && compSrc.includes('minHeight: 48'))
+  const screens = {
+    checkout: readFileSync(join(root, 'src/components/booking/Checkout.tsx'), 'utf8').replace(/\r\n/g, '\n'),
+    ginpay: readFileSync(join(root, 'src/components/ginpay/GinpayPanel.tsx'), 'utf8').replace(/\r\n/g, '\n'),
+    ticket: readFileSync(join(root, 'src/screens/AdminScreen.tsx'), 'utf8').replace(/\r\n/g, '\n'),
+    hq: readFileSync(join(root, 'src/hq/screens/HqSalesLedgerScreen.tsx'), 'utf8').replace(/\r\n/g, '\n'),
+  }
+  check('B-2B-2 all money screens (checkout, GINPay incl. HQ refund, ticket issue, HQ void) use the shared notice built from pendingOps state',
+    Object.values(screens).every((src) => src.includes('<PendingOperationNotice notice={') && /pendingNotice\(\{\s*failure: pendingView\.failure|pendingNotice\(\{ failure: storeFailure/.test(src))
+    && Object.values(screens).every((src) => !/pendingBlockMessage\(|pendingStoreMessage\(pendingView|unresolvedMessage\(out\)/.test(src)))
+  check('B-2B-2 in-flight records (sent before the screen was re-shown) disable new operations on every screen',
+    /const inFlightOp: PendingOp \| null = blockingOp && isPendingInFlight\(blockingOp\.id\) \? blockingOp : null/.test(screens.checkout)
+    && screens.checkout.includes('<fieldset disabled={locked || inFlightOp !== null}')
+    && screens.ginpay.includes('const uiLocked = locked || inFlightOp !== null') && !/disabled=\{locked\}|!locked\b/.test(screens.ginpay.slice(screens.ginpay.indexOf('  return (\n    <section')))
+    && screens.ticket.includes("&& !ticketResultUnknown && !ticketInFlight") && screens.ticket.includes("{issueLoading || ticketInFlight ? '処理中…'")
+    && /\{notice \? \([\s\S]*?\) : s\.status === 'completed'/.test(screens.hq))
+  check('B-2B-2 the confirm button calls only the existing confirm path (same record, same key) and is not offered while processing',
+    screens.checkout.includes('onConfirm={lockOp ? () => void checkLock() : undefined}') && screens.ginpay.includes('onConfirm={lockOp ? () => void checkLock() : undefined}')
+    && screens.hq.includes('onConfirm={lockOp ? () => void checkVoid() : undefined}') && screens.ticket.includes('<PendingOperationNotice notice={ticketNotice} />'))
+}
+
+// B-2B-2 remediation: production handlers with the real pending store, without DB/network.
+function productionHandler(file, name, scope) {
+  const src = ts.createSourceFile(file, readFileSync(join(root, file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  let expression
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(src) === name) expression = node.initializer?.getText(src)
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) expression = node.getText(src)
+    ts.forEachChild(node, visit)
+  }
+  visit(src)
+  if (!expression) throw new Error(`Missing production handler: ${name}`)
+  const js = ts.transpileModule(`const handler = ${expression}`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  return new Function(...Object.keys(scope), `${js}\nreturn handler`)(...Object.values(scope))
+}
+const ticketHandler = (name, scope) => productionHandler('src/screens/AdminScreen.tsx', name, scope)
+{
+  resetPending(); requests.length = 0
+  const rec = await unknownOp(PC.draftTicketIssue(ticketInput, operator), ticketInput)
+  const healthyView = P.getPendingView()
+  const healthyNotice = N.pendingNotice({ failure: healthyView.failure, op: rec, inFlight: false })
+  const raw = storedRaw(), inputBefore = JSON.stringify(P.getPendingInput(rec.id))
+  check('M1 healthy pending ticket: the lower confirmation CTA is eligible', G.canConfirmTicketPending(rec, healthyNotice, false))
+  const errors = []
+  const scope = {
+    ticketLockOp: rec, pendingView: healthyView,
+    pendingTicketApproval: { action: 'ticket_issue', requestHash: 'saved-hash', input: ticketInput, continuesOpId: rec.id },
+    exclusiveIssue: async (fn) => fn(), runTicketPendingAction: G.runTicketPendingAction,
+    confirmPendingOp: PC.confirmPendingOp, sendPendingWithApproval: PC.sendPendingWithApproval,
+    getCurrentOperator: () => operator, issueTickets: tickets.issueTickets,
+    pendingErrorMessage: P.pendingErrorMessage, setIssueError: (e) => errors.push(e),
+    setPendingTicketApproval: () => {}, setOperator: () => {}, setShowOperatorModal: () => {},
+    showIssued: () => {}, isDisplayed: () => true, setTicketCheck: () => {}, scannedData: { name: ticketInput.customerName },
+  }
+  const retry = ticketHandler('handleRetryIssueTicket', scope)
+  const approved = ticketHandler('handleTicketApproved', scope)
+  const savedNavigator = globalThis.navigator
+  const savedGetItem = localStorage.getItem
+  for (const failure of ['lock_unavailable', 'unavailable', 'corrupt']) {
+    store.set(KEY, raw)
+    if (failure === 'lock_unavailable') globalThis.navigator = {}
+    if (failure === 'unavailable') localStorage.getItem = () => { throw new Error('storage denied') }
+    if (failure === 'corrupt') store.set(KEY, '{broken')
+    const view = P.getPendingView()
+    const notice = N.pendingNotice({ failure: view.failure, op: rec, inFlight: false })
+    check(`M1 ${failure}: STORAGE_ERROR and lower CTA disabled even with a valid pending ticket`,
+      view.failure === failure && notice.status === 'storage_error' && !G.canConfirmTicketPending(rec, notice, false))
+    const failedRaw = store.get(KEY)
+    await retry()
+    await approved('APR1.' + 'e'.repeat(64))
+    check(`M1 ${failure}: direct production confirm/approval handlers with stale healthy render state send zero RPCs`, requests.length === 0)
+    const differentKey = { ...ticketInput, idempotencyKey: 'ticket-issue:m1-new-key' }
+    const newSend = await outcome(() => G.runTicketPendingAction(() => tickets.issueTickets(differentKey, operator, null)))
+    check(`M1 ${failure}: same-key and new-key sends blocked; stored record and original snapshot are untouched`,
+      newSend.error instanceof P.PendingStoreError && newSend.error.reason === failure && requests.length === 0
+      && store.get(KEY) === failedRaw && JSON.stringify(P.getPendingInput(rec.id)) === inputBefore)
+    globalThis.navigator = savedNavigator
+    localStorage.getItem = savedGetItem
+  }
+  store.set(KEY, raw)
+  check('M1 pending ticket survives all storage failures without key or state changes', storedRaw() === raw && has(P, rec.id) && P.readPendingOps()[0].state === 'unknown' && errors.filter(Boolean).length === 6)
+  route({ staff_issue_tickets: () => json({ ...ticketOk, idempotent: true }, 200) })
+  await retry()
+  check('M1 healthy store still permits exact same-key confirmation', calls('staff_issue_tickets') === 1 && requests[0].body.p_idempotency_key === ticketInput.idempotencyKey)
+  resetPending()
+}
+{
+  const local = { subtotal: 9000, discount: 0, total: 9000 }
+  const display = CT.checkoutTotalDisplay({ quote: null, quoteUsable: false, approval: { subtotal: 5000, total: 5000 }, approved: false, quoteLoading: false, local })
+  const preview = CT.ginpayBalancePreview(12500, display)
+  check('L1 balance 12,500 / server payment 5,000 / local 9,000: display payment 5,000 and remaining 7,500',
+    preview.paymentAmount === 5000 && preview.remainingBalance === 7500 && !preview.insufficient)
+  const provisional = CT.checkoutTotalDisplay({ quote: null, quoteUsable: false, approval: null, approved: false, quoteLoading: true, local })
+  const prediction = CT.ginpayBalancePreview(12500, provisional)
+  check('L1 provisional payment also labels the remaining balance provisional', prediction.paymentLabel === '今回のお支払い（暫定）' && prediction.remainingLabel === '支払後の残高（暫定）' && prediction.remainingBalance === 3500)
+  check('L1 displayed payment alone controls the insufficient-balance preview', CT.ginpayBalancePreview(6000, display).remainingBalance === 1000 && !CT.ginpayBalancePreview(6000, display).insufficient && CT.ginpayBalancePreview(4000, display).insufficient)
+  const co = readFileSync(join(root, 'src/components/booking/Checkout.tsx'), 'utf8')
+  check('L1 production payment and remaining labels/values use the same display helper; no local total subtraction remains',
+    co.includes('ginpayBalancePreview(ginpayAccount.balance, shownTotal)') && co.includes('label={ginpayPreview.paymentLabel}')
+    && co.includes('{ginpayPreview.remainingLabel}') && co.includes('yen(ginpayPreview.remainingBalance)') && !co.includes('ginpayAccount.balance - totals.total'))
+}
+{
+  resetPending()
+  const rec = await P.beginPendingOp(PC.draftTicketIssue(ticketInput, operator), ticketInput, [operator.operatorToken])
+  const before = JSON.stringify(P.getPendingInput(rec.id)), raw = storedRaw()
+  check('L2 in-flight ticket form is disabled even before issueLoading is reflected', G.ticketFormDisabled(false, P.isPendingInFlight(rec.id), false))
+  check('L2 pending/result-unknown and local processing also disable the form; idle does not', G.ticketFormDisabled(true, false, false) && G.ticketFormDisabled(false, false, true) && !G.ticketFormDisabled(false, false, false))
+  check('L2 checking input eligibility does not mutate the sending snapshot or record', JSON.stringify(P.getPendingInput(rec.id)) === before && storedRaw() === raw)
+  const admin = readFileSync(join(root, 'src/screens/AdminScreen.tsx'), 'utf8')
+  const fieldset = admin.slice(admin.indexOf('<fieldset disabled={ticketInputsLocked}'), admin.indexOf('</fieldset>', admin.indexOf('<fieldset disabled={ticketInputsLocked}')))
+  check('L2 production fieldset disables ticket type, amount input/presets and all quantity controls together',
+    admin.includes('ticketFormDisabled(ticketResultUnknown, ticketInFlight, issueLoading)') && fieldset.includes('TICKET_TABS.map')
+    && fieldset.includes('DISCOUNT_AMOUNT_PRESETS.map') && fieldset.includes('type="number"') && fieldset.includes('QTY_PRESETS.map')
+    && fieldset.includes('Math.max(1, q - 1)') && fieldset.includes('Math.min(MAX_QTY, q + 1)'))
+  check('M1 lower button uses notice eligibility while both production pending paths use the fresh storage guard',
+    admin.includes('disabled={ticketResultUnknown ? !canConfirmTicket : !canIssue}')
+    && admin.includes('canConfirmTicketPending(ticketLockOp, ticketNotice, issueLoading || ticketInFlight)')
+    && admin.includes('runTicketPendingAction(() => confirmPendingOp(') && admin.includes('runTicketPendingAction(() => sendPendingWithApproval('))
+  resetPending()
+}
+
+// M2: approval completes after storage safety changed. Use the real callback/store/API.
+for (const kind of ['charge', 'refund']) {
+  resetPending(); resetSessions(); requests.length = 0
+  const input = kind === 'charge' ? { ...chargeInput, memo: '店頭チャージ' } : { ...refundInput }
+  const draft = kind === 'charge' ? PC.draftCharge(input, operator) : PC.draftRefund('ginpay_refund', input.clientId, input, operator)
+  const rec = await unknownOp(draft, input)
+  const rpcName = kind === 'charge' ? 'staff_ginpay_charge_store' : 'staff_ginpay_refund'
+  route({
+    staff_ginpay_ledger: () => json({ transactions: [] }, 200),
+    [rpcName]: () => json({ error: 'approval_required', action: `ginpay_${kind}`, request_hash: `m2-${kind}-server-hash` }, 200),
+  })
+  const approvalRequest = await PC.confirmPendingOp(rec, { operator, ginpay: staffGinpay })
+  check(`M2 ${kind}: real confirmation opens approval for the original input and key`,
+    approvalRequest.status === 'approval_required' && approvalRequest.input === input && has(P, rec.id))
+  const snapshot = { kind, action: approvalRequest.action, requestHash: approvalRequest.requestHash, input: approvalRequest.input, continuesOpId: rec.id }
+  const raw = storedRaw(), inputBefore = JSON.stringify(P.getPendingInput(rec.id)), approvalBefore = JSON.stringify(snapshot)
+  const cleared = [], messages = [], auth = [], finishes = []
+  const scope = {
+    pendingApproval: snapshot, pendingView: P.getPendingView(), api: staffGinpay,
+    getCurrentOperator: () => operator, runPendingStorageAction: G.runTicketPendingAction,
+    sendPendingWithApproval: PC.sendPendingWithApproval, pendingErrorMessage: P.pendingErrorMessage,
+    setPendingApproval: (v) => cleared.push(v), setMessage: (m) => messages.push(m),
+    setShowAuthModal: (v) => auth.push(v), finishCharge: () => finishes.push('charge'),
+    load: async () => {}, setLockCheck: () => {},
+    sendCharge: () => { throw new Error('continuation must not start a new charge') },
+    sendRefund: () => { throw new Error('continuation must not start a new refund') }, reverse: null,
+  }
+  scope.exclusive = productionHandler('src/components/ginpay/GinpayPanel.tsx', 'exclusive', { sendingRef: { current: false }, setLoading: () => {} })
+  const approved = productionHandler('src/components/ginpay/GinpayPanel.tsx', 'handleManagerApproved', scope)
+  const token = 'APR1.' + 'e'.repeat(64)
+  const savedNavigator = globalThis.navigator, savedGetItem = localStorage.getItem
+  for (const failure of ['lock_unavailable', 'unavailable', 'corrupt']) {
+    store.set(KEY, raw); requests.length = 0
+    if (failure === 'lock_unavailable') globalThis.navigator = {}
+    if (failure === 'unavailable') localStorage.getItem = () => { throw new Error('storage denied') }
+    if (failure === 'corrupt') store.set(KEY, '{broken')
+    const failedRaw = store.get(KEY)
+    await approved(token)
+    await approved(token)
+    check(`M2 ${kind} ${failure}: repeated direct approval callbacks send zero RPCs despite stale healthy render state`, requests.length === 0)
+    check(`M2 ${kind} ${failure}: original key, pending data, memory input and approval snapshot remain; no clear/auth/finish`,
+      store.get(KEY) === failedRaw && rec.key === input.idempotencyKey && JSON.stringify(P.getPendingInput(rec.id)) === inputBefore
+      && JSON.stringify(snapshot) === approvalBefore && cleared.length === 0 && auth.length === 0 && finishes.length === 0)
+    const view = P.getPendingView()
+    check(`M2 ${kind} ${failure}: existing STORAGE_ERROR notice and message, not RESULT_UNKNOWN or failed`,
+      view.failure === failure && N.pendingNotice({ failure: view.failure, op: rec, inFlight: false }).status === 'storage_error'
+      && messages.at(-1) === P.pendingStoreMessage(failure))
+    globalThis.navigator = savedNavigator; localStorage.getItem = savedGetItem
+  }
+  store.set(KEY, raw); requests.length = 0
+  route({ [rpcName]: () => json(kind === 'charge' ? chargeOk : refundOk, 200) })
+  await approved(token)
+  const sent = requests.find(r => r.url.endsWith(`/rpc/${rpcName}`))?.body
+  const expected = kind === 'charge' ? {
+    p_staff: 'staff-token', p_operator_token: operator.operatorToken, p_client_id: input.clientId,
+    p_amount: input.amount, p_payment_method: input.paymentMethod, p_staff_name: operator.memberName,
+    p_memo: input.memo, p_idempotency_key: input.idempotencyKey, p_approval_token: token, p_account_id: input.accountId,
+  } : {
+    p_staff: 'staff-token', p_operator_token: operator.operatorToken, p_transaction_id: input.transactionId,
+    p_amount: input.amount, p_staff_name: operator.memberName, p_reason: input.reason,
+    p_idempotency_key: input.idempotencyKey, p_approval_token: token,
+  }
+  check(`M2 ${kind} healthy control: one RPC with every original input field, key and APR1 unchanged`,
+    calls(rpcName) === 1 && JSON.stringify(sent) === JSON.stringify(expected))
+  check(`M2 ${kind} healthy control: only existing confirmed-success path resolves the record`,
+    !has(P, rec.id) && cleared.length === 1 && cleared[0] === null && messages.length >= 6)
+  resetPending()
+}
+{
+  resetPending(); requests.length = 0
+  const rec = await unknownOp(PC.draftRefund('hq_ginpay_refund', hqRefundInput.clientId, hqRefundInput, null), hqRefundInput, [])
+  route({ hq_ginpay_ledger: () => json({ transactions: [] }, 200) })
+  const out = await PC.confirmPendingOp(rec, { operator, ginpay: ginpay.hqGinpayApi })
+  check('M2 HQ refund sibling remains read-only: no approval continuation or mutation when absent',
+    out.status === 'unresolved' && out.reason === 'not_found' && calls('hq_ginpay_ledger') === 1 && requests.length === 1 && has(P, rec.id))
+  const src = readFileSync(join(root, 'src/components/ginpay/GinpayPanel.tsx'), 'utf8')
+  check('M2 all shared GINPay manager continuation calls use the ticket storage guard; modal hidden without deleting snapshot in STORAGE_ERROR',
+    (src.match(/sendPendingWithApproval\(/g) ?? []).length === 1 && src.includes('await runPendingStorageAction(async () => {')
+    && src.includes("runTicketPendingAction as runPendingStorageAction") && src.includes('{pendingApproval && !storeFailure && ('))
+  resetPending()
+}
+{
+  const zero = CT.checkoutTotalDisplay({ quote: { subtotal: 5000, discount_total: 5000, total: 0 }, quoteUsable: true, approval: null, approved: false, quoteLoading: false, local: { subtotal: 9000, discount: 0, total: 9000 } })
+  const zeroBalance = CT.ginpayBalancePreview(12500, zero)
+  check('display boundary: zero payment keeps current balance unchanged and has no insufficient warning', zeroBalance.paymentAmount === 0 && zeroBalance.remainingBalance === 12500 && !zeroBalance.insufficient)
+  const short = CT.ginpayBalancePreview(0, { ...zero, total: 5000 })
+  check('display boundary: insufficient balance uses displayed amount, not the local calculation', short.paymentAmount === 5000 && short.remainingBalance === -5000 && short.insufficient)
+  const provisional = CT.ginpayBalancePreview(12500, { ...zero, source: 'provisional', total: 9000 })
+  check('display boundary: provisional amount and remaining balance carry matching provisional labels', provisional.paymentAmount === 9000 && provisional.remainingBalance === 3500 && provisional.paymentLabel.includes('暫定') && provisional.remainingLabel.includes('暫定'))
 }
 
 console.log(`[pos-b2a] ${passed} passed, ${failed} failed`)

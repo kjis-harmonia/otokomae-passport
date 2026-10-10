@@ -5,7 +5,22 @@
 //   - 送信が終わったときの応答は、発行した会員と今表示している会員が同じときだけ画面に反映する。
 //   - 未解決の記録は画面の外にあるので、画面を離れても・切り替えても残る（ここでは消さない）。
 import type { TicketRow } from '../data/ticket'
-import { target, type PendingView } from './pendingOps'
+import { getPendingView, PendingStoreError, target, type PendingOp, type PendingView } from './pendingOps'
+
+export function ticketFormDisabled(resultUnknown: boolean, inFlight: boolean, sending: boolean): boolean {
+  return resultUnknown || inFlight || sending
+}
+
+export function canConfirmTicketPending(op: PendingOp | null, notice: { canConfirm: boolean } | null, sending: boolean): boolean {
+  return op?.kind === 'ticket_issue' && notice?.canConfirm === true && !sending
+}
+
+/** 確認も発行 RPC を呼び得るため、render 時ではなく送信直前に保存領域を読み直す。 */
+export async function runTicketPendingAction<T>(send: () => Promise<T>): Promise<T> {
+  const view = getPendingView()
+  if (view.failure !== null) throw new PendingStoreError(view.failure)
+  return send()
+}
 
 export interface CustomerResetState {
   /** この画面から発行を送信中・確認中 */

@@ -428,7 +428,8 @@ export interface PendingView {
 
 let cachedRaw: string | null | undefined
 let cachedView: PendingView = { ops: [], failure: null }
-let cachedFailure: PendingStoreFailure | null = null
+/** 読む前に分かる失敗（排他なし・読めない）。解析の失敗（corrupt）は含めない（含めると毎回作り直して画面が止まる） */
+let cachedReadFailure: PendingStoreFailure | null = null
 let version = 0
 let cachedVersion = -1
 
@@ -449,7 +450,8 @@ export function getPendingView(): PendingView {
     raw = null
     failure = 'unavailable'
   }
-  if (raw === cachedRaw && failure === cachedFailure && version === cachedVersion) return cachedView
+  const readFailure = failure
+  if (raw === cachedRaw && readFailure === cachedReadFailure && version === cachedVersion) return cachedView
   let ops: PendingOp[] = []
   if (failure !== 'unavailable') {
     try {
@@ -459,7 +461,7 @@ export function getPendingView(): PendingView {
     }
   }
   cachedRaw = raw
-  cachedFailure = failure
+  cachedReadFailure = readFailure
   cachedVersion = version
   cachedView = { ops, failure }
   return cachedView
@@ -485,6 +487,10 @@ const KIND_LABEL: Record<PendingKind, string> = {
   ticket_issue: 'チケット発行',
   hq_ginpay_refund: 'GINPay返金（本部）',
   hq_void: '会計の取消',
+}
+
+export function pendingKindLabel(kind: PendingKind): string {
+  return KIND_LABEL[kind]
 }
 
 export function pendingLabel(op: PendingOp): string {

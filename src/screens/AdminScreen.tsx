@@ -11,11 +11,13 @@ import { ticketApprovalSummary } from '../utils/approvalSummary'
 import { idempotencyKey } from '../utils/ginpayApi'
 import { usePendingView } from '../components/pos/usePendingView'
 import {
-  beginPendingOp, findBlockingOp, getPendingView, isPendingInFlight, markPendingUnknown, pendingBlockMessage, pendingErrorMessage,
-  pendingStoreMessage, settlePendingOp, target, type PendingOp,
+  beginPendingOp, findBlockingOp, getPendingView, isPendingInFlight, markPendingUnknown, pendingErrorMessage,
+  settlePendingOp, target, type PendingOp,
 } from '../utils/pendingOps'
-import { confirmPendingOp, draftTicketIssue, sendPendingWithApproval, unresolvedMessage } from '../utils/pendingConfirm'
-import { canResetCustomer, ticketsForDisplayed } from '../utils/ticketIssueGuard'
+import { confirmPendingOp, draftTicketIssue, sendPendingWithApproval } from '../utils/pendingConfirm'
+import { pendingNotice, type PendingCheck } from '../utils/pendingNotice'
+import { PendingOperationNotice } from '../components/pos/PendingOperationNotice'
+import { canConfirmTicketPending, canResetCustomer, runTicketPendingAction, ticketFormDisabled, ticketsForDisplayed } from '../utils/ticketIssueGuard'
 import {
   registerCustomerWithContext, searchCustomersByName, recoverMember,
   getCustomerContextForStaff, issueBindCode,
@@ -420,7 +422,16 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   // 表示中の会員に送信中の記録がある（画面を開き直す前の送信を含む）。終わるまで新しい発行・切り替えをしない
   const ticketInFlight = ticketBlockingOp !== null && isPendingInFlight(ticketBlockingOp.id)
   const ticketResultUnknown = ticketLockOp !== null || pendingView.failure !== null
-  const ticketLockText = pendingView.failure ? pendingStoreMessage(pendingView.failure) : ticketLockOp ? pendingBlockMessage(ticketLockOp) : null
+  // 最後の「結果を確認」の結果（どの記録の結果かを持つ）。通知は記録の実際の状態から作る（表示専用）
+  const [ticketCheck, setTicketCheck] = useState<PendingCheck | null>(null)
+  const ticketNotice = pendingNotice({
+    failure: pendingView.failure,
+    op: ticketLockOp ?? (ticketInFlight ? ticketBlockingOp : null),
+    inFlight: ticketInFlight && ticketLockOp === null,
+    check: ticketCheck,
+  })
+  const ticketInputsLocked = ticketFormDisabled(ticketResultUnknown, ticketInFlight, issueLoading)
+  const canConfirmTicket = canConfirmTicketPending(ticketLockOp, ticketNotice, issueLoading || ticketInFlight)
   // 同時クリック対策（state の更新を待たずに2回目の送信・確認を止める）
   const issueSendingRef = useRef(false)
   // 今表示している会員。送信が終わったときの応答を、発行した会員と照合してから画面に反映する
@@ -622,7 +633,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   }, [])
 
   function handleTabChange(type: TicketType) {
-    if (ticketResultUnknown) return
+    if (ticketInputsLocked) return
     setTicketTab(type)
     setDiscountAmountInput('')
     setOtokuAmountInput('')
@@ -766,14 +777,16 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       const rec = pendingView.ops.find(o => o.id === snapshot.continuesOpId)
       if (!rec) return
       await exclusiveIssue(async () => {
-        const out = await sendPendingWithApproval(rec, snapshot.input, approvalToken, { operator: current, issueTickets })
+        const out = await runTicketPendingAction(() => sendPendingWithApproval(rec, snapshot.input, approvalToken, { operator: current, issueTickets }))
+          .catch(err => { setIssueError(pendingErrorMessage(err)); return null })
+        if (!out) return
         if (out.status === 'confirmed') {
           showIssued(snapshot.input, (out.value as { tickets: TicketRow[] }).tickets)
           return
         }
         if (!isDisplayed(snapshot.input.userId)) return
         if (out.status === 'operator_required') { setOperator(null); setShowOperatorModal(true) }
-        setIssueError(unresolvedMessage(out))
+        setTicketCheck({ opId: rec.id, outcome: out })
       })
       return
     }
@@ -790,7 +803,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     const { userId } = op.snapshot
     await exclusiveIssue(async () => {
       setIssueError(null)
-      const out = await confirmPendingOp(op, { operator: getCurrentOperator(), issueTickets })
+      const out = await runTicketPendingAction(() => confirmPendingOp(op, { operator: getCurrentOperator(), issueTickets }))
+        .catch(err => { setIssueError(pendingErrorMessage(err)); return null })
+      if (!out) return
       if (out.status === 'confirmed') {
         const input: TicketIssueInput = {
           userId, type: op.snapshot.ticketType as TicketIssueInput['type'], amount: op.snapshot.amount, quantity: op.snapshot.quantity,
@@ -806,7 +821,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         return
       }
       if (out.status === 'operator_required' && !getCurrentOperator()) { setOperator(null); setShowOperatorModal(true) }
-      setIssueError(unresolvedMessage(out))
+      setTicketCheck({ opId: op.id, outcome: out })
     })
   }
 
@@ -1417,7 +1432,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             </div>
 
             {/* ── チケット発行フォーム ── */}
-            <div style={{ borderRadius: 18, marginBottom: 14, border: '1px solid rgba(201,162,74,0.18)', background: 'linear-gradient(160deg, #0e0808 0%, #090504 100%)', padding: '18px' }}>
+            <fieldset disabled={ticketInputsLocked} style={{ minWidth: 0, margin: '0 0 14px', borderRadius: 18, border: '1px solid rgba(201,162,74,0.18)', background: 'linear-gradient(160deg, #0e0808 0%, #090504 100%)', padding: '18px' }}>
 
               {/* Tab selector */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -1486,7 +1501,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     disabled={ticketResultUnknown}
                     value={ticketTab === 'discount' ? discountAmountInput : otokuAmountInput}
                     onChange={e => {
-                      if (ticketResultUnknown) return
+                      if (ticketInputsLocked) return
                       const v = e.target.value.replace(/[^\d]/g, '')
                       if (ticketTab === 'discount') {
                         setDiscountAmountInput(v)
@@ -1593,9 +1608,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 </div>
               )}
 
-              {ticketLockText && <p role="status" style={{ fontSize: 12, color: '#e5e5e5', marginTop: 10, lineHeight: 1.5 }}>{ticketLockText}</p>}
+              {/* 未解決の発行（処理中・結果不明・確認できない）／端末の記録を保存できない。「結果を確認」は下のボタン */}
+              {ticketNotice && <div style={{ marginTop: 10 }}><PendingOperationNotice notice={ticketNotice} /></div>}
               {issueError && <p style={{ fontSize: 12, color: '#E06060', marginTop: 10, lineHeight: 1.5 }}>{issueError}</p>}
-            </div>
+            </fieldset>
 
           </div>
         )}
@@ -2120,24 +2136,24 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             <button
               type="button"
               onClick={ticketResultUnknown ? () => void handleRetryIssueTicket() : handleIssueClick}
-              disabled={ticketResultUnknown ? (issueLoading || !ticketLockOp) : !canIssue}
+              disabled={ticketResultUnknown ? !canConfirmTicket : !canIssue}
               style={{
                 flex: 1, height: 66, borderRadius: 18,
-                background: (canIssue || ticketResultUnknown)
+                background: (canIssue || canConfirmTicket)
                   ? 'linear-gradient(90deg, #800c14 0%, #3a0307 100%)'
                   : 'rgba(255,255,255,0.04)',
-                border: `2px solid ${(canIssue || ticketResultUnknown) ? '#e6ca65' : 'rgba(255,255,255,0.07)'}`,
-                boxShadow: (canIssue || ticketResultUnknown)
+                border: `2px solid ${(canIssue || canConfirmTicket) ? '#e6ca65' : 'rgba(255,255,255,0.07)'}`,
+                boxShadow: (canIssue || canConfirmTicket)
                   ? ['0 0 32px rgba(128,12,20,0.72)', '0 0 64px rgba(128,12,20,0.36)', 'inset 0 1px 0 rgba(230,202,101,0.28)', 'inset 0 -1px 0 rgba(230,202,101,0.1)', '0 6px 32px rgba(0,0,0,0.85)'].join(', ')
                   : 'none',
-                color: (canIssue || ticketResultUnknown) ? '#F2E6C8' : '#999999',
+                color: (canIssue || canConfirmTicket) ? '#F2E6C8' : '#999999',
                 fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.22em',
-                cursor: (canIssue || (ticketResultUnknown && !issueLoading)) ? 'pointer' : 'default',
-                animation: (canIssue || ticketResultUnknown) ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
+                cursor: (canIssue || canConfirmTicket) ? 'pointer' : 'default',
+                animation: (canIssue || canConfirmTicket) ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
                 transition: 'background 0.2s, border-color 0.2s',
               }}
             >
-              {issueLoading ? '処理中…' : ticketResultUnknown ? '結果を確認' : '発行する'}
+              {issueLoading || ticketInFlight ? '処理中…' : ticketResultUnknown ? '結果を確認' : '発行する'}
             </button>
           </div>
         </div>

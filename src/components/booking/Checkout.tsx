@@ -19,10 +19,13 @@ import { ManagerApprovalModal } from '../pos/ManagerApprovalModal'
 import { checkoutApprovalSummary, quoteApprovalAmounts, type ApprovalSummary, type ServerQuoteAmounts } from '../../utils/approvalSummary'
 import { usePendingView } from '../pos/usePendingView'
 import {
-  beginPendingOp, checkoutTargets, findBlockingOp, isPendingInFlight, markPendingUnknown, pendingBlockMessage, pendingErrorMessage,
-  pendingStoreMessage, settlePendingOp, type PendingOp,
+  beginPendingOp, checkoutTargets, findBlockingOp, isPendingInFlight, markPendingUnknown, pendingErrorMessage,
+  settlePendingOp, type PendingOp,
 } from '../../utils/pendingOps'
-import { confirmPendingOp, draftCheckout, unresolvedMessage } from '../../utils/pendingConfirm'
+import { confirmPendingOp, draftCheckout } from '../../utils/pendingConfirm'
+import { pendingNotice, type PendingCheck } from '../../utils/pendingNotice'
+import { checkoutTotalDisplay, ginpayBalancePreview } from '../../utils/checkoutTotal'
+import { PendingOperationNotice } from '../pos/PendingOperationNotice'
 
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
@@ -66,6 +69,8 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   // 同じ予約・顧客（匿名なら端末のすべて）の新しい会計を止める
   const pendingView = usePendingView()
   const [lockMessage, setLockMessage] = useState<string | null>(null)
+  // 最後の「結果を確認」の結果（どの記録の結果かを持つ。通知の状態に使う）
+  const [lockCheck, setLockCheck] = useState<PendingCheck | null>(null)
 
   // POS Operator 認証セッション (メモリのみ、画面開始時に未認証なら要求)
   const [operator, setOperator] = useState<OperatorSession | null>(() => getCurrentOperator())
@@ -106,6 +111,9 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   const lockOp: PendingOp | null = blockingOp && !isPendingInFlight(blockingOp.id) ? blockingOp : null
   const storeFailure = pendingView.failure
   const locked = lockOp !== null || storeFailure !== null
+  // 送信中の記録（この画面・開き直す前の画面が送ったもの）。終わるまで内容を変えさせず、処理中と表示する（送信ガードは begin のまま）
+  const inFlightOp: PendingOp | null = blockingOp && isPendingInFlight(blockingOp.id) ? blockingOp : null
+  const notice = pendingNotice({ failure: storeFailure, op: lockOp ?? inFlightOp, inFlight: inFlightOp !== null && lockOp === null, check: lockCheck })
   const tickets = clientInfo ? ctx?.tickets ?? [] : []
   const chosenTickets = tickets.filter(t => ticketIds.includes(t.id))
   const manualAmount = manual ? Math.max(0, parseInt(manual.amount || '0', 10) || 0) : 0
@@ -473,6 +481,17 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
     return localTotals
   }, [quote, localTotals])
 
+  // 表示する合計と、その出所（有効な見積もり／承認待ちのサーバー金額／暫定）
+  const shownTotal = checkoutTotalDisplay({
+    quote,
+    quoteUsable: !!quote && !quoteError && !needsFreshQuote,
+    approval: pendingApproval ? pendingApproval.server : null,
+    approved: !!(approvedToken && approvedSnapshot),
+    quoteLoading,
+    local: localTotals,
+  })
+  const ginpayPreview = ginpayAccount ? ginpayBalancePreview(ginpayAccount.balance, shownTotal) : null
+
   const paid = !!ctx?.paid_sale_id
   const customerReady = !!ctx?.reservation || anonymous || !!client
   // 残高は台帳合計。台帳と一致しない口座では支払えない（DB 側でも止める）
@@ -615,6 +634,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
         setApprovedSnapshot(null)
         setPendingApproval(null)
         setLockMessage(null)
+        setLockCheck(null)
       } else {
         // サーバーが処理せずに拒否した（rollback 済み）。会計は確定していない
         await settlePendingOp(op.id, 'not_executed').catch(() => undefined)
@@ -634,11 +654,12 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
     if (!lockOp || busy || sendingRef.current) return
     sendingRef.current = true
     setBusy(true); setError(null); setLockMessage(null)
+    const op = lockOp
     try {
-      const out = await confirmPendingOp(lockOp, { operator: getCurrentOperator(), checkout: api })
+      const out = await confirmPendingOp(op, { operator: getCurrentOperator(), checkout: api })
       if (out.status === 'confirmed') {
         // この画面が送った会計（同じキー）なら、その会計で完了する。別の会計（前の匿名会計など）なら、この会計を続けられる
-        if (lockOp.key === saleKey) onDone(out.value as Sale)
+        if (op.key === saleKey) onDone(out.value as Sale)
         else setLockMessage('前の会計は確定していました。この会計を続けられます。')
         return
       }
@@ -646,7 +667,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
         setOperator(null)
         setShowAuthModal(true)
       }
-      setLockMessage(unresolvedMessage(out))
+      setLockCheck({ opId: op.id, outcome: out })
     } finally {
       sendingRef.current = false
       setBusy(false)
@@ -670,7 +691,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
         <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 20px 24px' }}>
           {!ctx ? <p style={{ fontSize: 14, color: error ? C.danger : C.sub }}>{error ?? '読み込み中…'}</p> : (
             // 結果不明のあいだは内容を変えられない（保持した内容と同じもので確認するため）
-            <fieldset disabled={locked} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0, opacity: locked ? 0.6 : 1 }}>
+            <fieldset disabled={locked || inFlightOp !== null} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0, opacity: locked || inFlightOp !== null ? 0.6 : 1 }}>
               {/* お客様・担当 */}
               {ctx.reservation || clientInfo || anonymous ? (
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
@@ -752,17 +773,20 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
               ) : <button type="button" onClick={() => setManual({ amount: '', label: '' })} style={{ ...linkStyle, display: 'flex' }}>値引きを入力</button>}
 
               {/* 合計 */}
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.text}` }}>
-                {totals.discount > 0 && (
+              <div data-checkout-total={shownTotal.source} style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.text}` }}>
+                {(shownTotal.discount ?? 0) > 0 ? (
                   <>
-                    <Sum label="小計" value={yen(totals.subtotal)} />
-                    <Sum label="値引き" value={`−${yen(totals.discount)}`} />
+                    {shownTotal.subtotal !== null && <Sum label="小計" value={yen(shownTotal.subtotal)} />}
+                    <Sum label="値引き" value={`−${yen(shownTotal.discount ?? 0)}`} />
                   </>
-                )}
+                ) : shownTotal.source === 'approval_pending' && shownTotal.subtotal !== null && shownTotal.subtotal !== shownTotal.total ? (
+                  <Sum label="小計" value={yen(shownTotal.subtotal)} />
+                ) : null}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>お支払い</span>
-                  <span style={{ fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: totals.total < 0 ? C.danger : C.text }}>{yen(totals.total)}</span>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>{shownTotal.label}</span>
+                  <span style={{ fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: shownTotal.total < 0 ? C.danger : shownTotal.source === 'provisional' ? C.sub : C.text }}>{yen(shownTotal.total)}</span>
                 </div>
+                {shownTotal.note && <p style={{ marginTop: 4, fontSize: 14, color: C.sub, textAlign: 'right' }}>{shownTotal.note}</p>}
               </div>
 
               <Row label="支払方法">
@@ -789,13 +813,13 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
                       {ginpayAccount && !ginpayAccount.consistent && (
                         <p style={{ fontSize: 14, color: C.danger, lineHeight: 1.7 }}>この口座は残高の照合が取れていないため支払えません。本部に連絡してください。</p>
                       )}
-                      {ginpayAccount && ginpayAccount.consistent && (
+                      {ginpayAccount && ginpayAccount.consistent && ginpayPreview && (
                         <>
                           <Sum label="現在の残高" value={yen(ginpayAccount.balance)} />
-                          <Sum label="今回のお支払い" value={`−${yen(Math.max(0, totals.total))}`} />
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, lineHeight: 1.9, color: ginpayAccount.balance < totals.total ? C.danger : C.text }}>
-                            <span>支払後の残高</span>
-                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{ginpayAccount.balance < totals.total ? '残高が不足しています' : yen(ginpayAccount.balance - totals.total)}</span>
+                          <Sum label={ginpayPreview.paymentLabel} value={`−${yen(ginpayPreview.paymentAmount)}`} />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, lineHeight: 1.9, color: ginpayPreview.insufficient ? C.danger : C.text }}>
+                            <span>{ginpayPreview.remainingLabel}</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{ginpayPreview.insufficient ? '残高が不足しています' : yen(ginpayPreview.remainingBalance)}</span>
                           </div>
                         </>
                       )}
@@ -811,16 +835,9 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
       {ctx && (
         <div style={{ flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div style={{ maxWidth: 640, margin: '0 auto' }}>
-            {storeFailure ? (
-              <p role="status" style={{ margin: 0, fontSize: 14, lineHeight: 1.7, color: C.danger }}>{pendingStoreMessage(storeFailure)}</p>
-            ) : lockOp ? (
-              <>
-                <p role="status" style={{ margin: '0 0 10px', fontSize: 14, lineHeight: 1.7, color: C.text }}>
-                  {pendingBlockMessage(lockOp)}
-                  {lockMessage && <span style={{ display: 'block', marginTop: 4, color: C.danger }}>{lockMessage}</span>}
-                </p>
-                <PrimaryButton onClick={() => void checkLock()} disabled={busy}>{busy ? '確認中…' : '結果を確認'}</PrimaryButton>
-              </>
+            {notice ? (
+              // 未解決の会計（処理中・結果不明・確認できない）／端末の記録を保存できない。新しい会計は出さない
+              <PendingOperationNotice notice={notice} onConfirm={lockOp ? () => void checkLock() : undefined} confirming={busy} />
             ) : (<>
             {lockMessage && <p role="status" style={{ margin: '0 0 8px', fontSize: 13, color: C.sub }}>{lockMessage}</p>}
             {quoteError && <p style={{ margin: '0 0 8px', fontSize: 13, color: C.danger }}>{quoteError}</p>}
