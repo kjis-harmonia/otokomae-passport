@@ -8,7 +8,7 @@
  *   - 循環参照を避けるため、staffSession.ts は import せず staffRpc.ts を直接使用する。
  */
 
-import { callStaffRpc, RpcError } from './staffRpc'
+import { callStaffRpc, isResultUnknown, RpcError } from './staffRpc'
 
 export interface ManagerCandidate {
   id: string
@@ -55,7 +55,8 @@ export async function getStaffManagerCandidates(operatorToken: string): Promise<
     }
     return { ok: true, candidates: r.candidates ?? [] }
   } catch (err) {
-    if (err instanceof RpcError) {
+    // 通信断・結果不明は業務エラーにしない（呼び出し元で通信エラーとして表示する）
+    if (err instanceof RpcError && !isResultUnknown(err)) {
       return { ok: false, error: err.code }
     }
     throw err
@@ -112,7 +113,8 @@ export async function approvePosOperation(
       expiresAt: r.expires_at,
     }
   } catch (err) {
-    if (err instanceof RpcError) {
+    // 通信断・結果不明は業務エラーにしない。APR1 が発行されていても使われずに期限切れになる
+    if (err instanceof RpcError && !isResultUnknown(err)) {
       const detail = (typeof err.detail === 'object' && err.detail !== null) ? (err.detail as Record<string, unknown>) : {}
       return {
         ok: false,

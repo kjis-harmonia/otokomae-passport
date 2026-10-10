@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { getJapanDateString, addDaysToDateString } from '../../utils/dateUtils'
-import { rpcErrorMessage } from '../../utils/staffSession'
+import { isResultUnknown, rpcErrorMessage } from '../../utils/staffSession'
 import { jstDateLabel, jstTime, yen } from '../../utils/bookingApi'
 import { checkoutErrorMessage, hqSalesApi, PAYMENT_LABEL, type Sale, type SalesDay } from '../../utils/checkoutApi'
 import { Field, SecondaryButton, Sheet } from '../../components/booking/ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from '../../components/booking/ledgerTheme'
+import { usePendingView } from '../../components/pos/usePendingView'
+import {
+  beginPendingOp, findBlockingOp, isPendingInFlight, markPendingUnknown, pendingBlockMessage, pendingErrorMessage,
+  pendingStoreMessage, settlePendingOp, target, type PendingOp,
+} from '../../utils/pendingOps'
+import { confirmPendingOp, draftHqVoid, unresolvedMessage } from '../../utils/pendingConfirm'
 
 // 本部：確定した会計の閲覧（日別の一覧・会計の詳細・取消履歴）と取消。売上 Dashboard ではない。
 // 一覧の合計は確定済みだけ（取消は件数のみ）。会計は確定時点の内容をそのまま表示する。
@@ -95,15 +101,75 @@ function SaleDetail({ id, onClose, onChanged }: { id: string; onClose: () => voi
   const [voiding, setVoiding] = useState(false)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
+  // 結果不明の取消は端末の記録（pendingOps）で管理する。シートを閉じても・再読み込みしても残り、
+  // 会計が voided になったことを読み取りで確かめるまで、この会計の新しい取消を止める
+  const pendingView = usePendingView()
+  const [lockMessage, setLockMessage] = useState<string | null>(null)
+  const blockingOp = findBlockingOp(pendingView.ops, 'hq_void', [target.sale(id)])
+  const lockOp: PendingOp | null = blockingOp && !isPendingInFlight(blockingOp.id) ? blockingOp : null
+  const sendingRef = useRef(false)
   useEffect(() => { hqSalesApi.detail(id).then(setS).catch(err => setError(rpcErrorMessage(err))) }, [id])
 
-  async function doVoid() {
-    setBusy(true); setError(null)
+  /**
+   * 結果不明の取消を、会計の状態（読み取りのみ）で確かめる。voided のときだけ確定として解除する。
+   * completed のままでも解除しない（取消の要求が後から反映され得るため）。
+   */
+  async function checkVoid(op: PendingOp | null = lockOp) {
+    if (!op || sendingRef.current) return
+    sendingRef.current = true
+    setBusy(true); setLockMessage(null)
     try {
-      const res = await hqSalesApi.void(id, reason.trim())
-      if ('error' in res) setError(checkoutErrorMessage(res.error))
-      else { setS(res); setVoiding(false); onChanged() }
-    } catch (err) { setError(rpcErrorMessage(err)) } finally { setBusy(false) }
+      const out = await confirmPendingOp(op, { operator: null, sales: hqSalesApi })
+      if (out.status === 'confirmed') {
+        setS(out.value as Sale); setError(null); setVoiding(false); onChanged()
+        return
+      }
+      setLockMessage(unresolvedMessage(out))
+      hqSalesApi.detail(id).then(setS).catch(() => undefined)
+    } finally {
+      sendingRef.current = false
+      setBusy(false)
+    }
+  }
+
+  async function doVoid() {
+    if (!s || lockOp || sendingRef.current) return
+    sendingRef.current = true
+    setBusy(true); setError(null)
+    let unknownOp: PendingOp | null = null
+    try {
+      // 送信の前に端末へ記録する。記録できなければ送信しない
+      let rec: PendingOp
+      try {
+        rec = await beginPendingOp(draftHqVoid({ id, total: s.total }), { id, reason: reason.trim() }, [])
+      } catch (err) {
+        setError(pendingErrorMessage(err))
+        return
+      }
+      try {
+        const res = await hqSalesApi.void(id, reason.trim(), rec.amount)
+        if ('error' in res) {
+          await settlePendingOp(rec.id, 'not_executed').catch(() => undefined)
+          setError(checkoutErrorMessage(res.error))
+        } else {
+          await settlePendingOp(rec.id, 'server_confirmed').catch(() => undefined)
+          setS(res); setVoiding(false); onChanged()
+        }
+      } catch (err) {
+        if (isResultUnknown(err)) {
+          await markPendingUnknown(rec.id)
+          unknownOp = rec
+        } else {
+          await settlePendingOp(rec.id, 'not_executed').catch(() => undefined)
+          setError(rpcErrorMessage(err, '取消は確定していません。内容を確認してください。'))
+        }
+      }
+    } finally {
+      sendingRef.current = false
+      setBusy(false)
+    }
+    // 結果不明：会計の状態を読み直す（voided なら確定、それ以外は未解決のまま）
+    if (unknownOp) await checkVoid(unknownOp)
   }
 
   const title = s ? `${jstDateLabel(getJapanDateString(new Date(s.completed_at)))} ${jstTime(s.completed_at)}` : '会計'
@@ -163,7 +229,17 @@ function SaleDetail({ id, onClose, onChanged }: { id: string; onClose: () => voi
             ))}
           </div>
           {error && <p style={{ color: C.danger, fontSize: 14, marginTop: 10 }}>{error}</p>}
-          {s.status === 'completed' && (voiding ? (
+          {lockOp ? (
+            <div style={{ marginTop: 14 }}>
+              <p role="status" style={{ fontSize: 14, lineHeight: 1.7 }}>{pendingBlockMessage(lockOp)}</p>
+              {lockMessage && <p style={{ color: C.danger, fontSize: 14, marginTop: 6, lineHeight: 1.7 }}>{lockMessage}</p>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                <SecondaryButton onClick={() => void checkVoid()} disabled={busy}>{busy ? '確認中…' : '状態を確認'}</SecondaryButton>
+              </div>
+            </div>
+          ) : pendingView.failure ? (
+            <p role="status" style={{ color: C.danger, fontSize: 14, marginTop: 10, lineHeight: 1.7 }}>{pendingStoreMessage(pendingView.failure)}</p>
+          ) : s.status === 'completed' && (voiding ? (
             <div style={{ marginTop: 14 }}>
               <Field label="取消の理由（必須）"><input value={reason} onChange={e => setReason(e.target.value)} maxLength={200} style={inputStyle} /></Field>
               <p style={{ fontSize: 12, color: C.mute, marginTop: 6 }}>会計は削除されず「取消」として残ります。使ったクーポンはお客様に戻ります。{(s.ginpay ?? []).some(g => g.type === 'payment') ? 'GINPayの支払いは同じ口座の残高に戻ります。' : ''}訂正は取消のあと会計し直してください。</p>

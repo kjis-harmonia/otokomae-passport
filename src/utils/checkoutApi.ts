@@ -1,9 +1,10 @@
 // 会計のクライアント。売上は「会計を確定」でだけ発生する（予約の金額は予定売上）。
 // 確定は DB の1トランザクション（会計・明細・値引き・支払・GINPay 支払い・クーポン消費・予約の完了）。テーブルへは直接アクセスしない。
-import { callStaffRpc, RpcError } from './staffSession'
+import { callStaffRpc, expectRpcResult, RpcError } from './staffSession'
 import { callHqRpc } from '../hq/hqSession'
 import type { Reservation } from './bookingApi'
 import type { OperatorSession } from './posOperatorSession'
+import { resolveSaleIdentity } from './saleIdentity'
 
 
 export type ItemCategory = 'menu' | 'option' | 'retail'
@@ -131,6 +132,8 @@ export interface Sale {
   /** この会計の GINPay 取引（支払い・取消時の戻し） */
   ginpay?: { id: string; type: 'payment' | 'void' | 'refund'; amount: number; account_id: string; original_transaction_id: string | null; created_at: string }[]
   idempotent?: boolean
+  /** 確定に使った冪等キー（成功応答の照合に使う） */
+  idempotency_key?: string | null
   voided_at: string | null
   voided_by: string | null
   void_reason: string | null
@@ -157,12 +160,14 @@ export interface CheckoutApi {
   context(reservationId: string | null, clientId: string | null): Promise<CheckoutContext>
   catalog(): Promise<Catalog>
   quote(input: QuoteInput, operator: OperatorSession, approvalToken?: string | null): Promise<CheckoutResult<QuoteResult>>
-  finalize(input: SaleInput, operator: OperatorSession, approvalToken?: string | null): Promise<CheckoutResult<Sale>>
+  /** expect は成功応答の照合内容（記録した会計から作る）。合わない応答は結果不明として扱う */
+  finalize(input: SaleInput, operator: OperatorSession, approvalToken: string | null | undefined, expect: SaleExpectation): Promise<CheckoutResult<Sale>>
 }
 export interface SalesApi {
   day(date: string): Promise<SalesDay>
   detail(id: string): Promise<Sale>
-  void(id: string, reason: string): Promise<CheckoutResult<Sale>>
+  /** expectedTotal は取消する会計の合計（成功応答の照合に使う） */
+  void(id: string, reason: string, expectedTotal: number): Promise<CheckoutResult<Sale>>
 }
 
 export const PAYMENT_LABEL: Record<string, string> = { cash: '現金', card: 'カード', credit: 'カード', qr: 'QR等', other: 'その他', ginpay: 'GINPay' }
@@ -224,20 +229,106 @@ export function saleTotals(lines: SaleLine[], tickets: { amount: number }[], man
   return { subtotal, discount, total: subtotal - discount }
 }
 
+/**
+ * 業務エラー（rpc_result）と呼出前の失敗（local_precondition）だけを結果として返す。
+ * supabase_error（通信断・結果不明・サーバー側の例外）は例外のまま呼び出し元へ渡し、
+ * 呼び出し元が isResultUnknown で結果不明かどうかを判断する。
+ */
 async function asResult<T>(fn: () => Promise<T>): Promise<CheckoutResult<T>> {
   try {
     return await fn()
   } catch (err) {
-    if (err instanceof RpcError) {
+    if (err instanceof RpcError && err.source === 'rpc_result') {
       const detail = (typeof err.detail === 'object' && err.detail !== null) ? err.detail : {}
       return { error: err.code, ...(detail as object) }
     }
-    const code = (err as { code?: string }).code
-    if (code) return { error: code }
-    const message = (err as { message?: string }).message
-    if (message) return { error: message }
+    if (err instanceof RpcError && err.source === 'local_precondition') {
+      return { error: err.code }
+    }
     throw err
   }
+}
+
+const isId = (v: unknown) => typeof v === 'string' && v !== ''
+const isYen = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v)
+const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
+
+/** 送った会計で、サーバーが記録するはずの内容（記録した送信内容とサーバーの顧客の決め方から作る） */
+export interface SaleExpectation {
+  idempotencyKey: string
+  total: number
+  /** サーバーが記録する予約・顧客（client_root）。匿名なら両方 null */
+  reservationId: string | null
+  clientId: string | null
+  paymentMethod: string
+  /** GINPay 払いで指定した口座（指定なしは null。サーバーが顧客の口座を1つに決める） */
+  ginpayAccountId: string | null
+  ticketCount: number
+}
+
+/** 送る内容から照合内容を作る。予約の会計は予約の顧客（reservationClientId）が無いと顧客が分からず、匿名として照合する */
+export function saleExpectation(input: SaleInput, reservationClientId?: string | null): SaleExpectation {
+  const identity = resolveSaleIdentity(input, reservationClientId)
+  return {
+    idempotencyKey: input.idempotency_key,
+    total: input.expected_total,
+    reservationId: identity.reservationId,
+    clientId: identity.clientId,
+    paymentMethod: input.payment_method,
+    ginpayAccountId: input.ginpay_account_id ?? null,
+    ticketCount: input.ticket_ids.length,
+  }
+}
+
+/**
+ * 会計確定の成功応答（sale_json）を、送った会計と照合する。どれか1つでも合わなければ成功として扱わない。
+ *   会計 ID・completed・合計・冪等キー
+ *   予約・顧客（client_root）。匿名なら両方 null
+ *   支払方法（card は credit で記録）・支払額の合計・GINPay の支払い（口座・金額）。GINPay 以外に GINPay の支払いが無いこと
+ *   使ったクーポンの枚数（sale_json にはクーポン ID が無いので、クーポン値引きの行数で照合する）
+ * staff_finalize_sale は取消済みの会計を同じキーで返さない（idempotency_conflict）ので、voided は受け付けない。
+ *
+ * 顧客：sale_json の client は「今の」統合先（client_root）。送った後に顧客が統合されると、記録した顧客と違う ID が返る。
+ *   mergedInto（記録した顧客の今の統合先を読み取りで確かめた ID）が渡され、返った顧客がそれと同じときだけ、統合による変化として認める。
+ *   anyClient は1段目（顧客以外の照合）だけに使い、それだけで成功にはしない。
+ */
+export function isCompleteSale(sale: Record<string, unknown>, expect: SaleExpectation, opts: { mergedInto?: string | null; anyClient?: boolean } = {}): boolean {
+  if (!(isId(sale.id) && sale.status === 'completed' && isYen(sale.total) && sale.total === expect.total
+    && sale.idempotency_key === expect.idempotencyKey)) return false
+
+  const reservationOk = expect.reservationId === null ? sale.reservation === null
+    : isObj(sale.reservation) && sale.reservation.id === expect.reservationId
+  const clientOk = expect.clientId === null ? sale.client === null
+    : isObj(sale.client) && isId(sale.client.id) && (sale.client.id === expect.clientId || opts.anyClient === true
+      || (isId(opts.mergedInto) && opts.mergedInto !== expect.clientId && sale.client.id === opts.mergedInto))
+  if (!reservationOk || !clientOk) return false
+
+  const method = expect.paymentMethod === 'card' ? 'credit' : expect.paymentMethod
+  const payments = sale.payments
+  if (sale.payment_method !== method || !Array.isArray(payments) || payments.length === 0) return false
+  if (!payments.every(p => isObj(p) && p.method === method && isYen(p.amount))) return false
+  if (payments.reduce((n: number, p) => n + (p as { amount: number }).amount, 0) !== expect.total) return false
+
+  const ginpay = sale.ginpay
+  if (!Array.isArray(ginpay) || !ginpay.every(isObj)) return false
+  const ginpayPayments = (ginpay as Record<string, unknown>[]).filter(g => g.type === 'payment')
+  if (method === 'ginpay') {
+    if (ginpayPayments.length !== 1) return false
+    const g = ginpayPayments[0]
+    if (!isId(g.id) || !isId(g.account_id) || g.amount !== -expect.total) return false
+    if (expect.ginpayAccountId !== null && g.account_id !== expect.ginpayAccountId) return false
+  } else if (ginpayPayments.length !== 0) {
+    return false
+  }
+
+  const discounts = sale.discounts
+  if (!Array.isArray(discounts) || !discounts.every(isObj)) return false
+  return (discounts as Record<string, unknown>[]).filter(d => d.kind === 'ticket').length === expect.ticketCount
+}
+
+/** 会計取消の成功応答：同じ会計が、取消前と同じ合計のまま取消済みになっていること */
+export function isVoidedSale(sale: Record<string, unknown>, saleId: string, total: number): boolean {
+  return sale.id === saleId && sale.status === 'voided' && isYen(sale.total) && sale.total === total
 }
 
 /** 店舗端末用。会計操作は検証済み OperatorSession が必須 */
@@ -251,12 +342,38 @@ export function createStaffCheckoutApi(_actor?: () => string): CheckoutApi {
       p_request: input,
       p_approval_token: approvalToken ?? null,
     })),
-    finalize: (input, operator, approvalToken) => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', {
-      p: input,
-      p_staff_name: operator.memberName,
-      p_operator_token: operator.operatorToken,
-      p_approval_token: approvalToken ?? null,
-    })),
+    finalize: (input, operator, approvalToken, expect) => {
+      // 照合内容が無い呼び出しは、送る内容だけから作る（予約の顧客が分からないので予約の会計は成功と認めない）
+      const expected = expect ?? saleExpectation(input)
+      return asResult(async () => {
+        const sale = expectRpcResult(await callStaffRpc<Sale>('staff_finalize_sale', {
+          p: input,
+          p_staff_name: operator.memberName,
+          p_operator_token: operator.operatorToken,
+          p_approval_token: approvalToken ?? null,
+        }), 'staff_finalize_sale', s => isCompleteSale(s, expected, { anyClient: true }))
+        const value = sale as unknown as Record<string, unknown>
+        if (isCompleteSale(value, expected)) return sale
+        // 顧客だけが違う：記録した顧客の今の統合先を読み取りで確かめ、返った顧客と同じときだけ統合として認める
+        const mergedInto = expected.clientId ? await currentClientRoot(expected.clientId) : null
+        if (isCompleteSale(value, expected, { mergedInto })) return sale
+        throw new RpcError('response_mismatch', '通信結果を確認できませんでした。', { fn: 'staff_finalize_sale', data: sale }, 'supabase_error', { resultUnknown: true })
+      })
+    },
+  }
+}
+
+/**
+ * 顧客の今の統合先（client_root）。読み取り専用の staff_checkout_context が返す client.id を使う。
+ * 読めない・見つからないときは null（統合を証明できないので、顧客の違う応答は成功にしない）。
+ */
+async function currentClientRoot(clientId: string): Promise<string | null> {
+  try {
+    const ctx = await callStaffRpc<CheckoutContext>('staff_checkout_context', { p_reservation_id: null, p_client_id: clientId })
+    const id = (ctx as { client?: { id?: unknown } | null } | null)?.client?.id
+    return typeof id === 'string' && id !== '' ? id : null
+  } catch {
+    return null
   }
 }
 
@@ -264,5 +381,5 @@ export function createStaffCheckoutApi(_actor?: () => string): CheckoutApi {
 export const hqSalesApi: SalesApi = {
   day: date => callHqRpc<SalesDay>('hq_sales', { p_date: date }),
   detail: id => callHqRpc<Sale>('hq_sale_detail', { p_id: id }),
-  void: (id, reason) => asResult(() => callHqRpc<Sale>('hq_void_sale', { p_id: id, p_reason: reason })),
+  void: (id, reason, expectedTotal) => asResult(async () => expectRpcResult(await callHqRpc<Sale>('hq_void_sale', { p_id: id, p_reason: reason }), 'hq_void_sale', sale => isVoidedSale(sale, id, expectedTotal))),
 }

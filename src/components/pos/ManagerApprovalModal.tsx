@@ -107,9 +107,9 @@ export function ManagerApprovalModal({
         setCandidates(res.candidates)
         setSelectedStaffId('') // 自動選択禁止。ユーザーが明示的に選択するまで未選択
       })
-      .catch(err => {
+      .catch(() => {
         if (!alive) return
-        setCandidateLoadError(err instanceof Error ? err.message : '管理者一覧の読み込みに失敗しました。')
+        setCandidateLoadError('通信を確認できず、管理者一覧を読み込めませんでした。')
       })
       .finally(() => {
         if (alive) setLoadingCandidates(false)
@@ -151,8 +151,9 @@ export function ManagerApprovalModal({
 
       setPin('')
       onApproved(res.approvalToken)
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : '通信に失敗しました。電波を確認してください。')
+    } catch {
+      // 承認 API の通信結果不明。発行されていても使われずに期限切れになるため、金銭処理は行われていない
+      setSubmitError('通信を確認できませんでした。この承認は使われません。通信状態を確認してからPINを入力してください。')
       setPin('')
     } finally {
       setBusy(false)

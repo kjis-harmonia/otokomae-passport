@@ -8,11 +8,19 @@ import { getCurrentOperator, isCurrentOperatorValid, type OperatorSession } from
 import { OperatorAuthModal } from '../components/pos/PosAuthModals'
 import { ManagerApprovalModal } from '../components/pos/ManagerApprovalModal'
 import { idempotencyKey } from '../utils/ginpayApi'
+import { usePendingView } from '../components/pos/usePendingView'
+import {
+  beginPendingOp, findBlockingOp, getPendingView, isPendingInFlight, markPendingUnknown, pendingBlockMessage, pendingErrorMessage,
+  pendingStoreMessage, settlePendingOp, target, type PendingOp,
+} from '../utils/pendingOps'
+import { confirmPendingOp, draftTicketIssue, sendPendingWithApproval, unresolvedMessage } from '../utils/pendingConfirm'
+import { canResetCustomer, ticketsForDisplayed } from '../utils/ticketIssueGuard'
 import {
   registerCustomerWithContext, searchCustomersByName, recoverMember,
   getCustomerContextForStaff, issueBindCode,
 } from '../utils/customerStore'
-import { callStaffRpc, rpcErrorMessage, RpcError } from '../utils/staffSession'
+import { callStaffRpc, isResultUnknown, rpcErrorMessage, RpcError } from '../utils/staffSession'
+
 import type { CustomerRow } from '../utils/customerStore'
 import { isWelcomeCouponBlockedToday, WELCOME_COUPON_WEEKEND_MESSAGE } from '../utils/welcomeCoupon'
 import { isStaging } from '../utils/env'
@@ -400,10 +408,23 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     action: string
     requestHash: string
     input: TicketIssueInput
+    /** 結果不明の記録の続き（同じ内容・同じキーで承認つきに送る）。無ければ新しい発行 */
+    continuesOpId?: string
   }
   const [pendingTicketApproval, setPendingTicketApproval] = useState<PendingTicketApproval | null>(null)
-  const [ticketResultUnknown, setTicketResultUnknown] = useState<boolean>(false)
-  const [resultUnknownSnapshot, setResultUnknownSnapshot] = useState<TicketIssueInput | null>(null)
+  // 未解決の発行は端末の記録（pendingOps）で管理する。画面を離れても・再読み込みしても残り、同じ会員への発行を止める
+  const pendingView = usePendingView()
+  const ticketBlockingOp = scannedData ? findBlockingOp(pendingView.ops, 'ticket_issue', [target.user(scannedData.userId)]) : null
+  const ticketLockOp: PendingOp | null = ticketBlockingOp && !isPendingInFlight(ticketBlockingOp.id) ? ticketBlockingOp : null
+  // 表示中の会員に送信中の記録がある（画面を開き直す前の送信を含む）。終わるまで新しい発行・切り替えをしない
+  const ticketInFlight = ticketBlockingOp !== null && isPendingInFlight(ticketBlockingOp.id)
+  const ticketResultUnknown = ticketLockOp !== null || pendingView.failure !== null
+  const ticketLockText = pendingView.failure ? pendingStoreMessage(pendingView.failure) : ticketLockOp ? pendingBlockMessage(ticketLockOp) : null
+  // 同時クリック対策（state の更新を待たずに2回目の送信・確認を止める）
+  const issueSendingRef = useRef(false)
+  // 今表示している会員。送信が終わったときの応答を、発行した会員と照合してから画面に反映する
+  const displayedUserRef = useRef<string | null>(null)
+  const isDisplayed = (userId: string) => displayedUserRef.current === userId
 
   // Ticket-use QR flow
   const [ticketUseData, setTicketUseData]         = useState<TicketUseQRData | null>(null)
@@ -460,7 +481,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const isFirstVisit  = prevLastVisitDate === null
   const elapsedDays   = prevLastVisitDate ? daysSince(prevLastVisitDate) : null
   const isEligible    = !isFirstVisit && prevLastVisitDate !== undefined && elapsedDays !== null && elapsedDays <= 14
-  const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0 && !ticketResultUnknown
+  const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0 && !ticketResultUnknown && !ticketInFlight
+  // 顧客を切り替える導線（次のお客様・来店完了ほか）はすべてこの判定で止める（端末の記録も見る）
+  const canReset = canResetCustomer({ sending: issueLoading, displayedUserId: scannedData?.userId ?? null, view: pendingView })
   const activeTickets = userTickets.filter(t => !t.used)
   const currentTab    = TICKET_TABS.find(t => t.type === ticketTab) ?? TICKET_TABS[0]
   const tc            = TICKET_TYPE_COLORS[ticketTab]
@@ -468,7 +491,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function handleReset() {
-    if (ticketResultUnknown) return
+    // 発行の送信・確認中、表示中の会員の発行が未解決（送信中・結果不明。画面を開き直す前の送信を含む）のあいだは切り替えない
+    if (!canResetCustomer({ sending: issueSendingRef.current, displayedUserId: displayedUserRef.current, view: getPendingView() })) return
+    // 未解決の発行は端末に記録されているので、別の会員に切り替えても失われない
+    displayedUserRef.current = null
     setPhase('scan')
     setScannedData(null)
     setPrevLastVisitDate(undefined)
@@ -512,6 +538,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   }
 
   const handleScanned = useCallback(async (text: string) => {
+    // 新しい読み取りも顧客の切り替え。表示中の会員の発行が未解決なら受け付けない（読み取りは scan 画面だけだが念のため）
+    if (!canResetCustomer({ sending: issueSendingRef.current, displayedUserId: displayedUserRef.current, view: getPendingView() })) return
     const data = parseQR(text)
     if (!data) { setParseError(`認識できないQRコードです\n→ ${text.slice(0, 80)}`); return }
     setParseError(null)
@@ -557,6 +585,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     }
 
     const passportData = data as PassportQRData
+    displayedUserRef.current = passportData.userId
     setScannedData(passportData)
     setPhase('loading')
     // 会員登録（初回登録・名前更新）＋来店日・チケット・当日利用状況をサーバーから一括取得。
@@ -565,6 +594,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     try {
       ctx = await registerCustomerWithContext(passportData.userId, passportData.name)
     } catch (err) {
+      displayedUserRef.current = null
       setScannedData(null)
       setPhase('scan')
       setParseError(rpcErrorMessage(err, '会員情報の取得に失敗しました。通信環境を確認してもう一度読み取ってください。'))
@@ -611,9 +641,90 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setShowConfirm(true)
   }
 
+  function showIssued(input: TicketIssueInput, issued: TicketRow[]) {
+    // 発行した会員を表示しているときだけ反映する（切り替え後の古い応答は、前の会員のチケットを混ぜない）
+    const own = ticketsForDisplayed(displayedUserRef.current, input.userId, issued)
+    if (!own) return
+    setTicketIssueKey(null)
+    setUserTickets(prev => [...own, ...prev])
+    playSuccessSound()
+    setSuccessInfo({ name: input.customerName || scannedData?.name || '', label: currentTab.autoTitle, amount: input.amount, qty: input.quantity })
+    setShowSuccess(true)
+    setDiscountAmountInput('')
+    setOtokuAmountInput('')
+    setQuantity(1)
+    setTimeout(() => setShowSuccess(false), 1800)
+  }
+
+  async function exclusiveIssue(fn: () => Promise<void>) {
+    if (issueSendingRef.current) return
+    issueSendingRef.current = true
+    setIssueLoading(true)
+    try {
+      await fn()
+    } finally {
+      issueSendingRef.current = false
+      setIssueLoading(false)
+    }
+  }
+
+  /** 新しい発行を送る。送信前に端末へ記録し、記録できなければ送らない */
+  async function sendIssue(input: TicketIssueInput, current: OperatorSession, approvalToken: string | null) {
+    let rec: PendingOp
+    try {
+      rec = await beginPendingOp(draftTicketIssue(input, current), input, [current.operatorToken, approvalToken])
+    } catch (err) {
+      setIssueError(pendingErrorMessage(err))
+      return
+    }
+    try {
+      const issued = await issueTickets(input, current, approvalToken)
+      if ('error' in issued) {
+        // この送信が業務エラーで返った＝この発行は実行されていない
+        await settlePendingOp(rec.id, 'not_executed').catch(() => undefined)
+        if (!isDisplayed(input.userId)) return
+        const isOperatorInvalid =
+          issued.error === 'operator_session_invalid' ||
+          issued.error === 'invalid_operator_session' ||
+          issued.error === 'operator_session_expired' ||
+          issued.error === 'staff_auth_required'
+        if (isOperatorInvalid) {
+          setOperator(null)
+          setPendingTicketApproval(null)
+        }
+        if (issued.error === 'approval_required') {
+          if (!issued.action || !issued.request_hash) {
+            setIssueError('管理者承認情報を取得できませんでした。最初からやり直してください。')
+            setTicketIssueKey(null)
+            return
+          }
+          setPendingTicketApproval({ action: issued.action, requestHash: issued.request_hash, input })
+          setIssueError(null)
+          return
+        }
+        setIssueError(issued.error === 'approval_expired'
+          ? '承認の有効期限が切れました。1枚も発行されていません。'
+          : `発行に失敗しました。1枚も発行されていません。(${issued.error})`)
+        setTicketIssueKey(null)
+        return
+      }
+      await settlePendingOp(rec.id, 'server_confirmed').catch(() => undefined)
+      showIssued(input, issued.tickets)
+    } catch (err) {
+      if (isResultUnknown(err)) {
+        // 発行された可能性がある。記録を残し、同じ内容・同じキーでだけ確認する
+        await markPendingUnknown(rec.id)
+        if (isDisplayed(input.userId)) setIssueError(null)
+      } else {
+        await settlePendingOp(rec.id, 'not_executed').catch(() => undefined)
+        if (isDisplayed(input.userId)) setIssueError(rpcErrorMessage(err, '発行は確定していません。1枚も発行されていません。'))
+      }
+    }
+  }
+
   // Called from confirm modal — does the actual issue + log
   const handleIssueTicket = async () => {
-    if (!scannedData || effectiveAmount <= 0) return
+    if (!scannedData || effectiveAmount <= 0 || ticketResultUnknown) return
     const current = getCurrentOperator()
     if (!current) {
       setShowConfirm(false)
@@ -622,13 +733,12 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       return
     }
     setShowConfirm(false)
-    setIssueLoading(true)
     setIssueError(null)
     const key = ticketIssueKey ?? idempotencyKey('ticket-issue')
     if (!ticketIssueKey) {
       setTicketIssueKey(key)
     }
-    const input = {
+    const input: TicketIssueInput = {
       userId:       scannedData.userId,
       type:         ticketTab === 'otoku' ? ('otoku' as const) : ('discount' as const),
       amount:       effectiveAmount,
@@ -636,201 +746,68 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       customerName: scannedData.name,
       idempotencyKey: key,
     }
-    try {
-      const issued = await issueTickets(input, current)
-
-      if ('error' in issued) {
-        setTicketResultUnknown(false)
-        setResultUnknownSnapshot(null)
-        const isOperatorInvalid =
-          issued.error === 'operator_session_invalid' ||
-          issued.error === 'invalid_operator_session' ||
-          issued.error === 'operator_session_expired' ||
-          issued.error === 'staff_auth_required'
-
-        if (isOperatorInvalid) {
-          setOperator(null)
-          setPendingTicketApproval(null)
-        }
-
-        if (issued.error === 'approval_required') {
-          if (!issued.action || !issued.request_hash) {
-            setIssueError('管理者承認情報を取得できませんでした。最初からやり直してください。')
-            setTicketIssueKey(null)
-            return
-          }
-
-          setPendingTicketApproval({
-            action: issued.action,
-            requestHash: issued.request_hash,
-            input,
-          })
-          setIssueError(null)
-          return
-        }
-
-        setIssueError(`発行に失敗しました。1枚も発行されていません。(${issued.error})`)
-        return
-      }
-
-      setTicketResultUnknown(false)
-      setResultUnknownSnapshot(null)
-      setTicketIssueKey(null)
-      setUserTickets(prev => [...issued.tickets, ...prev])
-
-      playSuccessSound()
-      setSuccessInfo({ name: scannedData.name, label: currentTab.autoTitle, amount: effectiveAmount, qty: quantity })
-      setShowSuccess(true)
-      setDiscountAmountInput('')
-      setOtokuAmountInput('')
-      setQuantity(1)
-      setTimeout(() => setShowSuccess(false), 1800)
-    } catch (err) {
-      const isTransportError = err instanceof RpcError && err.source === 'supabase_error'
-      if (isTransportError) {
-        setTicketResultUnknown(true)
-        setResultUnknownSnapshot(input)
-        setIssueError(`通信結果が確認できませんでした。二重発行を防ぐため、入力を変更せず「再試行」を押すか、保有チケット一覧を確認してください。(${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')})`)
-      } else {
-        setIssueError(rpcErrorMessage(err, 'チケット発行に失敗しました。'))
-      }
-    } finally {
-      setIssueLoading(false)
-    }
+    await exclusiveIssue(() => sendIssue(input, current, null))
   }
 
   const handleTicketApproved = async (approvalToken: string) => {
     if (!pendingTicketApproval) return
     const current = getCurrentOperator()
-    if (!current) {
-      setOperator(null)
-      setShowOperatorModal(true)
-      setPendingTicketApproval(null)
-      return
-    }
-
     const snapshot = pendingTicketApproval
     setPendingTicketApproval(null)
-    setIssueLoading(true)
-    setIssueError(null)
-
-    try {
-      const issued = await issueTickets(snapshot.input, current, approvalToken)
-
-      if ('error' in issued) {
-        if (!ticketResultUnknown) {
-          setTicketResultUnknown(false)
-          setResultUnknownSnapshot(null)
-          setTicketIssueKey(null)
-        }
-        const isOperatorInvalid =
-          issued.error === 'operator_session_invalid' ||
-          issued.error === 'invalid_operator_session' ||
-          issued.error === 'operator_session_expired' ||
-          issued.error === 'staff_auth_required'
-
-        if (isOperatorInvalid) {
-          setOperator(null)
-        }
-
-        if (issued.error === 'approval_expired') {
-          setIssueError('承認の有効期限が切れました。再試行してください。')
-        } else if (issued.error === 'approval_required') {
-          setIssueError('管理者承認の検証に失敗しました。再試行してください。')
-        } else {
-          setIssueError(ticketResultUnknown ? `発行の確認が取れませんでした。(${issued.error})` : `発行に失敗しました。1枚も発行されていません。(${issued.error})`)
-        }
-        return
-      }
-
-      setTicketResultUnknown(false)
-      setResultUnknownSnapshot(null)
-      setTicketIssueKey(null)
-      setUserTickets(prev => [...issued.tickets, ...prev])
-
-      playSuccessSound()
-      setSuccessInfo({ name: snapshot.input.customerName, label: currentTab.autoTitle, amount: snapshot.input.amount, qty: snapshot.input.quantity })
-      setShowSuccess(true)
-      setDiscountAmountInput('')
-      setOtokuAmountInput('')
-      setQuantity(1)
-      setTimeout(() => setShowSuccess(false), 1800)
-    } catch (err) {
-      const isTransportError = err instanceof RpcError && err.source === 'supabase_error'
-      if (isTransportError || ticketResultUnknown) {
-        setTicketResultUnknown(true)
-        setResultUnknownSnapshot(snapshot.input)
-        setIssueError(`通信結果が確認できませんでした。二重発行を防ぐため、入力を変更せず「再試行」を押すか、保有チケット一覧を確認してください。(${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')})`)
-      } else {
-        setIssueError(rpcErrorMessage(err, '通信環境を確認して再度お試しください。'))
-      }
-    } finally {
-      setIssueLoading(false)
-    }
-  }
-
-  const handleRetryIssueTicket = async () => {
-    if (!resultUnknownSnapshot || issueLoading) return
-    const current = getCurrentOperator()
     if (!current) {
       setOperator(null)
       setShowOperatorModal(true)
       return
     }
-    setIssueLoading(true)
     setIssueError(null)
-    try {
-      const issued = await issueTickets(resultUnknownSnapshot, current)
-      if ('error' in issued) {
-        // retry 失敗時：ticketResultUnknown, resultUnknownSnapshot, ticketIssueKey は破棄しない
-        const isOperatorInvalid =
-          issued.error === 'operator_session_invalid' ||
-          issued.error === 'invalid_operator_session' ||
-          issued.error === 'operator_session_expired' ||
-          issued.error === 'staff_auth_required'
-
-        if (isOperatorInvalid) {
-          setOperator(null)
-          setPendingTicketApproval(null)
-        }
-
-        if (issued.error === 'approval_required') {
-          if (!issued.action || !issued.request_hash) {
-            setIssueError('管理者承認情報を取得できませんでした。再試行してください。')
-            return
-          }
-          setPendingTicketApproval({
-            action: issued.action,
-            requestHash: issued.request_hash,
-            input: resultUnknownSnapshot,
-          })
-          setIssueError(null)
+    if (snapshot.continuesOpId) {
+      // 結果不明の記録の続き。記録は消さずに、同じ内容・同じキーで承認つきに送る
+      const rec = pendingView.ops.find(o => o.id === snapshot.continuesOpId)
+      if (!rec) return
+      await exclusiveIssue(async () => {
+        const out = await sendPendingWithApproval(rec, snapshot.input, approvalToken, { operator: current, issueTickets })
+        if (out.status === 'confirmed') {
+          showIssued(snapshot.input, (out.value as { tickets: TicketRow[] }).tickets)
           return
         }
-
-        setIssueError(`発行の確認が取れませんでした。(${issued.error})`)
-        return
-      }
-
-      setTicketResultUnknown(false)
-      setResultUnknownSnapshot(null)
-      setTicketIssueKey(null)
-      setUserTickets(prev => [...issued.tickets, ...prev])
-      playSuccessSound()
-      setSuccessInfo({ name: resultUnknownSnapshot.customerName, label: currentTab.autoTitle, amount: resultUnknownSnapshot.amount, qty: resultUnknownSnapshot.quantity })
-      setShowSuccess(true)
-      setDiscountAmountInput('')
-      setOtokuAmountInput('')
-      setQuantity(1)
-      setTimeout(() => setShowSuccess(false), 1800)
-    } catch (err) {
-      setIssueError(`通信エラーが継続しています。二重発行を防ぐため、入力を変更せず再度「再試行」を押すか、保有チケット一覧を確認してください。(${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')})`)
-    } finally {
-      setIssueLoading(false)
+        if (!isDisplayed(snapshot.input.userId)) return
+        if (out.status === 'operator_required') { setOperator(null); setShowOperatorModal(true) }
+        setIssueError(unresolvedMessage(out))
+      })
+      return
     }
+    await exclusiveIssue(() => sendIssue(snapshot.input, current, approvalToken))
   }
 
-
+  /**
+   * 未解決の発行を確かめる。承認なしの再送なので新しい発行にはならない（同じキーの発行があればそれが返る）。
+   * 業務エラー・通信不明では解除しない（先に送った要求が後で確定し得るため）。
+   */
+  const handleRetryIssueTicket = async () => {
+    if (!ticketLockOp || ticketLockOp.kind !== 'ticket_issue') return
+    const op = ticketLockOp
+    const { userId } = op.snapshot
+    await exclusiveIssue(async () => {
+      setIssueError(null)
+      const out = await confirmPendingOp(op, { operator: getCurrentOperator(), issueTickets })
+      if (out.status === 'confirmed') {
+        const input: TicketIssueInput = {
+          userId, type: op.snapshot.ticketType as TicketIssueInput['type'], amount: op.snapshot.amount, quantity: op.snapshot.quantity,
+          customerName: scannedData?.name ?? '', idempotencyKey: op.key,
+        }
+        showIssued(input, (out.value as { tickets: TicketRow[] }).tickets)
+        return
+      }
+      if (!isDisplayed(userId)) return
+      if (out.status === 'approval_required') {
+        // 同じ内容・同じキーのまま承認へ進む（金額・枚数は変えない）
+        setPendingTicketApproval({ action: out.action, requestHash: out.requestHash, input: out.input as TicketIssueInput, continuesOpId: op.id })
+        return
+      }
+      if (out.status === 'operator_required' && !getCurrentOperator()) { setOperator(null); setShowOperatorModal(true) }
+      setIssueError(unresolvedMessage(out))
+    })
+  }
 
   /** 本人確認のうえ、お客様の端末をアプリに紐付けるコードを発行（お客様がアプリで入力） */
   const handleIssueBindCode = async () => {
@@ -1334,13 +1311,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   </div>
                   <button
                     onClick={handleReset}
-                    disabled={issueLoading}
+                    disabled={!canReset}
                     style={{
                       width: '100%', marginTop: 14, padding: '15px 0', borderRadius: 14,
                       background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
                       border: '1px solid rgba(201,162,74,0.55)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)',
                       color: '#F2E6C8', fontFamily: SERIF, fontSize: 16, fontWeight: 700, letterSpacing: '0.22em',
-                      cursor: issueLoading ? 'default' : 'pointer', opacity: issueLoading ? 0.6 : 1,
+                      cursor: canReset ? 'pointer' : 'default', opacity: canReset ? 1 : 0.6,
                     }}
                   >
                     来店完了
@@ -1615,6 +1592,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 </div>
               )}
 
+              {ticketLockText && <p role="status" style={{ fontSize: 12, color: '#e5e5e5', marginTop: 10, lineHeight: 1.5 }}>{ticketLockText}</p>}
               {issueError && <p style={{ fontSize: 12, color: '#E06060', marginTop: 10, lineHeight: 1.5 }}>{issueError}</p>}
             </div>
 
@@ -1717,7 +1695,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               </>
             )}
 
-            <button onClick={handleReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
+            <button onClick={handleReset} disabled={!canReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
               次のお客様
             </button>
           </div>
@@ -1826,7 +1804,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               </button>
             )}
 
-            <button onClick={handleReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
+            <button onClick={handleReset} disabled={!canReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
               次のお客様
             </button>
           </div>
@@ -1893,7 +1871,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               </div>
             )}
 
-            <button onClick={handleReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
+            <button onClick={handleReset} disabled={!canReset} style={{ width: '100%', padding: '14px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.22em', cursor: 'pointer' }}>
               次のお客様
             </button>
           </div>
@@ -2126,14 +2104,14 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             <button
               type="button"
               onClick={handleReset}
-              disabled={ticketResultUnknown}
+              disabled={!canReset}
               style={{
                 flex: '0 0 34%', height: 66, borderRadius: 18,
                 background: 'rgba(255,255,255,0.045)',
                 border: '1.5px solid rgba(255,255,255,0.14)',
-                color: ticketResultUnknown ? '#666666' : '#e5e5e5',
+                color: canReset ? '#e5e5e5' : '#666666',
                 fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em',
-                cursor: ticketResultUnknown ? 'default' : 'pointer',
+                cursor: canReset ? 'pointer' : 'default',
               }}
             >
               次のお客様
@@ -2141,7 +2119,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             <button
               type="button"
               onClick={ticketResultUnknown ? () => void handleRetryIssueTicket() : handleIssueClick}
-              disabled={ticketResultUnknown ? issueLoading : !canIssue}
+              disabled={ticketResultUnknown ? (issueLoading || !ticketLockOp) : !canIssue}
               style={{
                 flex: 1, height: 66, borderRadius: 18,
                 background: (canIssue || ticketResultUnknown)
@@ -2158,7 +2136,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 transition: 'background 0.2s, border-color 0.2s',
               }}
             >
-              {issueLoading ? '処理中…' : ticketResultUnknown ? '再試行' : '発行する'}
+              {issueLoading ? '処理中…' : ticketResultUnknown ? '結果を確認' : '発行する'}
             </button>
           </div>
         </div>
@@ -2407,16 +2385,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           requestHash={pendingTicketApproval.requestHash}
           onApproved={handleTicketApproved}
           onCancel={() => {
+            // 結果不明の記録の続きなら、記録とキーはそのまま（承認をやめても解除しない）
+            if (!pendingTicketApproval.continuesOpId) setTicketIssueKey(null)
             setPendingTicketApproval(null)
-            if (!ticketResultUnknown) {
-              setTicketIssueKey(null)
-            }
           }}
           onOperatorAuthRequired={() => {
+            if (!pendingTicketApproval.continuesOpId) setTicketIssueKey(null)
             setPendingTicketApproval(null)
-            if (!ticketResultUnknown) {
-              setTicketIssueKey(null)
-            }
             setOperator(null)
             setShowOperatorModal(true)
           }}

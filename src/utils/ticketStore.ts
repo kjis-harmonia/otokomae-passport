@@ -12,7 +12,7 @@
 import type { TicketRow, TicketType } from '../data/ticket'
 import { removeStoredValue } from './storage'
 import { supabase } from '../lib/supabase'
-import { callRpc, callStaffRpc, isMissingRpc, RpcError } from './staffSession'
+import { callRpc, callStaffRpc, expectRpcResult, isMissingRpc, RpcError } from './staffSession'
 import { callCustomerRpc, hasCustomerSession, readAsCustomer, saveCustomerSession } from './customerSession'
 import type { OperatorSession } from './posOperatorSession'
 import type { PosActionError } from './checkoutApi'
@@ -153,6 +153,21 @@ export interface IssueTicketsInput {
   idempotencyKey: string
 }
 
+/**
+ * 発行の成功応答（row_to_json(tickets)）：依頼した枚数ちょうどの、重複しないチケットが、
+ * 依頼した会員に、依頼した種類・金額で発行されていること（空配列で補わない）
+ */
+export function isCompleteIssue(result: Record<string, unknown>, input: { userId: string; type: string; amount: number; quantity: number }): boolean {
+  const rows = result.tickets
+  if (!Array.isArray(rows) || rows.length !== input.quantity) return false
+  const ok = rows.every(t => {
+    if (t === null || typeof t !== 'object') return false
+    const row = t as Record<string, unknown>
+    return typeof row.id === 'string' && row.id !== '' && row.user_id === input.userId && row.type === input.type && row.amount === input.amount
+  })
+  return ok && new Set(rows.map(t => (t as TicketRow).id)).size === rows.length
+}
+
 /** チケット一括発行。全件成功で発行済みチケットを返し、1枚でも失敗すれば何も発行されない。 */
 export async function issueTickets(
   input: IssueTicketsInput,
@@ -160,7 +175,7 @@ export async function issueTickets(
   approvalToken?: string | null
 ): Promise<TicketIssueResult> {
   try {
-    const r = await callStaffRpc<{ tickets: TicketRow[] }>('staff_issue_tickets', {
+    const r = expectRpcResult(await callStaffRpc<{ tickets: TicketRow[] }>('staff_issue_tickets', {
       p_operator_token: operator.operatorToken,
       p_customer_name: input.customerName,
       p_user_id:       input.userId,
@@ -170,8 +185,8 @@ export async function issueTickets(
       p_staff_name:    operator.memberName,
       p_idempotency_key: input.idempotencyKey,
       p_approval_token: approvalToken ?? null,
-    })
-    return { tickets: r.tickets ?? [] }
+    }), 'staff_issue_tickets', res => isCompleteIssue(res, input))
+    return { tickets: r.tickets }
   } catch (err) {
     if (err instanceof RpcError && err.source === 'rpc_result') {
       const detail = (typeof err.detail === 'object' && err.detail !== null) ? err.detail : {}

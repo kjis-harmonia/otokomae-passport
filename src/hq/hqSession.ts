@@ -47,14 +47,15 @@ export async function callHqRpc<T>(fn: string, params: Record<string, unknown> =
   const token = getHqToken()
   if (!token) {
     notifyAuthRequired()
-    throw new RpcError('hq_auth_required', '本部PINを入力してください。')
+    throw new RpcError('hq_auth_required', '本部PINを入力してください。', undefined, 'local_precondition')
   }
   try {
     return await callRpc<T>(fn, { p_hq: token, ...params })
   } catch (err) {
     if (err instanceof RpcError && err.message.includes('hq_auth_required')) {
       notifyAuthRequired()
-      throw new RpcError('hq_auth_required', '本部セッションの有効期限が切れました。本部PINを入力し直してください。', err)
+      // 元の出どころと結果不明かどうかを保つ
+      throw new RpcError('hq_auth_required', '本部セッションの有効期限が切れました。本部PINを入力し直してください。', err, err.source, { httpStatus: err.httpStatus, resultUnknown: err.resultUnknown })
     }
     throw err
   }

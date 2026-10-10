@@ -10,6 +10,9 @@
 import { supabase } from '../lib/supabase'
 import {
   RpcError,
+  isResultUnknown,
+  expectRpcObject,
+  expectRpcResult,
   callRpc,
   callStaffRpc,
   getStaffToken,
@@ -25,6 +28,9 @@ import {
 
 export {
   RpcError,
+  isResultUnknown,
+  expectRpcObject,
+  expectRpcResult,
   callRpc,
   callStaffRpc,
   getStaffToken,

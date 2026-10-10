@@ -1,5 +1,5 @@
 import { callCustomerRpc } from './customerSession'
-import { callStaffRpc, RpcError } from './staffSession'
+import { callStaffRpc, expectRpcObject, expectRpcResult, RpcError } from './staffSession'
 import { callHqRpc } from '../hq/hqSession'
 import type { OperatorSession } from './posOperatorSession'
 import type { PosActionError } from './checkoutApi'
@@ -79,6 +79,8 @@ export type GinpayResult<T = GinpayTransaction> =
   | ({ ok: false } & PosActionError)
 
 export interface GinpayClientApi {
+  /** staff: 店舗端末／hq: 本部（返金の確認方法が違う） */
+  scope?: 'staff' | 'hq'
   ledger(clientId: string, limit?: number): Promise<GinpayLedger>
   openAccount?(clientId: string): Promise<GinpayLedger>
   /** idempotencyKey は必須。検証済み OperatorSession が必須 */
@@ -87,8 +89,9 @@ export interface GinpayClientApi {
     operator: OperatorSession,
     approvalToken?: string | null
   ): Promise<GinpayResult>
+  /** accountId・clientId は元取引の口座と操作した顧客（送信はしない。成功応答の照合に使う） */
   refund?(
-    input: { transactionId: string; amount: number; reason: string; idempotencyKey: string },
+    input: { transactionId: string; accountId: string; clientId: string; amount: number; reason: string; idempotencyKey: string },
     operator: OperatorSession,
     approvalToken?: string | null
   ): Promise<GinpayResult>
@@ -147,9 +150,39 @@ export function idempotencyKey(prefix: string): string {
   return `${prefix}:${random}`
 }
 
-async function asGinpayResult(fn: () => Promise<GinpayTransaction>): Promise<GinpayResult> {
+const isId = (v: unknown) => typeof v === 'string' && v !== ''
+
+/**
+ * 取引の顧客が、操作した顧客と同じか。ginpay_tx_json の client_id は口座の持ち主、root_client_id はその統合先。
+ * 画面の顧客（台帳の client_id は統合先）はどちらかと一致する。
+ */
+function isClientOf(tx: Record<string, unknown>, clientId: string): boolean {
+  return tx.client_id === clientId || tx.root_client_id === clientId
+}
+
+/** 店舗チャージの成功応答：送った顧客・口座（指定時）・キー・金額で記録された charge_store 取引（ginpay_tx_json） */
+export function isCompleteCharge(tx: Record<string, unknown>, input: { clientId: string; accountId?: string | null; amount: number; idempotencyKey: string }): boolean {
+  return isId(tx.id) && isId(tx.account_id) && tx.type === 'charge_store' && tx.status === 'posted'
+    && (input.accountId == null || tx.account_id === input.accountId)
+    && isClientOf(tx, input.clientId)
+    && tx.amount === input.amount && tx.idempotency_key === input.idempotencyKey
+}
+
+/**
+ * 返金の成功応答：送ったキーで、指定した元取引を指定額だけ戻した refund 取引。
+ * 返金は元取引と同じ口座に記録される（ginpay_reverse_transaction）ので、元取引の口座 accountId と照合する。
+ */
+export function isCompleteRefund(tx: Record<string, unknown>, input: { transactionId: string; accountId: string; clientId: string; amount: number; idempotencyKey: string }): boolean {
+  return isId(tx.id) && isId(input.accountId) && tx.account_id === input.accountId && isClientOf(tx, input.clientId)
+    && tx.type === 'refund' && tx.status === 'posted'
+    && typeof tx.amount === 'number' && Math.abs(tx.amount) === input.amount
+    && tx.original_transaction_id === input.transactionId && tx.idempotency_key === input.idempotencyKey
+}
+
+async function asGinpayResult(fn: () => Promise<GinpayTransaction>, isComplete?: (tx: Record<string, unknown>) => boolean): Promise<GinpayResult> {
   try {
-    return { ok: true, value: await fn() }
+    const tx = await fn()
+    return { ok: true, value: isComplete ? expectRpcResult(tx, 'ginpay', isComplete) : expectRpcObject(tx, 'ginpay') }
   } catch (err) {
     if (err instanceof RpcError && err.source === 'rpc_result') {
       const detail = (typeof err.detail === 'object' && err.detail !== null) ? err.detail : {}
@@ -168,6 +201,7 @@ export async function getCustomerGinpayLedger(limit = 50): Promise<GinpayLedger>
 
 export function createStaffGinpayApi(_actor?: () => string): GinpayClientApi {
   return {
+    scope: 'staff',
     ledger: (clientId, limit = 50) => callStaffRpc<GinpayLedger>('staff_ginpay_ledger', { p_client_id: clientId, p_limit: limit }),
     openAccount: (clientId) => callStaffRpc<GinpayLedger>('staff_ginpay_open_account', { p_client_id: clientId, p_staff_name: _actor ? _actor() : '' }),
     chargeStore: (input, operator, approvalToken) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_charge_store', {
@@ -180,7 +214,7 @@ export function createStaffGinpayApi(_actor?: () => string): GinpayClientApi {
       p_idempotency_key: input.idempotencyKey,
       p_approval_token: approvalToken ?? null,
       p_account_id: input.accountId ?? null,
-    })),
+    }), tx => isCompleteCharge(tx, input)),
     refund: (input, operator, approvalToken) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_refund', {
       p_operator_token: operator.operatorToken,
       p_transaction_id: input.transactionId,
@@ -189,19 +223,23 @@ export function createStaffGinpayApi(_actor?: () => string): GinpayClientApi {
       p_reason: input.reason,
       p_idempotency_key: input.idempotencyKey,
       p_approval_token: approvalToken ?? null,
-    })),
+    }), tx => isCompleteRefund(tx, input)),
   }
 }
 
 
 export const hqGinpayApi: GinpayClientApi = {
+  scope: 'hq',
   ledger: (clientId, limit = 100) => callHqRpc<GinpayLedger>('hq_ginpay_ledger', { p_client_id: clientId, p_limit: limit }),
+  // 呼び出し元のキーをそのまま送る（確認のたびに新しいキーを作らない）。
+  // hq_ginpay_refund は返金可能額の判定を冪等キーの照合より先に行うため、同じキーでも完全な再現は保証されない。
+  // 結果不明のときに再送して確かめることはせず、台帳の読み取りで確認する（pendingConfirm）。
   refund: (input) => asGinpayResult(() => callHqRpc<GinpayTransaction>('hq_ginpay_refund', {
     p_transaction_id: input.transactionId,
     p_amount: input.amount,
     p_reason: input.reason,
-    p_idempotency_key: idempotencyKey('hq-refund'),
-  })),
+    p_idempotency_key: input.idempotencyKey,
+  }), tx => isCompleteRefund(tx, input)),
   void: (input) => asGinpayResult(() => callHqRpc<GinpayTransaction>('hq_ginpay_void', {
     p_transaction_id: input.transactionId,
     p_reason: input.reason,
