@@ -696,7 +696,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
               {ctx.reservation || clientInfo || anonymous ? (
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
                   <h1 style={{ fontSize: 22, fontWeight: 600 }}>{clientInfo?.name ?? ctx.reservation?.customer_name ?? '匿名'}</h1>
-                  {!ctx.reservation && <button type="button" onClick={() => { setClient(undefined); setAnonymous(false); setTicketIds([]); setGinpayAccountId(null); setMethod(m => m === 'ginpay' ? null : m) }} style={{ ...linkStyle, minHeight: 32, marginLeft: 'auto' }}>変更</button>}
+                  {!ctx.reservation && <button type="button" onClick={() => { setClient(undefined); setAnonymous(false); setTicketIds([]); setGinpayAccountId(null); setMethod(m => m === 'ginpay' ? null : m) }} style={{ ...linkStyle, marginLeft: 'auto' }}>変更</button>}
                 </div>
               ) : customers ? <ClientPicker customers={customers} onPick={c => void chooseClient(c)} /> : null}
               {paid && <p style={{ marginTop: 8, fontSize: 14, color: C.danger }}>この予約はすでに会計済みです。</p>}
@@ -839,8 +839,9 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
               // 未解決の会計（処理中・結果不明・確認できない）／端末の記録を保存できない。新しい会計は出さない
               <PendingOperationNotice notice={notice} onConfirm={lockOp ? () => void checkLock() : undefined} confirming={busy} />
             ) : (<>
-            {lockMessage && <p role="status" style={{ margin: '0 0 8px', fontSize: 13, color: C.sub }}>{lockMessage}</p>}
-            {quoteError && <p style={{ margin: '0 0 8px', fontSize: 13, color: C.danger }}>{quoteError}</p>}
+            {lockMessage && <p role="status" style={{ margin: '0 0 8px', fontSize: 14, color: C.sub }}>{lockMessage}</p>}
+            {/* 承認待ちは通常の手順なので黒字で示す（エラーは赤） */}
+            {quoteError && <p role={pendingApproval ? 'status' : 'alert'} style={{ margin: '0 0 8px', fontSize: 14, color: pendingApproval ? C.text : C.danger }}>{quoteError}</p>}
             {needsFreshQuote && !quoteLoading && (
               <button
                 type="button"
@@ -866,24 +867,26 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
               <button
                 type="button"
                 onClick={() => setShowManagerModal(true)}
+                aria-haspopup="dialog"
                 style={{
                   width: '100%',
-                  minHeight: 44,
+                  minHeight: 48,
                   marginBottom: 8,
                   padding: '10px 16px',
                   borderRadius: 10,
-                  background: 'linear-gradient(135deg, #C9A24A 0%, #9E7D2B 100%)',
-                  border: 'none',
-                  color: '#0B0403',
-                  fontWeight: 700,
-                  fontSize: 14,
+                  background: C.bg,
+                  border: `1px solid ${C.text}`,
+                  color: C.text,
+                  fontFamily: SANS,
+                  fontWeight: 600,
+                  fontSize: 15,
                   cursor: 'pointer',
                 }}
               >
                 管理者承認を入力
               </button>
             )}
-            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : quoteLoading ? '計算中…' : needsFreshQuote ? '見積もりの再取得が必要です' : quoteError ? '見積もりエラー' : !quote && lines.length > 0 ? '見積もり未取得' : ginpayMismatch ? 'GINPayは利用できません' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : quoteLoading ? '計算中…' : needsFreshQuote ? '見積もりの再取得が必要です' : pendingApproval && quoteError ? '管理者承認待ち' : quoteError ? '見積もりエラー' : !quote && lines.length > 0 ? '見積もり未取得' : ginpayMismatch ? 'GINPayは利用できません' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
             </>)}
           </div>
         </div>
@@ -1009,7 +1012,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 function Choice({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={on} style={{
-      minHeight: 40, padding: '0 14px', borderRadius: 8, fontSize: 14, fontFamily: SANS, cursor: 'pointer',
+      minHeight: 44, padding: '0 14px', borderRadius: 8, fontSize: 14, fontFamily: SANS, cursor: 'pointer',
       background: on ? C.text : C.bg, color: on ? C.bg : C.text, border: `1px solid ${on ? C.text : C.lineStrong}`,
     }}>{children}</button>
   )
@@ -1037,4 +1040,4 @@ const lineBtn: CSSProperties = {
   display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', gap: 12, minHeight: 52, padding: '10px 0',
   background: 'none', border: 'none', borderBottom: `1px solid ${C.line}`, color: C.text, fontFamily: SANS, textAlign: 'left', cursor: 'pointer',
 }
-const smallLabel: CSSProperties = { display: 'block', fontSize: 12, color: C.sub, marginBottom: 4 }
+const smallLabel: CSSProperties = { display: 'block', fontSize: 13, color: C.sub, marginBottom: 4 }

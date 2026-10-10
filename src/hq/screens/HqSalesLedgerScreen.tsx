@@ -40,7 +40,7 @@ export function HqSalesLedgerScreen() {
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
           <h1 style={{ fontSize: 20, fontWeight: 600, marginRight: 12 }}>会計</h1>
           <button type="button" aria-label="前の日" onClick={() => setDate(addDaysToDateString(date, -1))} style={navBtn}>‹</button>
-          <span style={{ position: 'relative', fontSize: 16, fontWeight: 600, minWidth: 120, textAlign: 'center' }}>
+          <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, fontSize: 16, fontWeight: 600, minWidth: 120 }}>
             {jstDateLabel(date)}
             <input type="date" value={date} aria-label="日付を選ぶ" onChange={e => e.target.value && setDate(e.target.value)}
               style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', cursor: 'pointer' }} />
@@ -245,7 +245,7 @@ function SaleDetail({ id, onClose, onChanged }: { id: string; onClose: () => voi
           ) : s.status === 'completed' && (voiding ? (
             <div style={{ marginTop: 14 }}>
               <Field label="取消の理由（必須）"><input value={reason} onChange={e => setReason(e.target.value)} maxLength={200} style={inputStyle} /></Field>
-              <p style={{ fontSize: 12, color: C.mute, marginTop: 6 }}>会計は削除されず「取消」として残ります。使ったクーポンはお客様に戻ります。{(s.ginpay ?? []).some(g => g.type === 'payment') ? 'GINPayの支払いは同じ口座の残高に戻ります。' : ''}訂正は取消のあと会計し直してください。</p>
+              <p style={{ fontSize: 14, color: C.sub, marginTop: 6, lineHeight: 1.7 }}>会計は削除されず「取消」として残ります。使ったクーポンはお客様に戻ります。{(s.ginpay ?? []).some(g => g.type === 'payment') ? 'GINPayの支払いは同じ口座の残高に戻ります。' : ''}訂正は取消のあと会計し直してください。</p>
               <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
                 <SecondaryButton onClick={() => setVoiding(false)} disabled={busy}>やめる</SecondaryButton>
                 <SecondaryButton danger onClick={() => void doVoid()} disabled={busy || !reason.trim()}>取消する</SecondaryButton>
@@ -258,7 +258,7 @@ function SaleDetail({ id, onClose, onChanged }: { id: string; onClose: () => voi
   )
 }
 
-const navBtn: CSSProperties = { minWidth: 40, minHeight: 40, background: 'none', border: 'none', color: C.text, fontSize: 22, cursor: 'pointer', fontFamily: SANS }
+const navBtn: CSSProperties = { minWidth: 44, minHeight: 44, background: 'none', border: 'none', color: C.text, fontSize: 22, cursor: 'pointer', fontFamily: SANS }
 const rowBtn: CSSProperties = {
   display: 'block', width: '100%', textAlign: 'left', minHeight: 52, padding: '10px 0', background: 'none', border: 'none',
   borderBottom: `1px solid ${C.line}`, fontFamily: SANS, fontSize: 14, cursor: 'pointer',

@@ -25,12 +25,13 @@ export const C = {
 export const SANS = '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif'
 
 export const linkStyle: CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', minHeight: 44,
+  display: 'inline-flex', alignItems: 'center', minHeight: 44, minWidth: 44,
   background: 'none', border: 'none', padding: 0, color: C.sub, fontSize: 14, fontFamily: SANS,
   textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer',
 }
 
+// 入力欄のフォーカス枠はブラウザ標準のまま表示する（outline を消さない。キーボード操作で今の入力欄が分かるように）
 export const inputStyle: CSSProperties = {
   width: '100%', height: 46, boxSizing: 'border-box', padding: '0 12px', borderRadius: 8, fontSize: 16, fontFamily: SANS,
-  background: C.bg, color: C.text, border: `1px solid ${C.lineStrong}`, outline: 'none', colorScheme: 'light',
+  background: C.bg, color: C.text, border: `1px solid ${C.lineStrong}`, colorScheme: 'light',
 }

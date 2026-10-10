@@ -363,8 +363,8 @@ export function ManagerApprovalModal({
           </div>
         ) : (
           <form onSubmit={e => { e.preventDefault(); void handleSubmit() }}>
-            <p style={{ marginTop: 14, fontSize: 13, color: C.sub }}>承認する管理者</p>
-            <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <p id="manager-approval-staff" style={{ marginTop: 14, fontSize: 14, color: C.sub }}>承認する管理者</p>
+            <div role="group" aria-labelledby="manager-approval-staff" style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {candidates.map(c => {
                 const selected = selectedStaffId === c.id
                 return (
@@ -376,7 +376,7 @@ export function ManagerApprovalModal({
                     onClick={() => { setSelectedStaffId(c.id); setSubmitError(null) }}
                     style={{
                       flex: '1 1 calc(50% - 4px)', minWidth: 0, minHeight: 44, padding: '4px 10px', borderRadius: 8, overflowWrap: 'anywhere',
-                      fontFamily: SANS, fontSize: 15, cursor: 'pointer',
+                      fontFamily: SANS, fontSize: 15, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1,
                       background: selected ? C.text : C.bg, color: selected ? C.bg : C.text,
                       border: `1px solid ${selected ? C.text : C.lineStrong}`,
                     }}
@@ -387,7 +387,7 @@ export function ManagerApprovalModal({
               })}
             </div>
 
-            <p style={{ marginTop: 14, fontSize: 13, color: C.sub }}>管理者 PIN（4〜8桁）</p>
+            <p style={{ marginTop: 14, fontSize: 14, color: C.sub }}>管理者 PIN（4〜8桁）</p>
             <div
               aria-live="polite"
               aria-label={`入力済み ${pin.length} 桁`}
@@ -415,7 +415,7 @@ export function ManagerApprovalModal({
                   style={{
                     minHeight: 48, borderRadius: 8, fontFamily: SANS, fontSize: 19, fontWeight: 500,
                     background: d === 'C' || d === '⌫' ? C.surface : C.bg, color: C.text,
-                    border: `1px solid ${C.line}`, cursor: busy ? 'default' : 'pointer',
+                    border: `1px solid ${C.line}`, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1,
                   }}
                 >
                   {d}

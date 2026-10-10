@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
@@ -17,6 +17,8 @@ import {
 import { confirmPendingOp, draftTicketIssue, sendPendingWithApproval } from '../utils/pendingConfirm'
 import { pendingNotice, type PendingCheck } from '../utils/pendingNotice'
 import { PendingOperationNotice } from '../components/pos/PendingOperationNotice'
+import { C, SANS } from '../components/booking/ledgerTheme'
+import { trapModalFocus } from '../utils/modalFocus'
 import { canConfirmTicketPending, canResetCustomer, runTicketPendingAction, ticketFormDisabled, ticketsForDisplayed } from '../utils/ticketIssueGuard'
 import {
   registerCustomerWithContext, searchCustomersByName, recoverMember,
@@ -498,7 +500,20 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const canReset = canResetCustomer({ sending: issueLoading, displayedUserId: scannedData?.userId ?? null, view: pendingView })
   const activeTickets = userTickets.filter(t => !t.used)
   const currentTab    = TICKET_TABS.find(t => t.type === ticketTab) ?? TICKET_TABS[0]
-  const tc            = TICKET_TYPE_COLORS[ticketTab]
+
+  // 発行の確認：開いているあいだはフォーカスをダイアログの中に閉じ込め（背景は inert）、Escape で閉じる。
+  // 開いたときに1回だけ設定し（親の再描画では何もしない）、閉じたら開いたボタンへフォーカスを戻す
+  const ticketConfirmOverlayRef = useRef<HTMLDivElement>(null)
+  const ticketConfirmPanelRef = useRef<HTMLDivElement>(null)
+  const ticketConfirmCancelRef = useRef<HTMLButtonElement>(null)
+  const ticketConfirmOpen = showConfirm && !!scannedData
+  useEffect(() => {
+    if (!ticketConfirmOpen) return
+    const overlay = ticketConfirmOverlayRef.current
+    const panel = ticketConfirmPanelRef.current
+    if (!overlay || !panel) return
+    return trapModalFocus(overlay, panel, ticketConfirmCancelRef.current, () => setShowConfirm(false))
+  }, [ticketConfirmOpen])
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -968,30 +983,11 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           65%  { transform: translateY(-2px) scale(1.003); filter: drop-shadow(0 0 6px rgba(230,202,101,0.2)); }
           100% { transform: translateY(0) scale(1); filter: none; }
         }
-        @keyframes gj-burst {
-          0%   { opacity: 0.65; transform: scale(0.35); }
-          55%  { opacity: 0.18; }
-          100% { opacity: 0;    transform: scale(2.4); }
-        }
         @keyframes gj-success-fade {
           0%   { opacity: 0; }
           10%  { opacity: 1; }
           75%  { opacity: 1; }
           100% { opacity: 0; }
-        }
-        @keyframes gj-success-pop {
-          0%   { transform: scale(0.82); opacity: 0; }
-          22%  { transform: scale(1.05); opacity: 1; }
-          42%  { transform: scale(0.98); }
-          100% { transform: scale(1);    opacity: 1; }
-        }
-        @keyframes gj-pulse-gold {
-          0%, 100% { box-shadow: 0 0 0 1px rgba(201,162,74,0.32), 0 4px 16px rgba(0,0,0,0.55); }
-          50%       { box-shadow: 0 0 0 1.5px rgba(201,162,74,0.68), 0 0 22px rgba(201,162,74,0.28), 0 4px 22px rgba(0,0,0,0.65); }
-        }
-        @keyframes gj-pulse-red {
-          0%, 100% { box-shadow: 0 0 16px rgba(128,12,20,0.5), 0 0 0 2px rgba(230,202,101,0.55); }
-          50%       { box-shadow: 0 0 36px rgba(128,12,20,0.8), 0 0 60px rgba(128,12,20,0.35), 0 0 0 2px rgba(230,202,101,0.9); }
         }
         @keyframes gj-toast-in {
           from { opacity: 0; transform: translateY(-100%); }
@@ -1026,7 +1022,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           <button
             onClick={() => setShowStaffPicker(true)}
             style={{
-              padding: '9px 20px', borderRadius: 10,
+              minHeight: 44, padding: '9px 20px', borderRadius: 10,
               background: staffId ? 'rgba(139,26,26,0.3)' : 'rgba(224,96,70,0.1)',
               border: `1.5px solid ${staffId ? 'rgba(201,162,74,0.55)' : 'rgba(224,96,70,0.4)'}`,
               color: staffId ? '#F2E6C8' : '#E07050',
@@ -1162,24 +1158,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             {/* ── Customer card ── */}
             <div style={{ position: 'relative', marginBottom: 16 }}>
               <div
-                key={`burst-${scannedData.userId}`}
-                style={{
-                  position: 'absolute', inset: 0, borderRadius: 22, zIndex: 1, pointerEvents: 'none',
-                  background: 'radial-gradient(circle at 50% 38%, rgba(230,202,101,0.32) 0%, rgba(139,26,26,0.16) 45%, transparent 72%)',
-                  animation: 'gj-burst 0.9s ease-out both',
-                }}
-              />
-              <div
                 key={scannedData.userId}
                 style={{
-                  borderRadius: 20, overflow: 'hidden', position: 'relative', zIndex: 2,
-                  border: '1px solid rgba(201,162,74,0.45)',
-                  background: 'linear-gradient(160deg, #1c0e08 0%, #0e0604 100%)',
-                  boxShadow: '0 0 25px rgba(230,202,101,0.22), 0 14px 44px rgba(0,0,0,0.75)',
-                  animation: 'gj-slot-in 0.52s cubic-bezier(0.34,1.56,0.64,1) both',
+                  borderRadius: 16, overflow: 'hidden', position: 'relative',
+                  border: '1px solid rgba(201,162,74,0.3)',
+                  background: '#120907',
                 }}
               >
-                <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B5A10 20%, #C9A24A 40%, #F2E6C8 50%, #C9A24A 60%, #8B5A10 80%, transparent)' }} />
                 <div style={{ padding: '16px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1369,104 +1354,74 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               )}
             </div>
 
-            {/* ── 使用可能チケット一覧 ── */}
-            <div style={{ marginBottom: 14 }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.24em', color: '#e5e5e5', marginBottom: 10, fontFamily: SERIF }}>
-                保有チケット（未使用 {ticketsLoading ? '—' : `${activeTickets.length}枚`}）
-              </p>
-              {!ticketsLoading && activeTickets.length > 0 && (
-                <p style={{ fontSize: 11, color: '#e5e5e5', marginBottom: 10, lineHeight: 1.6 }}>
-                  使用する割引券をタップして選択し、下の「使用確定」でまとめて使用します（同じ種別のみ）。
-                </p>
-              )}
+            {/* ── 保有チケット（白い面・黒文字。チケットは会計で適用し、ここでは使わない） ── */}
+            <section aria-labelledby="ticket-held-heading" style={ticketPanel}>
+              <h2 id="ticket-held-heading" style={ticketHeading}>
+                保有チケット<span style={{ fontWeight: 400, color: C.sub }}>（未使用 {ticketsLoading ? '—' : `${activeTickets.length}枚`}）</span>
+              </h2>
               {ticketsLoading ? (
-                <div style={{ padding: '16px', textAlign: 'center', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <p style={{ fontSize: 12, color: '#e5e5e5' }}>読込中…</p>
-                </div>
+                <p style={{ fontSize: 14, color: C.sub, marginTop: 10 }}>読込中…</p>
               ) : activeTickets.length === 0 ? (
-                <div style={{ padding: '16px', textAlign: 'center', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <p style={{ fontSize: 12, color: '#e5e5e5' }}>保有チケットなし</p>
-                </div>
+                <p style={{ fontSize: 14, color: C.sub, marginTop: 10 }}>保有チケットはありません</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {activeTickets.map(ticket => {
-                    const tktTc = TICKET_TYPE_COLORS[ticket.type]
+                <>
+                  <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}>
+                    {activeTickets.map(ticket => (
+                      <li key={ticket.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.line}` }}>
+                        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                          <span style={{ display: 'block', fontSize: 15 }}>{ticket.title}</span>
+                          <span style={{ display: 'block', fontSize: 13, color: C.sub, marginTop: 2, lineHeight: 1.6 }}>
+                            {TICKET_TYPE_LABELS[ticket.type]}・未使用・発行 {fmtCreatedAt(ticket.created_at)}
+                            {ticket.expires_at ? `・期限 ${fmtCreatedAt(ticket.expires_at)}` : ''}
+                          </span>
+                        </span>
+                        {ticket.amount > 0 && (
+                          <span style={{ flexShrink: 0, fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>¥{ticket.amount.toLocaleString()}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <p style={{ fontSize: 13, color: C.sub, marginTop: 6, lineHeight: 1.6 }}>
+                    チケットは会計画面で選択して適用します（この画面からは使用できません）。
+                  </p>
+                </>
+              )}
+            </section>
+
+            {/* ── チケット発行フォーム（送信中・結果不明のあいだは fieldset ごと操作できない） ── */}
+            <fieldset disabled={ticketInputsLocked} aria-labelledby="ticket-issue-heading" style={{ ...ticketPanel, margin: '0 0 14px' }}>
+              <h2 id="ticket-issue-heading" style={ticketHeading}>チケットを発行</h2>
+
+              {/* 操作できないあいだは薄く表示する（通知は薄くしない） */}
+              <div style={{ opacity: ticketInputsLocked ? 0.5 : 1 }}>
+                {/* 種類 */}
+                <div role="group" aria-label="発行する種類" style={{ display: 'flex', marginTop: 12, border: `1px solid ${C.lineStrong}`, borderRadius: 10, overflow: 'hidden' }}>
+                  {TICKET_TABS.map((tab, i) => {
+                    const active = ticketTab === tab.type
                     return (
-                      <div
-                        key={ticket.id}
+                      <button
+                        key={tab.type}
+                        type="button"
+                        disabled={ticketResultUnknown}
+                        onClick={() => handleTabChange(tab.type)}
+                        aria-pressed={active}
                         style={{
-                          borderRadius: 16, background: tktTc.cardBg, overflow: 'hidden',
-                          border: `1px solid ${tktTc.border}`,
+                          flex: 1, minHeight: 48, border: 'none', borderLeft: i > 0 ? `1px solid ${C.lineStrong}` : 'none',
+                          background: active ? C.text : C.bg, color: active ? C.bg : C.text,
+                          fontFamily: SANS, fontSize: 15, fontWeight: active ? 600 : 400,
+                          cursor: ticketResultUnknown ? 'default' : 'pointer',
                         }}
                       >
-                        <div style={{ height: 2, background: `linear-gradient(90deg, transparent, ${tktTc.border}, transparent)` }} />
-                        <div style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: tktTc.bg, border: `1px solid ${tktTc.border}`, color: tktTc.text, letterSpacing: '0.1em' }}>
-                              {TICKET_TYPE_LABELS[ticket.type]}
-                            </span>
-                            <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(80,210,120,0.15)', border: '1px solid rgba(80,210,120,0.4)', color: '#50d278' }}>未使用</span>
-                          </div>
-                          <div>
-                            <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#F2E6C8', marginBottom: 2 }}>{ticket.title}</p>
-                            {ticket.amount > 0 && (
-                              <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#C9A24A', lineHeight: 1, marginBottom: 4 }}>¥{ticket.amount.toLocaleString()}</p>
-                            )}
-                            <p style={{ fontSize: 9, color: '#e5e5e5' }}>発行日 {fmtCreatedAt(ticket.created_at)}</p>
-                            {ticket.expires_at && (
-                              <p style={{ fontSize: 9, color: 'rgba(255,180,0,1)', marginTop: 1 }}>有効期限 {fmtCreatedAt(ticket.expires_at)}</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                        {tab.label}
+                      </button>
                     )
                   })}
-                  <div style={{ padding: '12px 14px', borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.22)', textAlign: 'center' }}>
-                    <p style={{ fontFamily: SERIF, fontSize: 13, color: '#C9A24A', lineHeight: 1.6 }}>
-                      チケットは POS 会計（Checkout）時に自動適用されます<br />
-                      <span style={{ fontSize: 11, color: '#e5e5e5' }}>（店頭管理画面からの直接消費は終了しました）</span>
-                    </p>
-                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* ── チケット発行フォーム ── */}
-            <fieldset disabled={ticketInputsLocked} style={{ minWidth: 0, margin: '0 0 14px', borderRadius: 18, border: '1px solid rgba(201,162,74,0.18)', background: 'linear-gradient(160deg, #0e0808 0%, #090504 100%)', padding: '18px' }}>
-
-              {/* Tab selector */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-                {TICKET_TABS.map(tab => {
-                  const tabTc  = TICKET_TYPE_COLORS[tab.type]
-                  const active = ticketTab === tab.type
-                  return (
-                    <button
-                      key={tab.type}
-                      disabled={ticketResultUnknown}
-                      onClick={() => handleTabChange(tab.type)}
-                      style={{
-                        flex: 1, padding: '15px 4px', borderRadius: 13,
-                        background: active ? tabTc.cardBg : 'rgba(255,255,255,0.03)',
-                        border: `1.5px solid ${active ? tabTc.border : 'rgba(255,255,255,0.08)'}`,
-                        color: active ? tabTc.text : '#b3b3b3',
-                        fontSize: 15, fontFamily: SERIF, fontWeight: 700, letterSpacing: '0.06em',
-                        cursor: ticketResultUnknown ? 'default' : 'pointer',
-                        opacity: ticketResultUnknown ? 0.6 : 1,
-                        animation: (active && !ticketResultUnknown) ? 'gj-pulse-gold 2.4s ease-in-out infinite' : 'none',
-                        transition: 'all 0.18s',
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* ── Amount input: both tabs free-form ── */}
-              <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 10 }}>金額を入力</p>
+                {/* 金額（どちらの種類も自由入力） */}
+                <label htmlFor="ticket-amount" style={ticketLabel}>金額</label>
                 {ticketTab === 'discount' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                  <div role="group" aria-label="よく使う金額" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 8 }}>
                     {DISCOUNT_AMOUNT_PRESETS.map(amount => {
                       const active = discountAmountInput === String(amount)
                       return (
@@ -1475,16 +1430,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                           type="button"
                           disabled={ticketResultUnknown}
                           onClick={() => setDiscountAmountInput(String(amount))}
-                          style={{
-                            padding: '12px 4px', borderRadius: 12,
-                            background: active ? tc.cardBg : 'rgba(255,255,255,0.04)',
-                            border: `1.5px solid ${active ? tc.border : 'rgba(255,255,255,0.09)'}`,
-                            color: active ? tc.text : '#e5e5e5',
-                            fontFamily: SERIF, fontSize: 16, fontWeight: 700,
-                            cursor: ticketResultUnknown ? 'default' : 'pointer',
-                            opacity: ticketResultUnknown ? 0.6 : 1,
-                            transition: 'all 0.15s',
-                          }}
+                          aria-pressed={active}
+                          style={{ ...ticketChoice(active), cursor: ticketResultUnknown ? 'default' : 'pointer' }}
                         >
                           ¥{amount.toLocaleString()}
                         </button>
@@ -1493,8 +1440,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   </div>
                 )}
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: effectiveAmount > 0 ? '#C9A24A' : '#999999', pointerEvents: 'none' }}>¥</span>
+                  <span aria-hidden="true" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 20, color: effectiveAmount > 0 ? C.text : C.mute, pointerEvents: 'none' }}>¥</span>
                   <input
+                    id="ticket-amount"
                     type="number"
                     inputMode="numeric"
                     min="1"
@@ -1511,106 +1459,73 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     }}
                     placeholder="0"
                     style={{
-                      width: '100%', boxSizing: 'border-box',
-                      padding: '18px 16px 18px 40px', borderRadius: 14,
-                      background: effectiveAmount > 0 ? tc.cardBg : 'rgba(255,255,255,0.04)',
-                      border: `1.5px solid ${effectiveAmount > 0 ? tc.border : 'rgba(255,255,255,0.12)'}`,
-                      color: '#F2E6C8', fontFamily: SERIF, fontSize: 28, fontWeight: 700,
-                      outline: 'none', letterSpacing: '0.04em',
-                      opacity: ticketResultUnknown ? 0.6 : 1,
-                      transition: 'border-color 0.15s, background 0.15s',
+                      width: '100%', boxSizing: 'border-box', height: 56,
+                      padding: '0 14px 0 36px', borderRadius: 10,
+                      background: C.bg, color: C.text, colorScheme: 'light',
+                      border: `1px solid ${C.lineStrong}`,
+                      fontFamily: SANS, fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
                     }}
                   />
                 </div>
-                {effectiveAmount > 0 && (
-                  <p style={{ fontSize: 11, color: '#e5e5e5', textAlign: 'right', marginTop: 6, letterSpacing: '0.06em' }}>
-                    ¥{effectiveAmount.toLocaleString()} の{currentTab.autoTitle}
-                  </p>
-                )}
                 {(() => {
                   const raw = ticketTab === 'discount' ? discountAmountInput : otokuAmountInput
                   return raw !== '' && effectiveAmount <= 0
-                    ? <p style={{ fontSize: 11, color: '#E06060', marginTop: 6 }}>1円以上の金額を入力してください</p>
+                    ? <p role="alert" style={{ fontSize: 14, color: C.danger, marginTop: 6 }}>1円以上の金額を入力してください</p>
                     : null
                 })()}
-              </div>
 
-              {/* Quantity */}
-              <p style={{ fontSize: 9, letterSpacing: '0.22em', color: '#e5e5e5', marginBottom: 10 }}>枚数を選択</p>
-              <div style={{ display: 'flex', gap: 7, marginBottom: 12 }}>
-                {QTY_PRESETS.map(n => (
+                {/* 枚数 */}
+                <p id="ticket-qty-label" style={ticketLabel}>枚数</p>
+                <div role="group" aria-labelledby="ticket-qty-label" style={{ display: 'flex', gap: 6 }}>
+                  {QTY_PRESETS.map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={ticketResultUnknown}
+                      onClick={() => setQuantity(n)}
+                      aria-pressed={quantity === n}
+                      style={{ ...ticketChoice(quantity === n), flex: 1, padding: 0, minWidth: 0, cursor: ticketResultUnknown ? 'default' : 'pointer' }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 10 }}>
                   <button
-                    key={n}
+                    type="button"
                     disabled={ticketResultUnknown}
-                    onClick={() => setQuantity(n)}
-                    style={{
-                      flex: 1, padding: '14px 2px', borderRadius: 11,
-                      background: quantity === n ? tc.cardBg : 'rgba(255,255,255,0.04)',
-                      border: `1.5px solid ${quantity === n ? tc.border : 'rgba(255,255,255,0.09)'}`,
-                      color: quantity === n ? tc.text : '#e5e5e5',
-                      fontFamily: SERIF, fontSize: 16, fontWeight: 700,
-                      cursor: ticketResultUnknown ? 'default' : 'pointer',
-                      opacity: ticketResultUnknown ? 0.6 : 1,
-                      animation: (quantity === n && !ticketResultUnknown) ? 'gj-pulse-gold 2.2s ease-in-out infinite' : 'none',
-                      transition: 'all 0.15s',
-                    }}
+                    onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                    aria-label="1枚減らす"
+                    style={{ ...ticketStep, cursor: ticketResultUnknown ? 'default' : 'pointer' }}
                   >
-                    {n}
+                    −
                   </button>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginBottom: 18 }}>
-                <button
-                  disabled={ticketResultUnknown}
-                  onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                  style={{
-                    width: 46, height: 46, borderRadius: '50%',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1.5px solid rgba(255,255,255,0.13)',
-                    color: ticketResultUnknown ? '#666666' : '#e5e5e5',
-                    fontSize: 22, fontWeight: 300,
-                    cursor: ticketResultUnknown ? 'default' : 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    opacity: ticketResultUnknown ? 0.6 : 1,
-                  }}
-                >
-                  −
-                </button>
-                <div style={{ textAlign: 'center', minWidth: 72 }}>
-                  <span style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 700, color: '#F2E6C8', letterSpacing: '-0.01em' }}>{quantity}</span>
-                  <span style={{ fontSize: 12, color: '#e5e5e5', marginLeft: 4 }}>枚</span>
-                </div>
-                <button
-                  disabled={ticketResultUnknown}
-                  onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))}
-                  style={{
-                    width: 46, height: 46, borderRadius: '50%',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1.5px solid rgba(255,255,255,0.13)',
-                    color: ticketResultUnknown ? '#666666' : '#e5e5e5',
-                    fontSize: 22, fontWeight: 300,
-                    cursor: ticketResultUnknown ? 'default' : 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    opacity: ticketResultUnknown ? 0.6 : 1,
-                  }}
-                >
-                  ＋
-                </button>
-              </div>
-
-              {/* Summary */}
-              {effectiveAmount > 0 && (
-                <div style={{ padding: '10px 16px', borderRadius: 12, background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.18)', textAlign: 'center' }}>
-                  <p style={{ fontFamily: SERIF, fontSize: 14, color: '#C9A24A', letterSpacing: '0.06em' }}>
-                    {currentTab.autoTitle} ¥{effectiveAmount.toLocaleString()} x {quantity}枚
+                  <p aria-live="polite" style={{ minWidth: 72, textAlign: 'center', fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                    {quantity}<span style={{ fontSize: 14, fontWeight: 400, color: C.sub, marginLeft: 4 }}>枚</span>
                   </p>
+                  <button
+                    type="button"
+                    disabled={ticketResultUnknown}
+                    onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))}
+                    aria-label="1枚増やす"
+                    style={{ ...ticketStep, cursor: ticketResultUnknown ? 'default' : 'pointer' }}
+                  >
+                    ＋
+                  </button>
                 </div>
-              )}
+
+                {/* 発行内容 */}
+                {effectiveAmount > 0 && (
+                  <p style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}`, fontSize: 15 }}>
+                    <span style={{ color: C.sub }}>発行内容</span>
+                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{currentTab.autoTitle} ¥{effectiveAmount.toLocaleString()} × {quantity}枚</span>
+                  </p>
+                )}
+              </div>
 
               {/* 未解決の発行（処理中・結果不明・確認できない）／端末の記録を保存できない。「結果を確認」は下のボタン */}
-              {ticketNotice && <div style={{ marginTop: 10 }}><PendingOperationNotice notice={ticketNotice} /></div>}
-              {issueError && <p style={{ fontSize: 12, color: '#E06060', marginTop: 10, lineHeight: 1.5 }}>{issueError}</p>}
+              {ticketNotice && <div style={{ marginTop: 12 }}><PendingOperationNotice notice={ticketNotice} /></div>}
+              {issueError && <p role="alert" style={{ fontSize: 14, color: C.danger, marginTop: 10, lineHeight: 1.6 }}>{issueError}</p>}
             </fieldset>
 
           </div>
@@ -2114,8 +2029,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       {mainTab === 'issue' && phase === 'result' && scannedData && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-          background: 'linear-gradient(0deg, rgba(6,2,1,0.99) 0%, rgba(6,2,1,0.92) 70%, transparent 100%)',
-          padding: '14px 20px calc(14px + env(safe-area-inset-bottom, 0px))',
+          background: C.bg, borderTop: `1px solid ${C.line}`, fontFamily: SANS,
+          padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))',
         }}>
           <div style={{ display: 'flex', gap: 10, maxWidth: 480, margin: '0 auto' }}>
             <button
@@ -2123,11 +2038,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               onClick={handleReset}
               disabled={!canReset}
               style={{
-                flex: '0 0 34%', height: 66, borderRadius: 18,
-                background: 'rgba(255,255,255,0.045)',
-                border: '1.5px solid rgba(255,255,255,0.14)',
-                color: canReset ? '#e5e5e5' : '#666666',
-                fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em',
+                flex: '0 0 34%', minHeight: 52, borderRadius: 10,
+                background: C.bg, border: `1px solid ${C.lineStrong}`,
+                color: canReset ? C.text : C.mute, fontFamily: SANS, fontSize: 15,
                 cursor: canReset ? 'pointer' : 'default',
               }}
             >
@@ -2137,20 +2050,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               type="button"
               onClick={ticketResultUnknown ? () => void handleRetryIssueTicket() : handleIssueClick}
               disabled={ticketResultUnknown ? !canConfirmTicket : !canIssue}
+              aria-busy={issueLoading || ticketInFlight}
               style={{
-                flex: 1, height: 66, borderRadius: 18,
-                background: (canIssue || canConfirmTicket)
-                  ? 'linear-gradient(90deg, #800c14 0%, #3a0307 100%)'
-                  : 'rgba(255,255,255,0.04)',
-                border: `2px solid ${(canIssue || canConfirmTicket) ? '#e6ca65' : 'rgba(255,255,255,0.07)'}`,
-                boxShadow: (canIssue || canConfirmTicket)
-                  ? ['0 0 32px rgba(128,12,20,0.72)', '0 0 64px rgba(128,12,20,0.36)', 'inset 0 1px 0 rgba(230,202,101,0.28)', 'inset 0 -1px 0 rgba(230,202,101,0.1)', '0 6px 32px rgba(0,0,0,0.85)'].join(', ')
-                  : 'none',
-                color: (canIssue || canConfirmTicket) ? '#F2E6C8' : '#999999',
-                fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.22em',
+                flex: 1, minHeight: 52, borderRadius: 10, border: 'none',
+                background: (canIssue || canConfirmTicket) ? C.text : C.line,
+                color: (canIssue || canConfirmTicket) ? C.bg : C.mute,
+                fontFamily: SANS, fontSize: 17, fontWeight: 600,
                 cursor: (canIssue || canConfirmTicket) ? 'pointer' : 'default',
-                animation: (canIssue || canConfirmTicket) ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
-                transition: 'background 0.2s, border-color 0.2s',
               }}
             >
               {issueLoading || ticketInFlight ? '処理中…' : ticketResultUnknown ? '結果を確認' : '発行する'}
@@ -2254,60 +2160,59 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       {/* ── Confirmation modal ── */}
       {showConfirm && scannedData && (
         <div
+          ref={ticketConfirmOverlayRef}
           onClick={() => setShowConfirm(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(20,20,18,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
         >
           <div
+            ref={ticketConfirmPanelRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ticket-confirm-title"
             onClick={e => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 440, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.32)', boxShadow: '0 32px 80px rgba(0,0,0,0.9)', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 420, maxHeight: '100%', overflowY: 'auto', boxSizing: 'border-box', borderRadius: 12, background: C.bg, color: C.text, fontFamily: SANS, padding: '20px 18px' }}
           >
-            <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, #8B1A1A 30%, #C9A24A 50%, #8B1A1A 70%, transparent)' }} />
-            <div style={{ padding: '28px 26px 24px' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#e5e5e5', marginBottom: 10, textAlign: 'center' }}>CONFIRM ISSUE</p>
-              <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#F2E6C8', textAlign: 'center', marginBottom: 22 }}>
-                {currentTab.autoTitle}を発行します
-              </p>
-
-              {/* Issue details */}
-              <div style={{ borderRadius: 14, background: 'rgba(201,162,74,0.05)', border: '1px solid rgba(201,162,74,0.18)', padding: '16px 18px', marginBottom: 18 }}>
-                {[
-                  { label: 'お客様', value: `${scannedData.name} 様` },
-                  { label: '種別',   value: currentTab.autoTitle },
-                  { label: '金額',   value: `¥${effectiveAmount.toLocaleString()}` },
-                  { label: '枚数',   value: `${quantity}枚` },
-                  { label: '担当',   value: staffId },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(201,162,74,0.09)' }}>
-                    <span style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em' }}>{label}</span>
-                    <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8' }}>{value}</span>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.1em' }}>合計</span>
-                  <span style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: '#C9A24A' }}>
-                    ¥{(effectiveAmount * quantity).toLocaleString()}
-                  </span>
+            <h2 id="ticket-confirm-title" style={{ fontSize: 17, fontWeight: 600 }}>{currentTab.autoTitle}を発行します</h2>
+            <dl style={{ margin: '12px 0 0' }}>
+              {[
+                { label: 'お客様', value: `${scannedData.name} 様` },
+                { label: '種別',   value: currentTab.autoTitle },
+                { label: '金額',   value: `¥${effectiveAmount.toLocaleString()}` },
+                { label: '枚数',   value: `${quantity}枚` },
+                { label: '担当',   value: staffId },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '8px 0', borderBottom: `1px solid ${C.line}` }}>
+                  <dt style={{ flexShrink: 0, fontSize: 14, color: C.sub }}>{label}</dt>
+                  <dd style={{ margin: 0, minWidth: 0, fontSize: 15, textAlign: 'right', overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{value}</dd>
                 </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, paddingTop: 10 }}>
+                <dt style={{ fontSize: 14, color: C.sub }}>合計</dt>
+                <dd style={{ margin: 0, fontSize: 20, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>¥{(effectiveAmount * quantity).toLocaleString()}</dd>
               </div>
+            </dl>
 
-              <p style={{ fontSize: 11, color: '#e5e5e5', textAlign: 'center', lineHeight: 1.75, marginBottom: 22, letterSpacing: '0.04em' }}>
-                この操作は店舗端末に記録されます。{'\n'}内容を確認してから発行してください。
-              </p>
+            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.7, marginTop: 12 }}>
+              この操作は店舗端末に記録されます。内容を確認してから発行してください。
+            </p>
 
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={() => setShowConfirm(false)}
-                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: '#e5e5e5', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
-                >
-                  キャンセル
-                </button>
-                <button
-                  onClick={() => { void handleIssueTicket() }}
-                  style={{ flex: 2, padding: '14px 0', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.50)', boxShadow: '0 4px 24px rgba(107,15,18,0.5)', fontSize: 15, fontWeight: 700, color: '#F2E6C8', fontFamily: SERIF, letterSpacing: '0.18em', cursor: 'pointer' }}
-                >
-                  発行する
-                </button>
-              </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button
+                ref={ticketConfirmCancelRef}
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                style={{ flex: 1, minHeight: 48, borderRadius: 10, background: C.bg, border: `1px solid ${C.lineStrong}`, color: C.text, fontFamily: SANS, fontSize: 15, cursor: 'pointer' }}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleIssueTicket() }}
+                style={{ flex: 2, minHeight: 48, borderRadius: 10, background: C.text, border: 'none', color: C.bg, fontFamily: SANS, fontSize: 16, fontWeight: 600, cursor: 'pointer' }}
+              >
+                発行する
+              </button>
             </div>
           </div>
         </div>
@@ -2316,27 +2221,15 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
       {/* ── Success overlay ── */}
       {showSuccess && successInfo && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'gj-success-fade 2.5s ease-in-out both' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(6,2,1,0.97)' }} />
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: 'inset 0 0 120px rgba(201,162,74,0.32), inset 0 0 60px rgba(139,26,26,0.28)' }} />
-          <div style={{ position: 'relative', textAlign: 'center', padding: '32px 28px', maxWidth: 380, animation: 'gj-success-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px', background: 'radial-gradient(circle, rgba(201,162,74,0.18) 0%, rgba(139,26,26,0.12) 60%, transparent 100%)', border: '1.5px solid rgba(201,162,74,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(201,162,74,0.38), 0 0 64px rgba(201,162,74,0.18)' }}>
-              <span style={{ fontSize: 38, color: '#e6ca65', lineHeight: 1 }}>✓</span>
-            </div>
-            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: '#e5e5e5', marginBottom: 14 }}>ISSUED</p>
-            <p style={{ fontFamily: SERIF, fontSize: 40, fontWeight: 700, color: '#e6ca65', letterSpacing: '0.14em', marginBottom: 20, lineHeight: 1.1, textShadow: '0 0 40px rgba(201,162,74,0.55), 0 0 80px rgba(139,26,26,0.4), 0 2px 6px rgba(0,0,0,0.95)' }}>
-              発行完了
-            </p>
-            <p style={{ fontFamily: SERIF, fontSize: 16, color: '#F2E6C8', lineHeight: 1.9, letterSpacing: '0.06em', textShadow: '0 1px 10px rgba(0,0,0,0.95)', marginBottom: 14 }}>
+        <div role="status" aria-live="polite" style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: C.bg, color: C.text, fontFamily: SANS, animation: 'gj-success-fade 2.5s ease-in-out both' }}>
+          <div style={{ textAlign: 'center', maxWidth: 360 }}>
+            <p style={{ fontSize: 22, fontWeight: 600 }}>発行完了</p>
+            <p style={{ fontSize: 15, lineHeight: 1.8, marginTop: 12, overflowWrap: 'anywhere' }}>
               {successInfo.name}様に<br />
               {successInfo.label} ¥{successInfo.amount.toLocaleString()} × {successInfo.qty}枚<br />
               を付与しました。
             </p>
-            <div style={{ padding: '10px 16px', borderRadius: 10, background: 'rgba(201,162,74,0.08)', border: '1px solid rgba(201,162,74,0.22)' }}>
-              <p style={{ fontSize: 10, color: '#e5e5e5', letterSpacing: '0.08em', lineHeight: 1.6 }}>
-                割引券発行ログを店舗端末に通知しました
-              </p>
-            </div>
+            <p style={{ fontSize: 14, color: C.sub, marginTop: 12 }}>割引券発行ログを店舗端末に通知しました</p>
           </div>
         </div>
       )}
@@ -2421,4 +2314,22 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       {/* ── 営業開始／営業終了 確認モーダル ── */}
     </div>
   )
+}
+
+// チケット領域（保有チケット・発行フォーム）。docs/DESIGN_PRINCIPLES.md：白い面・黒文字・薄い罫線、状態は文字で示す
+const ticketPanel: CSSProperties = {
+  minWidth: 0, marginBottom: 14, padding: 16, borderRadius: 12, boxSizing: 'border-box',
+  background: C.bg, color: C.text, border: `1px solid ${C.line}`, fontFamily: SANS,
+}
+const ticketHeading: CSSProperties = { fontSize: 15, fontWeight: 600, color: C.text }
+const ticketLabel: CSSProperties = { display: 'block', fontSize: 14, color: C.sub, margin: '16px 0 8px' }
+const ticketStep: CSSProperties = {
+  width: 48, height: 48, borderRadius: 10, border: `1px solid ${C.lineStrong}`, background: C.bg, color: C.text,
+  fontSize: 20, fontFamily: SANS, display: 'flex', alignItems: 'center', justifyContent: 'center',
+}
+function ticketChoice(active: boolean): CSSProperties {
+  return {
+    minHeight: 44, padding: '0 8px', borderRadius: 8, fontFamily: SANS, fontSize: 15, fontVariantNumeric: 'tabular-nums',
+    background: active ? C.text : C.bg, color: active ? C.bg : C.text, border: `1px solid ${active ? C.text : C.lineStrong}`,
+  }
 }

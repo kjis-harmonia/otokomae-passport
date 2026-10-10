@@ -466,9 +466,9 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {activeAccounts.map((a) => (
                           <button key={a.id} type="button" onClick={() => { setChargeAccountId(a.id); setConfirmingCharge(false) }} style={{
-                            minHeight: 42, padding: '0 14px', borderRadius: 8, border: `1px solid ${chargeAccountId === a.id ? C.text : C.lineStrong}`,
+                            minHeight: 44, padding: '0 14px', borderRadius: 8, border: `1px solid ${chargeAccountId === a.id ? C.text : C.lineStrong}`,
                             background: chargeAccountId === a.id ? C.text : C.bg, color: chargeAccountId === a.id ? C.bg : C.text,
-                            fontFamily: SANS, fontSize: 13, cursor: 'pointer',
+                            fontFamily: SANS, fontSize: 14, cursor: 'pointer',
                           }}>{a.is_current_client ? '現在の顧客口座' : `${a.client_name ?? '統合元'} の口座`}</button>
                         ))}
                       </div>
@@ -482,9 +482,9 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                       {STORE_PAYMENT_METHODS.map((m) => (
                         <button key={m.id} type="button" onClick={() => { setMethod(m.id); setConfirmingCharge(false) }} style={{
-                          minHeight: 42, borderRadius: 8, border: `1px solid ${method === m.id ? C.text : C.lineStrong}`,
+                          minHeight: 44, borderRadius: 8, border: `1px solid ${method === m.id ? C.text : C.lineStrong}`,
                           background: method === m.id ? C.text : C.bg, color: method === m.id ? C.bg : C.text,
-                          fontFamily: SANS, fontSize: 13, cursor: 'pointer',
+                          fontFamily: SANS, fontSize: 14, cursor: 'pointer',
                         }}>{m.label}</button>
                       ))}
                     </div>
@@ -524,7 +524,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
         <div role="dialog" aria-modal="true" aria-label={reverse.kind === 'refund' ? '返金' : '取消'} style={modalBackdrop}>
           <div style={modalBody}>
             <p style={{ fontSize: 15, fontWeight: 600 }}>{reverse.kind === 'refund' ? '返金を記録' : '取引を取消'}</p>
-            <p style={{ marginTop: 6, fontSize: 13, color: C.sub, lineHeight: 1.6 }}>
+            <p style={{ marginTop: 6, fontSize: 14, color: C.sub, lineHeight: 1.6 }}>
               元取引：{GINPAY_TYPE_LABEL[reverse.transaction.type]} {yen(reverse.transaction.amount)}
             </p>
             {reverse.kind === 'refund' && (
@@ -653,21 +653,22 @@ const txRowStyle: CSSProperties = {
 }
 
 const smallLink: CSSProperties = {
-  marginLeft: 6,
-  minHeight: 36,
-  padding: '0 4px',
+  marginLeft: 4,
+  minHeight: 44,
+  minWidth: 44,
+  padding: '0 8px',
   border: 'none',
   background: 'transparent',
   color: C.sub,
   fontFamily: SANS,
-  fontSize: 12,
+  fontSize: 14,
   textDecoration: 'underline',
   textUnderlineOffset: 3,
   cursor: 'pointer',
 }
 
 function msgStyle(color: string): CSSProperties {
-  return { marginTop: 10, fontSize: 13, color, lineHeight: 1.6 }
+  return { marginTop: 10, fontSize: 14, color, lineHeight: 1.6 }
 }
 
 const modalBackdrop: CSSProperties = {

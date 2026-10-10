@@ -1427,6 +1427,224 @@ for (const kind of ['charge', 'refund']) {
   check('display boundary: provisional amount and remaining balance carry matching provisional labels', provisional.paymentAmount === 9000 && provisional.remainingBalance === 3500 && provisional.paymentLabel.includes('暫定') && provisional.remainingLabel.includes('暫定'))
 }
 
+// ── 18. B-2B-3：POS 画面の仕上げ（操作領域 44px・装飾の撤去・無効状態の条件は変えない） ──
+{
+  const rd = (f) => readFileSync(join(root, f), 'utf8').replace(/\r\n/g, '\n')
+  const posFiles = {
+    checkout: rd('src/components/booking/Checkout.tsx'),
+    ginpay: rd('src/components/ginpay/GinpayPanel.tsx'),
+    hq: rd('src/hq/screens/HqSalesLedgerScreen.tsx'),
+    modal: rd('src/components/pos/ManagerApprovalModal.tsx'),
+    notice: rd('src/components/pos/PendingOperationNotice.tsx'),
+  }
+  const admin = rd('src/screens/AdminScreen.tsx')
+  const between = (src, a, b) => { const i = src.indexOf(a); const j = src.indexOf(b, i + 1); return i < 0 || j < 0 ? '' : src.slice(i, j) }
+  const ticketArea = between(admin, '{/* ── 保有チケット', '{/* ===== TICKET-LOADING ===== */}')
+  const bottomBar = between(admin, '{/* ── Fixed bottom: 次のお客様 / 発行する ── */}', '{/* ── Recovery confirm modal ── */}')
+  const confirmModal = between(admin, '{/* ── Confirmation modal ── */}', '{/* ── Success overlay ── */}')
+  const success = between(admin, '{/* ── Success overlay ── */}', '{/* ── Staff Picker Modal ── */}')
+  const ticketAll = ticketArea + bottomBar + confirmModal + success
+  check('B-2B-3 ticket area blocks were found', [ticketArea, bottomBar, confirmModal, success].every(b => b.length > 200))
+
+  // 44px：POS 画面の操作要素に 44px 未満の高さ・幅を指定しない
+  const small = []
+  for (const [name, src] of [...Object.entries(posFiles), ['ticket', ticketAll]]) {
+    for (const m of src.matchAll(/\b(minHeight|height|minWidth|width): (\d+)\b/g)) {
+      const n = Number(m[2])
+      // 操作要素ではないもの（縮められる幅 0・チェック枠 18px・罫線 1〜2px・会計明細の数量表示 28px）は除く
+      const display = n === 0 || n === 18 || (m[1] === 'height' && n <= 2) || (m[1] === 'minWidth' && n === 28 && src.includes("minWidth: 28, textAlign: 'center', fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>{l.quantity}</span>"))
+      if (n < 44 && !display) small.push(`${name}:${m[0]}`)
+    }
+  }
+  check('B-2B-3 no control in POS screens is given a height/width under 44px', small.length === 0, small.join(', '))
+  check('B-2B-3 link-style controls keep the shared 44px minimum (no smaller override)', !/\.\.\.linkStyle, minHeight: (?:[0-3]\d|4[0-3])\b/.test(posFiles.checkout + posFiles.ginpay + posFiles.hq))
+  check('B-2B-3 GINPay refund/void links and HQ day arrows are 44px', /const smallLink: CSSProperties = \{[^}]*minHeight: 44,[^}]*minWidth: 44,/.test(posFiles.ginpay) && /const navBtn: CSSProperties = \{ minWidth: 44, minHeight: 44,/.test(posFiles.hq))
+
+  // 管理者承認の導線：金色・グラデーションをやめ、白地に黒の枠と文字
+  const approvalBtn = between(posFiles.checkout, '{pendingApproval && !quoteLoading && (', '管理者承認を入力')
+  check('B-2B-3 manager approval CTA has no gold/gradient and stays a visible 48px outlined button',
+    approvalBtn.length > 0 && !/gradient|#C9A24A|#9E7D2B|boxShadow/i.test(approvalBtn)
+    && approvalBtn.includes('minHeight: 48') && approvalBtn.includes('border: `1px solid ${C.text}`') && approvalBtn.includes('aria-haspopup="dialog"'))
+  check('B-2B-3 approval-required message is shown in black (status), real errors stay red (alert)',
+    posFiles.checkout.includes("role={pendingApproval ? 'status' : 'alert'}") && posFiles.checkout.includes('color: pendingApproval ? C.text : C.danger'))
+  check('B-2B-3 no gradient/glow/gold in POS screens', Object.values(posFiles).every(src => !/gradient|textShadow|#C9A24A|#e6ca65|glow/i.test(src)))
+
+  // チケット領域：発光・脈打ち・金・グラデーションを使わない
+  check('B-2B-3 ticket area has no gradient, glow, gold, pulse or shadow',
+    !/gradient|boxShadow|textShadow|gj-pulse|gj-burst|gj-success-pop|#C9A24A|#e6ca65|#F2E6C8|SERIF/.test(ticketAll))
+  check('B-2B-3 ticket pulse/burst keyframes are removed', !/gj-pulse-gold|gj-pulse-red|gj-burst|gj-success-pop/.test(admin))
+  check('B-2B-3 ticket text is at least 13px (notice text 14px+)',
+    [...ticketAll.matchAll(/fontSize: (\d+)/g)].every(m => Number(m[1]) >= 13)
+    && [...posFiles.notice.matchAll(/fontSize: (\d+)/g)].every(m => Number(m[1]) >= 14))
+  check('B-2B-3 long names wrap in the ticket list and the issue confirmation', ticketArea.includes("overflowWrap: 'anywhere'") && confirmModal.includes("overflowWrap: 'anywhere'"))
+
+  // 無効状態の条件は変えない（見た目だけ）
+  check('B-2B-3 ticket form disabled conditions are unchanged',
+    ticketArea.includes('<fieldset disabled={ticketInputsLocked}')
+    && (ticketArea.match(/disabled=\{ticketResultUnknown\}/g) ?? []).length === 6
+    && ticketArea.includes('if (ticketInputsLocked) return')
+    && admin.includes('const ticketInputsLocked = ticketFormDisabled(ticketResultUnknown, ticketInFlight, issueLoading)')
+    && admin.includes('const canConfirmTicket = canConfirmTicketPending(ticketLockOp, ticketNotice, issueLoading || ticketInFlight)')
+    && admin.includes("const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0 && !ticketResultUnknown && !ticketInFlight"))
+  check('B-2B-3 ticket bottom button keeps the same send/confirm paths and disabled condition',
+    bottomBar.includes('onClick={ticketResultUnknown ? () => void handleRetryIssueTicket() : handleIssueClick}')
+    && bottomBar.includes('disabled={ticketResultUnknown ? !canConfirmTicket : !canIssue}')
+    && bottomBar.includes('disabled={!canReset}')
+    && bottomBar.includes("{issueLoading || ticketInFlight ? '処理中…' : ticketResultUnknown ? '結果を確認' : '発行する'}"))
+  check('B-2B-3 issue confirmation still sends only through handleIssueTicket',
+    (confirmModal.match(/onClick=/g) ?? []).length === 4 && confirmModal.includes('onClick={() => { void handleIssueTicket() }}'))
+  const fadeEnd = ticketArea.indexOf('{/* 未解決の発行')
+  check('B-2B-3 locked controls are dimmed but the pending notice is not',
+    ticketArea.includes('<div style={{ opacity: ticketInputsLocked ? 0.5 : 1 }}>') && fadeEnd > 0
+    && /<\/div>\n\n\s*$/.test(ticketArea.slice(0, fadeEnd)) && ticketArea.slice(fadeEnd).includes('<PendingOperationNotice notice={ticketNotice} />'))
+  check('B-2B-3 manager approval modal keeps its controls and shows busy as dimmed',
+    (posFiles.modal.match(/disabled=\{busy\}/g) ?? []).length >= 3 && (posFiles.modal.match(/opacity: busy \? 0\.5 : 1/g) ?? []).length === 2
+    && posFiles.modal.includes('role="group" aria-labelledby="manager-approval-staff"'))
+
+  // アクセシビリティ：押した状態・ラベル・読み上げ
+  check('B-2B-3 ticket choices expose pressed state, labels and live quantity',
+    (ticketArea.match(/aria-pressed=/g) ?? []).length === 3 && ticketArea.includes('htmlFor="ticket-amount"') && ticketArea.includes('id="ticket-amount"')
+    && ticketArea.includes('aria-label="1枚減らす"') && ticketArea.includes('aria-label="1枚増やす"') && ticketArea.includes('aria-live="polite"')
+    && confirmModal.includes('role="dialog"') && confirmModal.includes('aria-labelledby="ticket-confirm-title"') && success.includes('role="status"'))
+}
+
+// ── 19. B-2B-3 監査対応：入力欄のフォーカス表示・発行確認ダイアログのフォーカス・チケットの案内文 ──
+{
+  const rd = (f) => readFileSync(join(root, f), 'utf8').replace(/\r\n/g, '\n')
+  const theme = rd('src/components/booking/ledgerTheme.ts')
+  const inputBlock = theme.slice(theme.indexOf('export const inputStyle'), theme.indexOf('}', theme.indexOf('export const inputStyle')))
+  // M1：共通の入力欄はフォーカス枠を消さない（ブラウザ標準の枠を残す）
+  check('B-2B-3 M1 shared input style no longer suppresses the focus outline', inputBlock.length > 0 && !/outline/.test(inputBlock))
+  check('B-2B-3 M1 no global stylesheet hides focus outlines', ['src/index.css', 'src/styles/tokens.css'].every(f => !/outline\s*:\s*(none|0)\b/.test(rd(f))))
+  const adminSrc19 = rd('src/screens/AdminScreen.tsx')
+  const amountInput = adminSrc19.slice(adminSrc19.indexOf('id="ticket-amount"'), adminSrc19.indexOf('/>', adminSrc19.indexOf('id="ticket-amount"')))
+  check('B-2B-3 M1 ticket amount input keeps the native focus outline', amountInput.length > 0 && !/outline/.test(amountInput))
+  const posInputs = ['src/components/booking/Checkout.tsx', 'src/components/ginpay/GinpayPanel.tsx', 'src/hq/screens/HqSalesLedgerScreen.tsx'].map(rd)
+  check('B-2B-3 M1 Checkout / GINPay / HQ inputs do not override outline', posInputs.every(src => !/outline: 'none'/.test(src)))
+
+  // L1：チケットは会計画面でスタッフが選んで適用する
+  check('B-2B-3 L1 ticket copy no longer says tickets are applied automatically', !/自動で適用|自動適用|自動的に適用/.test(adminSrc19))
+  check('B-2B-3 L1 ticket copy says tickets are selected on the checkout screen', adminSrc19.includes('チケットは会計画面で選択して適用します'))
+
+  // M2：本物の trapModalFocus を、ブラウザと同じ規則で動く最小の DOM で動かす
+  //   （inert の中へはフォーカスできない・Tab は止められなければ文書順で次の要素へ移る・focusin が飛ぶ）
+  function fakeDom() {
+    const listeners = { keydown: [], focusin: [] }
+    const doc = { activeElement: null, addEventListener(t, f) { listeners[t].push(f) }, removeEventListener(t, f) { listeners[t] = listeners[t].filter(x => x !== f) } }
+    class El {
+      constructor(name, opts = {}) { this.name = name; this.tag = opts.tag ?? 'div'; this.children = []; this.parentElement = null; this.inert = !!opts.inert; this.disabled = !!opts.disabled; this.tabIndex = opts.tabIndex }
+      append(...cs) { for (const c of cs) { c.parentElement = this; this.children.push(c) } return this }
+      remove() { const p = this.parentElement; if (p) { p.children = p.children.filter(c => c !== this); this.parentElement = null } }
+      get isConnected() { let n = this; while (n.parentElement) n = n.parentElement; return n === doc.documentElement }
+      contains(n) { for (; n; n = n.parentElement) if (n === this) return true; return false }
+      descendants() { return this.children.flatMap(c => [c, ...c.descendants()]) }
+      get tabbable() { return (['button', 'input', 'select', 'textarea'].includes(this.tag) && !this.disabled) || (this.tabIndex !== undefined && this.tabIndex >= 0) }
+      get blocked() { for (let n = this; n; n = n.parentElement) if (n.inert) return true; return !this.isConnected }
+      querySelectorAll() { return this.descendants().filter(e => e.tabbable) }
+      focus() {
+        if (this.blocked || !(this.tabbable || this.tabIndex === -1)) return
+        doc.activeElement = this
+        for (const l of [...listeners.focusin]) l({ target: this })
+      }
+    }
+    const html = new El('html'); const body = new El('body'); html.append(body)
+    doc.documentElement = html; doc.body = body; doc.activeElement = body
+    function key(k, shift = false) {
+      let prevented = false
+      const e = { key: k, shiftKey: shift, preventDefault() { prevented = true } }
+      for (const l of [...listeners.keydown]) l(e)
+      if (k !== 'Tab' || prevented) return prevented
+      const order = body.descendants().filter(x => x.tabbable && !x.blocked)
+      const i = order.indexOf(doc.activeElement)
+      const next = shift ? order[(i <= 0 ? order.length : i) - 1] : order[(i + 1) % order.length]
+      next?.focus()
+      return prevented
+    }
+    return { El, doc, body, key, listeners }
+  }
+  const savedDocument = globalThis.document
+  const dom = fakeDom()
+  globalThis.document = dom.doc
+  const MF = await import(load('src/utils/modalFocus.ts', {}))
+  const { El, body, key, doc } = dom
+  // AdminScreen と同じ形：画面の根の下にヘッダー・本文（発行フォーム）・下部ボタン・確認ダイアログ
+  const btn = (n, o = {}) => new El(n, { tag: 'button', ...o })
+  const staff = btn('担当'), typeBtn = btn('割引券'), amount = new El('金額', { tag: 'input' }), qty = btn('1枚'), next = btn('次のお客様'), issue = btn('発行する')
+  const header = new El('header').append(staff)
+  const main = new El('main').append(new El('fieldset').append(typeBtn, amount, qty))
+  const bottom = new El('bottom').append(next, issue)
+  const alreadyInert = new El('already-inert', { inert: true }).append(btn('元から inert'))
+  const cancel = btn('キャンセル'), confirm = btn('発行する（確認）')
+  const panel = new El('panel', { tabIndex: -1 }).append(new El('dl'), new El('row').append(cancel, confirm))
+  const overlay = new El('overlay').append(panel)
+  const rootEl = new El('root').append(header, main, bottom, alreadyInert, overlay)
+  body.append(rootEl)
+  const background = [staff, typeBtn, amount, qty, next, issue]
+
+  issue.focus()
+  let escapes = 0
+  const release = MF.trapModalFocus(overlay, panel, cancel, () => { escapes += 1 })
+  check('B-2B-3 M2 opening the confirm dialog moves focus to the safe cancel action (not the issue button)', doc.activeElement === cancel)
+  check('B-2B-3 M2 background is made inert while open; pre-existing inert is kept', header.inert && main.inert && bottom.inert && alreadyInert.inert && !overlay.inert && !panel.inert)
+  // 開いたあとに追加された要素は inert が付かない。Tab の順でダイアログの次に来るので、閉じ込めがなければここへ抜ける
+  const lateToast = btn('後から出た通知'); body.append(lateToast)
+
+  key('Tab')
+  const afterTab = doc.activeElement
+  key('Tab')
+  check('B-2B-3 M2 Tab moves inside and wraps from the last control to the first', afterTab === confirm && doc.activeElement === cancel)
+  key('Tab', true)
+  const afterShift = doc.activeElement
+  key('Tab', true)
+  check('B-2B-3 M2 Shift+Tab wraps from the first control to the last and stays inside', afterShift === confirm && doc.activeElement === cancel)
+  const visited = new Set()
+  for (let i = 0; i < 12; i++) { key('Tab', i % 3 === 0); visited.add(doc.activeElement) }
+  check('B-2B-3 M2 repeated Tab / Shift+Tab never reaches a background control', [...visited].every(e => panel.contains(e)) && background.every(b => !visited.has(b)) && !visited.has(lateToast))
+
+  doc.activeElement = cancel
+  for (const b of background) b.focus()
+  check('B-2B-3 M2 background controls cannot receive focus (ticket type, amount, quantity, next customer, issue)', doc.activeElement === cancel)
+  // 開いたあとに追加された（inert の付いていない）要素へフォーカスが移っても、ダイアログへ戻す
+  lateToast.focus()
+  check('B-2B-3 M2 focus escaping to a later-added element is pulled back into the dialog', panel.contains(doc.activeElement))
+  lateToast.remove()
+
+  const prevented = key('Escape')
+  check('B-2B-3 M2 Escape asks the screen to close the dialog', escapes === 1 && prevented)
+
+  release()
+  check('B-2B-3 M2 closing restores background interaction and keeps pre-existing inert', !header.inert && !main.inert && !bottom.inert && alreadyInert.inert)
+  check('B-2B-3 M2 closing returns focus to the button that opened the dialog', doc.activeElement === issue)
+  check('B-2B-3 M2 closing removes the key and focus handlers', dom.listeners.keydown.length === 0 && dom.listeners.focusin.length === 0)
+  key('Escape')
+  check('B-2B-3 M2 Escape after close does nothing', escapes === 1)
+
+  // 開いたボタンが閉じる前に消えた場合（画面の切り替えなど）：消えた要素へは戻さず、後始末は最後まで行う
+  const opener = btn('開いたボタン'); bottom.append(opener); opener.focus()
+  const release2 = MF.trapModalFocus(overlay, panel, cancel, () => {})
+  opener.remove()
+  let threw = false
+  try { release2() } catch { threw = true }
+  check('B-2B-3 M2 a removed opener is not refocused and cleanup still restores the background', !threw && doc.activeElement !== opener && !header.inert && !main.inert && !bottom.inert)
+  // 安全な操作がないときはパネルへ
+  doc.activeElement = issue
+  const release3 = MF.trapModalFocus(overlay, panel, null, () => {})
+  check('B-2B-3 M2 without an initial control focus goes to the dialog panel', doc.activeElement === panel)
+  release3()
+  globalThis.document = savedDocument
+
+  // 画面への組み込み：開いたときに1回だけ（親の再描画では設定し直さない）、閉じる・アンマウントで後始末
+  const effect = adminSrc19.slice(adminSrc19.indexOf('const ticketConfirmOpen = showConfirm && !!scannedData'), adminSrc19.indexOf('}, [ticketConfirmOpen])') + 25)
+  check('B-2B-3 M2 AdminScreen sets up the trap once per open (deps only open state) and returns its cleanup',
+    effect.includes('if (!ticketConfirmOpen) return') && effect.includes('return trapModalFocus(overlay, panel, ticketConfirmCancelRef.current, () => setShowConfirm(false))')
+    && /\}, \[ticketConfirmOpen\]\)$/.test(effect.trim()))
+  const dialog = adminSrc19.slice(adminSrc19.indexOf('{/* ── Confirmation modal ── */}'), adminSrc19.indexOf('{/* ── Success overlay ── */}'))
+  check('B-2B-3 M2 confirm dialog is wired: overlay/panel/cancel refs, focusable panel, cancel is the initial target',
+    dialog.includes('ref={ticketConfirmOverlayRef}') && dialog.includes('ref={ticketConfirmPanelRef}') && dialog.includes('tabIndex={-1}')
+    && /ref=\{ticketConfirmCancelRef\}\n\s+type="button"\n\s+onClick=\{\(\) => setShowConfirm\(false\)\}/.test(dialog))
+  check('B-2B-3 M2 ManagerApprovalModal focus logic is untouched (still its own implementation)', !rd('src/components/pos/ManagerApprovalModal.tsx').includes('modalFocus'))
+}
+
 console.log(`[pos-b2a] ${passed} passed, ${failed} failed`)
 if (failed) process.exit(1)
 console.log('[pos-b2a] PASS all checks')
