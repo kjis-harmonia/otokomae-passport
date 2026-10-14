@@ -35,7 +35,10 @@ const MIGRATION_ORDER = [
   '20261009000400_pos_money_authorization.sql',
   '20261009000500_pos_manager_candidates.sql',
   '20261009000900_pos_replay_hardening.sql',
+  '20261011000000_pos_operation_registry.sql',
 ]
+// B-2C-1 の操作レジストリ（新しい app_private の表と内部関数だけ）。当てる前後で既存オブジェクトのカタログが完全一致すること
+const REGISTRY_MIGRATION = '20261011000000_pos_operation_registry.sql'
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
   'supabase/schema.sql', '20261001_welcome_coupon_onboarding', '20261001_prod_schema_catchup', '20261001_security_hardening_a_functions',
@@ -66,16 +69,18 @@ async function main() {
     // 各 migration は Supabase CLI と同じく1トランザクションで適用する。
     // base_schema は土台の一括作成で再実行を想定していないため、再適用（冪等性の確認）は base 以外だけ
     const later = migrations.filter((file) => !file.endsWith(BASE_MIGRATION))
-    for (const file of migrations) runPsqlMigration(dbUrl, file, `migration ${relative(root, file)}`)
-    for (const file of later) runPsqlMigration(dbUrl, file, `migration replay ${relative(root, file)}`)
+    let catalogLines = 0
+    for (const file of migrations) catalogLines = applyWithCatalogCheck(dbUrl, file, `migration ${relative(root, file)}`) || catalogLines
+    for (const file of later) applyWithCatalogCheck(dbUrl, file, `migration replay ${relative(root, file)}`)
     if (baselineDbUrl) {
       // 本番相当のコピー：本番には base_schema が最初からある。適用前のデータの指紋を取り、base 以外を適用してから比較する
       baselineBefore = snapshot(baselineDbUrl)
-      for (const file of later) runPsqlMigration(baselineDbUrl, file, `baseline migration ${relative(root, file)}`)
+      for (const file of later) applyWithCatalogCheck(baselineDbUrl, file, `baseline migration ${relative(root, file)}`)
     }
+    const catalogNote = `existing-object catalog unchanged by ${REGISTRY_MIGRATION} (${catalogLines} objects)`
     return baselineDbUrl
-      ? `clean apply + replay + baseline apply ok (${migrations.length} migrations)`
-      : `clean apply + replay ok (${migrations.length} migrations); baseline skipped`
+      ? `clean apply + replay + baseline apply ok (${migrations.length} migrations); ${catalogNote}`
+      : `clean apply + replay ok (${migrations.length} migrations); baseline skipped; ${catalogNote}`
   })
 
   await stage('baseline-data', async () => {
@@ -189,6 +194,19 @@ async function main() {
     runPgbench(dbUrl, join(testsDir, 'preflight_replay_concurrency_sale_worker.sql'), 'POS replay hardening sale concurrency')
     runPsqlFile(dbUrl, join(testsDir, 'preflight_replay_concurrency_verify.sql'), 'POS replay hardening concurrency verify')
     return 'booking + checkout + GINPay + POS presence + POS approval + GINPay mismatch + POS pricing + POS replay hardening concurrency ok'
+  })
+
+  await stage('pos-operation-registry', async () => {
+    // B-2C-1：操作レジストリ（キーの範囲・依頼・枠の版・資源・取り消しの印・旧データの分類・効果・読み取り専用・不変条件・権限）
+    // 使い捨ての DB だけで実行する（テスト用の旧データを会計・GINPay・チケットの表へ直接入れるため、本番コピーでは実行しない）
+    if (skipDb) return 'skipped'
+    requireCommand('pgbench')
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_operation_registry.sql'), 'POS B-2C-1 registry (single session)')
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_pos_operation_interleave.sql'), 'POS B-2C-1 registry (deterministic interleaving)')
+    runPsqlFile(dbUrl, join(testsDir, 'pos_operation_concurrency_setup.sql'), 'POS B-2C-1 registry concurrency setup')
+    runPgbench(dbUrl, join(testsDir, 'pos_operation_concurrency_worker.sql'), 'POS B-2C-1 registry concurrency')
+    runPsqlFile(dbUrl, join(testsDir, 'pos_operation_concurrency_verify.sql'), 'POS B-2C-1 registry concurrency verify')
+    return 'key domains + instructions + slot epoch + targets (required = active) + tombstones + legacy classification + E1 effects (parent shape) + sale-void proof + secret-free snapshots + read-only + invariants + grants + interleaving (incl. fence/claim lock order) + pgbench concurrency (NULL-safe verify) ok'
   })
 
   await stage('frontend', async () => {
@@ -372,6 +390,27 @@ function runPsqlFile(url, file, label) {
 function runPsqlMigration(url, file, label) {
   if (!existsSync(file)) throw new Error(`missing migration for ${label}: ${relative(root, file)}`)
   runCommand('psql', ['-X', '-q', '-1', '-v', 'ON_ERROR_STOP=1', url, '-f', file], label)
+}
+
+/**
+ * migration を1つ当てる。B-2C-1 の migration のときだけ、前後で既存オブジェクトのカタログ（public / app_private の表・列・制約・索引・
+ * トリガー・ポリシー・関数の本文と権限・スキーマ権限・既定の権限・拡張・publication）を取り、完全一致を確かめる。比較した行数を返す
+ */
+function applyWithCatalogCheck(url, file, label) {
+  if (!file.endsWith(REGISTRY_MIGRATION)) {
+    runPsqlMigration(url, file, label)
+    return 0
+  }
+  const catalogSql = readFileSync(join(testsDir, 'preflight_pos_operation_catalog.sql'), 'utf8')
+  const before = runPsqlQuery(url, catalogSql, `${label} catalog before`).split(/\r?\n/).filter(Boolean)
+  runPsqlMigration(url, file, label)
+  const after = runPsqlQuery(url, catalogSql, `${label} catalog after`).split(/\r?\n/).filter(Boolean)
+  const removed = before.filter((line) => !after.includes(line))
+  const added = after.filter((line) => !before.includes(line))
+  if (removed.length || added.length) {
+    throw new Error(`${label} changed existing objects: ${removed.length} removed/changed, ${added.length} added (first: ${(removed[0] ?? added[0]).slice(0, 160)})`)
+  }
+  return before.length
 }
 
 function runPsqlQuery(url, sql, label) {
