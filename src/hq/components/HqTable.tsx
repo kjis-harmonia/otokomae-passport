@@ -31,7 +31,7 @@ export function HqTable({ columns, children }: {
 
 export function HqTr({ children }: { children: ReactNode }) {
   return (
-    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+    <tr style={{ borderBottom: `1px solid ${HQ_COLORS.panelBorder}` }}>
       {children}
     </tr>
   )

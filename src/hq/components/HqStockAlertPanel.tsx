@@ -21,9 +21,9 @@ export function HqStockAlertPanel({ products }: { products: Product[] }) {
             return (
               <div key={p.id} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: '2px 10px' }}>
                 <span style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textPrimary, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {isReorder ? '🔴' : '🟡'} {p.name}
+                  {p.name}
                 </span>
-                <span style={{ fontFamily: HQ_MONO, fontSize: 12, color: isReorder ? HQ_COLORS.negative : '#E0B84A', whiteSpace: 'nowrap' }}>
+                <span style={{ fontFamily: HQ_MONO, fontSize: 12, color: isReorder ? HQ_COLORS.negative : '#946b2b', whiteSpace: 'nowrap' }}>
                   現在庫 {p.current_stock} / 最低在庫 {p.min_stock}
                 </span>
               </div>
@@ -59,7 +59,7 @@ export function HqStockAlertSummaryTile({ products }: { products: Product[] }) {
             </p>
           )}
           {low.length > 0 && (
-            <p style={{ fontFamily: HQ_SERIF, fontSize: 14, fontWeight: 700, color: '#E0B84A', margin: 0 }}>
+            <p style={{ fontFamily: HQ_SERIF, fontSize: 14, fontWeight: 600, color: '#946b2b', margin: 0 }}>
               少ない {low.length}件
             </p>
           )}

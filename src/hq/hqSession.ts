@@ -8,6 +8,7 @@
 
 import { supabase } from '../lib/supabase'
 import { RpcError, callRpc } from '../utils/staffSession'
+import { isHqPreview } from './hqPreview'
 
 const HQ_TOKEN_KEY  = 'ginjiro_hq_session'
 /** 本部 PIN 成功時にサーバーが発行する端末キー（ロック判定を端末ごとに分けるため。単体では認証にならない） */
@@ -44,6 +45,10 @@ function notifyAuthRequired(): void {
 
 /** 本部セッション必須の RPC（p_hq を付与）。認証切れは PIN 画面へ戻す。 */
 export async function callHqRpc<T>(fn: string, params: Record<string, unknown> = {}): Promise<T> {
+  if (import.meta.env.DEV && isHqPreview()) {
+    const { previewHqRpc } = await import('./hqPreviewData')
+    return await previewHqRpc(fn, params) as T
+  }
   const token = getHqToken()
   if (!token) {
     notifyAuthRequired()

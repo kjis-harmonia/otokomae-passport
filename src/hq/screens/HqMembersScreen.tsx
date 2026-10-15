@@ -1,65 +1,20 @@
-import { HqPanel } from '../components/HqPanel'
-import { HqRatioBars } from '../components/HqRatioBars'
-import { HqTable, HqTr, HqTd } from '../components/HqTable'
-import { HQ_MEMBER_RANKS, HQ_MEMBER_TREND, HQ_TOP_MEMBERS } from '../hqMockData'
-import { HQ_COLORS, HQ_SANS } from '../hqTheme'
+import { useEffect, useMemo, useState } from 'react'
+import { Search } from 'lucide-react'
+import { getCustomerKarteList, type CustomerKarteSummary } from '../hqCustomerKarteStore'
+import { money } from '../hqInsights'
 
 export function HqMembersScreen() {
-  const total = HQ_MEMBER_RANKS.reduce((s, r) => s + r.count, 0)
-  const maxTrend = Math.max(...HQ_MEMBER_TREND.map(m => m.newCount), 1)
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'stretch' }}>
-        <HqPanel title="会員ランク分布" code={`TOTAL ${total}`} style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <HqRatioBars unit="名" data={HQ_MEMBER_RANKS.map(r => ({ label: r.label, ratio: r.count, color: r.color }))} />
-        </HqPanel>
-
-        <HqPanel title="新規 / 離脱トレンド" code="6M" style={{ flex: '2 1 320px', minWidth: 0 }}>
-          <div style={{ width: '100%', overflowX: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 130, minWidth: HQ_MEMBER_TREND.length * 48 }}>
-              {HQ_MEMBER_TREND.map((m) => (
-                <div key={m.month} style={{ flex: '1 1 36px', minWidth: 36, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                  <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: '100%' }}>
-                    <div style={{
-                      width: 14, height: `${(m.newCount / maxTrend) * 100}%`,
-                      background: `linear-gradient(180deg, ${HQ_COLORS.goldHi}, ${HQ_COLORS.gold})`,
-                      borderRadius: '2px 2px 0 0',
-                    }} />
-                    <div style={{
-                      width: 14, height: `${(m.churnCount / maxTrend) * 100}%`,
-                      background: `linear-gradient(180deg, ${HQ_COLORS.negative}, ${HQ_COLORS.red})`,
-                      borderRadius: '2px 2px 0 0',
-                    }} />
-                  </div>
-                  <p style={{ fontFamily: HQ_SANS, fontSize: 10, color: HQ_COLORS.textSecondary, margin: 0, marginTop: 8, whiteSpace: 'nowrap' }}>{m.month}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 14, fontFamily: HQ_SANS, fontSize: 10.5, color: HQ_COLORS.textSecondary }}>
-            <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: HQ_COLORS.goldHi, marginRight: 6 }} />新規</span>
-            <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: HQ_COLORS.negative, marginRight: 6 }} />離脱</span>
-          </div>
-        </HqPanel>
-      </div>
-
-      <HqPanel title="LTV ランキング（上位会員）" code="TOP MEMBERS">
-        <HqTable columns={[
-          { label: '順位' }, { label: '会員' }, { label: 'ランク' },
-          { label: '来店回数', align: 'right' }, { label: 'LTV', align: 'right' },
-        ]}>
-          {HQ_TOP_MEMBERS.map((m) => (
-            <HqTr key={m.rank}>
-              <HqTd color={HQ_COLORS.goldHi} mono>#{m.rank}</HqTd>
-              <HqTd>{m.name}</HqTd>
-              <HqTd>{m.rankTier}</HqTd>
-              <HqTd align="right" mono>{m.visits}</HqTd>
-              <HqTd align="right" mono color={HQ_COLORS.goldHi}>¥{m.ltv.toLocaleString()}</HqTd>
-            </HqTr>
-          ))}
-        </HqTable>
-      </HqPanel>
-    </div>
-  )
+  const [members, setMembers] = useState<CustomerKarteSummary[] | null>(null)
+  const [error, setError] = useState(false)
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<'visits' | 'sales'>('sales')
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    let alive = true
+    getCustomerKarteList().then(data => { if (alive) { setMembers(data); setError(false) } }).catch(() => { if (alive) setError(true) })
+    return () => { alive = false }
+  }, [retry])
+  const shown = useMemo(() => (members ?? []).filter(m => (m.name + ' ' + (m.phoneLast4 ?? '')).includes(query.trim())).sort((a, b) => sort === 'sales' ? b.totalSpend - a.totalSpend : b.visitCount - a.visitCount), [members, query, sort])
+  if (!members) return error ? <div className="hq-error" role="alert"><h2>会員情報を取得できませんでした</h2><p>接続を確認して、もう一度お試しください。</p><button className="hq-button" onClick={() => setRetry(n => n + 1)}>再試行</button></div> : <div className="hq-loading" role="status">会員情報を読み込んでいます…</div>
+  return <>{error && <p className="hq-partial-notice">更新できませんでした。前回取得した内容を表示しています。</p>}<section className="hq-metrics" aria-label="会員の状況">{[{ label: '登録会員', value: members.length }, { label: '会計履歴のある会員', value: members.filter(m => m.visitCount > 0).length }, { label: '複数回の会計履歴', value: members.filter(m => m.visitCount > 1).length }].map(m => <div className="hq-metric" key={m.label}><p className="hq-metric-label">{m.label}</p><p className="hq-metric-value">{m.value}<small>名</small></p></div>)}</section><section className="hq-surface"><div className="hq-surface-header"><h2>会員の利用状況</h2><span className="hq-eyebrow">{shown.length} 名</span></div><div className="hq-toolbar"><label className="hq-member-search"><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="名前・電話番号の下4桁" aria-label="会員を検索" /></label><div className="hq-segmented" aria-label="会員の並び順"><button aria-pressed={sort === 'sales'} onClick={() => setSort('sales')}>累計会計額</button><button aria-pressed={sort === 'visits'} onClick={() => setSort('visits')}>会計件数</button></div></div><div style={{ overflowX: 'auto' }}><table className="hq-data-table hq-member-table"><thead><tr><th>会員</th><th className="is-number">会計件数</th><th className="is-number">累計会計額</th><th className="is-number">最終会計日</th></tr></thead><tbody>{shown.map(member => <tr key={member.userId}><td>{member.name}<span className="hq-mobile-member-date">{member.lastVisitDate?.replaceAll('-', '/') ?? '会計履歴なし'}</span></td><td className="is-number">{member.visitCount} 件</td><td className="is-number">{money(member.totalSpend)}</td><td className="is-number is-muted">{member.lastVisitDate?.replaceAll('-', '/') ?? '—'}</td></tr>)}</tbody></table></div>{shown.length === 0 && <p className="hq-empty-inline">{query ? '一致する会員がいません。' : '登録会員はまだいません。'}</p>}<p className="hq-report-note">会員に紐づく確定済み会計を集計しています。予約の来店回数とは異なります。</p></section></>
 }

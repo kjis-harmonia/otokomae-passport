@@ -1,234 +1,51 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { HqPanel } from '../components/HqPanel'
-import { HqStatTile } from '../components/HqStatTile'
-import { HqStockAlertSummaryTile } from '../components/HqStockAlertPanel'
-import { getHqDashboardData, subscribeHqRealtime } from '../hqDataStore'
-import type { HqDashboardData, HqRealtimeStatus } from '../hqDataStore'
-import { getProducts, subscribeProductsRealtime } from '../hqInventoryStore'
-import type { Product } from '../hqInventoryStore'
-import { HQ_COLORS, HQ_MONO, HQ_SANS, HQ_SERIF } from '../hqTheme'
+import { useState } from 'react'
+import { ArrowUpRight, CalendarDays, Check, ChevronRight, FileText, Package, Store } from 'lucide-react'
+import { getJapanDateString } from '../../utils/dateUtils'
+import type { HqTab } from '../hqMockData'
+import { money, type HqPeriod } from '../hqInsights'
+import { useHqOverview, type HqOverview } from '../hqOverviewStore'
+import { splitStockAlerts } from '../hqInventoryStore'
+import { HqMetrics, HqPaymentPanel, HqPeriodToolbar, HqRankingPanel, HqRevenuePanel } from '../components/HqOverviewParts'
 
-type LoadState =
-  | { phase: 'loading' }
-  | { phase: 'error'; message: string }
-  | { phase: 'ready'; data: HqDashboardData }
-
-function yen(v: number): string {
-  return `¥${v.toLocaleString()}`
+export function HqDashboardScreen({ onNavigate }: { onNavigate: (tab: HqTab) => void }) {
+  const [period, setPeriod] = useState<HqPeriod>('today')
+  const [date, setDate] = useState(getJapanDateString)
+  const { data, error, retry } = useHqOverview(period, date)
+  return <>
+    <HqPeriodToolbar period={period} date={date} onPeriod={setPeriod} onDate={setDate} updatedAt={data?.updatedAt} />
+    {!data ? error ? <div className="hq-error" role="alert"><h2>店舗のデータを取得できませんでした</h2><p>{error}</p><button className="hq-button" onClick={retry}>もう一度読み込む</button></div> : <div className="hq-loading" role="status">店舗のデータを読み込んでいます…</div> : <>
+      {(error || data.unavailable.length > 0) && <p className="hq-partial-notice" role="status">{error ?? data.unavailable.join('・') + 'を取得できませんでした。取得できた情報を表示しています。'}</p>}
+      <HqMetrics data={data} />
+      <div className="hq-overview-grid">
+        <div className="hq-overview-main"><HqRevenuePanel data={data} /><Attention data={data} onNavigate={onNavigate} /><HqRankingPanel data={data} /></div>
+        <div className="hq-overview-side"><StoreSummary data={data} date={date} onNavigate={onNavigate} /><StaffSummary data={data} onNavigate={onNavigate} /><HqPaymentPanel data={data} /></div>
+      </div>
+    </>}
+  </>
 }
 
-function fmtClock(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+function StoreSummary({ data, date, onNavigate }: { data: HqOverview; date: string; onNavigate: (tab: HqTab) => void }) {
+  const ledger = data.ledger
+  const active = ledger?.reservations.filter(r => r.status !== 'cancelled' && r.status !== 'no_show')
+  const serving = active?.filter(r => r.status === 'in_service' || r.status === 'checked_in').length
+  const hours = ledger?.business_hours
+  const closed = ledger?.closure || hours?.is_closed
+  const schedule = !ledger ? '取得できません' : closed ? '店休日' : hours?.open_time && hours.close_time ? hours.open_time + ' – ' + hours.close_time : '未設定'
+  return <section className="hq-surface"><div className="hq-surface-header"><h2>店舗の状況</h2><span className="hq-eyebrow">{date.slice(5).replace('-', '/')}</span></div><div className="hq-store-head"><span className="hq-store-icon"><Store size={22} strokeWidth={1.5} /></span><div><h3>銀二郎</h3><p>現在の接続店舗</p></div></div><div className="hq-fact-row"><span>営業時間</span><strong>{schedule}</strong></div><div className="hq-fact-row"><span>予約</span><strong>{active ? active.length + ' 件' : '—'}</strong></div><div className="hq-fact-row"><span>来店済み・施術中</span><strong>{serving === undefined ? '—' : serving + ' 件'}</strong></div><div className="hq-fact-row"><span>シフト登録</span><strong>{ledger ? ledger.staff.filter(s => s.shifts.length > 0).length + ' 名' : '—'}</strong></div><button className="hq-text-button hq-store-link" onClick={() => onNavigate('ledger')}>予約台帳をみる<ArrowUpRight size={13} /></button></section>
 }
 
-function LiveSyncBadge({ status, lastUpdated }: { status: HqRealtimeStatus; lastUpdated: Date | null }) {
-  const live = status === 'live'
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-      <span
-        aria-hidden="true"
-        style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: live ? HQ_COLORS.positive : HQ_COLORS.textMute,
-          boxShadow: live ? `0 0 6px ${HQ_COLORS.positive}` : 'none',
-          animation: live ? 'hqLiveSyncPulse 1.8s ease-in-out infinite' : 'none',
-        }}
-      />
-      <span style={{ fontFamily: HQ_MONO, fontSize: 10, letterSpacing: '0.1em', color: live ? HQ_COLORS.textSecondary : HQ_COLORS.textMute }}>
-        {live ? 'LIVE SYNC' : 'LIVE SYNC待機中'}
-      </span>
-      {lastUpdated && (
-        <span style={{ fontFamily: HQ_MONO, fontSize: 10, color: HQ_COLORS.textMute }}>
-          最終更新 {fmtClock(lastUpdated)}
-        </span>
-      )}
-      <style>{`
-        @keyframes hqLiveSyncPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.35; }
-        }
-      `}</style>
-    </div>
-  )
+function Attention({ data, onNavigate }: { data: HqOverview; onNavigate: (tab: HqTab) => void }) {
+  const alerts = data.products ? splitStockAlerts(data.products) : null
+  const unassigned = data.ledger?.reservations.filter(r => r.status === 'confirmed' && !r.staff_confirmed).length ?? 0
+  const tasks = [
+    ...(alerts && alerts.reorder.length > 0 ? [{ title: '発注を確認する商品', detail: alerts.reorder.slice(0, 2).map(p => p.name).join('、'), count: alerts.reorder.length, tab: 'inventory' as HqTab, Icon: Package }] : []),
+    ...(unassigned > 0 ? [{ title: '担当が未確定の予約', detail: '予約台帳で担当者を確認してください', count: unassigned, tab: 'ledger' as HqTab, Icon: CalendarDays }] : []),
+    ...(alerts && alerts.low.length > 0 ? [{ title: '在庫が少ない商品', detail: alerts.low.slice(0, 2).map(p => p.name).join('、'), count: alerts.low.length, tab: 'inventory' as HqTab, Icon: Package }] : []),
+  ]
+  return <section className="hq-surface"><div className="hq-surface-header"><h2>確認すること</h2><span className="hq-eyebrow">{tasks.length} 項目</span></div>{tasks.length ? tasks.map(task => <button className="hq-action-row" key={task.title} onClick={() => onNavigate(task.tab)}><span className="hq-action-icon"><task.Icon size={17} strokeWidth={1.6} /></span><span><strong>{task.title}</strong><p>{task.detail}</p></span><span className="hq-action-count">{task.count} 件</span><ChevronRight size={14} /></button>) : <p className="hq-empty-inline"><Check size={15} style={{ verticalAlign: 'middle', marginRight: 7 }} />{data.unavailable.includes('在庫') || data.unavailable.includes('予約') ? '一部の状況を確認できません。再読み込みしてください。' : '今すぐ確認する項目はありません。'}</p>}<p className="hq-report-note"><FileText size={13} /><span>一日の振り返りは日報から。</span><button className="hq-text-button" style={{ marginLeft: 'auto' }} onClick={() => onNavigate('reports')}>日報をみる<ChevronRight size={12} /></button></p></section>
 }
 
-export function HqDashboardScreen() {
-  const [state, setState] = useState<LoadState>({ phase: 'loading' })
-  const [realtimeStatus, setRealtimeStatus] = useState<HqRealtimeStatus>('connecting')
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const [products, setProducts] = useState<Product[]>([])
-  const productsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const load = useCallback(() => {
-    getHqDashboardData()
-      .then((data) => {
-        setState({ phase: 'ready', data })
-        setLastUpdated(new Date())
-      })
-      .catch((e) => {
-        console.error('[HqDashboardScreen] getHqDashboardData error:', e)
-        setState((prev) => (prev.phase === 'ready' ? prev : { phase: 'error', message: '売上データの取得に失敗しました。' }))
-      })
-  }, [])
-
-  // 初回fetch（リアルタイム購読の成否に関わらず必ず実行）
-  useEffect(() => {
-    setState({ phase: 'loading' })
-    load()
-  }, [load])
-
-  // 売上データ（本部 RPC）を定期取得して再集計する
-  useEffect(() => {
-    setRealtimeStatus('connecting')
-    const unsubscribe = subscribeHqRealtime(
-      () => {
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-        debounceRef.current = setTimeout(load, 400)
-      },
-      setRealtimeStatus,
-    )
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      unsubscribe()
-    }
-  }, [load])
-
-  // 在庫アラート用に products も独立して取得・購読する（失敗してもダッシュボード本体は壊さない）
-  const loadProducts = useCallback(() => {
-    getProducts().then(setProducts).catch((e) => {
-      console.error('[HqDashboardScreen] getProducts error:', e)
-    })
-  }, [])
-
-  useEffect(() => { loadProducts() }, [loadProducts])
-
-  useEffect(() => {
-    const unsubscribe = subscribeProductsRealtime(() => {
-      if (productsDebounceRef.current) clearTimeout(productsDebounceRef.current)
-      productsDebounceRef.current = setTimeout(loadProducts, 400)
-    })
-    return () => {
-      if (productsDebounceRef.current) clearTimeout(productsDebounceRef.current)
-      unsubscribe()
-    }
-  }, [loadProducts])
-
-  if (state.phase === 'loading') {
-    return (
-      <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textSecondary }}>
-        読み込み中…
-      </p>
-    )
-  }
-
-  if (state.phase === 'error') {
-    return (
-      <div style={{
-        background: 'rgba(140,31,26,0.10)', border: `1px solid ${HQ_COLORS.red}`,
-        borderRadius: 4, padding: '16px 18px',
-      }}>
-        <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.negative, margin: 0 }}>
-          {state.message}
-        </p>
-      </div>
-    )
-  }
-
-  const { data } = state
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <LiveSyncBadge status={realtimeStatus} lastUpdated={lastUpdated} />
-
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-        <HqStatTile label="本日売上" value={yen(data.todaySales)} />
-        <HqStatTile label="本日来客" value={`${data.todayVisitors}名`} />
-        <HqStatTile label="客単価" value={yen(data.todayUnitPrice)} />
-        <HqStatTile label="今月売上" value={yen(data.monthSales)} />
-
-        <HqStockAlertSummaryTile products={products} />
-      </div>
-
-      <HqPanel title="スタイリスト別集計（本日）" code="STAFF">
-        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-          {data.stylists.map((s) => (
-            <div key={s.name} style={{
-              flex: '1 1 0', minWidth: 140,
-              background: 'rgba(0,0,0,0.25)', border: `1px solid ${HQ_COLORS.panelBorder}`,
-              borderRadius: 4, padding: '12px 14px',
-            }}>
-              <p style={{ fontFamily: HQ_SERIF, fontSize: 15, fontWeight: 700, color: '#fff', margin: 0, marginBottom: 8 }}>
-                {s.name}
-              </p>
-              <p style={{ fontFamily: HQ_MONO, fontSize: 11.5, color: HQ_COLORS.textSecondary, margin: 0, marginBottom: 3 }}>
-                売上 <span style={{ color: HQ_COLORS.goldHi }}>{yen(s.sales)}</span>
-              </p>
-              <p style={{ fontFamily: HQ_MONO, fontSize: 11.5, color: HQ_COLORS.textSecondary, margin: 0, marginBottom: 3 }}>
-                来客 {s.visitors}名
-              </p>
-              <p style={{ fontFamily: HQ_MONO, fontSize: 11.5, color: HQ_COLORS.textSecondary, margin: 0 }}>
-                客単価 {yen(s.unitPrice)}
-              </p>
-            </div>
-          ))}
-        </div>
-      </HqPanel>
-
-      <HqPanel title="支払い方法別売上（本日）" code="PAYMENT">
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-          {data.paymentBreakdown.map((p) => (
-            <div key={p.method} style={{ flex: '1 1 0', minWidth: 100 }}>
-              <p style={{ fontFamily: HQ_SANS, fontSize: 10, letterSpacing: '0.1em', color: HQ_COLORS.textSecondary, margin: 0, marginBottom: 4 }}>
-                {p.label}
-              </p>
-              <p style={{ fontFamily: HQ_MONO, fontSize: 16, fontWeight: 700, color: HQ_COLORS.goldHi, margin: 0 }}>
-                {yen(p.total)}
-              </p>
-            </div>
-          ))}
-        </div>
-      </HqPanel>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'stretch' }}>
-        <HqPanel title="人気メニュー（本日）" code="TOP5" style={{ flex: '1 1 280px', minWidth: 0 }}>
-          {data.menuRanking.length === 0 ? (
-            <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textMute, margin: 0 }}>
-              本日のデータなし
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {data.menuRanking.map((m) => (
-                <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textPrimary }}>
-                    <span style={{ fontFamily: HQ_MONO, color: HQ_COLORS.goldHi, marginRight: 8 }}>{m.rank}位</span>
-                    {m.name}
-                  </span>
-                  <span style={{ fontFamily: HQ_MONO, fontSize: 12.5, color: HQ_COLORS.textSecondary }}>{m.count}件</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </HqPanel>
-
-        <HqPanel title="店販（本日）" code="RETAIL" style={{ flex: '1 1 280px', minWidth: 0 }}>
-          {data.retailRanking.length === 0 ? (
-            <p style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textMute, margin: 0 }}>
-              本日のデータなし
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {data.retailRanking.map((r) => (
-                <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textPrimary }}>{r.name}</span>
-                  <span style={{ fontFamily: HQ_MONO, fontSize: 12.5, color: HQ_COLORS.textSecondary }}>{r.count}個</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </HqPanel>
-      </div>
-    </div>
-  )
+function StaffSummary({ data, onNavigate }: { data: HqOverview; onNavigate: (tab: HqTab) => void }) {
+  const total = data.summary.sales
+  return <section className="hq-surface"><div className="hq-surface-header"><h2>スタッフの実績</h2><button className="hq-text-button" onClick={() => onNavigate('stylist')}>詳しく<ChevronRight size={12} /></button></div>{data.summary.staff.length ? data.summary.staff.map(staff => <div className="hq-staff-row" key={staff.name}><span className="hq-staff-avatar">{staff.name.slice(0, 1)}</span><div className="hq-staff-detail"><strong>{staff.name}</strong><p>{staff.count}件の会計</p><div className="hq-staff-bar"><span style={{ width: (total ? staff.sales / total * 100 : 0) + '%' }} /></div></div><span className="hq-staff-value">{money(staff.sales)}</span></div>) : <p className="hq-empty-inline">この期間の会計はありません。</p>}</section>
 }
