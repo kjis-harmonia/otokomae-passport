@@ -50,6 +50,7 @@ export function HeadquartersApp() {
   const helpDialog = useRef<HTMLDialogElement>(null)
   const preview = isHqPreview()
   const label = HQ_TABS.find(t => t.id === tab)?.label ?? ''
+  const isSb = tab === 'ledger'
 
   useEffect(() => {
     const onHash = () => { if (window.location.hash === '#hq-content') return; setTab(currentTab()); setMenuOpen(false); window.scrollTo(0, 0) }
@@ -98,13 +99,13 @@ export function HeadquartersApp() {
       case 'settings': return <HqSettingsScreen />
     }
   }
-  return <div className="hq-app">
+  return <div className={'hq-app' + (isSb ? ' hq-app-sb' : '')}>
     <a href="#hq-content" className="hq-skip-link">本文へ移動</a>
     <aside className="hq-sidebar">{navigation()}</aside>
     <div className="hq-main-column">
       <header className="hq-topbar"><button className="hq-icon-button hq-menu-toggle" onClick={() => setMenuOpen(true)} aria-label="本部メニューを開く"><Menu size={21} /></button><div className="hq-breadcrumb"><House size={15} /><span>本部</span><ChevronRight size={12} /><strong>{label}</strong></div><div className="hq-topbar-actions"><button className="hq-search-trigger" aria-label="本部のページを検索" onClick={() => setSearchOpen(true)}><Search size={16} /><span>ページを検索</span><kbd>⌘ K</kbd></button><button className="hq-icon-button" onClick={() => setHelpOpen(true)} aria-label="本部の使い方"><CircleHelp size={19} strokeWidth={1.7} /></button><span className="hq-topbar-avatar" aria-label="本部">本</span></div></header>
       {preview && <div className="hq-preview-banner"><span>画面プレビュー · サンプルデータ</span><span>実データへの接続・保存は行いません</span></div>}
-      <main className="hq-content" id="hq-content" tabIndex={-1}><div className="hq-page-heading"><div><h1>{label}</h1><p>{DESCRIPTIONS[tab]}</p></div><button className="hq-button hq-button-quiet" onClick={() => setRefreshKey(n => n + 1)}>再読み込み</button></div><Suspense fallback={<div className="hq-loading" role="status">データを読み込んでいます…</div>}><div key={tab + '-' + refreshKey} className="hq-screen">{screen()}</div></Suspense><footer className="hq-content-footer"><span>GINJIRO HEADQUARTERS</span><span>日本標準時（JST）</span></footer></main>
+      <main className="hq-content" id="hq-content" tabIndex={-1}>{!isSb && <div className="hq-page-heading"><div><h1>{label}</h1><p>{DESCRIPTIONS[tab]}</p></div><button className="hq-button hq-button-quiet" onClick={() => setRefreshKey(n => n + 1)}>再読み込み</button></div>}<Suspense fallback={<div className="hq-loading" role="status">データを読み込んでいます…</div>}><div key={tab + '-' + refreshKey} className="hq-screen">{screen()}</div></Suspense>{!isSb && <footer className="hq-content-footer"><span>GINJIRO HEADQUARTERS</span><span>日本標準時（JST）</span></footer>}</main>
     </div>
     <dialog ref={mobileDialog} className="hq-mobile-drawer" onClose={() => setMenuOpen(false)} onClick={event => { if (event.target === event.currentTarget) setMenuOpen(false) }}><div className="hq-mobile-drawer-inner"><button className="hq-icon-button hq-drawer-close" onClick={() => setMenuOpen(false)} aria-label="本部メニューを閉じる"><X size={20} /></button>{navigation()}</div></dialog>
     <HqCommandMenu open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={navigate} />

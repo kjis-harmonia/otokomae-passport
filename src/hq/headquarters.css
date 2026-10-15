@@ -219,3 +219,12 @@ dialog::backdrop { background:#22223033; backdrop-filter:blur(3px); }
 }
 @media(max-width:380px) { .hq-content { padding-left:15px; padding-right:15px; } .hq-metric { padding:19px 16px; } .hq-metric-value { font-size:26px; } .hq-date-input input { width:104px; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; animation:none !important; transition:none !important; } }
+
+/* 予約台帳は独立したSB画面に領域を渡し、スマホでも横幅とスクロールをそのまま保つ。 */
+.hq-app.hq-app-sb { height:100dvh; min-height:0; }
+.hq-app-sb .hq-main-column { display:flex; flex-direction:column; height:100dvh; min-height:0; }
+.hq-app-sb .hq-topbar,.hq-app-sb .hq-preview-banner { flex-shrink:0; }
+.hq-app-sb .hq-content { display:flex; flex:1; min-height:0; max-width:none; width:100%; padding:0; }
+.hq-app.hq-app-sb .hq-screen { flex:1; min-width:0; min-height:0; zoom:1; }
+.hq-sb-frame { display:block; width:100%; height:100%; border:0; background:#f2f3f2; }
+.hq-sb-preview { padding:24px; color:var(--hq-sub); }
