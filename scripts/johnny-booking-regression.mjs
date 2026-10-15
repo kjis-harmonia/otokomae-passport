@@ -125,3 +125,20 @@ check('0始まりでない', () => assert.equal(normalizePhone('9012345678'), nu
 check('表示形式', () => assert.equal(formatPhone('09012345678'), '090-1234-5678'))
 
 console.log(`johnny booking regression: ${passed} checks ok`)
+
+// ── 質問・相談の見分け ──
+const { detectAsk, answerMenuInfo } = await import('../src/features/johnny/askIntent.ts')
+const M2 = [
+  { code: 'punch', name: 'パンチパーマ', duration_min: 120, price: 8000 },
+  { code: 'color', name: 'ヘアカラー', duration_min: 60, price: 4000 },
+  { code: 'fade', name: 'スキンフェードカット', duration_min: 60, price: 5000 },
+]
+check('パンチ何分', () => { const a = detectAsk('パンチって何分かかる？', M2); assert.equal(a.kind, 'menu_info'); assert.equal(answerMenuInfo(a), 'パンチパーマは、だいたい120分です。') })
+check('カラーいくら', () => assert.equal(answerMenuInfo(detectAsk('カラーいくら', M2)), 'ヘアカラーは4,000円です。'))
+check('時間と料金', () => assert.equal(answerMenuInfo(detectAsk('スキンフェードの値段と何分くらい', M2)), 'スキンフェードカットは、だいたい60分、5,000円です。'))
+check('似合うパーマは相談', () => assert.equal(detectAsk('今こんな感じだけど、どんなパーマが似合うかな', M2).kind, 'consult'))
+check('おすすめは相談', () => assert.equal(detectAsk('おすすめは？', M2).kind, 'consult'))
+check('メニュー不明の時間質問は相談', () => assert.equal(detectAsk('どのくらいかかる？', M2).kind, 'consult'))
+check('普通の予約は質問ではない', () => assert.equal(detectAsk('明日の15時でパンチ', M2), null))
+check('「はい」は質問ではない', () => assert.equal(detectAsk('はい、お願いします', M2), null))
+console.log(`ask intent: ok (total ${passed})`)

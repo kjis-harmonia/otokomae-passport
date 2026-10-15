@@ -5,6 +5,7 @@ import { RpcError } from '../../utils/staffSession'
 import { fetchContact, normalizePhone, saveContact, type CustomerContact } from '../../utils/customerContact'
 import type { MenuOption } from './menuMatcher'
 import type { Slot } from './slotPlanner'
+import { consultStylist, type ConsultReply } from './consult'
 
 export interface BookingSettings { slot_minutes: number; booking_window_days: number; min_lead_minutes: number; hold_minutes: number }
 export interface AssistantOptions { settings: BookingSettings; menus: MenuOption[] }
@@ -32,6 +33,8 @@ export interface BookingAssistantApi {
   /** 連絡先（本名・電話番号）。サーバーに仕組みが無ければ null */
   contact(): Promise<CustomerContact | null>
   saveContact(name: string, phone: string): Promise<void>
+  /** 髪型などの相談（AI）。使えないときは null（呼び出し側が店頭へのご案内に切り替える） */
+  consult(message: string, menus: readonly MenuOption[]): Promise<ConsultReply | null>
 }
 
 export const customerBookingApi: BookingAssistantApi = {
@@ -43,6 +46,7 @@ export const customerBookingApi: BookingAssistantApi = {
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   contact: () => fetchContact(),
   saveContact: async (name, phone) => { await saveContact(name, phone) },
+  consult: (message, menus) => consultStylist(message, menus),
 }
 
 // ── 開発用デモ ───────────────────────────────────────────────────
@@ -107,6 +111,14 @@ export const demoBookingApi: BookingAssistantApi = {
     const p = normalizePhone(phone)
     if (!p) throw new RpcError('invalid_phone', '電話番号を確認してください。')
     demoContact = { name: name.trim(), phone: p, registered: true }
+  },
+  // デモ：AI の代わりに決まった答え（パーマの相談ならパンチ・カールアイパーを勧める）
+  async consult(message) {
+    await wait(700)
+    if (/パーマ|ぱーま|くせ|ボリューム/.test(message)) {
+      return { reply: '今の長さなら、パンチパーマかカールアイパーがおすすめです。どちらも約2時間です。', menuCodes: ['punch', 'curl_iper'] }
+    }
+    return { reply: '髪型のご相談なら、まずはカットで今の長さを整えるのがおすすめです。', menuCodes: ['cut'] }
   },
 }
 

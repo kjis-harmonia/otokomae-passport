@@ -12,6 +12,7 @@ import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { normalizePhone } from '../../utils/customerContact'
 import { bookingAssistantApi, type AssistantOptions, type CustomerReservation } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
+import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
 import { isEmptyRequest, parseVisitRequest, parseYesNo, type VisitRequest } from './visitParser'
 import { formatVisit, rememberReservation } from './nextReservation'
@@ -88,6 +89,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   const [options, setOptions] = useState<AssistantOptions | null>(null)
   const [lastMenuCode, setLastMenuCode] = useState<string | null>(null)
   const [heard, setHeard] = useState('')
+  // 質問・相談への答え（どの段階で答えたかを覚え、段階が変わったら出さない）
+  const [answer, setAnswer] = useState<{ forStep: Step; text: string; menus: MenuOption[]; thinking?: boolean } | null>(null)
   const [typing, setTyping] = useState(false)
   const [draft, setDraft] = useState('')
   const stepRef = useRef(step)
@@ -204,6 +207,28 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     if (!text) return
     setHeard(text)
     const s = stepRef.current
+    // 予約の途中の質問：時間・料金はメニュー表で答える（無料）。髪型の相談だけ AI に聞く。答えたら今の質問に戻る
+    if (s.k === 'askWhen' || s.k === 'askMenu' || s.k === 'pick') {
+      const question = detectAsk(text, menus)
+      const follow = s.k === 'askWhen' ? 'ご希望の日時をお聞かせください。' : s.k === 'askMenu' ? 'メニューはどれにしますか？' : 'どの時間にしますか？'
+      if (question?.kind === 'menu_info') {
+        const reply = answerMenuInfo(question)
+        setAnswer({ forStep: s, text: reply, menus: [question.menu] })
+        ask(`${reply}${follow}`)
+        return
+      }
+      if (question?.kind === 'consult') {
+        setAnswer({ forStep: s, text: '', menus: [], thinking: true })
+        void api.consult(text, menus).then(r => {
+          if (stepRef.current !== s) return
+          const reply = r?.reply ?? '髪型のご相談は、ご来店のときにスタッフが一緒に考えます。'
+          const suggested = (r?.menuCodes ?? []).map(c => menus.find(m => m.code === c)).filter((m): m is MenuOption => !!m)
+          setAnswer({ forStep: s, text: reply, menus: suggested })
+          ask(`${reply}${follow}`)
+        })
+        return
+      }
+    }
     if (s.k === 'askWhen') {
       const req = parseVisitRequest(text)
       // 今回の言葉にメニューが無ければ、先に聞いたメニュー（「濡れパンで」→「明日の15時」）を使う
@@ -244,8 +269,16 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       if (yes === false) { setStep({ k: 'askWhen', again: 'retry', menu: s.menu }); return }
       setStep({ ...s })
     }
-  }, [book, menus, search])
+  }, [api, ask, book, menus, search])
   useEffect(() => { handleTextRef.current = handleText }, [handleText])
+
+  /** 答えに出したおすすめのメニューを選ぶ（今の段階に合わせて続ける） */
+  const chooseMenu = useCallback((menu: MenuOption) => {
+    const s = stepRef.current
+    setAnswer(null)
+    if (s.k === 'askWhen') setStep({ k: 'askWhen', again: 'menu', menu })
+    else if (s.k === 'askMenu' || s.k === 'pick') void search(s.req, menu)
+  }, [search])
 
   // ── 段階ごとの言葉（画面と読み上げ） ──
   const prompt = useMemo((): { title: string; sub?: string; speech?: string; listen?: boolean } => {
@@ -400,6 +433,22 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
             )}
           </motion.div>
         </AnimatePresence>
+
+        {/* 質問・相談への答え（おすすめのメニューは押すとそのまま選べる） */}
+        {answer && answer.forStep === step && (
+          <div aria-live="polite" style={{ width: '100%', maxWidth: 420, marginTop: 20 }}>
+            <p style={{ margin: 0, padding: '14px 16px', borderRadius: 14, background: C.fill, fontSize: 16, lineHeight: 1.6, color: answer.thinking ? C.secondary : C.text }}>
+              {answer.thinking ? '考えています…' : answer.text}
+            </p>
+            {!answer.thinking && answer.menus.length > 0 && (step.k === 'askWhen' || step.k === 'askMenu' || step.k === 'pick') && (
+              <List>
+                {answer.menus.map(m => (
+                  <Row key={m.code} title={m.name} detail={`${m.duration_min}分・${yen(m)}`} onClick={() => chooseMenu(m)} />
+                ))}
+              </List>
+            )}
+          </div>
+        )}
 
         {/* 聞き取った言葉 */}
         {canTalk && (voice.interim || heard) && (
