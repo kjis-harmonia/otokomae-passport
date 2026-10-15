@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, Check, Search } from 'lucide-react'
+import { ChevronLeft, Check } from 'lucide-react'
 import { addDaysToDateString, getJapanDateString } from '../utils/dateUtils'
 import { jstDateLabel, jstIsoFromMinutes, jstTime, yen } from '../utils/bookingApi'
 import { createStaffCustomerApi, type ClientCandidate } from '../utils/customerApi'
 import { sbApi, sbError } from './sbApi'
 import type { SbCommand, SbInput, SbOptions, SbPreview, SbReservation } from './sbTypes'
 import { SbModal } from './SbModal'
+import { SbMenuPicker } from './SbMenuPicker'
+import { recordMenuUsage } from './sbMenuUsage'
 
 /** 新規予約の初期値。draft は「話して予約登録」で読み取った内容（スタッフがフォームで確かめてから送る） */
 export interface SbPreset {
@@ -28,7 +30,6 @@ export function SbBookingEditor({ options, preset, reservation, actor, setActor,
   const [date, setDate] = useState(preset.date)
   const [time, setTime] = useState(r ? jstTime(r.starts_at) : preset.minutes !== undefined ? `${String(Math.floor(preset.minutes / 60)).padStart(2, '0')}:${String(preset.minutes % 60).padStart(2, '0')}` : '')
   const [staffId, setStaffId] = useState<string | null>(r ? r.nominated ? r.staff_id : null : preset.staffId ?? null)
-  const [filter, setFilter] = useState('')
   const [candidates, setCandidates] = useState<ClientCandidate[]>([])
   const [slots, setSlots] = useState<{ starts_at: string; staff_id: string }[] | null>(null)
   const [slotError, setSlotError] = useState(false)
@@ -72,10 +73,10 @@ export function SbBookingEditor({ options, preset, reservation, actor, setActor,
     } catch (err) { setError(sbError(err)) } finally { reviewing.current = false; setChecking(false) }
   }
 
-  const shownMenus = options.menus.filter(m => !filter || `${m.name} ${m.category ?? ''}`.includes(filter))
   const availableTimes = [...new Set((slots ?? []).map(s => s.starts_at))]
   const submit = () => {
     if (!preview || busy) return
+    recordMenuUsage(preview.input.menu_codes)
     void onSend(r ? { kind: 'edit', reservation_id: r.id, expected_updated_at: r.updated_at, input: preview.input, plan_hash: preview.value.plan_hash }
       : { kind: 'create', input: preview.input, plan_hash: preview.value.plan_hash })
   }
@@ -102,9 +103,8 @@ export function SbBookingEditor({ options, preset, reservation, actor, setActor,
         {!r && !client && query && candidates.length > 0 && <div className="sb-candidates">{candidates.map(c => <button type="button" className="sb-candidate" key={c.id} onClick={() => { setClient(c); setName(c.name); if (c.phone) setPhone(c.phone) }}><span>{c.name}<small>{c.phone || (c.phone_last4 ? `電話 下4桁 ${c.phone_last4}` : '')}{c.last_visit ? ` / 前回 ${c.last_visit}` : ''}</small></span><span>選択</span></button>)}</div>}
         {client && <div className="sb-client">既存顧客：{client.name}{!r && <button type="button" onClick={() => setClient(null)}>解除</button>}</div>}
         <section className="sb-form-section"><h3>メニュー</h3>
-          {options.menus.length > 8 && <label className="sb-search"><Search size={18} /><input aria-label="メニューを検索" value={filter} onChange={e => setFilter(e.target.value)} placeholder="メニューを検索" /></label>}
+          {options.menus.length > 0 && <SbMenuPicker menus={options.menus} codes={codes} onChange={setCodes} />}
           {!options.menus.length && <p className="sb-muted">本部で所要時間・担当メニューの設定が必要です。</p>}
-          {shownMenus.map(m => <label className="sb-menu-option" key={m.code}><input type="checkbox" checked={codes.includes(m.code)} disabled={!codes.includes(m.code) && codes.length >= 5} onChange={() => setCodes(codes.includes(m.code) ? codes.filter(c => c !== m.code) : [...codes, m.code])} /><span>{m.name}<small>{m.category}</small></span><span className="sb-menu-price">{yen(m.price)}<small>{m.duration_min}分</small></span></label>)}
           {r?.items.filter(i => !options.menus.some(m => m.code === i.menu_code)).map(i => <p key={i.menu_code} className="sb-muted">{i.name}（現在の予約内容）</p>)}
         </section>
         <label className="sb-field">担当<select value={staffId ?? ''} onChange={e => setStaffId(e.target.value || null)}><option value="">指名なし</option>{options.staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>

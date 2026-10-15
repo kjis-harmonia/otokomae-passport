@@ -40,11 +40,17 @@ export function matchMenu<T extends MenuOption>(utterance: string, menus: readon
   if (!s) return null
   const full = menus.filter(m => s.includes(normalize(m.name)))
   if (full.length > 0) return full.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0]
-  // 名前の先頭2文字以上が発話に含まれ、それが1件だけ
-  const partial = menus.filter(m => {
+  // 名前の先頭2文字以上が発話に含まれるもの。いちばん長く一致したメニューが1件に決まれば、それを選ぶ
+  // （「スキンフェード」は「スキンフェードカット」に7文字、「フェイスパック」には「フェ」2文字しか一致しない）
+  // 同じ長さで並んだら、名前の残りが短い方（「スキンフェード」→ セットの「スキンフェード&カラー」より「スキンフェードカット」）
+  const scored = menus.map(m => {
     const n = normalize(m.name)
-    for (let len = n.length - 1; len >= 2; len--) if (s.includes(n.slice(0, len))) return true
-    return false
-  })
-  return partial.length === 1 ? partial[0] : null
+    for (let len = n.length - 1; len >= 2; len--) if (s.includes(n.slice(0, len))) return { m, len, rest: n.length - len }
+    return { m, len: 0, rest: 0 }
+  }).filter(x => x.len > 0)
+  const best = Math.max(0, ...scored.map(x => x.len))
+  const tied = scored.filter(x => x.len === best)
+  const fewest = Math.min(...tied.map(x => x.rest))
+  const top = tied.filter(x => x.rest === fewest)
+  return top.length === 1 ? top[0].m : null
 }

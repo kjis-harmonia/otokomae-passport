@@ -292,6 +292,32 @@
 .sb-menu-option > span:not(.sb-menu-price) { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .sb-menu-option small { font-size: 12px; color: var(--sb-muted); }
 .sb-menu-price { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* メニューの選び方：種類のタブ＋2列の小さなボタン */
+.sb-picker { display: flex; flex-direction: column; gap: 10px; }
+.sb-picker-selected { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sb-picker-chip {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 4px 10px;
+  border: 1px solid var(--sb-gold); border-radius: 17px; background: var(--sb-gold-tint); color: var(--sb-ink); font-size: 14px;
+}
+.sb-picker-total { margin-left: auto; font-size: 13px; color: var(--sb-muted); font-variant-numeric: tabular-nums; }
+.sb-picker-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -2px; padding: 0 2px; }
+.sb-picker-tabs::-webkit-scrollbar { display: none; }
+.sb-picker-tabs button {
+  flex: none; min-height: 36px; padding: 0 14px; border: 1px solid var(--sb-line); border-radius: 18px;
+  background: var(--sb-bg); color: var(--sb-ink); font-size: 14px; white-space: nowrap;
+}
+.sb-picker-tabs button[aria-selected="true"] { background: var(--sb-ink); border-color: var(--sb-ink); color: #fff; }
+.sb-picker-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.sb-picker-item {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
+  min-height: 56px; padding: 8px 10px; border: 1px solid var(--sb-line); border-radius: 6px;
+  background: var(--sb-bg); color: var(--sb-ink); text-align: left;
+}
+.sb-picker-item[aria-pressed="true"] { border-color: var(--sb-gold); background: var(--sb-gold-tint); box-shadow: inset 0 0 0 1px var(--sb-gold); }
+.sb-picker-name { font-size: 14px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.sb-picker-meta { font-size: 12px; color: var(--sb-muted); font-variant-numeric: tabular-nums; }
+@media (min-width: 900px) { .sb-picker-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
 .sb-candidates { display: flex; flex-direction: column; border: 1px solid var(--sb-line); border-radius: 5px; overflow: hidden; }
 .sb-candidate { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 8px 12px; background: var(--sb-bg); border: 0; border-bottom: 1px solid var(--sb-line); text-align: left; }
 .sb-candidate:last-child { border-bottom: 0; }
