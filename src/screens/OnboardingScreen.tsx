@@ -618,7 +618,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   onBlur={() => setFocusedField(null)}
                   value={name}
                   onChange={setName}
-                  placeholder="例：銀二 太郎"
+                  placeholder="例：田中　太郎"
                   ariaLabel="お名前（本名）"
                   autoComplete="name"
                   maxLength={20}
