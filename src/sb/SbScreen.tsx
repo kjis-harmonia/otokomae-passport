@@ -9,6 +9,7 @@ import type { SbCommand, SbLedger, SbOptions, SbReservation, TransferStatus } fr
 import { SbBookingEditor, type SbPreset } from './SbBookingEditor'
 import { SbModal } from './SbModal'
 import { SbCommandBar } from './SbCommandBar'
+import { SbToday } from './SbToday'
 import './sb.css'
 
 const ACTOR = 'ginjiro_staff_name'
@@ -139,6 +140,8 @@ export function SbScreen() {
       {pending.pending && !pending.error && <button className="sb-secondary" disabled={busy || !online} onClick={() => void retry()}>{busy ? '確認中…' : '同じ内容で結果を確認'}</button>}
       {!pending.pending && !pending.error && online && <button className="sb-icon" aria-label="再読み込み" onClick={() => { void refresh(date); void loadOptions() }}><RefreshCw size={18} /></button>}
     </div>}
+    {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
+      onNew={p => newBooking({ date, minutes: p.minutes, staffId: p.staffId })} onTransfer={() => setArchive('transfer')} />}
     <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />予約</span><span><i className="sb-dot sb-green" />来店済み</span><span><FileClock size={13} />未転記</span></div>
       <div className="sb-view-picker" role="group" aria-label="予約の表示"><button className="sb-icon" aria-label="予約表" title="予約表" aria-pressed={view === 'board'} onClick={() => setView('board')}><CalendarDays size={19} /></button><button className="sb-icon" aria-label="予約一覧" title="予約一覧" aria-pressed={view === 'list'} onClick={() => setView('list')}><List size={19} /></button><button className="sb-icon" aria-label="予約表を更新" title="更新" disabled={busy} onClick={() => void refresh(date)}><RefreshCw size={18} /></button></div></div>
     {notice && <p className="sb-notice" role="status">{notice}</p>}

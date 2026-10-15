@@ -26,12 +26,39 @@ export interface SbDraft {
 const JST = 9 * 60 * 60 * 1000
 const today = (now: Date) => new Date(now.getTime() + JST).toISOString().slice(0, 10)
 
+/**
+ * 音声認識は空白なしで返す（「明日15時スキンフェード田中さん」）。敬称の前の語から、日付・時刻・メニュー・担当・助詞を
+ * 先頭側から取り除き、最後に残った部分を名前にする。
+ */
+function stripLeading(word: string, staff: readonly SbCommandStaff[], menus: readonly MenuOption[]): string {
+  let cut = 0
+  const mark = (re: RegExp) => { for (const m of word.matchAll(re)) cut = Math.max(cut, m.index + m[0].length) }
+  mark(/(今日|明日|明後日|あした|きょう|あさって|本日|来週|今週|再来週|週末|土日)/g)
+  mark(/(\d{1,2}月)?\d{1,2}日(後)?|\d{1,2}\/\d{1,2}/g)
+  mark(/[日月火水木金土]曜日?/g)
+  mark(/(午前|午後|朝|夜|夕方)?\d{1,2}(時半?|:\d{2})(\d{1,2}分)?(以降|から|頃|ごろ|くらい)?/g)
+  mark(/(朝|昼|夕方|夜|午前|午後)(イチ|いち)?/g)
+  // かなの時刻（音声認識）：「さんじ」「じゅうごじはん」。数字のかなが前にある「じ」だけ
+  mark(/(じゅう(いち|に|さん|よ|ご|ろく|しち|なな|はち|く)?|いち|に|さん|よ|ご|ろく|しち|なな|はち|く)じ(はん)?/g)
+  mark(/(電話|ホットペッパー|フリー|指名なし)/g)
+  for (const st of staff) mark(new RegExp(st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))
+  // メニュー名（先頭3文字以上の一致も。「スキンフェード」→「スキンフェードカット」）と、よく使う呼び方
+  for (const m of menus) {
+    const n = m.name.normalize('NFKC')
+    for (let len = n.length; len >= 3; len--) { const i = word.lastIndexOf(n.slice(0, len)); if (i >= 0) { cut = Math.max(cut, i + len); break } }
+  }
+  mark(/(パンチ|パーマ|カット|カラー|メンテ|メッシュ|ブリーチ|白髪染め|顔そり|シャンプー|ぬれぱん|濡れパン|ぱんち|スキンフェード|フェード|アイパー|ツイスト|スペイン|ニグロ|アフロ|ギンパラ|銀パラ|丸刈り|前髪|眉|ライン|ゴッソ)/g)
+  return word.slice(cut).replace(/^(の|で|に|は|と|、)+/, '')
+}
+
 /** 「田中さん」「田中太郎様」「タナカ君」：敬称の直前の名前。担当者の名前とメニュー名は除く */
-function findCustomer(raw: string, staff: readonly SbCommandStaff[]): string | null {
+function findCustomer(raw: string, staff: readonly SbCommandStaff[], menus: readonly MenuOption[]): string | null {
+  // 敬称（「さんじ」＝3時の「さん」は除く）。敬称の後ろに続く言葉（「田中さんパンチ」）は名前に入れない
+  const HONORIFIC = /(さん(?![じ時])|様|さま|サマ|くん|君|ちゃん)/
   const tokens = raw.normalize('NFKC').split(/[\s、,。]+/).filter(Boolean)
-  const i = tokens.findIndex(t => /(さん|様|さま|サマ|くん|君|ちゃん)$/.test(t) && !/^(さん|様|さま|サマ|くん|君|ちゃん)$/.test(t))
+  const i = tokens.findIndex(t => { const m = t.match(HONORIFIC); return !!m && m.index! > 0 })
   if (i < 0) return null
-  let name = tokens[i].replace(/(さん|様|さま|サマ|くん|君|ちゃん)$/, '')
+  let name = stripLeading(tokens[i].slice(0, tokens[i].match(HONORIFIC)!.index), staff, menus)
   // 「明日の田中さん」：前に付いた言葉を外す（最後の「の」より後ろ）
   if (name.includes('の')) name = name.slice(name.lastIndexOf('の') + 1)
   name = name.replace(/^(お客様は?|お客さんは?|名前は?|予約は?)/, '')
@@ -79,7 +106,7 @@ export function parseSbCommand<T extends MenuOption>(
   const t = req.time ?? req.range?.from ?? null
   if (t) { const [h, m] = t.split(':').map(Number); minutes = h * 60 + m; understood.push('時刻') }
 
-  const customerName = findCustomer(raw, staff)
+  const customerName = findCustomer(raw, staff, menus)
   if (customerName) understood.push('お客様')
 
   const phoneMatch = raw.normalize('NFKC').match(/(?:\+81[\s-]?|0)\d{1,4}[\s-]?\d{1,4}[\s-]?\d{3,4}/)
