@@ -11,6 +11,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         staff: resolve(__dirname, 'staff.html'),
         headquarters: resolve(__dirname, 'headquarters.html'),
+        sb: resolve(__dirname, 'sb.html'),
       },
     },
   },
