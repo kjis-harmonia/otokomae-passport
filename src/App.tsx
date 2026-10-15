@@ -841,6 +841,8 @@ function App() {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
+    // 下タブの SHOP（番号入力のあと）は予約の画面を開く。ショップのページへは行かない
+    if (requestedTab === 'shop') return 'reserve'
     const valid: NavTab[] = ['home', 'styles', 'shop', 'diagnosis', 'tryon', 'reserve', 'mypage', 'tickets']
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
@@ -953,7 +955,8 @@ function App() {
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
     if (navTabs.includes(nextTab)) setNavHighlight(nextTab)
     if (nextTab === 'tickets') setTicketInitialFilter('cut')
-    setActiveTab(nextTab)
+    // 下タブの SHOP は予約の画面を開く（タブの表示は SHOP のまま）
+    setActiveTab(nextTab === 'shop' ? 'reserve' : nextTab)
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
   }, [shopUnlocked])
 
@@ -961,7 +964,7 @@ function App() {
     setShopUnlocked(true)
     setShowShopPasswordGate(false)
     setNavHighlight('shop')
-    setActiveTab('shop')
+    setActiveTab('reserve')
   }, [])
 
   const handleGachaComplete = useCallback(() => {
@@ -1034,7 +1037,7 @@ function App() {
                   {activeTab === 'home'      && <HomeScreen member={liveMember} onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'gacha'     && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                   {activeTab === 'tryon'     && <TryOnScreen />}
-                  {activeTab === 'reserve'   && <ReserveScreen />}
+                  {activeTab === 'reserve'   && <ReserveScreen onShowQr={() => setShowQrModal(true)} />}
                   {activeTab === 'tickets'   && (
                     <TicketWalletScreen
                       key={`tickets-${ticketInitialFilter}-${ticketRefreshKey}`}
