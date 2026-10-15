@@ -2,7 +2,7 @@ import { callStaffRpc } from './sbRpc'
 
 // SALON BOARD（HOT PEPPER）の予約メールの取込結果。Gmail からは自動で届き、ここでは貼り付けでも取り込める
 export interface HpbMail {
-  id: string; kind: 'booking' | 'cancel' | 'change' | 'unknown'; status: 'applied' | 'duplicate' | 'needs_review' | 'checked'
+  id: string; kind: 'booking' | 'cancel' | 'change' | 'unknown'; status: 'applied' | 'duplicate' | 'needs_review' | 'checked' | 'ignored'
   reason: string | null; warnings: string[]; external_ref: string | null; customer_name: string | null
   starts_at: string | null; stylist: string | null; menu: string | null; reservation_id: string | null
   created_at: string; checked_by: string | null; repeat?: boolean
@@ -27,6 +27,7 @@ export const WARNING: Record<string, string> = { out_of_hours: '勤務時間外'
 
 export function hpbResult(m: HpbMail): string {
   if (m.repeat) return 'このメールは取込済みです。'
+  if (m.status === 'ignored') return m.reason === 'notice' ? 'SALON BOARD からのお知らせです（予約ではありません）。' : '取込を始める前の予約のキャンセルです。SB ではすることはありません。'
   if (m.status === 'needs_review' || m.status === 'checked') return REASON[m.reason ?? ''] ?? '確認が必要です。'
   if (m.status === 'duplicate') return m.reason === 'already_cancelled' ? REASON.already_cancelled : 'すでに予約表にあります。'
   return m.kind === 'cancel' ? '予約を取り消しました。' : m.kind === 'change' ? '予約を変更しました。' : '予約表に入れました。'
