@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Clipboard, FileClock, List, LoaderCircle, Plus, RefreshCw, UserRound } from 'lucide-react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Clipboard, List, LoaderCircle, Plus, RefreshCw, UserRound } from 'lucide-react'
 import { addDaysToDateString, getJapanDateString } from '../utils/dateUtils'
 import { jstDateLabel, jstMinutesOf, jstTime, STATUS_LABEL, yen } from '../utils/bookingApi'
 import { callStaffRpc } from './sbRpc'
@@ -17,7 +17,7 @@ const OCCUPYING = new Set(['confirmed', 'checked_in', 'in_service', 'awaiting_pa
 const TRANSFER: Record<TransferStatus, string> = { pending: '未転記', done: '転記済み', not_required: '転記不要' }
 const SLOT_W = 44
 const LABEL_W = 96
-const LANE_H = 84
+const LANE_H = 72
 const loadActor = () => { try { return localStorage.getItem(ACTOR) ? JSON.parse(localStorage.getItem(ACTOR)!) as string : '' } catch { return '' } }
 function errorText(err: unknown) { return sbError(err instanceof Error && !(err instanceof TypeError) ? err.message : err) }
 
@@ -38,6 +38,7 @@ export function SbScreen() {
   const [updated, setUpdated] = useState<string | null>(null)
   const [now, setNow] = useState(Date.now)
   const [online, setOnline] = useState(navigator.onLine)
+  const [compact, setCompact] = useState(false)
   const pending = useSyncExternalStore(subscribeSbPending, sbPending.read)
   const sending = useRef(false)
   const generation = useRef(0)
@@ -78,6 +79,13 @@ export function SbScreen() {
     window.addEventListener('online', connection); window.addEventListener('offline', connection)
     return () => { clearInterval(timer); clearInterval(clock); document.removeEventListener('visibilitychange', reload); window.removeEventListener('focus', reload); window.removeEventListener('online', connection); window.removeEventListener('offline', connection) }
   }, [refresh, loadOptions])
+  useEffect(() => {
+    // 行ったり来たりしないよう、畳む位置と戻す位置をずらす
+    // 共通CSSの都合で body がスクロールすることがあるので、どちらの位置も見る
+    const onScroll = () => { const y = Math.max(window.scrollY, document.body.scrollTop); setCompact(c => (c ? y > 8 : y > 80)) }
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
+  }, [])
   const range = useMemo(() => {
     const times = (ledger?.staff ?? []).flatMap(s => s.shifts.flatMap(t => [jstMinutesOf(t.start, date), jstMinutesOf(t.end, date)]))
     for (const r of ledger?.reservations ?? []) times.push(jstMinutesOf(r.starts_at, date), jstMinutesOf(r.occupied_until, date))
@@ -126,13 +134,13 @@ export function SbScreen() {
     setNotice(null); setEditor({ preset })
   }
   const list = archive === 'cancelled' ? cancelled : archive === 'transfer' ? toTransfer : ledger?.reservations ?? []
-  return <div className="sb-app">
-    <header className="sb-toolbar"><h1>銀二郎<span>SB</span></h1>
-      <div className="sb-date-nav"><button className="sb-icon" aria-label="前の日" title="前の日" onClick={() => setDate(addDaysToDateString(date, -1))}><ChevronLeft size={21} /></button>
+  return <div className={`sb-app${compact ? ' sb-compact' : ''}`}>
+    <header className="sb-toolbar"><h1><span className="sb-wordmark">銀二郎</span><span className="sb-mark">SB</span></h1>
+      <div className="sb-date-nav"><button className="sb-nav" aria-label="前の日" title="前の日" onClick={() => setDate(addDaysToDateString(date, -1))}><ChevronLeft size={24} /></button>
         <label className="sb-date-label"><span>{jstDateLabel(date)}</span><input type="date" aria-label="予約表の日付" value={date} onChange={e => e.target.value && setDate(e.target.value)} /></label>
-        <button className="sb-icon" aria-label="次の日" title="次の日" onClick={() => setDate(addDaysToDateString(date, 1))}><ChevronRight size={21} /></button><button className="sb-secondary sb-today" onClick={() => setDate(today)}>今日</button></div>
+        <button className="sb-nav" aria-label="次の日" title="次の日" onClick={() => setDate(addDaysToDateString(date, 1))}><ChevronRight size={24} /></button><button className="sb-secondary sb-today" onClick={() => setDate(today)}>今日</button></div>
       <div className="sb-toolbar-actions"><button className="sb-actor" disabled={busy || !!pending.pending} onClick={() => setPickActor(true)}><UserRound size={18} /><span>{options?.actors.some(a => a.name === actor) ? actor : '操作者'}</span></button>
-        <button className="sb-primary" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} />新規予約</button></div>
+        <button className="sb-primary" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} /><span className="sb-primary-label">新規予約</span></button></div>
     </header>
     <SbCommandBar options={options} disabled={blocked} onDraft={draft => newBooking({ date: draft.date < today ? today : draft.date, minutes: draft.minutes ?? undefined, staffId: draft.staffId, draft })} />
     {(pending.error || pending.pending || !online || error) && <div className="sb-alert" role="alert">
@@ -142,14 +150,14 @@ export function SbScreen() {
     </div>}
     {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
       onNew={p => newBooking({ date, minutes: p.minutes, staffId: p.staffId })} onTransfer={() => setArchive('transfer')} />}
-    <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />予約</span><span><i className="sb-dot sb-green" />来店済み</span><span><FileClock size={13} />未転記</span></div>
+    <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />予約</span><span><i className="sb-dot sb-green" />来店済み</span><span><i className="sb-dot sb-gold-dot" />未転記</span></div>
       <div className="sb-view-picker" role="group" aria-label="予約の表示"><button className="sb-icon" aria-label="予約表" title="予約表" aria-pressed={view === 'board'} onClick={() => setView('board')}><CalendarDays size={19} /></button><button className="sb-icon" aria-label="予約一覧" title="予約一覧" aria-pressed={view === 'list'} onClick={() => setView('list')}><List size={19} /></button><button className="sb-icon" aria-label="予約表を更新" title="更新" disabled={busy} onClick={() => void refresh(date)}><RefreshCw size={18} /></button></div></div>
     {notice && <p className="sb-notice" role="status">{notice}</p>}
     {!ledger ? <div className="sb-empty">{error ? '予約表を表示できません。' : <><LoaderCircle size={18} className="sb-spin" />読み込み中…</>}</div>
       : view === 'list' ? <div className="sb-agenda"><ReservationList reservations={ledger.reservations} onPick={setSelectedId} /></div>
       : <div className="sb-board-scroll" ref={scrollRef} role="region" aria-label="担当者別予約表"><div className="sb-grid" style={{ gridTemplateColumns: `${LABEL_W}px ${x(range.end)}px`, width: LABEL_W + x(range.end) }}>
         <div className="sb-axis-name">担当者</div><div className="sb-axis">{Array.from({ length: (range.end - range.start) / 60 }, (_, i) => range.start + i * 60).map(m => <span key={m} style={{ left: x(m) + 8 }}>{Math.floor(m / 60)}:00</span>)}</div>
-        {ledger.staff.map(staff => { const bookings = active.filter(r => r.staff_id === staff.id); const lanes = Math.max(staff.capacity, ...bookings.map(r => r.booking_lane + 1))
+        {ledger.staff.map(staff => { const bookings = active.filter(r => r.staff_id === staff.id); const used = Math.max(0, ...bookings.map(r => r.booking_lane + 1)); const lanes = Math.max(used, Math.min(staff.capacity, Math.max(2, used + 1)))
           return <StaffRow key={staff.id} staff={staff} lanes={lanes} reservations={bookings} ledger={ledger} date={date} range={range} nowMin={minutesNow} x={x} blocked={blocked}
             onOpen={setSelectedId} onNew={minutes => newBooking({ date, staffId: staff.id, minutes })} /> })}
       </div>{!ledger.staff.length && <p className="sb-empty">本部で予約スタッフの設定が必要です。</p>}</div>}
@@ -184,7 +192,7 @@ function StaffRow({ staff, lanes, reservations, ledger, date, range, nowMin, x, 
         const start = jstMinutesOf(r.starts_at, date), end = jstMinutesOf(r.ends_at, date), until = jstMinutesOf(r.occupied_until, date)
         return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}`} aria-label={`${jstTime(r.starts_at)} ${r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`} onClick={() => onOpen(r.id)}
           style={{ left: x(start) + 2, width: Math.max(12, x(end) - x(start) - 4), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10 }}>
-          <strong>{r.customer_name}</strong><span>{r.items.map(i => i.name).join('・')}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <FileClock size={12} aria-label="未転記" />}</small>
+          <strong>{r.customer_name}</strong><span>{r.items.map(i => i.name).join('・')}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}</small>
         </button>{until > end && <div className="sb-buffer" aria-label="片付け時間" style={{ left: x(end), width: x(until) - x(end), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10 }} />}</div>
       })}
       {nowMin !== null && nowMin >= range.start && nowMin < range.end && <div className="sb-now" style={{ left: x(nowMin) }} aria-hidden="true" />}
@@ -192,7 +200,7 @@ function StaffRow({ staff, lanes, reservations, ledger, date, range, nowMin, x, 
 }
 
 function ReservationList({ reservations, onPick }: { reservations: SbReservation[]; onPick: (id: string) => void }) {
-  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong>{r.customer_name}</strong><small>{r.items.map(i => i.name).join('・')}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{r.transfer_status === 'pending' && <FileClock size={17} aria-label="未転記" />}<ChevronRight size={18} /></button>)}</div> : <p className="sb-muted">予約はありません。</p>
+  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong>{r.customer_name}</strong><small>{r.items.map(i => i.name).join('・')}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}<ChevronRight size={18} /></button>)}</div> : <p className="sb-muted">予約はありません。</p>
 }
 
 function ReservationDetails({ reservation: r, busy, blocked, onClose, onEdit, onSend }: {
