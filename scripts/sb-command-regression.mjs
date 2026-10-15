@@ -37,6 +37,20 @@ check('時刻なし', () => assert.equal(p('明日 田中さん カット').minu
 check('ホットペッパー＋予約番号', () => { const d = p('ホットペッパー BE12345678 明日11時 佐藤さん カット'); assert.equal(d.source, 'hotpepper'); assert.equal(d.externalRef, 'BE12345678') })
 check('電話予約', () => assert.equal(p('電話で 明日11時 佐藤さん カット').source, 'phone'))
 check('音声のかな', () => { const d = p('あしたのさんじ たなかさん ぱんち'); assert.equal(d.minutes, 15 * 60); assert.deepEqual(d.menuCodes, ['punch']); assert.equal(d.customerName, 'たなか') })
+// 音声認識は空白なしで返す
+check('空白なし：日付時刻メニュー名前', () => {
+  const d = p('明日15時スキンフェード田中さん')
+  assert.equal(d.customerName, '田中'); assert.equal(d.minutes, 15 * 60); assert.equal(d.date, '2026-10-16')
+})
+check('空白なし：名前の後ろにメニューと担当', () => {
+  const d = p('明日15時田中さんパンチ銀二郎で')
+  assert.equal(d.customerName, '田中'); assert.deepEqual(d.menuCodes, ['punch']); assert.equal(d.staffId, 'g')
+})
+check('空白なし：の・で が入る', () => assert.equal(p('明日の15時に銀二郎で田中さんのカット').customerName, '田中'))
+check('空白なし：かなの時刻（さんじ）を敬称にしない', () => {
+  const d = p('あしたのさんじたなかさんぱんち'); assert.equal(d.customerName, 'たなか'); assert.equal(d.minutes, 15 * 60)
+})
+check('空白なし：フルネーム', () => assert.equal(p('土曜日13時銀パラ鈴木太郎様').customerName, '鈴木太郎'))
 check('読み取れた項目', () => assert.deepEqual(p('明日15時 田中さん パンチ 銀二郎で').understood, ['日付', '時刻', 'お客様', '担当', 'メニュー']))
 
 console.log(`sb command regression: ${passed} checks ok`)

@@ -97,6 +97,26 @@
 @keyframes sb-pulse { 50% { box-shadow: 0 0 0 6px rgba(154, 53, 53, 0.15); } }
 .sb-understood { margin: 0; padding: 8px 12px; border-left: 3px solid var(--sb-gold); background: var(--sb-gold-tint); font-size: 13px; color: var(--sb-ink); }
 
+/* ── 今日の相棒（次のお客様・空いている時間・やること） ── */
+.sb-buddy { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 22px 2px; }
+.sb-buddy-col { min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--sb-line); border-radius: 8px; padding: 10px 6px 6px; background: var(--sb-bg); }
+.sb-buddy-col h2 { margin: 0 8px 6px; font-size: 12px; font-weight: 600; color: var(--sb-muted); letter-spacing: 0.02em; }
+.sb-buddy-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 6px 8px;
+  border: 0; border-radius: 6px; background: transparent; text-align: left; color: var(--sb-ink);
+}
+.sb-buddy-row:hover:not(:disabled) { background: var(--sb-light); }
+.sb-buddy-row > svg { flex: none; color: var(--sb-muted); }
+.sb-buddy-time { flex: none; min-width: 46px; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sb-buddy-live { font-size: 12px; color: var(--sb-green); }
+.sb-buddy-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.sb-buddy-main strong { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-buddy-main small { font-size: 12px; color: var(--sb-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-buddy-badge { flex: none; font-size: 12px; font-weight: 600; color: var(--sb-gold); white-space: nowrap; }
+.sb-buddy-alert > svg:first-child { color: var(--sb-red); }
+.sb-buddy-empty { margin: 4px 8px 8px; font-size: 13px; color: var(--sb-muted); }
+.sb-buddy-total { margin: auto 8px 4px; padding-top: 8px; font-size: 13px; color: var(--sb-muted); font-variant-numeric: tabular-nums; }
+
 /* ── お知らせ ── */
 .sb-alert {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -294,6 +314,9 @@
   .sb-date-label { min-width: 0; flex: 1 1 auto; }
   .sb-actor { max-width: 120px; }
   .sb-alert, .sb-notice, .sb-command { margin-left: 14px; margin-right: 14px; }
+  /* 今日の相棒：スマホでは横にめくる */
+  .sb-buddy { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin: 12px 0 2px; padding: 0 14px; gap: 10px; scrollbar-width: none; }
+  .sb-buddy-col { flex: 0 0 86%; scroll-snap-align: center; }
   .sb-board-toolbar, .sb-statusbar { padding-left: 14px; padding-right: 14px; }
   .sb-legend { gap: 10px; font-size: 11px; }
   .sb-agenda { padding: 0 14px 16px; }
