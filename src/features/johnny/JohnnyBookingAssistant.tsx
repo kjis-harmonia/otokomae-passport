@@ -9,6 +9,7 @@ import { ArrowUp, Keyboard, Mic, Volume2, VolumeX, X } from 'lucide-react'
 import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
 import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
+import { normalizePhone } from '../../utils/customerContact'
 import { bookingAssistantApi, type AssistantOptions, type CustomerReservation } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
@@ -35,6 +36,7 @@ const C = {
 
 type Step =
   | { k: 'loading' }
+  | { k: 'contact'; name: string }
   | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' }
   | { k: 'askMenu'; req: VisitRequest }
   | { k: 'searching' }
@@ -107,14 +109,20 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   const reload = useCallback(() => { setStep({ k: 'loading' }); setLoadKey(k => k + 1) }, [])
   useEffect(() => {
     let alive = true
-    Promise.all([api.options(), api.reservations().catch(() => [] as CustomerReservation[])])
-      .then(([opts, list]) => {
+    Promise.all([
+      api.options(),
+      api.reservations().catch(() => [] as CustomerReservation[]),
+      api.contact().catch(() => null),
+    ])
+      .then(([opts, list, contact]) => {
         if (!alive) return
         setOptions(opts)
         // 前回のメニュー（キャンセル以外で一番新しい予約）を選択肢の先頭に出す
         const last = [...list].filter(r => r.status !== 'cancelled').sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0]
         setLastMenuCode(last?.items[0]?.menu_code ?? null)
-        setStep({ k: 'askWhen' })
+        // 連絡先（本名・電話番号）が未登録なら、日時の前に1回だけ聞く。仕組みが無い環境（null）では聞かない
+        if (contact && !contact.registered) setStep({ k: 'contact', name: contact.name })
+        else setStep({ k: 'askWhen' })
       })
       .catch((err: unknown) => {
         if (!alive) return
@@ -242,6 +250,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   const prompt = useMemo((): { title: string; sub?: string; speech?: string; listen?: boolean } => {
     switch (step.k) {
       case 'loading': return { title: '' }
+      case 'contact': return {
+        title: 'お名前とお電話番号を教えてください',
+        sub: 'ご予約の確認でお店からご連絡することがあります。',
+        speech: 'ご予約のために、お名前とお電話番号を教えてください。',
+      }
       case 'askWhen': {
         const title = step.again === 'unclear' ? 'すみません、日時を聞き取れませんでした。'
           : step.again === 'none' ? 'その日は空きがありませんでした。'
@@ -367,6 +380,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
             )}
 
             {step.k === 'done' && <ReservationSummary r={step.reservation} />}
+
+            {step.k === 'contact' && (
+              <ContactForm
+                initialName={step.name}
+                onSave={(name, phone) => api.saveContact(name, phone)}
+                onSaved={() => setStep({ k: 'askWhen' })}
+              />
+            )}
 
             {step.k === 'unavailable' && (
               <List>
@@ -530,6 +551,61 @@ function Row({ title, detail, note, onClick, href, muted }: {
     </>
   )
   return href ? <a href={href} style={style}>{body}</a> : <button type="button" onClick={onClick} style={style}>{body}</button>
+}
+
+/** 連絡先の登録（本名・電話番号）。保存はサーバー（customer_set_contact） */
+function ContactForm({ initialName, onSave, onSaved }: {
+  initialName: string
+  onSave: (name: string, phone: string) => Promise<void>
+  onSaved: () => void
+}) {
+  const [name, setName] = useState(initialName)
+  const [phone, setPhone] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const valid = name.trim() !== '' && normalizePhone(phone) !== null
+
+  const submit = async () => {
+    if (busy) return
+    if (!name.trim()) { setError('お名前を入力してください。'); return }
+    if (!normalizePhone(phone)) { setError('電話番号を確認してください（例：090-1234-5678）。'); return }
+    setBusy(true)
+    setError(null)
+    try {
+      await onSave(name, phone)
+      onSaved()
+    } catch (err) {
+      const code = err instanceof RpcError ? err.code : ''
+      setError(code === 'invalid_phone' ? '電話番号を確認してください。'
+        : code === 'invalid_name' ? 'お名前を確認してください。'
+        : code === 'rate_limited' ? 'しばらくしてからもう一度お試しください。'
+        : '保存できませんでした。通信環境を確認してください。')
+      setBusy(false)
+    }
+  }
+
+  const field: CSSProperties = {
+    width: '100%', height: 52, boxSizing: 'border-box', padding: '0 16px', border: 'none', outline: 'none',
+    background: 'transparent', color: C.text, fontSize: 17, fontFamily: FONT,
+  }
+  return (
+    <form onSubmit={e => { e.preventDefault(); void submit() }} style={{ width: '100%', marginTop: 24 }}>
+      <div style={{ borderRadius: 14, overflow: 'hidden', background: C.fill }}>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="お名前（本名）" aria-label="お名前（本名）"
+          autoComplete="name" maxLength={40} style={field} />
+        <div style={{ height: 0.5, background: C.separator, marginLeft: 16 }} />
+        <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="電話番号（090-1234-5678）" aria-label="電話番号"
+          type="tel" inputMode="tel" autoComplete="tel" maxLength={16} enterKeyHint="done" style={field} />
+      </div>
+      {error && <p role="alert" style={{ margin: '10px 4px 0', fontSize: 14, color: C.danger }}>{error}</p>}
+      <button type="submit" disabled={busy} style={{
+        ...buttonBase, width: '100%', marginTop: 16,
+        background: valid ? C.text : C.fill, color: valid ? C.bg : C.tertiary,
+      }}>
+        {busy ? '保存しています' : '次へ'}
+      </button>
+    </form>
+  )
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {

@@ -2,6 +2,7 @@
 // 開発用のデモ（?johnny=demo、開発ビルドのときだけ）は通信せず、端末の中だけで動く。
 import { callCustomerRpc } from '../../utils/customerSession'
 import { RpcError } from '../../utils/staffSession'
+import { fetchContact, normalizePhone, saveContact, type CustomerContact } from '../../utils/customerContact'
 import type { MenuOption } from './menuMatcher'
 import type { Slot } from './slotPlanner'
 
@@ -28,6 +29,9 @@ export interface BookingAssistantApi {
   confirm(holdId: string): Promise<CustomerReservation>
   release(holdId: string): Promise<void>
   reservations(): Promise<CustomerReservation[]>
+  /** 連絡先（本名・電話番号）。サーバーに仕組みが無ければ null */
+  contact(): Promise<CustomerContact | null>
+  saveContact(name: string, phone: string): Promise<void>
 }
 
 export const customerBookingApi: BookingAssistantApi = {
@@ -37,6 +41,8 @@ export const customerBookingApi: BookingAssistantApi = {
   confirm: holdId => callCustomerRpc<CustomerReservation>('customer_confirm_reservation', { p_hold_id: holdId, p_note: null }),
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
+  contact: () => fetchContact(),
+  saveContact: async (name, phone) => { await saveContact(name, phone) },
 }
 
 // ── 開発用デモ ───────────────────────────────────────────────────
@@ -67,6 +73,8 @@ function demoSlotsFor(date: string): Slot[] {
 }
 
 const demoStore: CustomerReservation[] = []
+/** デモは連絡先が未登録の状態から始める（登録の画面も確かめられるように） */
+let demoContact: CustomerContact = { name: '銀二 太郎', phone: null, registered: false }
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export const demoBookingApi: BookingAssistantApi = {
@@ -93,6 +101,13 @@ export const demoBookingApi: BookingAssistantApi = {
   },
   async release() { /* nothing */ },
   async reservations() { await wait(200); return [...demoStore] },
+  async contact() { await wait(150); return demoContact },
+  async saveContact(name, phone) {
+    await wait(300)
+    const p = normalizePhone(phone)
+    if (!p) throw new RpcError('invalid_phone', '電話番号を確認してください。')
+    demoContact = { name: name.trim(), phone: p, registered: true }
+  },
 }
 
 export function bookingAssistantApi(): BookingAssistantApi {

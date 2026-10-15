@@ -17,6 +17,7 @@ import { OnboardingScreen, type OnboardingDonePayload } from './screens/Onboardi
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import PremiumGachaExperience from './components/PremiumGachaExperience'
 import { MemberQrModal } from './components/MemberQrModal'
+import { flushPendingContact } from './utils/customerContact'
 import { MOCK_MEMBER } from './data/brand'
 import type { NavTab, MemberStatus } from './data/brand'
 import type { WalletFilter } from './data/wallet'
@@ -798,6 +799,8 @@ function BgmTrackSheet({
 function App() {
   // テストデータを localStorage に1度だけ投入
   seedDevData()
+  // 端末に一時保存した連絡先（本名・電話番号）を、サーバーの仕組みがあれば送る
+  useEffect(() => { void flushPendingContact() }, [])
   const [shopUnlocked, setShopUnlocked] = useState(isShopUnlocked)
   const [showShopPasswordGate, setShowShopPasswordGate] = useState(() => {
     const requestedTab = new URLSearchParams(window.location.search).get('tab')

@@ -92,4 +92,14 @@ check('候補日の2日目で一致', () => {
 })
 check('空きなし', () => assert.equal(planOffer({ dates: ['2026-10-15'], time: '15:00', range: null, earliest: false }, { '2026-10-15': [] }).kind, 'none'))
 
+// ── 電話番号 ──
+const { normalizePhone, formatPhone } = await import('../src/utils/phone.ts')
+check('携帯（ハイフン）', () => assert.equal(normalizePhone('090-1234-5678'), '09012345678'))
+check('全角', () => assert.equal(normalizePhone('０８０ １２３４ ５６７８'), '08012345678'))
+check('+81', () => assert.equal(normalizePhone('+81 90 1234 5678'), '09012345678'))
+check('固定電話10桁', () => assert.equal(normalizePhone('092-123-4567'), '0921234567'))
+check('桁不足', () => assert.equal(normalizePhone('090-1234'), null))
+check('0始まりでない', () => assert.equal(normalizePhone('9012345678'), null))
+check('表示形式', () => assert.equal(formatPhone('09012345678'), '090-1234-5678'))
+
 console.log(`johnny booking regression: ${passed} checks ok`)

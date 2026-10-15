@@ -6,6 +6,7 @@ import { setStoredValue, ONBOARDING_DONE_KEY, ONBOARDING_NAME_KEY } from '../uti
 import { getUserId, getMemberIssuedAt } from '../utils/userId'
 import { completeCustomerOnboarding } from '../utils/ticketStore'
 import { RpcError } from '../utils/staffSession'
+import { normalizePhone, saveContact } from '../utils/customerContact'
 import { DEFAULT_BGM_TRACK_SRC, registerBgmAudio, stopAllBgmAudio } from '../hooks/useBgm'
 
 type Step = 0 | 1 | 2
@@ -102,11 +103,80 @@ function ChoiceButton({
   )
 }
 
+/** 金の枠の入力欄（選択中は枠が回る） */
+function GoldField({
+  focused, onFocus, onBlur, value, onChange, onEnter, placeholder, ariaLabel, type = 'text', inputMode, autoComplete, maxLength, disabled,
+}: {
+  focused: boolean
+  onFocus: () => void
+  onBlur: () => void
+  value: string
+  onChange: (v: string) => void
+  onEnter?: () => void
+  placeholder: string
+  ariaLabel: string
+  type?: 'text' | 'tel'
+  inputMode?: 'text' | 'tel'
+  autoComplete?: string
+  maxLength: number
+  disabled: boolean
+}) {
+  return (
+    <div style={{
+      position: 'relative', marginBottom: 'clamp(12px, 2.4svh, 16px)', borderRadius: 16,
+      padding: focused ? '2px' : '1.5px',
+      background: focused ? 'transparent' : 'rgba(212,175,55,0.48)',
+    }}>
+      {focused && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, borderRadius: 16, overflow: 'hidden', zIndex: 0 }}>
+          <div style={{
+            position: 'absolute', top: '50%', left: '50%',
+            width: '280%', height: '280%',
+            background: 'conic-gradient(from 0deg at 50% 50%, #5c0f1a 0deg, #C9A24A 75deg, #F0E4C0 150deg, #C9A24A 225deg, #5c0f1a 310deg, #5c0f1a 360deg)',
+            animation: 'gjConicSpin 3s linear infinite',
+          }} />
+        </div>
+      )}
+      <input
+        type={type}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        aria-label={ariaLabel}
+        className="gj-name-input"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onKeyDown={e => { if (e.key === 'Enter') onEnter?.() }}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        disabled={disabled}
+        style={{
+          position: 'relative', zIndex: 1,
+          display: 'block', width: '100%', boxSizing: 'border-box',
+          padding: 'clamp(15px, 3.8svh, 18px) clamp(16px, 5vw, 22px)',
+          background: 'rgba(10,5,3,0.97)',
+          border: 'none',
+          borderRadius: 13,
+          color: '#F2E6C8',
+          fontSize: 'clamp(17px, 5vw, 20px)',
+          fontFamily: SERIF,
+          letterSpacing: '0.08em',
+          textShadow: value ? '0 0 14px rgba(212,175,55,0.20)' : 'none',
+          caretColor: '#C9A24A',
+          outline: 'none',
+        }}
+      />
+    </div>
+  )
+}
+
 export function OnboardingScreen({ memberStatus, onDone }: Props) {
   const [step, setStep] = useState<Step>(0)
   const [hasVisitedBefore, setHasVisitedBefore] = useState<boolean | null>(null)
   const [name, setName] = useState('')
-  const [inputFocused, setInputFocused] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [focusedField, setFocusedField] = useState<'name' | 'phone' | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -134,6 +204,10 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       setSubmitError('お名前を入力してください。')
       return
     }
+    if (!normalizePhone(phone)) {
+      setSubmitError('電話番号を確認してください（例：090-1234-5678）。')
+      return
+    }
 
     setSubmitting(true)
     setSubmitError(null)
@@ -142,6 +216,8 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       const userId = getUserId()
       getMemberIssuedAt()
       const result = await completeCustomerOnboarding(userId, trimmedName, hasVisitedBefore)
+      // 連絡先（本名・電話番号）。会員登録は済んでいるので、ここで失敗しても入場は止めない（次の起動で送り直す）
+      await saveContact(trimmedName, phone).catch(err => console.warn('[Onboarding] contact not saved:', err))
       const nextStatus: MemberStatus = { ...memberStatus, memberName: trimmedName }
       setStoredValue(ONBOARDING_DONE_KEY, true)
       setStoredValue(ONBOARDING_NAME_KEY, trimmedName)
@@ -514,7 +590,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   overflowWrap: 'normal',
                   wordBreak: 'keep-all',
                 }}>
-                  あなたのお名前は？
+                  お名前とお電話番号
                 </h2>
 
                 <p style={{
@@ -522,54 +598,36 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   color: 'rgba(201,162,39,0.50)', textAlign: 'center',
                   fontFamily: SERIF, marginBottom: 'clamp(22px, 4.8svh, 32px)',
                 }}>
-                  この名で、男前証を発行します。
+                  本名でご登録ください。男前証の発行とご予約に使います。
                 </p>
 
-                <div style={{
-                  position: 'relative', marginBottom: 'clamp(12px, 2.4svh, 16px)', borderRadius: 16,
-                  padding: inputFocused ? '2px' : '1.5px',
-                  background: inputFocused ? 'transparent' : 'rgba(212,175,55,0.48)',
-                }}>
-                  {inputFocused && (
-                    <div aria-hidden style={{ position: 'absolute', inset: 0, borderRadius: 16, overflow: 'hidden', zIndex: 0 }}>
-                      <div style={{
-                        position: 'absolute', top: '50%', left: '50%',
-                        width: '280%', height: '280%',
-                        background: 'conic-gradient(from 0deg at 50% 50%, #5c0f1a 0deg, #C9A24A 75deg, #F0E4C0 150deg, #C9A24A 225deg, #5c0f1a 310deg, #5c0f1a 360deg)',
-                        animation: 'gjConicSpin 3s linear infinite',
-                      }} />
-                    </div>
-                  )}
-                  <input
-                    type="text"
-                    className="gj-name-input"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    onFocus={() => setInputFocused(true)}
-                    onBlur={() => setInputFocused(false)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') void handleFinish()
-                    }}
-                    placeholder="例：銀二郎"
-                    maxLength={20}
-                    disabled={submitting}
-                    style={{
-                      position: 'relative', zIndex: 1,
-                      display: 'block', width: '100%', boxSizing: 'border-box',
-                      padding: 'clamp(15px, 3.8svh, 18px) clamp(16px, 5vw, 22px)',
-                      background: 'rgba(10,5,3,0.97)',
-                      border: 'none',
-                      borderRadius: 13,
-                      color: '#F2E6C8',
-                      fontSize: 'clamp(17px, 5vw, 20px)',
-                      fontFamily: SERIF,
-                      letterSpacing: '0.08em',
-                      textShadow: name ? '0 0 14px rgba(212,175,55,0.20)' : 'none',
-                      caretColor: '#C9A24A',
-                      outline: 'none',
-                    }}
-                  />
-                </div>
+                <GoldField
+                  focused={focusedField === 'name'}
+                  onFocus={() => setFocusedField('name')}
+                  onBlur={() => setFocusedField(null)}
+                  value={name}
+                  onChange={setName}
+                  placeholder="お名前（例：銀二 太郎）"
+                  ariaLabel="お名前（本名）"
+                  autoComplete="name"
+                  maxLength={20}
+                  disabled={submitting}
+                />
+                <GoldField
+                  focused={focusedField === 'phone'}
+                  onFocus={() => setFocusedField('phone')}
+                  onBlur={() => setFocusedField(null)}
+                  value={phone}
+                  onChange={setPhone}
+                  onEnter={() => { void handleFinish() }}
+                  placeholder="電話番号（例：090-1234-5678）"
+                  ariaLabel="電話番号"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  maxLength={16}
+                  disabled={submitting}
+                />
 
                 {submitError && (
                   <p style={{
