@@ -38,7 +38,7 @@ export function SbHotpepper({ list, actor, disabled, onClose, onChanged, onOpen 
         const date = m.starts_at ? getJapanDateString(new Date(m.starts_at)) : null
         const canOpen = !!(m.reservation_id && date)
         const body = <><time>{m.starts_at ? <>{jstTime(m.starts_at)}<small>{jstDateLabel(date!)}</small></> : '—'}</time>
-          <span><strong>{`${KIND[m.kind]} ${m.customer_name ?? '名前不明'}`}</strong>
+          <span><strong>{m.status === 'ignored' && m.reason === 'notice' ? 'お知らせ' : `${KIND[m.kind]} ${m.customer_name ?? '名前不明'}`}</strong>
             <small>{[m.stylist, m.menu].filter(Boolean).join(' / ')}</small>
             <small className={m.status === 'needs_review' ? 'sb-hpb-review' : undefined}>{m.status === 'needs_review' ? '要確認：' : m.status === 'checked' ? `確認済み（${m.checked_by}）：` : ''}{hpbResult(m)}{m.warnings.length ? `（${m.warnings.map(w => WARNING[w] ?? w).join('・')}）` : ''}</small></span></>
         return <div className="sb-hpb-row" key={m.id}>
