@@ -122,8 +122,17 @@ function GoldField({
   disabled: boolean
 }) {
   return (
+    <label style={{ display: 'block', marginBottom: 'clamp(12px, 2.4svh, 16px)' }}>
+    {/* 入力欄の名前（薄い例文だけに頼らず、何を入れる欄かを常に見せる） */}
+    <span style={{
+      display: 'block', marginBottom: 6, paddingLeft: 4,
+      fontFamily: SERIF, fontSize: 'clamp(13px, 3.7vw, 14px)', letterSpacing: '0.06em',
+      color: 'rgba(242,230,200,0.86)',
+    }}>
+      {ariaLabel}
+    </span>
     <div style={{
-      position: 'relative', marginBottom: 'clamp(12px, 2.4svh, 16px)', borderRadius: 16,
+      position: 'relative', borderRadius: 16,
       padding: focused ? '2px' : '1.5px',
       background: focused ? 'transparent' : 'rgba(212,175,55,0.48)',
     }}>
@@ -168,6 +177,7 @@ function GoldField({
         }}
       />
     </div>
+    </label>
   )
 }
 
@@ -463,8 +473,8 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                 }}
               >
                 <p style={{
-                  fontSize: 'clamp(8px, 2.35vw, 9px)', letterSpacing: '0.34em', textTransform: 'uppercase',
-                  color: 'rgba(201,162,39,0.38)', textAlign: 'center',
+                  fontSize: 'clamp(11px, 3.1vw, 12px)', letterSpacing: '0.28em', textTransform: 'uppercase',
+                  color: 'rgba(212,175,55,0.78)', textAlign: 'center',
                   fontFamily: 'monospace', marginBottom: 'clamp(24px, 5.6svh, 38px)',
                 }}>
                   Step 2 / 3
@@ -538,7 +548,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   100% { background-position: 200% center; }
                 }
                 .gj-name-input::placeholder {
-                  color: rgba(212,175,55,0.28);
+                  color: rgba(242,230,200,0.38);
                   letter-spacing: 0.06em;
                 }
               `}</style>
@@ -569,8 +579,8 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                 }}
               >
                 <p style={{
-                  fontSize: 'clamp(8px, 2.35vw, 9px)', letterSpacing: '0.34em', textTransform: 'uppercase',
-                  color: 'rgba(201,162,39,0.38)', textAlign: 'center',
+                  fontSize: 'clamp(11px, 3.1vw, 12px)', letterSpacing: '0.28em', textTransform: 'uppercase',
+                  color: 'rgba(212,175,55,0.78)', textAlign: 'center',
                   fontFamily: 'monospace', marginBottom: 'clamp(24px, 5.6svh, 38px)',
                 }}>
                   Step 3 / 3
@@ -594,11 +604,12 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                 </h2>
 
                 <p style={{
-                  fontSize: 'clamp(10px, 2.9vw, 12px)', letterSpacing: '0.12em', lineHeight: 1.7,
-                  color: 'rgba(201,162,39,0.50)', textAlign: 'center',
+                  fontSize: 'clamp(13px, 3.7vw, 15px)', letterSpacing: '0.04em', lineHeight: 1.8,
+                  color: 'rgba(242,230,200,0.80)', textAlign: 'center',
                   fontFamily: SERIF, marginBottom: 'clamp(22px, 4.8svh, 32px)',
                 }}>
-                  本名でご登録ください。男前証の発行とご予約に使います。
+                  本名でご登録ください。<br />
+                  男前証の発行とご予約に使います。
                 </p>
 
                 <GoldField
@@ -607,7 +618,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   onBlur={() => setFocusedField(null)}
                   value={name}
                   onChange={setName}
-                  placeholder="お名前（例：銀二 太郎）"
+                  placeholder="例：銀二 太郎"
                   ariaLabel="お名前（本名）"
                   autoComplete="name"
                   maxLength={20}
@@ -620,7 +631,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   value={phone}
                   onChange={setPhone}
                   onEnter={() => { void handleFinish() }}
-                  placeholder="電話番号（例：090-1234-5678）"
+                  placeholder="例：090-1234-5678"
                   ariaLabel="電話番号"
                   type="tel"
                   inputMode="tel"
