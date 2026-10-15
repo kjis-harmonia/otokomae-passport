@@ -1,6 +1,6 @@
 // 「今日の相棒」：今日の予約表の上に、次のお客様・空き時間・やることを出す。押すとその予約・新規予約が開く。
-import { useMemo } from 'react'
-import { ChevronRight, Clock, FileClock, Plus } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ChevronRight, Clock, Plus } from 'lucide-react'
 import { jstTime, yen } from '../utils/bookingApi'
 import { summarizeToday } from './sbTodaySummary'
 import type { SbLedger } from './sbTypes'
@@ -24,10 +24,14 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
 }) {
   const s = useMemo(() => summarizeToday(ledger, now), [ledger, now])
   const nextOne = s.next[0]
+  // スマホでは3つを切り替えて1つずつ見せる（パソコンでは3列すべて）
+  const [tab, setTab] = useState(0)
+  const tabs = ['次のお客様', `空き時間${s.gaps.length ? ` ${s.gaps.length}` : ''}`, `やること${s.late.length + (s.pendingTransfer > 0 ? 1 : 0) ? ` ${s.late.length + (s.pendingTransfer > 0 ? 1 : 0)}` : ''}`]
 
   return (
     <section className="sb-buddy" aria-label="今日の相棒">
-      <div className="sb-buddy-col">
+      <div className="sb-buddy-tabs" role="tablist">{tabs.map((label, i) => <button key={i} type="button" role="tab" aria-selected={tab === i} onClick={() => setTab(i)}>{label}</button>)}</div>
+      <div className="sb-buddy-col" data-active={tab === 0}>
         <h2>次のお客様</h2>
         {s.inService.map(r => (
           <button key={r.id} type="button" className="sb-buddy-row" onClick={() => onOpen(r.id)}>
@@ -47,7 +51,7 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
         {!s.inService.length && !s.next.length && <p className="sb-buddy-empty">今日のこれからの予約はありません</p>}
       </div>
 
-      <div className="sb-buddy-col">
+      <div className="sb-buddy-col" data-active={tab === 1}>
         <h2>空いている時間</h2>
         {s.gaps.map(g => (
           <button key={`${g.staffId}-${g.start}`} type="button" className="sb-buddy-row" disabled={blocked}
@@ -60,7 +64,7 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
         {!s.gaps.length && <p className="sb-buddy-empty">今日はこの先、まとまった空きはありません</p>}
       </div>
 
-      <div className="sb-buddy-col">
+      <div className="sb-buddy-col" data-active={tab === 2}>
         <h2>やること</h2>
         {s.late.map(r => (
           <button key={r.id} type="button" className="sb-buddy-row sb-buddy-alert" onClick={() => onOpen(r.id)}>
@@ -71,7 +75,7 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
         ))}
         {s.pendingTransfer > 0 && (
           <button type="button" className="sb-buddy-row" onClick={onTransfer}>
-            <FileClock size={16} />
+            <i className="sb-dot sb-gold-dot sb-buddy-dot" aria-hidden="true" />
             <span className="sb-buddy-main"><strong>Salon Board に未転記</strong><small>{s.pendingTransfer}件</small></span>
             <ChevronRight size={16} />
           </button>
