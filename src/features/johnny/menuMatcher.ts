@@ -43,13 +43,19 @@ export function matchMenu<T extends MenuOption>(utterance: string, menus: readon
   // 名前の先頭2文字以上が発話に含まれるもの。いちばん長く一致したメニューが1件に決まれば、それを選ぶ
   // （「スキンフェード」は「スキンフェードカット」に7文字、「フェイスパック」には「フェ」2文字しか一致しない）
   // 同じ長さで並んだら、名前の残りが短い方（「スキンフェード」→ セットの「スキンフェード&カラー」より「スキンフェードカット」）
+  // 名前の後ろ側でも、名前の半分より長く一致すれば候補にする（「カラー」→「ヘアカラー」。「パーマ」だけでは「パンチパーマ」にしない）
   const scored = menus.map(m => {
     const n = normalize(m.name)
-    for (let len = n.length - 1; len >= 2; len--) if (s.includes(n.slice(0, len))) return { m, len, rest: n.length - len }
-    return { m, len: 0, rest: 0 }
+    let len = 0
+    let head = true
+    for (let l = n.length - 1; l >= 2; l--) if (s.includes(n.slice(0, l))) { len = l; break }
+    for (let l = n.length - 1; l >= 3 && l > len; l--) if (l * 2 > n.length && s.includes(n.slice(n.length - l))) { len = l; head = false; break }
+    return { m, len, head, rest: n.length - len }
   }).filter(x => x.len > 0)
+  // 長さ → 先頭からの一致（「スキンフェード」は「子供スキンフェード」より「スキンフェードカット」）→ 残りの短さ、の順に絞る
   const best = Math.max(0, ...scored.map(x => x.len))
-  const tied = scored.filter(x => x.len === best)
+  let tied = scored.filter(x => x.len === best)
+  if (tied.some(x => x.head)) tied = tied.filter(x => x.head)
   const fewest = Math.min(...tied.map(x => x.rest))
   const top = tied.filter(x => x.rest === fewest)
   return top.length === 1 ? top[0].m : null
