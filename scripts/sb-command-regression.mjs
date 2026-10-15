@@ -51,6 +51,11 @@ check('空白なし：かなの時刻（さんじ）を敬称にしない', () =
   const d = p('あしたのさんじたなかさんぱんち'); assert.equal(d.customerName, 'たなか'); assert.equal(d.minutes, 15 * 60)
 })
 check('空白なし：フルネーム', () => assert.equal(p('土曜日13時銀パラ鈴木太郎様').customerName, '鈴木太郎'))
+check('似た名前のメニュー（スキンフェード と フェイスパック）', () => {
+  const menus = [...MENUS, { code: 'fade', name: 'スキンフェードカット', duration_min: 60, price: 5000 }, { code: 'pack', name: 'フェイスパック', duration_min: 15, price: 500 },
+    { code: 'fade-color', name: 'スキンフェード&カラー', duration_min: 120, price: 7500 }, { code: 'kids-fade', name: '子供スキンフェード', duration_min: 45, price: 3000 }]
+  assert.deepEqual(parseSbCommand('明日15時スキンフェード田中さん', STAFF, menus, NOW).menuCodes, ['fade'])
+})
 check('読み取れた項目', () => assert.deepEqual(p('明日15時 田中さん パンチ 銀二郎で').understood, ['日付', '時刻', 'お客様', '担当', 'メニュー']))
 
 console.log(`sb command regression: ${passed} checks ok`)
