@@ -7,19 +7,24 @@ import { sbApi, sbError } from './sbApi'
 import type { SbCommand, SbInput, SbOptions, SbPreview, SbReservation } from './sbTypes'
 import { SbModal } from './SbModal'
 
-export interface SbPreset { date: string; minutes?: number; staffId?: string | null }
+/** 新規予約の初期値。draft は「話して予約登録」で読み取った内容（スタッフがフォームで確かめてから送る） */
+export interface SbPreset {
+  date: string; minutes?: number; staffId?: string | null
+  draft?: { customerName: string | null; phone: string | null; menuCodes: string[]; source: SbInput['source'] | null; externalRef: string | null; understood: string[] }
+}
 export function SbBookingEditor({ options, preset, reservation, actor, setActor, busy: sending, onSend, onClose }: {
   options: SbOptions; preset: SbPreset; reservation?: SbReservation; actor: string; setActor: (name: string) => void
   busy: boolean; onSend: (command: SbCommand) => Promise<void>; onClose: () => void
 }) {
   const r = reservation
-  const [name, setName] = useState(r?.customer_name ?? '')
-  const [phone, setPhone] = useState(r?.customer_phone ?? '')
-  const [source, setSource] = useState<SbInput['source']>(r?.source === 'hotpepper' ? 'hotpepper' : r?.source === 'phone' ? 'phone' : 'staff')
-  const [externalRef, setExternalRef] = useState(r?.external_ref ?? '')
+  const d = r ? undefined : preset.draft
+  const [name, setName] = useState(r?.customer_name ?? d?.customerName ?? '')
+  const [phone, setPhone] = useState(r?.customer_phone ?? d?.phone ?? '')
+  const [source, setSource] = useState<SbInput['source']>(r?.source === 'hotpepper' ? 'hotpepper' : r?.source === 'phone' ? 'phone' : r ? 'staff' : d?.source ?? 'staff')
+  const [externalRef, setExternalRef] = useState(r?.external_ref ?? d?.externalRef ?? '')
   const [note, setNote] = useState(r?.note ?? '')
   const [client, setClient] = useState<{ id: string; name: string } | null>(r ? { id: r.client_id, name: r.customer_name } : null)
-  const [codes, setCodes] = useState<string[]>(r?.items.map(i => i.menu_code) ?? [])
+  const [codes, setCodes] = useState<string[]>(r?.items.map(i => i.menu_code) ?? d?.menuCodes ?? [])
   const [date, setDate] = useState(preset.date)
   const [time, setTime] = useState(r ? jstTime(r.starts_at) : preset.minutes !== undefined ? `${String(Math.floor(preset.minutes / 60)).padStart(2, '0')}:${String(preset.minutes % 60).padStart(2, '0')}` : '')
   const [staffId, setStaffId] = useState<string | null>(r ? r.nominated ? r.staff_id : null : preset.staffId ?? null)
@@ -90,6 +95,7 @@ export function SbBookingEditor({ options, preset, reservation, actor, setActor,
       {preview.input.note && <><dt>メモ</dt><dd className="sb-prewrap">{preview.input.note}</dd></>}
     </dl> : <form ref={form} onSubmit={e => { e.preventDefault(); void review() }}>
       <fieldset disabled={busy} className="sb-fieldset">
+        {d && <p className="sb-understood">{d.understood.length ? `読み取った内容：${d.understood.join("・")}` : "読み取れた内容がありません"}。足りないところを入れて確かめてください。</p>}
         <label className="sb-field">操作者<select value={actor} onChange={e => setActor(e.target.value)} required><option value="">選択してください</option>{options.actors.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></label>
         <label className="sb-field">お客様名<input value={name} onChange={e => { setName(e.target.value); if (!r) setClient(null) }} required maxLength={60} autoComplete="off" placeholder="お名前" /></label>
         <label className="sb-field">電話番号（任意）<input type="tel" value={phone} onChange={e => { setPhone(e.target.value); if (!r) setClient(null) }} maxLength={20} autoComplete="off" /></label>

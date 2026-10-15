@@ -1,4 +1,4 @@
-import { callStaffRpc, expectRpcResult, RpcError } from '../utils/staffSession'
+import { callStaffRpc, expectRpcResult, RpcError } from './sbRpc'
 import { bookingErrorMessage, jstDateLabel, jstTime, yen } from '../utils/bookingApi'
 import type { SbCommand, SbInput, SbLedger, SbOptions, SbPending, SbPreview, SbReservation } from './sbTypes'
 
