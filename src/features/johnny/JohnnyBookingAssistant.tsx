@@ -37,7 +37,7 @@ const C = {
 type Step =
   | { k: 'loading' }
   | { k: 'contact'; name: string }
-  | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' }
+  | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption }
   | { k: 'askMenu'; req: VisitRequest }
   | { k: 'searching' }
   | { k: 'pick'; req: VisitRequest; menu: MenuOption; offer: Offer }
@@ -148,12 +148,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     const dates = (reqIn.dates.length > 0 ? reqIn.dates : Array.from({ length: 7 }, (_, i) => jstDate(i)))
       .filter(d => d >= today && d <= last)
     const req = { ...reqIn, dates }
-    if (dates.length === 0) { setStep({ k: 'askWhen', again: 'none' }); return }
+    if (dates.length === 0) { setStep({ k: 'askWhen', again: 'none', menu }); return }
     try {
       const results = await Promise.all(dates.map(d => api.slots(d, menu.code).then(s => [d, s] as const)))
       const offer = planOffer(req, Object.fromEntries(results))
       if (offer.kind === 'exact') setStep({ k: 'confirm', req, menu, slot: offer.slots[0] })
-      else if (offer.kind === 'none') setStep({ k: 'askWhen', again: 'none' })
+      else if (offer.kind === 'none') setStep({ k: 'askWhen', again: 'none', menu })
       else setStep({ k: 'pick', req, menu, offer })
     } catch {
       setStep({ k: 'unavailable', reason: 'network' })
@@ -206,10 +206,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     const s = stepRef.current
     if (s.k === 'askWhen') {
       const req = parseVisitRequest(text)
-      const menu = matchMenu(text, menus)
+      // 今回の言葉にメニューが無ければ、先に聞いたメニュー（「濡れパンで」→「明日の15時」）を使う
+      const menu = matchMenu(text, menus) ?? s.menu ?? null
       if (isEmptyRequest(req)) {
-        // 日時は無いがメニューだけ言った → メニューは覚えておかず、日時を聞き直す
-        setStep({ k: 'askWhen', again: 'unclear' })
+        // 日時は無いがメニューだけ言った → メニューを覚えて、日時だけ聞く
+        setStep(menu ? { k: 'askWhen', again: 'menu', menu } : { k: 'askWhen', again: 'unclear', menu: s.menu })
         return
       }
       if (menu) { void search(req, menu); return }
@@ -240,7 +241,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     if (s.k === 'confirm') {
       const yes = parseYesNo(text)
       if (yes === true) { void book(s.menu, s.slot, s.req); return }
-      if (yes === false) { setStep({ k: 'askWhen', again: 'retry' }); return }
+      if (yes === false) { setStep({ k: 'askWhen', again: 'retry', menu: s.menu }); return }
       setStep({ ...s })
     }
   }, [book, menus, search])
@@ -259,8 +260,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         const title = step.again === 'unclear' ? 'すみません、日時を聞き取れませんでした。'
           : step.again === 'none' ? 'その日は空きがありませんでした。'
           : step.again === 'retry' ? '別の日時をお聞かせください。'
+          : step.again === 'menu' && step.menu ? `${step.menu.name}ですね。`
           : 'いつのご来店をご希望ですか？'
-        const follow = step.again && step.again !== 'retry' ? 'ほかのご希望の日時をお聞かせください。' : undefined
+        const follow = step.again === 'unclear' ? 'もう一度、ご希望の日時をお聞かせください。'
+          : step.again === 'none' ? 'ほかのご希望の日時をお聞かせください。'
+          : step.again === 'menu' ? 'いつのご来店をご希望ですか？' : undefined
         return { title, sub: follow ?? '例：明日の15時、今日か明日の夕方', speech: follow ? `${title}${follow}` : title, listen: true }
       }
       case 'askMenu': return { title: 'メニューはどれにしますか？', speech: 'メニューはどれにしますか？', listen: true }
@@ -371,7 +375,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
                   <Row key={x.starts_at} onClick={() => setStep({ k: 'confirm', req: step.req, menu: step.menu, slot: x })}
                     title={formatVisit(x.starts_at).time} detail={formatVisit(x.starts_at).date} />
                 ))}
-                <Row onClick={() => setStep({ k: 'askWhen', again: 'retry' })} title="別の日時にする" muted />
+                <Row onClick={() => setStep({ k: 'askWhen', again: 'retry', menu: step.menu })} title="別の日時にする" muted />
               </List>
             )}
 
@@ -413,7 +417,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
               <p style={{ margin: '0 0 2px', fontSize: 13, color: C.secondary, textAlign: 'center' }}>「はい」「いいえ」と話しても進めます</p>
             )}
             <PrimaryButton onClick={() => book(step.menu, step.slot, step.req)}>はい</PrimaryButton>
-            <SecondaryButton onClick={() => setStep({ k: 'askWhen', again: 'retry' })}>いいえ</SecondaryButton>
+            <SecondaryButton onClick={() => setStep({ k: 'askWhen', again: 'retry', menu: step.menu })}>いいえ</SecondaryButton>
           </>
         )}
         {step.k === 'done' && (
