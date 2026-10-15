@@ -24,6 +24,24 @@ export interface SbDraft {
 }
 
 const JST = 9 * 60 * 60 * 1000
+
+/**
+ * 音声認識は担当の名前を別の字で返すことがある（「銀二郎」→「銀次郎」「ぎんじろう」）。
+ * 担当ごとに聞き間違えやすい書き方を足し、ひらがな・カタカナの両方で探す。
+ */
+const STAFF_ALIASES: Record<string, string[]> = {
+  銀二郎: ['銀次郎', '銀二朗', '銀次朗', '銀治郎', '銀司郎', '金二郎', '金次郎', 'ぎんじろう', 'ぎんじろー', 'ギンジロウ', 'ギンジロー', 'ギンジロ'],
+  テイテイ: ['ていてい', 'テーテー', 'ティーティー', 'ティティ', 'TT'],
+}
+const toKatakana = (v: string) => v.replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
+const toHiragana = (v: string) => v.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60))
+/** その担当を指す書き方（長い順） */
+function spellings(st: SbCommandStaff): string[] {
+  const name = st.name.replace(/\s+/g, '').normalize('NFKC')
+  const all = [name, ...(STAFF_ALIASES[name] ?? [])].flatMap(v => [v, toKatakana(v), toHiragana(v)])
+  return [...new Set(all)].sort((a, b) => b.length - a.length)
+}
+const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const today = (now: Date) => new Date(now.getTime() + JST).toISOString().slice(0, 10)
 
 /**
@@ -41,7 +59,7 @@ function stripLeading(word: string, staff: readonly SbCommandStaff[], menus: rea
   // かなの時刻（音声認識）：「さんじ」「じゅうごじはん」。数字のかなが前にある「じ」だけ
   mark(/(じゅう(いち|に|さん|よ|ご|ろく|しち|なな|はち|く)?|いち|に|さん|よ|ご|ろく|しち|なな|はち|く)じ(はん)?/g)
   mark(/(電話|ホットペッパー|フリー|指名なし)/g)
-  for (const st of staff) mark(new RegExp(st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))
+  for (const st of staff) for (const v of spellings(st)) mark(new RegExp(escapeRe(v), 'g'))
   // メニュー名（先頭3文字以上の一致も。「スキンフェード」→「スキンフェードカット」）と、よく使う呼び方
   for (const m of menus) {
     const n = m.name.normalize('NFKC')
@@ -64,11 +82,11 @@ function findCustomer(raw: string, staff: readonly SbCommandStaff[], menus: read
   name = name.replace(/^(お客様は?|お客さんは?|名前は?|予約は?)/, '')
   // 「鈴木 次郎さん」：直前が漢字だけの短い語（日付・時刻・担当でない）なら姓として前に付ける
   const prev = tokens[i - 1]
-  if (prev && /^[\p{Script=Han}]{1,4}$/u.test(prev) && !staff.some(st => st.name === prev)
+  if (prev && /^[\p{Script=Han}]{1,4}$/u.test(prev) && !staff.some(st => spellings(st).includes(prev))
       && parseVisitRequest(prev).dates.length === 0 && !/今日|明日|明後日|本日|週|曜/.test(prev)) {
     name = `${prev} ${name}`
   }
-  if (!name || staff.some(st => st.name === name)) return null
+  if (!name || staff.some(st => spellings(st).includes(name))) return null
   return name
 }
 
@@ -77,7 +95,7 @@ function findStaff(raw: string, staff: readonly SbCommandStaff[]): { id: string 
   const s = raw.normalize('NFKC').replace(/\s+/g, '')
   if (/フリー|ふりー|指名なし|しめいなし|誰でも|だれでも/.test(s)) return { id: null, said: true }
   // 名前の長い順に見る（「銀二郎」と「二郎」のような部分一致を避ける）
-  const hit = [...staff].sort((a, b) => b.name.length - a.name.length).find(st => s.includes(st.name.replace(/\s+/g, '')))
+  const hit = [...staff].sort((a, b) => b.name.length - a.name.length).find(st => spellings(st).some(v => s.includes(v)))
   return hit ? { id: hit.id, said: true } : { id: null, said: false }
 }
 
@@ -117,7 +135,7 @@ export function parseSbCommand<T extends MenuOption>(
   if (st.said) understood.push('担当')
 
   // メニュー探しでは、担当・お客様の名前を除いて誤読を防ぐ（「銀パラ」と担当「銀二郎」など）
-  const menuCodes = findMenus(raw, menus, [customerName ?? '', ...staff.map(s2 => s2.name)]).map(m => m.code)
+  const menuCodes = findMenus(raw, menus, [customerName ?? '', ...staff.flatMap(spellings)]).map(m => m.code)
   if (menuCodes.length) understood.push('メニュー')
 
   const n = normalizeUtterance(raw)
