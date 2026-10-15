@@ -127,10 +127,10 @@ export function SbScreen() {
   }
   const list = archive === 'cancelled' ? cancelled : archive === 'transfer' ? toTransfer : ledger?.reservations ?? []
   return <div className="sb-app">
-    <header className="sb-toolbar"><h1>銀二郎<span>SB</span></h1>
-      <div className="sb-date-nav"><button className="sb-icon" aria-label="前の日" title="前の日" onClick={() => setDate(addDaysToDateString(date, -1))}><ChevronLeft size={21} /></button>
+    <header className="sb-toolbar"><h1><span className="sb-wordmark">銀二郎</span><span className="sb-mark">SB</span></h1>
+      <div className="sb-date-nav"><button className="sb-nav" aria-label="前の日" title="前の日" onClick={() => setDate(addDaysToDateString(date, -1))}><ChevronLeft size={24} /></button>
         <label className="sb-date-label"><span>{jstDateLabel(date)}</span><input type="date" aria-label="予約表の日付" value={date} onChange={e => e.target.value && setDate(e.target.value)} /></label>
-        <button className="sb-icon" aria-label="次の日" title="次の日" onClick={() => setDate(addDaysToDateString(date, 1))}><ChevronRight size={21} /></button><button className="sb-secondary sb-today" onClick={() => setDate(today)}>今日</button></div>
+        <button className="sb-nav" aria-label="次の日" title="次の日" onClick={() => setDate(addDaysToDateString(date, 1))}><ChevronRight size={24} /></button><button className="sb-secondary sb-today" onClick={() => setDate(today)}>今日</button></div>
       <div className="sb-toolbar-actions"><button className="sb-actor" disabled={busy || !!pending.pending} onClick={() => setPickActor(true)}><UserRound size={18} /><span>{options?.actors.some(a => a.name === actor) ? actor : '操作者'}</span></button>
         <button className="sb-primary" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} />新規予約</button></div>
     </header>

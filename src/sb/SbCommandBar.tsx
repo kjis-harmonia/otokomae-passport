@@ -25,9 +25,10 @@ export function SbCommandBar({ options, disabled, onDraft }: {
       {canTalk && (
         <button type="button" className="sb-command-mic" aria-label={listening ? '聞き取りを止める' : '話して予約'} aria-pressed={listening}
           disabled={disabled || !options} onClick={() => (listening ? voice.stopListening() : voice.startListening())}>
-          <Mic size={19} />
+          <Mic size={21} />
         </button>
       )}
+      {listening && <span className="sb-wave" aria-hidden="true"><i /><i /><i /><i /></span>}
       <input
         value={listening ? voice.interim : text}
         onChange={e => setText(e.target.value)}
@@ -38,7 +39,7 @@ export function SbCommandBar({ options, disabled, onDraft }: {
         readOnly={listening}
       />
       <button type="submit" className="sb-command-go" aria-label="予約フォームを開く" disabled={disabled || !options || !text.trim()}>
-        <ArrowUp size={19} />
+        <ArrowUp size={21} />
       </button>
     </form>
   )
