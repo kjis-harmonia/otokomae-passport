@@ -244,11 +244,11 @@ function ReservationDetails({ reservation: r, busy, blocked, onClose, onEdit, on
         {['checked_in', 'in_service', 'awaiting_payment'].includes(r.status) && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'completed' })}>施術完了</button>}
         {r.status === 'confirmed' && Date.parse(r.starts_at) <= openedAt && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'no_show' })}>不来店</button>}
         {r.status === 'confirmed' && <button className="sb-text-danger" disabled={blocked} onClick={() => setCancel(true)}>予約を取り消す</button>}</div>
-      <section className="sb-transfer"><h3>Salon Board <span>{TRANSFER[r.transfer_status]}</span></h3>
+      {r.source !== 'hotpepper' && <section className="sb-transfer"><h3>Salon Board <span>{TRANSFER[r.transfer_status]}</span></h3>
         <button className="sb-secondary sb-grow" onClick={() => { void navigator.clipboard?.writeText(text).then(() => { setCopied(true); setCopyFallback(false) }).catch(() => setCopyFallback(true)); if (!navigator.clipboard) setCopyFallback(true) }}><Clipboard size={18} />{copied ? 'コピーしました' : '転記用テキストをコピー'}</button>
         {copyFallback && <textarea className="sb-copy-text" readOnly value={text} aria-label="Salon Board転記用テキスト" onFocus={e => e.target.select()} />}
         <div className="sb-transfer-controls">{(['pending', 'done', 'not_required'] as const).map(s => <button className="sb-secondary" aria-pressed={r.transfer_status === s} key={s} disabled={blocked || r.transfer_status === s} onClick={() => void onSend({ ...base, kind: 'transfer', transfer_status: s })}>{r.transfer_status === s ? <Check size={16} /> : <Circle size={16} />}{TRANSFER[s]}</button>)}</div>
-      </section>
+      </section>}
       <details className="sb-extra" onToggle={e => { if (e.currentTarget.open && !history) void callStaffRpc<typeof history>('staff_reservation_events', { p_reservation_id: r.id }).then(setHistory).catch(() => setHistoryError(true)) }}><summary>変更履歴</summary>{historyError ? <p className="sb-error">履歴を取得できません。</p> : history?.map((e, i) => <p className="sb-history" key={i}>{jstTime(e.created_at)} {labels[e.event_type] ?? e.event_type} / {e.actor_name}</p>)}</details>
     </>}
   </SbModal>
