@@ -36,6 +36,8 @@ const MIGRATION_ORDER = [
   '20261009000500_pos_manager_candidates.sql',
   '20261009000900_pos_replay_hardening.sql',
   '20261011000000_pos_operation_registry.sql',
+  '20261015000000_sb_reservation_board.sql',
+  '20261015000100_sb_capacity_setting.sql',
 ]
 // B-2C-1 の操作レジストリ（新しい app_private の表と内部関数だけ）。当てる前後で既存オブジェクトのカタログが完全一致すること
 const REGISTRY_MIGRATION = '20261011000000_pos_operation_registry.sql'
@@ -112,6 +114,17 @@ async function main() {
     if (skipDb) return 'skipped'
     runPsqlFile(dbUrl, join(testsDir, 'preflight_booking_clients.sql'), 'booking/client smoke')
     return 'booking smoke ok'
+  })
+
+  await stage('sb', async () => {
+    if (skipDb) return 'skipped'
+    // 銀二郎SB：同時受付の枠（テイテイ・銀二郎は3）、4件目の拒否、依頼IDの再送、古い版、見積もり、既存の予約機能との共存、権限
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_sb_reservation_board.sql'), 'SB reservation board')
+    requireCommand('pgbench')
+    runPsqlFile(dbUrl, join(testsDir, 'sb_concurrency_setup.sql'), 'SB concurrency setup')
+    runPgbench(dbUrl, join(testsDir, 'sb_concurrency_worker.sql'), 'SB concurrency')
+    runPsqlFile(dbUrl, join(testsDir, 'sb_concurrency_verify.sql'), 'SB concurrency verify')
+    return 'capacity 1→3, 4th overlap refused, same-id replay/refusal receipts, stale version, preview hash, legacy one-per-stylist, grants, 10 concurrent → 3 ok'
   })
 
   await stage('clients', async () => {
