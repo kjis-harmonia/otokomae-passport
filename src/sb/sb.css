@@ -465,3 +465,21 @@
   .sb-app *, .sb-modal * { transition: none !important; }
   .sb-command-mic[aria-pressed="true"]::before, .sb-command-mic[aria-pressed="true"]::after, .sb-wave i { animation: none; }
 }
+
+/* ── HOT PEPPER のメール取込 ── */
+.sb-hpb-lead { margin: 0 0 14px; font-size: 14px; line-height: 1.6; }
+.sb-hpb-actions { margin-top: 10px; }
+.sb-hpb-message { margin: 12px 0 0; font-size: 14px; }
+.sb-hpb-heading { margin: 24px 0 4px; font-size: 13px; font-weight: 600; color: var(--sb-muted); }
+.sb-hpb-list { display: flex; flex-direction: column; border-top: 1px solid var(--sb-line); }
+.sb-hpb-row { display: flex; flex-direction: column; gap: 8px; padding: 10px 4px; border-bottom: 1px solid var(--sb-line); }
+.sb-hpb-row > button:not(.sb-secondary), .sb-hpb-row > div {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 0; background: transparent; border: 0; text-align: left; color: inherit;
+}
+.sb-hpb-row > .sb-secondary { align-self: flex-end; }
+.sb-hpb-row time { display: flex; flex-direction: column; min-width: 54px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sb-hpb-row time small { font-weight: 400; font-size: 12px; color: var(--sb-muted); }
+.sb-hpb-row span { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sb-hpb-row strong { font-weight: 600; }
+.sb-hpb-row span small { font-size: 12px; color: var(--sb-muted); line-height: 1.5; }
+.sb-hpb-row .sb-hpb-review { color: var(--sb-red); }

@@ -10,6 +10,8 @@ import { SbBookingEditor, type SbPreset } from './SbBookingEditor'
 import { SbModal } from './SbModal'
 import { SbCommandBar } from './SbCommandBar'
 import { SbToday } from './SbToday'
+import { SbHotpepper } from './SbHotpepper'
+import { hpbApi, type HpbList } from './sbHotpepperApi'
 import './sb.css'
 
 const ACTOR = 'ginjiro_staff_name'
@@ -34,6 +36,9 @@ export function SbScreen() {
   const [editor, setEditor] = useState<{ preset: SbPreset; reservation?: SbReservation } | null>(null)
   const [view, setView] = useState<'board' | 'list'>('board')
   const [archive, setArchive] = useState<'cancelled' | 'transfer' | null>(null)
+  const [hpb, setHpb] = useState<HpbList | null>(null)
+  const [hpbOpen, setHpbOpen] = useState(false)
+  const wantedId = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [updated, setUpdated] = useState<string | null>(null)
   const [now, setNow] = useState(Date.now)
@@ -51,15 +56,21 @@ export function SbScreen() {
     setActorState(name)
     try { localStorage.setItem(ACTOR, JSON.stringify(name)) } catch { /* Sending fails closed if persistence is unavailable. */ }
   }
+  const loadHpb = useCallback(async () => {
+    try { const value = await hpbApi.list(); if (Array.isArray(value?.mails)) setHpb(value) } catch { /* メールの取込一覧が読めなくても予約表は止めない */ }
+  }, [])
   const refresh = useCallback(async (d: string) => {
     const gen = ++generation.current
+    void loadHpb()
     try {
       const value = await sbApi.ledger(d)
       if (gen !== generation.current || dateRef.current !== d) return
       if (!value || !Array.isArray(value.staff) || !Array.isArray(value.reservations)) throw new Error('invalid_response')
       setLedger(value); setError(null); setUpdated(jstTime(new Date().toISOString()))
+      if (wantedId.current && value.reservations.some(r => r.id === wantedId.current)) setSelectedId(wantedId.current)
+      wantedId.current = null
     } catch { if (gen === generation.current && dateRef.current === d) setError('予約表を取得できません。接続とSBのサーバー設定を確認してください。') }
-  }, [])
+  }, [loadHpb])
   const loadOptions = useCallback(async () => {
     try { const value = await sbApi.options(); if (!Array.isArray(value.actors) || !Array.isArray(value.menus)) throw new Error(); setOptions(value) }
     catch { setError('予約設定を取得できません。SB用migrationの適用・端末認証を確認してください。') }
@@ -148,6 +159,7 @@ export function SbScreen() {
       {pending.pending && !pending.error && <button className="sb-secondary" disabled={busy || !online} onClick={() => void retry()}>{busy ? '確認中…' : '同じ内容で結果を確認'}</button>}
       {!pending.pending && !pending.error && online && <button className="sb-icon" aria-label="再読み込み" onClick={() => { void refresh(date); void loadOptions() }}><RefreshCw size={18} /></button>}
     </div>}
+    {hpb && hpb.open > 0 && <div className="sb-alert" role="status"><span>HOT PEPPERのメールで確認が必要なものが{hpb.open}件あります。</span><button className="sb-secondary" onClick={() => setHpbOpen(true)}>確認する</button></div>}
     {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
       onNew={p => newBooking({ date, minutes: p.minutes, staffId: p.staffId })} onTransfer={() => setArchive('transfer')} />}
     <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />予約</span><span><i className="sb-dot sb-green" />来店済み</span><span><i className="sb-dot sb-gold-dot" />未転記</span></div>
@@ -162,8 +174,11 @@ export function SbScreen() {
             onOpen={setSelectedId} onNew={minutes => newBooking({ date, staffId: staff.id, minutes })} /> })}
       </div>{!ledger.staff.length && <p className="sb-empty">本部で予約スタッフの設定が必要です。</p>}</div>}
     <footer className="sb-statusbar"><div>{ledger?.closure ? <span>休業日{ledger.closure.reason ? `：${ledger.closure.reason}` : ''}</span> : ledger && !ledger.staff.some(s => s.shifts.length) ? <span>本部で勤務時間の設定が必要です。</span> : <span>{active.length}件</span>}
-      {cancelled.length > 0 && <button onClick={() => setArchive('cancelled')}>取消・不来店 {cancelled.length}件</button>}{toTransfer.length > 0 && <button onClick={() => setArchive('transfer')}>未転記 {toTransfer.length}件</button>}</div><span>{updated ? `${updated} 更新` : ''}</span></footer>
+      <button onClick={() => setHpbOpen(true)}>HPBメール</button>{cancelled.length > 0 && <button onClick={() => setArchive('cancelled')}>取消・不来店 {cancelled.length}件</button>}{toTransfer.length > 0 && <button onClick={() => setArchive('transfer')}>未転記 {toTransfer.length}件</button>}</div><span>{updated ? `${updated} 更新` : ''}</span></footer>
     {pickActor && options && <SbModal title="操作者" onClose={() => setPickActor(false)}><div className="sb-actor-list">{options.actors.map(a => <button className="sb-secondary" aria-pressed={actor === a.name} key={a.id} onClick={() => { setActor(a.name); setPickActor(false) }}>{a.name}{actor === a.name && <Check size={18} />}</button>)}</div></SbModal>}
+    {hpbOpen && <SbHotpepper list={hpb} actor={actor} disabled={!online} onClose={() => setHpbOpen(false)}
+      onChanged={() => void refresh(dateRef.current)}
+      onOpen={(d, id) => { setHpbOpen(false); if (d === dateRef.current) setSelectedId(id); else { wantedId.current = id; setDate(d) } }} />}
     {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
     {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
