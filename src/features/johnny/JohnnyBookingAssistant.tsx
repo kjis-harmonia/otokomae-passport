@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUp, Keyboard, Mic, Volume2, VolumeX, X } from 'lucide-react'
 import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
+import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { bookingAssistantApi, type AssistantOptions, type CustomerReservation } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
@@ -100,7 +101,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     speak(text, () => { if (listenAfter && voice.listen !== 'unsupported' && voice.listen !== 'denied') startListening() })
   }, [speak, startListening, voice.listen])
 
-  // ── 読み込み ──
+  // ── 読み込み（引き継ぎのあと・再試行で読み直す） ──
+  const [loadKey, setLoadKey] = useState(0)
+  const [binding, setBinding] = useState(false)
+  const reload = useCallback(() => { setStep({ k: 'loading' }); setLoadKey(k => k + 1) }, [])
   useEffect(() => {
     let alive = true
     Promise.all([api.options(), api.reservations().catch(() => [] as CustomerReservation[])])
@@ -118,7 +122,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         setStep({ k: 'unavailable', reason: code === 'booking_disabled' ? 'booking_disabled' : code === 'customer_auth_required' ? 'auth' : 'network' })
       })
     return () => { alive = false }
-  }, [api])
+  }, [api, loadKey])
 
   const menus = useMemo(() => {
     const list = options?.menus ?? []
@@ -271,7 +275,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       case 'unavailable': return step.reason === 'booking_disabled'
         ? { title: 'アプリからのご予約は準備中です', sub: 'お電話か HOT PEPPER Beauty でご予約ください。' }
         : step.reason === 'auth'
-          ? { title: 'ご予約には会員の引き継ぎが必要です', sub: '店頭で引き継ぎコードを受け取ってください。' }
+          ? { title: 'ご予約には会員の引き継ぎが必要です', sub: '店頭で受け取った6桁の引き継ぎコードを入力してください。お電話でもご予約いただけます。' }
           : { title: '通信できませんでした', sub: '電波の良い場所で、もう一度お試しください。' }
     }
   }, [step])
@@ -364,7 +368,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
 
             {step.k === 'done' && <ReservationSummary r={step.reservation} />}
 
-            {step.k === 'unavailable' && step.reason === 'booking_disabled' && (
+            {step.k === 'unavailable' && (
               <List>
                 <Row href={SHOP_PHONE_TEL} title="電話で予約する" detail={SHOP_PHONE_DISPLAY} />
               </List>
@@ -400,8 +404,21 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         {step.k === 'unknown' && (
           <PrimaryButton onClick={() => verifyUnknown(step.menu, step.slot)}>予約を確認する</PrimaryButton>
         )}
+        {step.k === 'unavailable' && step.reason === 'auth' && (
+          <PrimaryButton onClick={() => setBinding(true)}>引き継ぎコードを入力する</PrimaryButton>
+        )}
+        {step.k === 'unavailable' && step.reason === 'network' && (
+          <PrimaryButton onClick={reload}>もう一度試す</PrimaryButton>
+        )}
         {step.k === 'unavailable' && (
           <SecondaryButton onClick={onClose}>閉じる</SecondaryButton>
+        )}
+        {binding && (
+          <PreviousTicketsBindDialog
+            zIndex={10040}
+            onClose={() => setBinding(false)}
+            onBound={() => { setBinding(false); reload() }}
+          />
         )}
 
         {canTalk && step.k !== 'confirm' && (typing || voiceOff) && (
