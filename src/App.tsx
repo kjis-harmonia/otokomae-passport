@@ -12,7 +12,6 @@ import { ReserveScreen } from './screens/ReserveScreen'
 import { TicketWalletScreen } from './screens/TicketWalletScreen'
 import { MyPageScreen } from './screens/MyPageScreen'
 import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
-import { ShopScreen } from './screens/ShopScreen'
 import { DiagnosisScreen } from './screens/DiagnosisScreen'
 import { OnboardingScreen, type OnboardingDonePayload } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
@@ -1024,7 +1023,7 @@ function App() {
         /* App shell: mounted only after onboarding completes */
         <>
           <div className="app-shell flex flex-col h-dvh w-full mx-auto overflow-hidden">
-{activeTab !== 'home' && activeTab !== 'shop' && <AppHeader />}
+{activeTab !== 'home' && <AppHeader />}
             <main className="app-main flex-1 overflow-y-auto">
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -1047,7 +1046,6 @@ function App() {
                   )}
                   {activeTab === 'styles'    && <StyleLibraryScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'diagnosis' && <DiagnosisScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
-                  {activeTab === 'shop'      && <ShopScreen />}
                   {activeTab === 'mypage'    && <MyPageScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                 </motion.div>
               </AnimatePresence>
