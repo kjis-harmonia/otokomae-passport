@@ -11,8 +11,8 @@ export function HqPanel({ title, code, children, style }: {
     <div style={{
       background: HQ_COLORS.panel,
       border: `1px solid ${HQ_COLORS.panelBorder}`,
-      borderRadius: 4,
-      padding: '16px 18px',
+      borderRadius: 12,
+      padding: '22px 24px',
       ...style,
     }}>
       <div style={{
@@ -20,14 +20,14 @@ export function HqPanel({ title, code, children, style }: {
         marginBottom: 14,
       }}>
         <h3 style={{
-          fontFamily: HQ_SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.06em',
+          fontFamily: HQ_SERIF, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em',
           color: HQ_COLORS.textPrimary, margin: 0,
         }}>
           {title}
         </h3>
         {code && (
           <span style={{
-            fontFamily: HQ_SANS, fontSize: 9, letterSpacing: '0.18em',
+            fontFamily: HQ_SANS, fontSize: 10, letterSpacing: '0.02em',
             color: HQ_COLORS.goldDim,
           }}>
             {code}

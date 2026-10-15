@@ -1,100 +1,12 @@
-import { useEffect, useState } from 'react'
-import { HqPanel } from '../components/HqPanel'
-import { HqTable, HqTr, HqTd } from '../components/HqTable'
-import { getHqStylistAnalysis } from '../hqDataStore'
-import type { HqStylistAnalysisData, HqStylistPeriod, StylistAnalysis } from '../hqDataStore'
-import { HQ_COLORS, HQ_SANS } from '../hqTheme'
-
-type LoadState =
-  | { phase: 'loading' }
-  | { phase: 'error'; message: string }
-  | { phase: 'ready'; data: HqStylistAnalysisData }
-
-const PERIOD_LABEL: Record<HqStylistPeriod, string> = { today: '今日', month: '今月' }
-
-function yen(v: number): string {
-  return `¥${v.toLocaleString()}`
-}
+import { useState } from 'react'
+import { getJapanDateString } from '../../utils/dateUtils'
+import { money, type HqPeriod } from '../hqInsights'
+import { useHqOverview } from '../hqOverviewStore'
+import { HqMetrics, HqPeriodToolbar } from '../components/HqOverviewParts'
 
 export function HqStylistScreen() {
-  const [period, setPeriod] = useState<HqStylistPeriod>('today')
-  const [state, setState] = useState<LoadState>({ phase: 'loading' })
-
-  useEffect(() => {
-    let cancelled = false
-    setState({ phase: 'loading' })
-    getHqStylistAnalysis(period)
-      .then((data) => { if (!cancelled) setState({ phase: 'ready', data }) })
-      .catch((e) => {
-        console.error('[HqStylistScreen] getHqStylistAnalysis error:', e)
-        if (!cancelled) setState({ phase: 'error', message: 'スタイリスト分析データの取得に失敗しました' })
-      })
-    return () => { cancelled = true }
-  }, [period])
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        {(['today', 'month'] as HqStylistPeriod[]).map((p) => {
-          const active = p === period
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              style={{
-                padding: '6px 14px', borderRadius: 3,
-                background: active ? 'rgba(201,162,74,0.16)' : 'transparent',
-                border: `1px solid ${active ? HQ_COLORS.panelBorderStrong : HQ_COLORS.panelBorder}`,
-                color: active ? HQ_COLORS.goldHi : HQ_COLORS.textSecondary,
-                fontFamily: HQ_SANS, fontSize: 11.5, letterSpacing: '0.04em',
-                cursor: 'pointer',
-              }}
-            >
-              {PERIOD_LABEL[p]}
-            </button>
-          )
-        })}
-      </div>
-
-      {state.phase === 'loading' && (
-        <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.textSecondary }}>
-          読み込み中…
-        </p>
-      )}
-
-      {state.phase === 'error' && (
-        <div style={{
-          background: 'rgba(140,31,26,0.10)', border: `1px solid ${HQ_COLORS.red}`,
-          borderRadius: 4, padding: '16px 18px',
-        }}>
-          <p style={{ fontFamily: HQ_SANS, fontSize: 13, color: HQ_COLORS.negative, margin: 0 }}>
-            {state.message}
-          </p>
-        </div>
-      )}
-
-      {state.phase === 'ready' && (
-        <HqPanel title="スタイリスト一覧" code="ALL STAFF">
-          <HqTable columns={[
-            { label: '名前' },
-            { label: '売上', align: 'right' },
-            { label: '来客数', align: 'right' },
-            { label: '客単価', align: 'right' },
-            { label: '売上シェア', align: 'right' },
-          ]}>
-            {state.data.stylists.map((s: StylistAnalysis) => (
-              <HqTr key={s.name}>
-                <HqTd>{s.name}</HqTd>
-                <HqTd align="right" mono color={HQ_COLORS.goldHi}>{yen(s.sales)}</HqTd>
-                <HqTd align="right" mono>{s.visitors}名</HqTd>
-                <HqTd align="right" mono>{yen(s.unitPrice)}</HqTd>
-                <HqTd align="right" mono>{s.share}%</HqTd>
-              </HqTr>
-            ))}
-          </HqTable>
-        </HqPanel>
-      )}
-    </div>
-  )
+  const [period, setPeriod] = useState<HqPeriod>('today')
+  const [date, setDate] = useState(getJapanDateString)
+  const { data, error, retry } = useHqOverview(period, date)
+  return <><HqPeriodToolbar period={period} date={date} onPeriod={setPeriod} onDate={setDate} updatedAt={data?.updatedAt} />{!data ? error ? <div className="hq-error" role="alert"><h2>スタッフの実績を取得できませんでした</h2><p>{error}</p><button className="hq-button" onClick={retry}>再試行</button></div> : <div className="hq-loading" role="status">実績を読み込んでいます…</div> : <>{error && <p className="hq-partial-notice" role="status">{error}</p>}<HqMetrics data={data} /><section className="hq-surface"><div className="hq-surface-header"><h2>担当者別の実績</h2><span className="hq-eyebrow">確定済み会計</span></div>{data.summary.staff.length === 0 ? <p className="hq-empty-inline">この期間の会計はありません。</p> : <div style={{ overflowX: 'auto' }}><table className="hq-data-table" style={{ minWidth: 460 }}><thead><tr><th>担当者</th><th className="is-number">会計件数</th><th className="is-number">平均単価</th><th className="is-number">売上</th><th className="is-number">構成比</th></tr></thead><tbody>{data.summary.staff.map(member => <tr key={member.name}><td><span className="hq-staff-avatar" style={{ display: 'inline-grid', marginRight: 10 }}>{member.name.slice(0, 1)}</span>{member.name}</td><td className="is-number">{member.count} 件</td><td className="is-number">{money(member.unitPrice)}</td><td className="is-number">{money(member.sales)}</td><td className="is-number is-muted">{data.summary.sales ? Math.round(member.sales / data.summary.sales * 100) : 0}%</td></tr>)}</tbody></table></div>}<p className="hq-report-note">会計に記録された担当者ごとの集計です。担当未記録の会計は「未設定」に含みます。</p></section></>}</>
 }

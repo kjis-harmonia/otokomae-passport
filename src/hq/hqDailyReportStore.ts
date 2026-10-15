@@ -88,9 +88,5 @@ export async function generateAndSaveDailyReport(): Promise<GenerateDailyReportR
 
 /** 日報一覧を新しい順に取得（最大30件）。Realtimeなし、表示時に毎回取得するだけ。 */
 export async function getDailyReports(limit = 30): Promise<DailyReport[]> {
-  try {
-    return (await callHqRpc<DailyReport[] | null>('hq_daily_reports', { p_limit: limit })) ?? []
-  } catch {
-    return []
-  }
+  return (await callHqRpc<DailyReport[] | null>('hq_daily_reports', { p_limit: limit })) ?? []
 }

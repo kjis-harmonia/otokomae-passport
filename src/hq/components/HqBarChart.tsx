@@ -24,9 +24,8 @@ export function HqBarChart({ data, valueFormatter }: {
             </p>
             <div style={{
               width: '100%', maxWidth: 28, height: `${h}%`,
-              background: `linear-gradient(180deg, ${HQ_COLORS.goldHi} 0%, ${HQ_COLORS.gold} 55%, ${HQ_COLORS.goldDim} 100%)`,
+              background: '#8eabc9',
               borderRadius: '2px 2px 0 0',
-              boxShadow: `0 0 10px rgba(201,162,74,0.25)`,
             }} />
             <p style={{
               fontFamily: HQ_SANS, fontSize: 10, color: HQ_COLORS.textSecondary,
