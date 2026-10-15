@@ -8,6 +8,7 @@ import { sbPending, subscribeSbPending } from './sbPending'
 import type { SbCommand, SbLedger, SbOptions, SbReservation, TransferStatus } from './sbTypes'
 import { SbBookingEditor, type SbPreset } from './SbBookingEditor'
 import { SbModal } from './SbModal'
+import { SbCommandBar } from './SbCommandBar'
 import './sb.css'
 
 const ACTOR = 'ginjiro_staff_name'
@@ -132,6 +133,7 @@ export function SbScreen() {
       <div className="sb-toolbar-actions"><button className="sb-actor" disabled={busy || !!pending.pending} onClick={() => setPickActor(true)}><UserRound size={18} /><span>{options?.actors.some(a => a.name === actor) ? actor : '操作者'}</span></button>
         <button className="sb-primary" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} />新規予約</button></div>
     </header>
+    <SbCommandBar options={options} disabled={blocked} onDraft={draft => newBooking({ date: draft.date < today ? today : draft.date, minutes: draft.minutes ?? undefined, staffId: draft.staffId, draft })} />
     {(pending.error || pending.pending || !online || error) && <div className="sb-alert" role="alert">
       <span>{pending.error ? sbError('storage_error') : pending.pending ? '送信済み予約の結果確認が必要です。新しい予約の送信は停止中です。' : !online ? 'オフラインです。予約の登録・変更はできません。' : error}</span>
       {pending.pending && !pending.error && <button className="sb-secondary" disabled={busy || !online} onClick={() => void retry()}>{busy ? '確認中…' : '同じ内容で結果を確認'}</button>}

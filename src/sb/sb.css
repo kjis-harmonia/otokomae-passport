@@ -78,6 +78,25 @@
 }
 .sb-actor span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ── 話して予約登録 ── */
+.sb-command {
+  display: flex; align-items: center; gap: 8px;
+  margin: 12px 22px 0; padding: 6px 6px 6px 8px;
+  border: 1px solid var(--sb-line); border-radius: 26px; background: var(--sb-bg);
+}
+.sb-command:focus-within { border-color: var(--sb-gold); box-shadow: 0 0 0 3px rgba(151, 115, 43, 0.12); }
+.sb-command input { flex: 1 1 auto; min-width: 0; height: 40px; border: 0; outline: none; background: transparent; font-size: 16px; color: var(--sb-ink); }
+.sb-command input::placeholder { color: var(--sb-muted); }
+.sb-command-mic, .sb-command-go {
+  flex: none; width: 40px; height: 40px; border-radius: 20px; border: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sb-command-mic { background: var(--sb-light); color: var(--sb-ink); }
+.sb-command-mic[aria-pressed="true"] { background: var(--sb-red); color: #fff; animation: sb-pulse 1.4s ease-in-out infinite; }
+.sb-command-go { background: var(--sb-ink); color: #fff; }
+@keyframes sb-pulse { 50% { box-shadow: 0 0 0 6px rgba(154, 53, 53, 0.15); } }
+.sb-understood { margin: 0; padding: 8px 12px; border-left: 3px solid var(--sb-gold); background: var(--sb-gold-tint); font-size: 13px; color: var(--sb-ink); }
+
 /* ── お知らせ ── */
 .sb-alert {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -274,7 +293,7 @@
   .sb-date-nav { order: 3; width: 100%; justify-content: center; margin: 0; }
   .sb-date-label { min-width: 0; flex: 1 1 auto; }
   .sb-actor { max-width: 120px; }
-  .sb-alert, .sb-notice { margin-left: 14px; margin-right: 14px; }
+  .sb-alert, .sb-notice, .sb-command { margin-left: 14px; margin-right: 14px; }
   .sb-board-toolbar, .sb-statusbar { padding-left: 14px; padding-right: 14px; }
   .sb-legend { gap: 10px; font-size: 11px; }
   .sb-agenda { padding: 0 14px 16px; }
