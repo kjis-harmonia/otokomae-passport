@@ -6,6 +6,7 @@ import { fetchContact, normalizePhone, saveContact, type CustomerContact } from 
 import type { MenuOption } from './menuMatcher'
 import type { Slot } from './slotPlanner'
 import { consultStylist, type ConsultReply } from './consult'
+import type { DayOverview } from './dayAdvisor'
 
 export interface BookingSettings { slot_minutes: number; booking_window_days: number; min_lead_minutes: number; hold_minutes: number }
 export interface AssistantOptions { settings: BookingSettings; menus: MenuOption[] }
@@ -26,6 +27,10 @@ export interface Hold { hold_id: string; starts_at: string; ends_at: string; sta
 export interface BookingAssistantApi {
   options(): Promise<AssistantOptions>
   slots(date: string, menuCode: string): Promise<Slot[]>
+  /** その日の受付時間と、メニューごとの空き（空きのあるメニューだけ） */
+  dayOverview(date: string): Promise<DayOverview>
+  /** 近い日から空きを探す（早い順） */
+  nextSlots(menuCode: string, from: string, limit?: number): Promise<Slot[]>
   hold(startsAt: string, menuCode: string): Promise<Hold>
   confirm(holdId: string): Promise<CustomerReservation>
   release(holdId: string): Promise<void>
@@ -40,6 +45,8 @@ export interface BookingAssistantApi {
 export const customerBookingApi: BookingAssistantApi = {
   options: () => callCustomerRpc<AssistantOptions>('customer_booking_options'),
   slots: (date, menuCode) => callCustomerRpc<Slot[]>('customer_available_slots', { p_date: date, p_menu_codes: [menuCode], p_staff_id: null }),
+  dayOverview: date => callCustomerRpc<DayOverview>('customer_day_overview', { p_date: date }),
+  nextSlots: (menuCode, from, limit = 10) => callCustomerRpc<Slot[]>('customer_next_slots', { p_menu_codes: [menuCode], p_from: from, p_limit: limit }),
   hold: (startsAt, menuCode) => callCustomerRpc<Hold>('customer_create_hold', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: null }),
   confirm: holdId => callCustomerRpc<CustomerReservation>('customer_confirm_reservation', { p_hold_id: holdId, p_note: null }),
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
@@ -76,6 +83,14 @@ function demoSlotsFor(date: string): Slot[] {
   return out
 }
 
+// デモ：2時間以上のメニューは 17 時までに始まる枠だけ（今日は入れない＝「長いメニューは空きなし」を確かめられる）
+function demoSlotsForMenu(date: string, menu: MenuOption): Slot[] {
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+  if (menu.duration_min >= 120 && date === today) return []
+  return demoSlotsFor(date).filter(s => menu.duration_min < 120 || s.starts_at.slice(11, 16) <= '17:00')
+}
+const addDays = (date: string, n: number) => new Date(new Date(date + 'T00:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10)
+
 const demoStore: CustomerReservation[] = []
 /** デモは連絡先が未登録の状態から始める（登録の画面も確かめられるように） */
 let demoContact: CustomerContact = { name: '銀二 太郎', phone: null, registered: false }
@@ -83,7 +98,19 @@ const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export const demoBookingApi: BookingAssistantApi = {
   async options() { await wait(250); return { settings: { slot_minutes: 30, booking_window_days: 60, min_lead_minutes: 30, hold_minutes: 2 }, menus: DEMO_MENUS } },
-  async slots(date) { await wait(450); return demoSlotsFor(date) },
+  async slots(date, menuCode) { await wait(450); const m = DEMO_MENUS.find(x => x.code === menuCode); return m ? demoSlotsForMenu(date, m) : [] },
+  async dayOverview(date) {
+    await wait(500)
+    return { date, open: true, hours: { start: '10:00', end: '19:30' },
+      groups: DEMO_MENUS.map(m => ({ codes: [m.code], slots: demoSlotsForMenu(date, m).map(s => s.starts_at) })).filter(g => g.slots.length > 0) }
+  },
+  async nextSlots(menuCode, from, limit = 10) {
+    await wait(400)
+    const m = DEMO_MENUS.find(x => x.code === menuCode)
+    const out: Slot[] = []
+    for (let i = 0; m && i < 14 && out.length < limit; i++) out.push(...demoSlotsForMenu(addDays(from, i), m).slice(0, limit - out.length))
+    return out
+  },
   async hold(startsAt, menuCode) {
     await wait(300)
     const menu = DEMO_MENUS.find(m => m.code === menuCode)
