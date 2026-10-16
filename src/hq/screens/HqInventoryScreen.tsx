@@ -14,21 +14,21 @@ type LoadState =
   | { phase: 'ready'; products: Product[] }
 
 const STATUS_LABEL: Record<StockStatus, string> = {
-  ok: '🟢正常',
-  low: '🟡少ない',
-  reorder: '🔴要発注',
+  ok: '正常',
+  low: '少ない',
+  reorder: '要発注',
 }
 
 const STATUS_COLOR: Record<StockStatus, string> = {
   ok: HQ_COLORS.positive,
-  low: '#E0B84A',
+  low: '#946b2b',
   reorder: HQ_COLORS.negative,
 }
 
 const inputStyle: React.CSSProperties = {
-  background: 'rgba(0,0,0,0.35)',
+  background: '#f7f7f9',
   border: `1px solid ${HQ_COLORS.panelBorder}`,
-  borderRadius: 3,
+  borderRadius: 7,
   color: HQ_COLORS.textPrimary,
   fontFamily: HQ_SANS,
   fontSize: 12.5,
@@ -39,7 +39,7 @@ const buttonStyle: React.CSSProperties = {
   padding: '6px 12px',
   borderRadius: 3,
   border: `1px solid ${HQ_COLORS.panelBorderStrong}`,
-  background: 'rgba(201,162,74,0.12)',
+  background: '#edf3fb',
   color: HQ_COLORS.goldHi,
   fontFamily: HQ_SANS,
   fontSize: 11.5,
@@ -88,7 +88,7 @@ export function HqInventoryScreen() {
   // 編集中のフォームを潰さない。失敗しても直前の表示データを維持する。
   const load = useCallback((opts: { silent?: boolean } = {}) => {
     if (!opts.silent) setState({ phase: 'loading' })
-    getProducts()
+    getProducts({ strict: true })
       .then((products) => setState({ phase: 'ready', products }))
       .catch((e) => {
         console.error('[HqInventoryScreen] getProducts error:', e)

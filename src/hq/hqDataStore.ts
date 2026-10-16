@@ -7,9 +7,9 @@ import { callHqRpc } from './hqSession'
 // （hq_accounting_sessions / hq_accounting_session_items）経由で取得する。
 
 /** 支払い方法（過去の会計データの payment_method） */
-export type PaymentMethod = 'cash' | 'credit' | 'qr'
+export type PaymentMethod = 'cash' | 'credit' | 'qr' | 'ginpay' | 'other'
 
-export type StylistKey = 'テイテイ' | '銀二郎' | 'フリー' | '未設定'
+export type StylistKey = string
 
 const STYLISTS: StylistKey[] = ['テイテイ', '銀二郎', 'フリー', '未設定']
 
@@ -36,16 +36,21 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: '現金',
   credit: 'クレジット',
   qr: 'QR',
+  ginpay: 'GINPay',
+  other: 'その他',
 }
 
-const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'credit', 'qr']
+const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'credit', 'qr', 'ginpay', 'other']
 
 function buildPaymentBreakdown(sessions: { payment_method?: string | null; total: number | null }[]): PaymentBreakdownEntry[] {
   return PAYMENT_METHODS.map((method) => ({
     method,
     label: PAYMENT_METHOD_LABELS[method],
     total: sessions
-      .filter((s) => s.payment_method === method)
+      .filter((s) => {
+        const value = s.payment_method === 'card' ? 'credit' : s.payment_method
+        return (PAYMENT_METHODS.includes(value as PaymentMethod) ? value : 'other') === method
+      })
       .reduce((sum, s) => sum + (s.total ?? 0), 0),
   }))
 }
@@ -138,7 +143,8 @@ export function buildTodayAggregates(
   const todaySales = todaySessions.reduce((sum, s) => sum + (s.total ?? 0), 0)
   const todayVisitors = todaySessions.length
   const todayUnitPrice = todayVisitors > 0 ? Math.round(todaySales / todayVisitors) : 0
-  const stylists: StylistSummary[] = STYLISTS.map((name) => {
+  const names = [...new Set([...STYLISTS, ...todaySessions.map(s => s.stylist_name || '未設定')])]
+  const stylists: StylistSummary[] = names.map((name) => {
     const rows = todaySessions.filter((s) => (s.stylist_name || '未設定') === name)
     const sales = rows.reduce((sum, s) => sum + (s.total ?? 0), 0)
     const visitors = rows.length
@@ -187,7 +193,8 @@ export async function getHqStylistAnalysis(period: HqStylistPeriod): Promise<HqS
   const sessions = await fetchHqSessions({ fromJst: startStr, toJst: endStr })
   const totalSales = sessions.reduce((sum, s) => sum + (s.total ?? 0), 0)
 
-  const stylists: StylistAnalysis[] = STYLISTS.map((name) => {
+  const names = [...new Set([...STYLISTS, ...sessions.map(s => s.stylist_name || '未設定')])]
+  const stylists: StylistAnalysis[] = names.map((name) => {
     const rows = sessions.filter((s) => (s.stylist_name || '未設定') === name)
     const sales = rows.reduce((sum, s) => sum + (s.total ?? 0), 0)
     const visitors = rows.length

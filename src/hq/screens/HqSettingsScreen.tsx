@@ -1,94 +1,24 @@
-import { useState } from 'react'
-import { HqPanel } from '../components/HqPanel'
-import { HQ_COLORS, HQ_MONO, HQ_SANS } from '../hqTheme'
-
-const STORE_INFO = [
-  { label: '店舗名', value: '銀二郎 本店' },
-  { label: '所在地', value: '東京都〇〇区〇〇 1-2-3' },
-  { label: '電話番号', value: '090-2800-5425' },
-  { label: '営業時間', value: '10:00 - 20:00' },
-]
-
-const NOTIFICATIONS = [
-  { label: '予約通知', key: 'reserve' },
-  { label: '会計完了通知', key: 'accounting' },
-  { label: '在庫アラート', key: 'stock' },
-  { label: '会員ランクアップ通知', key: 'rankup' },
-]
-
-const PERMISSIONS = [
-  { name: '銀二郎', role: 'オーナー' },
-  { name: 'テイテイ', role: 'スタイリスト' },
-  { name: 'フリー', role: 'スタイリスト' },
-]
-
-function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      style={{
-        width: 38, height: 20, borderRadius: 10,
-        background: on ? 'rgba(201,162,74,0.30)' : 'rgba(255,255,255,0.08)',
-        border: `1px solid ${on ? HQ_COLORS.panelBorderStrong : HQ_COLORS.panelBorder}`,
-        position: 'relative', cursor: 'pointer', padding: 0,
-      }}
-    >
-      <span style={{
-        position: 'absolute', top: 1, left: on ? 19 : 1,
-        width: 16, height: 16, borderRadius: '50%',
-        background: on ? HQ_COLORS.goldHi : HQ_COLORS.textMute,
-        transition: 'left 0.15s ease',
-      }} />
-    </button>
-  )
-}
+import { useEffect, useState } from 'react'
+import { LockKeyhole } from 'lucide-react'
+import { getBookingMasters, type BookingMasters } from '../hqBookingStore'
+import { HQ_AUTH_REQUIRED_EVENT, hqLogout } from '../hqSession'
+import { isHqPreview } from '../hqPreview'
+import { isStaging } from '../../utils/env'
 
 export function HqSettingsScreen() {
-  const [toggles, setToggles] = useState<Record<string, boolean>>({
-    reserve: true, accounting: true, stock: false, rankup: true,
-  })
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'stretch' }}>
-        <HqPanel title="店舗情報" code="STORE" style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {STORE_INFO.map((f) => (
-              <div key={f.label} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 12px' }}>
-                <span style={{ fontFamily: HQ_SANS, fontSize: 11.5, color: HQ_COLORS.textSecondary, whiteSpace: 'nowrap' }}>{f.label}</span>
-                <span style={{ fontFamily: HQ_MONO, fontSize: 12, color: HQ_COLORS.textPrimary, textAlign: 'right' }}>{f.value}</span>
-              </div>
-            ))}
-          </div>
-        </HqPanel>
-
-        <HqPanel title="通知設定" code="NOTIFY" style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {NOTIFICATIONS.map((n) => (
-              <div key={n.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: HQ_SANS, fontSize: 11.5, color: HQ_COLORS.textPrimary }}>{n.label}</span>
-                <Toggle on={!!toggles[n.key]} onChange={() => setToggles(t => ({ ...t, [n.key]: !t[n.key] }))} />
-              </div>
-            ))}
-          </div>
-        </HqPanel>
-      </div>
-
-      <HqPanel title="ユーザー権限" code="ACCESS">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {PERMISSIONS.map((p) => (
-            <div key={p.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
-              <span style={{ fontFamily: HQ_SANS, fontSize: 12.5, color: HQ_COLORS.textPrimary }}>{p.name}</span>
-              <span style={{ fontFamily: HQ_MONO, fontSize: 11, color: HQ_COLORS.goldDim, letterSpacing: '0.06em' }}>{p.role}</span>
-            </div>
-          ))}
-        </div>
-      </HqPanel>
-
-      <p style={{ fontFamily: HQ_MONO, fontSize: 10, color: HQ_COLORS.textMute, letterSpacing: '0.06em', margin: 0 }}>
-        OTOKOMAE PASSPORT HQ — v0.1.0 (UI PROTOTYPE)
-      </p>
-    </div>
-  )
+  const [masters, setMasters] = useState<BookingMasters | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [scale, setScale] = useState(() => { try { return localStorage.getItem('ginjiro_hq_text_scale') ?? 'standard' } catch { return 'standard' } })
+  useEffect(() => {
+    let alive = true
+    getBookingMasters().then(data => { if (alive) setMasters(data) }).catch(() => { if (alive) setFailed(true) })
+    return () => { alive = false }
+  }, [])
+  function changeScale(value: string) {
+    setScale(value)
+    document.documentElement.dataset.hqTextScale = value
+    try { localStorage.setItem('ginjiro_hq_text_scale', value) } catch { /* Preference is optional. */ }
+  }
+  async function lock() { await hqLogout(); window.dispatchEvent(new Event(HQ_AUTH_REQUIRED_EVENT)) }
+  return <div className="hq-settings-list"><section className="hq-surface"><div className="hq-surface-header"><h2>店舗と接続</h2></div><div className="hq-setting-row"><strong>店舗</strong><span className="hq-setting-value">銀二郎</span></div><div className="hq-setting-row"><strong>接続環境</strong><span className="hq-setting-value">{isHqPreview() ? '画面プレビュー（サンプル）' : isStaging() ? 'Staging' : '本番'}</span></div><div className="hq-setting-row"><div><strong>登録スタッフ</strong><p>予約設定で管理しています。</p></div><span className="hq-setting-value">{masters ? masters.staff.filter(s => s.is_active).length + ' 名' : failed ? '取得できません' : '取得中…'}</span></div><div className="hq-setting-row"><div><strong>アプリからの予約</strong><p>変更は「予約設定」から行います。</p></div><span className="hq-setting-value">{masters ? masters.settings.app_booking_enabled ? '受付中' : '停止中' : failed ? '取得できません' : '取得中…'}</span></div></section><section className="hq-surface" style={{ marginTop: 20 }}><div className="hq-surface-header"><h2>この端末の表示</h2></div><div className="hq-setting-row"><div><strong>文字の大きさ</strong><p>このブラウザに保存します。</p></div><select value={scale} onChange={e => changeScale(e.target.value)} aria-label="本部の文字の大きさ"><option value="standard">標準</option><option value="large">大きめ</option></select></div></section><section className="hq-surface" style={{ marginTop: 20 }}><div className="hq-surface-header"><h2>本部セッション</h2></div><div className="hq-setting-row"><div><strong>本部をロックする</strong><p>再度開くときは本部専用PINが必要です。</p></div><button className="hq-button" disabled={isHqPreview()} onClick={() => void lock()}><LockKeyhole size={14} />ロック</button></div></section></div>
 }

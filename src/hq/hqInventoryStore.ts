@@ -67,7 +67,7 @@ function normalizeProducts(rows: Product[]): Product[] {
  *
  * 本部画面・店舗端末：全カテゴリー（RPC）。お客様アプリ：店販のみ（公開読み取り・最低在庫数は含まない）。
  */
-export async function getProducts(): Promise<Product[]> {
+export async function getProducts(options: { strict?: boolean } = {}): Promise<Product[]> {
   try {
     if (getDataAuthMode() === 'customer') {
       const { data, error } = await supabase
@@ -80,7 +80,8 @@ export async function getProducts(): Promise<Product[]> {
     }
     const rows = await callStoreOrHqRpc<Product[] | null>('staff_products_list', 'hq_products_list')
     return normalizeProducts(rows ?? [])
-  } catch {
+  } catch (error) {
+    if (options.strict) throw error
     return []
   }
 }
