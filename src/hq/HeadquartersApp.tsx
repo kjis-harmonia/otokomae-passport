@@ -11,6 +11,8 @@ import { HqCustomerKarteScreen } from './screens/HqCustomerKarteScreen'
 import { HqInventoryScreen } from './screens/HqInventoryScreen'
 import { HqDailyReportScreen } from './screens/HqDailyReportScreen'
 import { HqSettingsScreen } from './screens/HqSettingsScreen'
+import { HqBookingScreen } from './screens/HqBookingScreen'
+import { HqServiceMasterScreen } from './screens/HqServiceMasterScreen'
 
 function fmtClock(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
@@ -47,6 +49,8 @@ export function HeadquartersApp() {
       {tab === 'customers' && <HqCustomerKarteScreen />}
       {tab === 'inventory' && <HqInventoryScreen />}
       {tab === 'reports' && <HqDailyReportScreen />}
+      {tab === 'booking' && <HqBookingScreen />}
+      {tab === 'menus' && <HqServiceMasterScreen />}
       {tab === 'settings' && <HqSettingsScreen />}
     </>
   )
