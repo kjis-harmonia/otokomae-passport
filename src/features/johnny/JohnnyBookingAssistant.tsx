@@ -530,6 +530,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         {canTalk && voice.listen === 'denied' && (
           <p style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>マイクが使えないため、文字で入力してください。</p>
         )}
+        {canTalk && voice.listen !== 'denied' && voice.notice && (
+          <p role="status" style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>{voice.notice}</p>
+        )}
       </div>
     </motion.div>
   )
