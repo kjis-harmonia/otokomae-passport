@@ -128,7 +128,7 @@ export function readDates(utterance: string, today: string): { phrase: string; d
   return out.slice(0, 3)
 }
 
-/** お客様の言葉の時刻（お店は10〜20時なので「3時」は15時）。「朝一」「一番早い」は first */
+/** お客様の言葉の時刻（「1〜8時」は午後＝13〜20時、「9時」は朝。午前と言えば朝）。「朝一」「一番早い」は first */
 export function readTime(utterance: string, nowHm?: string): string | 'first' | null {
   const t = normalizeSpoken(utterance)
   if (/朝一|朝イチ|あさいち|一番早い時間/.test(t)) return 'first'
@@ -140,11 +140,11 @@ export function readTime(utterance: string, nowHm?: string): string | 'first' | 
     return hm(Math.floor(x / 60), x % 60)
   }
   const found: { at: number; v: string }[] = []
-  for (const m of t.matchAll(/(\d{1,2}):(\d{2})/g)) { let h = Number(m[1]); if (h < 10) h += 12; found.push({ at: m.index ?? 0, v: hm(h, Number(m[2])) }) }
+  for (const m of t.matchAll(/(\d{1,2}):(\d{2})/g)) { let h = Number(m[1]); if (h <= 8) h += 12; found.push({ at: m.index ?? 0, v: hm(h, Number(m[2])) }) }
   for (const m of t.matchAll(/(午前|午後|夕方|夜)?\s*(\d{1,2})時(?!間)(半|\s*(\d{1,2})分)?/g)) {
     let h = Number(m[2]); const min = m[3] === '半' ? 30 : m[4] ? Number(m[4]) : 0
-    if (m[1] !== '午前' && h < 10) h += 12
-    if (h >= 10 && h <= 20 && min <= 59) found.push({ at: m.index ?? 0, v: hm(h, min) })
+    if (m[1] !== '午前' && h <= 8) h += 12
+    if (h >= 7 && h <= 21 && min <= 59) found.push({ at: m.index ?? 0, v: hm(h, min) })
   }
   if (!found.length) return null
   found.sort((a, b) => a.at - b.at)
