@@ -1,6 +1,7 @@
 // JOHNNY の予約 AI の入口（Edge Function）。お客様アプリの予約アシスタントから呼ぶ。
 //   入力：{ session: 顧客セッション, message: お客様の言葉（300字まで）, history: 直前の会話（10往復まで）, shown: 画面に出している候補 }
-//   出力：{ say: 話す言葉, ui: 画面に出すもの }（agent.ts の AgentReply）
+//         声で話したときは message の代わりに audio（録音の base64）と mime。transcribe_only なら文字にするだけ（確認画面の「はい」など）
+//   出力：{ heard?: 聞き取った文, say: 話す言葉, ui: 画面に出すもの }（agent.ts の AgentReply）。聞き取れたが AI が失敗したら { heard, error }
 // 決まり：
 //   ・空き・予約は、お客様のセッションで DB の customer_* RPC を呼んで調べる（他のお客様のものは見えない）
 //   ・予約の確定・キャンセル・変更はしない。ui の確認画面で「はい」が押されたら、アプリが RPC を呼ぶ
@@ -12,6 +13,24 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const OPENAI_KEY = Deno.env.get('OPENAI_API_KEY') ?? ''
 const MODEL = Deno.env.get('OPENAI_MODEL') ?? 'gpt-6-luna'
+const STT_MODEL = Deno.env.get('OPENAI_TRANSCRIBE_MODEL') ?? 'gpt-transcribe'
+/** 録音の上限（base64 で約 2MB＝20 秒ほど） */
+const MAX_AUDIO_B64 = 2_000_000
+
+/** 録音を文字にする。メニュー名・スタッフ名を手がかりに渡して、聞き間違いを減らす */
+async function transcribe(b64: string, mime: string, menus: MenuInfo[], staff: StaffInfo[]): Promise<string> {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+  const ext = /mpeg|mp3/.test(mime) ? 'mp3' : /mp4|m4a|aac/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : /wav/.test(mime) ? 'wav' : 'webm'
+  const form = new FormData()
+  form.append('file', new Blob([bytes], { type: mime || 'audio/webm' }), `voice.${ext}`)
+  form.append('model', STT_MODEL)
+  form.append('language', 'ja')
+  form.append('prompt', `理容室の予約の会話。メニュー：${menus.map(m => m.name).join('、').slice(0, 600)}。スタッフ：${staff.map(x => x.name).join('、')}。`)
+  const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_KEY}` }, body: form })
+  if (!r.ok) throw new Error(`stt_unavailable ${r.status} ${(await r.text()).slice(0, 200)}`)
+  const data = await r.json()
+  return typeof data.text === 'string' ? data.text.trim().slice(0, 300) : ''
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -101,8 +120,9 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json(400, { error: 'invalid_request' }) }
   const session = str(body.session, 200)
-  const message = str(body.message, 300)
-  if (!message) return json(400, { error: 'invalid_request' })
+  let message = str(body.message, 300)
+  const audio = typeof body.audio === 'string' && body.audio.length <= MAX_AUDIO_B64 ? body.audio : ''
+  if (!message && !audio) return json(400, { error: 'invalid_request' })
   if (session.length < 32) return json(401, { error: 'customer_auth_required' })
 
   try {
@@ -113,6 +133,13 @@ Deno.serve(async (req) => {
       rpc<CustomerReservation[]>('customer_list_reservations', session).catch(() => [] as CustomerReservation[]),
     ])
     const t = tools(session, opts.staff)
+    let heard: string | undefined
+    if (audio) {
+      heard = await transcribe(audio, str(body.mime, 60), opts.menus, opts.staff)
+      // 聞き取れなかった・文字にするだけ：AI には聞かない
+      if (!heard || body.transcribe_only === true) return json(200, { heard })
+      message = heard
+    }
     const last = past.filter(r => Date.parse(r.starts_at) <= Date.now() && r.status !== 'cancelled' && r.status !== 'no_show').sort((a, b) => Date.parse(b.starts_at) - Date.parse(a.starts_at))[0]
     const ctx: AgentContext = {
       now: new Date().toISOString(),
@@ -121,8 +148,14 @@ Deno.serve(async (req) => {
       lastMenuCode: last?.items[0]?.menu_code ?? null,
       shown: cleanShown(body.shown, opts.menus, opts.staff),
     }
-    const reply = await runAgent(ctx, cleanHistory(body.history), message, t, { apiKey: OPENAI_KEY, model: MODEL })
-    return json(200, { say: reply.say, ui: reply.ui })
+    try {
+      const reply = await runAgent(ctx, cleanHistory(body.history), message, t, { apiKey: OPENAI_KEY, model: MODEL })
+      return json(200, { heard, say: reply.say, ui: reply.ui })
+    } catch (e) {
+      // 声は聞き取れたのに AI が失敗：聞き取った文だけ返す（アプリは決まった規則の JOHNNY で続ける）
+      if (heard) { console.error('[johnny-agent]', String((e as Error)?.message ?? e).slice(0, 300)); return json(200, { heard, error: 'ai_failed' }) }
+      throw e
+    }
   } catch (e) {
     if (e instanceof RpcFailed) {
       if (e.code === 'customer_auth_required') return json(401, { error: e.code })
@@ -131,6 +164,6 @@ Deno.serve(async (req) => {
     }
     const msg = String((e as Error)?.message ?? e)
     console.error('[johnny-agent]', msg.slice(0, 300))
-    return json(502, { error: msg.startsWith('ai_') ? msg.split(' ')[0] : 'agent_failed' })
+    return json(502, { error: /^(ai|stt)_/.test(msg) ? msg.split(' ')[0] : 'agent_failed' })
   }
 })

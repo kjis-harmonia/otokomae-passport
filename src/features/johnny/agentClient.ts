@@ -74,3 +74,38 @@ export async function askAgent(message: string, history: readonly AgentTurn[], s
     return null
   }
 }
+
+export interface VoiceAnswer {
+  /** 聞き取った文（空なら聞き取れなかった） */
+  heard: string
+  /** AI の答え。文字にするだけのとき・AI が失敗したときは null */
+  answer: AgentAnswer | null
+}
+
+const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const r = new FileReader()
+  r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ''))
+  r.onerror = () => reject(r.error)
+  r.readAsDataURL(blob)
+})
+
+/** 録音した声を送る。サーバーで文字にして、そのまま AI の答えまで返す（transcribeOnly なら文字にするだけ）。通信できなければ null */
+export async function askAgentVoice(audio: Blob, history: readonly AgentTurn[], shown: AgentShown | undefined, transcribeOnly: boolean): Promise<VoiceAnswer | null> {
+  const session = getCustomerSession()
+  if (!session || audio.size === 0) return null
+  try {
+    const b64 = await blobToBase64(audio)
+    const call = supabase.functions.invoke<{ heard?: unknown; say?: unknown; ui?: unknown }>('johnny-agent', {
+      body: { session, audio: b64, mime: audio.type, transcribe_only: transcribeOnly, history: history.slice(-20), shown },
+    })
+    const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), TIMEOUT_MS + 5000))
+    const res = await Promise.race([call, timeout])
+    if (!res || res.error || !res.data) return null
+    const heard = typeof res.data.heard === 'string' ? res.data.heard.trim() : ''
+    const ui = readUi(res.data.ui)
+    const answer = isStr(res.data.say) && ui ? { say: res.data.say.trim().slice(0, 240), ui } : null
+    return { heard, answer }
+  } catch {
+    return null
+  }
+}

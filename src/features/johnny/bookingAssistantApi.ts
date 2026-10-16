@@ -7,7 +7,7 @@ import type { MenuOption } from './menuMatcher'
 import type { Slot } from './slotPlanner'
 import { consultStylist, type ConsultReply } from './consult'
 import type { DayOverview } from './dayAdvisor'
-import { askAgent, type AgentAnswer, type AgentShown, type AgentTurn } from './agentClient'
+import { askAgent, askAgentVoice, type AgentAnswer, type AgentShown, type AgentTurn, type VoiceAnswer } from './agentClient'
 
 export interface BookingSettings { slot_minutes: number; booking_window_days: number; min_lead_minutes: number; hold_minutes: number }
 export interface AssistantOptions { settings: BookingSettings; menus: MenuOption[]; staff?: { id: string; name: string }[] }
@@ -40,6 +40,9 @@ export interface BookingAssistantApi {
   cancel(reservationId: string): Promise<CustomerReservation>
   /** 予約の AI。使えないときは null（呼び出し側が決まった規則の JOHNNY に切り替える） */
   agent(message: string, history: readonly AgentTurn[], shown?: AgentShown): Promise<AgentAnswer | null>
+  /** 録音した声を送る（サーバーで文字にする）。使えないときは null。voice が false の環境（デモ）は端末の音声認識を使う */
+  agentVoice(audio: Blob, history: readonly AgentTurn[], shown: AgentShown | undefined, transcribeOnly: boolean): Promise<VoiceAnswer | null>
+  serverVoice: boolean
   /** 連絡先（本名・電話番号）。サーバーに仕組みが無ければ null */
   contact(): Promise<CustomerContact | null>
   saveContact(name: string, phone: string): Promise<void>
@@ -58,6 +61,8 @@ export const customerBookingApi: BookingAssistantApi = {
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),
   agent: (message, history, shown) => askAgent(message, history, shown),
+  agentVoice: (audio, history, shown, transcribeOnly) => askAgentVoice(audio, history, shown, transcribeOnly),
+  serverVoice: true,
   contact: () => fetchContact(),
   saveContact: async (name, phone) => { await saveContact(name, phone) },
   consult: (message, menus) => consultStylist(message, menus),
@@ -148,6 +153,8 @@ export const demoBookingApi: BookingAssistantApi = {
   },
   // デモは AI を使わない（決まった規則の JOHNNY で動く）
   async agent() { return null },
+  async agentVoice() { return null },
+  serverVoice: false,
   async contact() { await wait(150); return demoContact },
   async saveContact(name, phone) {
     await wait(300)
