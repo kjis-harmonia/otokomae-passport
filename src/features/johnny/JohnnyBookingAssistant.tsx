@@ -17,6 +17,7 @@ import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
 import { isEmptyRequest, parseVisitRequest, parseYesNo, type VisitRequest } from './visitParser'
 import { formatVisit, rememberReservation } from './nextReservation'
 import { useVoice } from './useVoice'
+import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvisor'
 import { VoiceOrb, type OrbState } from './VoiceOrb'
 
 // ── 見た目（黒・白・グレーだけ） ─────────────────────────────────
@@ -40,8 +41,10 @@ type Step =
   | { k: 'contact'; name: string }
   | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption }
   | { k: 'askMenu'; req: VisitRequest }
+  /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
+  | { k: 'overview'; req: VisitRequest; advice: DayAdvice; note?: string }
   | { k: 'searching' }
-  | { k: 'pick'; req: VisitRequest; menu: MenuOption; offer: Offer }
+  | { k: 'pick'; req: VisitRequest; menu: MenuOption; offer: Offer; note?: string }
   | { k: 'confirm'; req: VisitRequest; menu: MenuOption; slot: Slot }
   | { k: 'booking'; menu: MenuOption; slot: Slot }
   | { k: 'done'; reservation: CustomerReservation }
@@ -58,6 +61,21 @@ function jstDate(offsetDays = 0): string {
   const t = new Date(Date.now() + JST + offsetDays * 86400000)
   return t.toISOString().slice(0, 10)
 }
+
+function addDays(date: string, n: number): string {
+  return new Date(new Date(date + 'T00:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10)
+}
+
+/** 本日・明日・あさって・10月20日（火） */
+function dayWord(date: string): string {
+  if (date === jstDate(0)) return '本日'
+  if (date === jstDate(1)) return '明日'
+  if (date === jstDate(2)) return 'あさって'
+  const d = new Date(date + 'T00:00:00Z')
+  return `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）`
+}
+
+const slotDate = (iso: string) => new Date(new Date(iso).getTime() + JST).toISOString().slice(0, 10)
 
 function yen(menu: MenuOption): string {
   if (menu.price == null) return '店頭でご案内'
@@ -140,6 +158,20 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     return lastMenuCode ? [...list].sort((a, b) => (a.code === lastMenuCode ? -1 : b.code === lastMenuCode ? 1 : 0)) : list
   }, [options, lastMenuCode])
 
+  // ── メニューが決まっていて、日が決まっていない／希望の日が埋まっている：近い日から探して、間をあけて3件 ──
+  const soonest = useCallback(async (menu: MenuOption, req: VisitRequest, from: string, note: string) => {
+    setStep({ k: 'searching' })
+    stopListening()
+    try {
+      const picks = spreadSlots(await api.nextSlots(menu.code, from, 10), 3)
+      if (picks.length === 0) { setStep({ k: 'askWhen', again: 'none', menu }); return }
+      const dates = [...new Set(picks.map(x => slotDate(x.starts_at)))]
+      setStep({ k: 'pick', req: { ...req, dates, time: null }, menu, offer: { kind: 'choices', slots: picks }, note })
+    } catch {
+      setStep({ k: 'unavailable', reason: 'network' })
+    }
+  }, [api, stopListening])
+
   // ── 空き枠を探して提案 ──
   const search = useCallback(async (reqIn: VisitRequest, menu: MenuOption) => {
     setStep({ k: 'searching' })
@@ -147,21 +179,57 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     const windowDays = options?.settings.booking_window_days ?? 60
     const today = jstDate(0)
     const last = jstDate(windowDays)
-    // 日付の指定が無ければ今日から1週間
-    const dates = (reqIn.dates.length > 0 ? reqIn.dates : Array.from({ length: 7 }, (_, i) => jstDate(i)))
-      .filter(d => d >= today && d <= last)
+    // 日付の指定が無ければ、近い日から探す
+    if (reqIn.dates.length === 0) { void soonest(menu, reqIn, today, `${menu.name}ですね。`); return }
+    const dates = reqIn.dates.filter(d => d >= today && d <= last)
     const req = { ...reqIn, dates }
     if (dates.length === 0) { setStep({ k: 'askWhen', again: 'none', menu }); return }
     try {
       const results = await Promise.all(dates.map(d => api.slots(d, menu.code).then(s => [d, s] as const)))
       const offer = planOffer(req, Object.fromEntries(results))
       if (offer.kind === 'exact') setStep({ k: 'confirm', req, menu, slot: offer.slots[0] })
-      else if (offer.kind === 'none') setStep({ k: 'askWhen', again: 'none', menu })
+      // 希望の日に空きが無い：「空きがありません」で止めず、次に早い日時を案内する
+      else if (offer.kind === 'none') void soonest(menu, req, addDays(dates[dates.length - 1], 1), `${menu.name}は${dayWord(dates[0])}は空きがありません。`)
       else setStep({ k: 'pick', req, menu, offer })
     } catch {
       setStep({ k: 'unavailable', reason: 'network' })
     }
-  }, [api, options, stopListening])
+  }, [api, options, soonest, stopListening])
+
+  // ── メニューがまだ決まっていない：その日の空き状況を先に見て、入れられるメニューと時刻を案内する ──
+  const advise = useCallback(async (reqIn: VisitRequest) => {
+    setStep({ k: 'searching' })
+    stopListening()
+    const today = jstDate(0)
+    const last = jstDate(options?.settings.booking_window_days ?? 60)
+    const wanted = (reqIn.dates.length > 0 ? reqIn.dates : [today]).filter(d => d >= today && d <= last)
+    try {
+      for (const d of wanted) {
+        const advice = adviseDay(await api.dayOverview(d), menus, reqIn)
+        if (advice && advice.available.length > 0) { setStep({ k: 'overview', req: { ...reqIn, dates: [d] }, advice }); return }
+      }
+      // 希望の日（時刻）に入れるメニューが無い：次に空いている日（1週間先まで）を案内する
+      const first = wanted[0] ?? today
+      const missed = `${dayWord(first)}は${reqIn.time ? `${reqIn.time.replace(/^0/, '')}には` : ''}空きがありません。`
+      for (let i = 1; i <= 7; i++) {
+        const d = addDays(wanted[wanted.length - 1] ?? today, i)
+        if (d > last) break
+        const advice = adviseDay(await api.dayOverview(d), menus, { time: null, range: reqIn.range })
+        if (advice && advice.available.length > 0) { setStep({ k: 'overview', req: { ...reqIn, dates: [d], time: null }, advice, note: missed }); return }
+      }
+      setStep({ k: 'askWhen', again: 'none' })
+    } catch {
+      setStep({ k: 'unavailable', reason: 'network' })
+    }
+  }, [api, menus, options, stopListening])
+
+  /** その日の空きから、選んだメニューの時刻を出す（時刻の指定どおりならそのまま確認へ） */
+  const pickFromOverview = useCallback((s: Extract<Step, { k: 'overview' }>, menu: MenuOption) => {
+    const hit = s.advice.available.find(x => x.menu.code === menu.code)
+    if (!hit) { void soonest(menu, s.req, addDays(s.advice.date, 1), `${menu.name}は${dayWord(s.advice.date)}は空きがありません。`); return }
+    if (s.req.time && hit.slots.length === 1) { setStep({ k: 'confirm', req: s.req, menu, slot: hit.slots[0] }); return }
+    setStep({ k: 'pick', req: s.req, menu, offer: { kind: 'choices', slots: spreadSlots(hit.slots, 3) } })
+  }, [soonest])
 
   // ── 予約の確定（仮押さえ → 確定）。通信が切れたら予約一覧で結果を確かめる ──
   const book = useCallback(async (menu: MenuOption, slot: Slot, req: VisitRequest) => {
@@ -208,9 +276,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     setHeard(text)
     const s = stepRef.current
     // 予約の途中の質問：時間・料金はメニュー表で答える（無料）。髪型の相談だけ AI に聞く。答えたら今の質問に戻る
-    if (s.k === 'askWhen' || s.k === 'askMenu' || s.k === 'pick') {
+    if (s.k === 'askWhen' || s.k === 'askMenu' || s.k === 'pick' || s.k === 'overview') {
       const question = detectAsk(text, menus)
-      const follow = s.k === 'askWhen' ? 'ご希望の日時をお聞かせください。' : s.k === 'askMenu' ? 'メニューはどれにしますか？' : 'どの時間にしますか？'
+      const follow = s.k === 'askWhen' ? 'ご希望の日時をお聞かせください。' : s.k === 'askMenu' || s.k === 'overview' ? 'メニューはどれにしますか？' : 'どの時間にしますか？'
       if (question?.kind === 'menu_info') {
         const reply = answerMenuInfo(question)
         setAnswer({ forStep: s, text: reply, menus: [question.menu] })
@@ -234,13 +302,23 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       // 今回の言葉にメニューが無ければ、先に聞いたメニュー（「濡れパンで」→「明日の15時」）を使う
       const menu = matchMenu(text, menus) ?? s.menu ?? null
       if (isEmptyRequest(req)) {
-        // 日時は無いがメニューだけ言った → メニューを覚えて、日時だけ聞く
-        setStep(menu ? { k: 'askWhen', again: 'menu', menu } : { k: 'askWhen', again: 'unclear', menu: s.menu })
+        // 日時は無いがメニューだけ言った → 日時を聞き返さず、近い日から空きを探して案内する
+        if (menu) void search(req, menu)
+        else setStep({ k: 'askWhen', again: 'unclear', menu: s.menu })
         return
       }
       if (menu) { void search(req, menu); return }
       if (menus.length === 1) { void search(req, menus[0]); return }
-      setStep({ k: 'askMenu', req })
+      // メニューがまだ：その日の空き状況を先に見て、入れられるメニューと時刻を案内する
+      void advise(req)
+      return
+    }
+    if (s.k === 'overview') {
+      const menu = matchMenu(text, menus)
+      if (menu) { pickFromOverview(s, menu); return }
+      const req = parseVisitRequest(text)
+      if (!isEmptyRequest(req)) { void advise(req); return }
+      setStep({ ...s })
       return
     }
     if (s.k === 'askMenu') {
@@ -269,16 +347,17 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       if (yes === false) { setStep({ k: 'askWhen', again: 'retry', menu: s.menu }); return }
       setStep({ ...s })
     }
-  }, [api, ask, book, menus, search])
+  }, [advise, api, ask, book, menus, pickFromOverview, search])
   useEffect(() => { handleTextRef.current = handleText }, [handleText])
 
   /** 答えに出したおすすめのメニューを選ぶ（今の段階に合わせて続ける） */
   const chooseMenu = useCallback((menu: MenuOption) => {
     const s = stepRef.current
     setAnswer(null)
-    if (s.k === 'askWhen') setStep({ k: 'askWhen', again: 'menu', menu })
+    if (s.k === 'askWhen') void search({ dates: [], time: null, range: null, earliest: true }, menu)
+    else if (s.k === 'overview') pickFromOverview(s, menu)
     else if (s.k === 'askMenu' || s.k === 'pick') void search(s.req, menu)
-  }, [search])
+  }, [pickFromOverview, search])
 
   // ── 段階ごとの言葉（画面と読み上げ） ──
   const prompt = useMemo((): { title: string; sub?: string; speech?: string; listen?: boolean } => {
@@ -301,16 +380,24 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         return { title, sub: follow ?? '例：明日の15時、今日か明日の夕方', speech: follow ? `${title}${follow}` : title, listen: true }
       }
       case 'askMenu': return { title: 'メニューはどれにしますか？', speech: 'メニューはどれにしますか？', listen: true }
+      case 'overview': {
+        const word = dayWord(step.advice.date)
+        const a = adviceSpeech(step.advice, word, { isToday: step.advice.date === jstDate(0), time: step.req.time })
+        return { title: step.note ?? a.title, sub: step.note ? `${a.title}・${a.sub}` : a.sub, speech: `${step.note ?? ''}${a.speech}`, listen: true }
+      }
       case 'searching': return { title: '空き状況を確認しています' }
       case 'pick': {
         const times = step.offer.slots.map(x => spokenTime(x.starts_at)).join('、')
         const missed = step.offer.kind === 'nearby' && step.req.time
         const day = formatVisit(step.offer.slots[0].starts_at)
-        const head = missed ? `${step.req.time?.replace(/^0/, '')}は埋まっています。` : ''
+        const head = step.note ?? (missed ? `${step.req.time?.replace(/^0/, '')}は埋まっています。` : '')
+        // 近い日から探した候補は日をまたぐことがある：「明日の11時、あさっての10時」
+        const multiDay = new Set(step.offer.slots.map(x => slotDate(x.starts_at))).size > 1
+        const spoken = multiDay ? step.offer.slots.map(x => spokenVisit(x.starts_at)).join('、') : `${day.relative ?? day.date}は${times}`
         return {
-          title: missed ? `${step.req.time?.replace(/^0/, '')} は埋まっています` : `${day.relative ?? day.date} の空き`,
-          sub: '近い時間をご案内します。どれにしますか？',
-          speech: `${head}${day.relative ?? day.date}は${times}が空いています。どれにしますか？`,
+          title: step.note ? step.note : missed ? `${step.req.time?.replace(/^0/, '')} は埋まっています` : `${day.relative ?? day.date} の空き`,
+          sub: step.note ? `${step.menu.name}のいちばん早い空きです。どれにしますか？` : '近い時間をご案内します。どれにしますか？',
+          speech: step.note ? `${head}いちばん早いのは、${spoken}です。どれにしますか？` : `${head}${spoken}が空いています。どれにしますか？`,
           listen: true,
         }
       }
@@ -341,9 +428,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   const orb: OrbState = voice.listen === 'listening' ? 'listening'
     : step.k === 'searching' || step.k === 'booking' || step.k === 'loading' ? 'thinking'
     : voice.speaking ? 'speaking' : 'idle'
-  const canTalk = ['askWhen', 'askMenu', 'pick', 'confirm'].includes(step.k)
+  const canTalk = ['askWhen', 'askMenu', 'overview', 'pick', 'confirm'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
-  const compact = ['askMenu', 'pick', 'confirm', 'booking', 'done', 'unknown'].includes(step.k)
+  const compact = ['askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown'].includes(step.k)
   const voiceOff = voice.listen === 'unsupported' || voice.listen === 'denied'
 
   return (
@@ -402,6 +489,17 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
               </List>
             )}
 
+            {step.k === 'overview' && (
+              <List>
+                {step.advice.available.map(x => (
+                  <Row key={x.menu.code} onClick={() => pickFromOverview(step, x.menu)}
+                    title={x.menu.name}
+                    detail={`${step.req.time ? formatVisit(x.slots[0].starts_at).time : `${formatVisit(x.slots[0].starts_at).time}から`}・${x.menu.duration_min}分・${yen(x.menu)}`}
+                    note={x.menu.code === lastMenuCode ? '前回' : undefined} />
+                ))}
+              </List>
+            )}
+
             {step.k === 'pick' && (
               <List>
                 {step.offer.slots.map(x => (
@@ -440,7 +538,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
             <p style={{ margin: 0, padding: '14px 16px', borderRadius: 14, background: C.fill, fontSize: 16, lineHeight: 1.6, color: answer.thinking ? C.secondary : C.text }}>
               {answer.thinking ? '考えています…' : answer.text}
             </p>
-            {!answer.thinking && answer.menus.length > 0 && (step.k === 'askWhen' || step.k === 'askMenu' || step.k === 'pick') && (
+            {!answer.thinking && answer.menus.length > 0 && (step.k === 'askWhen' || step.k === 'askMenu' || step.k === 'pick' || step.k === 'overview') && (
               <List>
                 {answer.menus.map(m => (
                   <Row key={m.code} title={m.name} detail={`${m.duration_min}分・${yen(m)}`} onClick={() => chooseMenu(m)} />
@@ -529,6 +627,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         )}
         {canTalk && voice.listen === 'denied' && (
           <p style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>マイクが使えないため、文字で入力してください。</p>
+        )}
+        {canTalk && voice.listen !== 'denied' && voice.notice && (
+          <p role="status" style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>{voice.notice}</p>
         )}
       </div>
     </motion.div>

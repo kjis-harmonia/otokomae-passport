@@ -37,6 +37,8 @@ function pickJapaneseVoice(): SpeechSynthesisVoice | null {
 export function useVoice(onFinal: (text: string) => void) {
   const [listen, setListen] = useState<ListenState>(() => (recognitionCtor() ? 'idle' : 'unsupported'))
   const [interim, setInterim] = useState('')
+  /** 聞き取れなかった・音声認識が使えなかったときの一言（次に話し始めたら消える） */
+  const [notice, setNotice] = useState<string | null>(null)
   const [speaking, setSpeaking] = useState(false)
   const [muted, setMutedState] = useState<boolean>(() => {
     try { return localStorage.getItem(MUTE_KEY) === '1' } catch { return false }
@@ -65,7 +67,24 @@ export function useVoice(onFinal: (text: string) => void) {
     rec.continuous = false
     rec.maxAlternatives = 1
     finalRef.current = ''
+    let heardAnything = false
+    let failed = false
+    let latest = ''
+    let silence: number | undefined
+    setNotice(null)
+    // iPhone は話し終わっても「確定」の合図がなかなか来ない。話が 1.2 秒止まったら、聞き取れた文で区切る
+    const settle = () => {
+      window.clearTimeout(silence)
+      silence = window.setTimeout(() => {
+        if (recRef.current !== rec || !latest.trim()) return
+        if (!finalRef.current) finalRef.current = latest
+        stopAndFinish()
+      }, 1200)
+    }
+    // 何も話さないままでも 10 秒で止める
+    const giveUp = window.setTimeout(() => { if (recRef.current === rec) stopAndFinish() }, 10000)
     rec.onresult = e => {
+      heardAnything = true
       let text = ''
       let final = ''
       for (let i = 0; i < e.results.length; i++) {
@@ -74,18 +93,31 @@ export function useVoice(onFinal: (text: string) => void) {
         else text += r[0].transcript
       }
       if (final) finalRef.current = final
-      setInterim(final || text)
+      latest = final || text
+      setInterim(latest)
+      settle()
     }
     rec.onerror = e => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setListen('denied')
+      failed = true
+      if (e.error === 'not-allowed') { setListen('denied'); return }
+      if (e.error === 'aborted') return
+      if (e.error === 'no-speech') { setNotice('聞き取れませんでした。マイクを押して、もう一度話してください。'); return }
+      // service-not-allowed（iPhone の音声入力がオフ・ホーム画面のアプリ）・audio-capture・network など
+      setNotice('このスマホでは音声入力が使えませんでした。キーボードで入力してください。')
+      setListen('unsupported')
     }
+    // 止めたあとの終わりの合図が来ない端末もあるので、来なくても区切る
+    const stopAndFinish = () => { rec.stop(); window.setTimeout(() => rec.onend?.(), 800) }
     rec.onend = () => {
+      window.clearTimeout(silence)
+      window.clearTimeout(giveUp)
       if (recRef.current !== rec) return
       recRef.current = null
       setListen(s => (s === 'listening' ? 'idle' : s))
       const text = finalRef.current.trim()
       setInterim('')
       if (text) onFinalRef.current(text)
+      else if (!heardAnything && !failed) setNotice('聞き取れませんでした。マイクを押して、もう一度話してください。')
     }
     recRef.current = rec
     try {
@@ -126,5 +158,5 @@ export function useVoice(onFinal: (text: string) => void) {
 
   useEffect(() => () => { recRef.current?.abort(); window.speechSynthesis?.cancel() }, [])
 
-  return { listen, interim, speaking, muted, setMuted, startListening, stopListening, speak }
+  return { listen, interim, notice, speaking, muted, setMuted, startListening, stopListening, speak }
 }
