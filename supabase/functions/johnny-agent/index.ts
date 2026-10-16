@@ -38,9 +38,9 @@ async function rpc<T>(name: string, session: string, args: Record<string, unknow
 
 const addDays = (date: string, n: number) => new Date(new Date(date + 'T00:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10)
 
-interface CustomerReservation { id: string; starts_at: string; status: string; staff_name: string; items: { menu_code: string; name: string }[] }
+interface CustomerReservation { id: string; starts_at: string; status: string; staff_name: string; nominated?: boolean; items: { menu_code: string; name: string }[] }
 
-function tools(session: string): AgentTools {
+function tools(session: string, staff: StaffInfo[]): AgentTools {
   const slotsOf = async (date: string, code: string, staffId: string | null) =>
     (await rpc<{ starts_at: string }[]>('customer_available_slots', session, { p_date: date, p_menu_codes: [code], p_staff_id: staffId })).map(s => s.starts_at)
   return {
@@ -61,7 +61,7 @@ function tools(session: string): AgentTools {
       const list = await rpc<CustomerReservation[]>('customer_list_reservations', session)
       return list
         .filter(r => r.status === 'confirmed' && Date.parse(r.starts_at) > Date.now())
-        .map((r): Reservation => ({ id: r.id, starts_at: r.starts_at, status: r.status, staff_name: r.staff_name, menu: r.items.map(i => i.name).join('・'), menu_code: r.items[0]?.menu_code ?? '' }))
+        .map((r): Reservation => ({ id: r.id, starts_at: r.starts_at, status: r.status, staff_name: r.staff_name, menu: r.items.map(i => i.name).join('・'), menu_code: r.items[0]?.menu_code ?? '', staff_id: r.nominated ? staff.find(s => s.name === r.staff_name)?.id ?? null : null }))
     },
   }
 }
@@ -107,10 +107,12 @@ Deno.serve(async (req) => {
 
   try {
     // セッションの確認と、予約できるメニュー・スタッフを一度に
-    const opts = await rpc<{ menus: MenuInfo[]; staff: StaffInfo[] }>('customer_booking_options', session)
-    const t = tools(session)
-    // 「いつもの」用：これまでの予約でいちばん新しい（過去の）もののメニュー
-    const past = await rpc<CustomerReservation[]>('customer_list_reservations', session).catch(() => [] as CustomerReservation[])
+    // 「いつもの」用に、これまでの予約も同時に読む（いちばん新しい過去の予約のメニュー）
+    const [opts, past] = await Promise.all([
+      rpc<{ menus: MenuInfo[]; staff: StaffInfo[] }>('customer_booking_options', session),
+      rpc<CustomerReservation[]>('customer_list_reservations', session).catch(() => [] as CustomerReservation[]),
+    ])
+    const t = tools(session, opts.staff)
     const last = past.filter(r => Date.parse(r.starts_at) <= Date.now() && r.status !== 'cancelled' && r.status !== 'no_show').sort((a, b) => Date.parse(b.starts_at) - Date.parse(a.starts_at))[0]
     const ctx: AgentContext = {
       now: new Date().toISOString(),
