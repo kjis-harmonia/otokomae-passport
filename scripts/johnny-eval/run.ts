@@ -4,7 +4,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { runAgent, type AgentUi } from '../../supabase/functions/johnny-agent/agent.ts'
-import { CASES, type Case } from './corpus.ts'
+import { CASES as BASE, type Case } from './corpus.ts'
+import { MORE } from './corpus2.ts'
 import { MENUS, NOW, RESERVATIONS, STAFF, fixtureTools } from './fixture.ts'
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, '$1')), '../..')
@@ -33,6 +34,7 @@ function score(c: Case, ui: AgentUi): string[] {
   return bad
 }
 
+const CASES = [...BASE, ...MORE]
 const filter = process.argv[2]
 const cases = CASES.filter(c => !filter || c.id.includes(filter))
 const results: { id: string; say: string; ok: boolean; bad: string[]; reply?: string; ui?: AgentUi; calls?: string[]; error?: string; ms: number }[] = []

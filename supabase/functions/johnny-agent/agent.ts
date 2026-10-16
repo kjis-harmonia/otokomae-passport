@@ -67,14 +67,37 @@ function calendar(today: string, n: number) {
   })
 }
 
+const KNUM: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 }
+const kanjiToNum = (x: string) => {
+  if (!x.includes('十')) return x.split('').reduce((a, c) => a * 10 + (KNUM[c] ?? 0), 0)
+  const [a, b] = x.split('十'); return (a ? KNUM[a] : 1) * 10 + (b ? KNUM[b] : 0)
+}
+const KANA_NUM: Record<string, number> = { いち: 1, に: 2, さん: 3, よ: 4, ご: 5, ろく: 6, しち: 7, なな: 7, はち: 8, く: 9 }
+/** 音声の聞き取りで出る数字の書き方を揃える：「さんじ」「十五時」「ごご3じ」→ 15時・午後3時、「10/22」→ 10月22日 */
+export function normalizeSpoken(utterance: string): string {
+  let t = utterance.normalize('NFKC')
+  t = t.replace(/ごご/g, '午後').replace(/ごぜん/g, '午前').replace(/みょうにち/g, '明日')
+  t = t.replace(/[一二三四五六七八九十]{1,3}(?=時|日|月|分)/g, x => String(kanjiToNum(x)))
+  t = t.replace(/(?<![\d/])(\d{1,2})\/(\d{1,2})(?![\d/])/g, '$1月$2日')
+  t = t.replace(/(\d{1,2})じ(はん)?/g, (_, n, h) => `${n}時${h ? '半' : ''}`)
+  t = t.replace(/(?<=^|[のにでは、\s]|午後|午前|夕方|夜)(じゅう)?(いち|に|さん|よ|ご|ろく|しち|なな|はち|く)?じ(?!かん)(はん)?/g, (all, ju, u, han) => {
+    if (!ju && !u) return all
+    return `${(ju ? 10 : 0) + (u ? KANA_NUM[u] : 0)}時${han ? '半' : ''}`
+  })
+  return t
+}
+const CORRECTION = /いや|じゃなく|やなく|やっぱ|違う|ちがう/
+
 /** お客様の言葉の日付を、決まった規則で日付に直す（AI に読ませる前のヒント） */
 export function readDates(utterance: string, today: string): { phrase: string; date: string }[] {
-  const t = utterance.normalize('NFKC')
+  const t = normalizeSpoken(utterance)
   const cal = calendar(today, 60)
   const out: { phrase: string; date: string }[] = []
   const add = (phrase: string, date: string | undefined) => { if (date && !out.some(o => o.date === date)) out.push({ phrase, date }) }
   if (/今日|本日|きょう/.test(t)) add('今日', today)
-  if (/明後日|あさって/.test(t)) add('あさって', addDays(today, 2))
+  if (/今から|これから|このあと|この後|今すぐ|\d+時間半?後|\d+分後/.test(t)) add('今から', today)
+  if (/しあさって|明々後日|明明後日/.test(t)) add('しあさって', addDays(today, 3))
+  else if (/明後日|あさって/.test(t)) add('あさって', addDays(today, 2))
   else if (/明日|あした|あす(?!か)/.test(t)) add('明日', addDays(today, 1))
   for (const m of t.matchAll(/(再来週|来週|今週)(?:の)?\s*([月火水木金土日])(?:曜日?)?/g)) {
     const week = m[1] === '今週' ? 0 : m[1] === '来週' ? 1 : 2
@@ -86,7 +109,7 @@ export function readDates(utterance: string, today: string): { phrase: string; d
   }
   if (/(?<![再来今])週末/.test(t)) cal.filter(c => c.week === 0 && (c.wd === '土' || c.wd === '日')).forEach(c => add('週末', c.date))
   // 「火曜」「火曜日」だけ（今週・来週が付かない）：今日以降でいちばん近い日
-  for (const m of t.matchAll(/(?<!(?:再来週|来週|今週)(?:の)?\s*)([月火水木金土日])曜/g)) add(m[0], cal.find(c => c.wd === m[1])?.date)
+  for (const m of t.matchAll(/(?<!(?:再来週|来週|今週)(?:の)?\s*)([月火水木金土日])曜/g)) add(m[0], cal.find(c => c.wd === m[1] && c.date !== today)?.date)
   for (const m of t.matchAll(/(\d{1,2})月(\d{1,2})日/g)) {
     const mm = Number(m[1]), dd = Number(m[2]); let y = Number(today.slice(0, 4))
     let d = `${y}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
@@ -97,36 +120,47 @@ export function readDates(utterance: string, today: string): { phrase: string; d
     const dd = Number(m[1]); const c = cal.find(x => Number(x.date.slice(8, 10)) === dd)
     add(m[0], c?.date)
   }
+  // 「火曜、じゃなくて木曜」：言い直したあとの日を先に
+  if (CORRECTION.test(t) && out.length > 1) out.reverse()
   return out.slice(0, 3)
 }
 
 /** お客様の言葉の時刻（お店は10〜20時なので「3時」は15時）。「朝一」「一番早い」は first */
-export function readTime(utterance: string): string | 'first' | null {
-  const t = utterance.normalize('NFKC')
+export function readTime(utterance: string, nowHm?: string): string | 'first' | null {
+  const t = normalizeSpoken(utterance)
   if (/朝一|朝イチ|あさいち|一番早い時間/.test(t)) return 'first'
   const hm = (h: number, m: number) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-  let m = t.match(/(\d{1,2}):(\d{2})/)
-  if (m) { let h = Number(m[1]); if (h < 10) h += 12; return hm(h, Number(m[2])) }
-  m = t.match(/(午前|午後|夕方|夜)?\s*(\d{1,2})時(半|\s*(\d{1,2})分)?/)
-  if (!m) return null
-  let h = Number(m[2]); const min = m[3] === '半' ? 30 : m[4] ? Number(m[4]) : 0
-  if (m[1] !== '午前' && h < 10) h += 12
-  if (h < 10 || h > 20 || min > 59) return null
-  return hm(h, min)
+  const rel = t.match(/(\d{1,2})時間(半)?後|(\d{1,3})分後/)
+  if (rel && nowHm) {
+    const [h0, m0] = nowHm.split(':').map(Number)
+    const x = Math.ceil((h0 * 60 + m0 + (rel[1] ? Number(rel[1]) * 60 + (rel[2] ? 30 : 0) : Number(rel[3]))) / 15) * 15
+    return hm(Math.floor(x / 60), x % 60)
+  }
+  const found: { at: number; v: string }[] = []
+  for (const m of t.matchAll(/(\d{1,2}):(\d{2})/g)) { let h = Number(m[1]); if (h < 10) h += 12; found.push({ at: m.index ?? 0, v: hm(h, Number(m[2])) }) }
+  for (const m of t.matchAll(/(午前|午後|夕方|夜)?\s*(\d{1,2})時(?!間)(半|\s*(\d{1,2})分)?/g)) {
+    let h = Number(m[2]); const min = m[3] === '半' ? 30 : m[4] ? Number(m[4]) : 0
+    if (m[1] !== '午前' && h < 10) h += 12
+    if (h >= 10 && h <= 20 && min <= 59) found.push({ at: m.index ?? 0, v: hm(h, min) })
+  }
+  if (!found.length) return null
+  found.sort((a, b) => a.at - b.at)
+  return (CORRECTION.test(t) ? found[found.length - 1] : found[0]).v
 }
 
-const MENU_WORDS: [RegExp, string][] = [[/ぬれぱん|濡れぱん|ヌレパン/g, '濡れパン'], [/ぱんち/g, 'パンチ'], [/かっと/g, 'カット'], [/ぱーま/g, 'パーマ'], [/ぎんぱら/g, 'ギンパラ'], [/坊主|ぼうず/g, '丸刈り'], [/顔剃り|顔ぞり|かおそり|ひげそり|髭剃り/g, '顔そり男性'], [/白髪ぞめ|しらがぞめ/g, '白髪染め']]
+const MENU_WORDS: [RegExp, string][] = [[/ぬれぱん|濡れぱん|ヌレパン/g, '濡れパン'], [/ぱんち/g, 'パンチ'], [/かっと/g, 'カット'], [/ぱーま/g, 'パーマ'], [/ぎんぱら/g, 'ギンパラ'], [/坊主|ぼうず/g, '丸刈り'], [/顔剃り|顔ぞり|かおそり|ひげそり|髭剃り/g, '顔そり男性'], [/白髪ぞめ|しらがぞめ/g, '白髪染め'], [/(?:子供|こども|子ども|キッズ)の?(?:スキン)?フェード/g, '子供スキンフェード'], [/(?:子供|こども|子ども|小学生)の?(?:子の?)?(?:散髪|カット|髪)/g, '小学生'], [/アフロ(?!系)/g, 'アフロ系'], [/(?<![ヘ白])カラー/g, 'ヘアカラー']]
 /** 言葉に名前がそのまま出てくるメニュー（いちばん長く一致したもの）。事前に空きを調べるためだけに使う */
 function mentionedMenu(utterance: string, ctx: AgentContext): MenuInfo | null {
-  let t = utterance.normalize('NFKC')
+  let t = normalizeSpoken(utterance)
   for (const [re, to] of MENU_WORDS) t = t.replace(re, to)
   if (/いつもの|前回|前と同じ/.test(t) && ctx.lastMenuCode) return ctx.menus.find(m => m.code === ctx.lastMenuCode) ?? null
-  const set = ctx.menus.filter(m => m.name.includes('&')).filter(m => m.name.split('&').every(part => t.includes(part) || t.includes(part.replace(/^通常/, '')))).sort((a, b) => b.name.length - a.name.length)[0]
+  const set = ctx.menus.filter(m => m.name.includes('&')).filter(m => m.name.split('&').every(part => [part, part.replace(/^通常/, ''), part.replace(/パーマ$/, ''), part.replace(/^スキン/, '')].some(p => t.includes(p)))).sort((a, b) => b.name.length - a.name.length)[0]
   if (set) return set
   // 「白髪染め/ぼかし」は「白髪染め」でも「ぼかし」でも
   const names = (m: MenuInfo) => [m.name, ...m.name.split('/'), ...(m.name.length > 3 ? [m.name.replace(/パーマ|カット$/, '')] : [])].filter(x => x.length >= 2)
-  const hits = ctx.menus.filter(m => names(m).some(n => t.includes(n)))
-  const best = hits.sort((a, b) => b.name.length - a.name.length)[0]
+  // いちばん長く一致した呼び方のメニュー（「子供スキンフェード」は「スキンフェード」より先）
+  const hit = (m: MenuInfo) => Math.max(0, ...names(m).filter(n => t.includes(n)).map(n => n.length))
+  const best = ctx.menus.filter(m => hit(m) > 0).sort((a, b) => hit(b) - hit(a) || b.name.length - a.name.length)[0]
   if (best) return best
   // 「カット」「髪切りたい」だけ → 通常カット
   if (/カット|髪切|散髪/.test(t)) return ctx.menus.find(m => m.code === 'cut-regular') ?? null
@@ -177,6 +211,7 @@ ${week}
 - 担当の指名（「テイテイさんで」など） → staff の id を slots / next_slots の staff_id に入れて確かめ、ui にも staff_id を入れる。指名が無ければ staff_id は null。日が決まっていなければ next_slots で近い日から探す。
 - 「2つ目で」「さっきの11時で」「一番最初の」「最後の」 → 画面に出ている候補（shown）の中から選ぶ（画面に候補があるときの「一番最初」は、候補の1つ目）。
 - 確認画面（shown.confirm）が出ているときの「16時にして」「メニューはスキンフェードで」「テイテイさんで」は、その予約案の一部を変えるだけ。変えたところを slots で確かめて、ui: confirm_booking を出し直す。このときの「ずらして」「遅らせて」は予約の変更ではないので my_reservations は呼ばない。
+- 予約一覧の wd・label で読む：「日曜の予約」「来週の日曜のやつ」はその曜日の予約（日付の読みより予約一覧が先）。今ある予約の日時を変える話は confirm_booking ではなく confirm_change。「両方キャンセル」は1つずつ（近い方から confirm_cancel）。
 - キャンセル・変更・「予約いつだっけ」 → my_reservations で確かめる。予約が1つなら ui: confirm_cancel / 変更なら新しい日時を確かめて ui: confirm_change。複数あって分からなければ ui: reservations で選んでもらう。
 - 料金や時間の質問は表の数字で答え、予約の話に戻す。
 - 2人以上（「わしと息子で」など）は、まだアプリでは1人ずつ。「おひとりずつご予約ください。お急ぎならお電話でも承ります」と案内する。
@@ -231,6 +266,11 @@ function ranges(times: string[], step: number): string[] {
 }
 
 /** 道具の結果を AI に渡す形にする（メニューの名前つき・時刻は日本時間の読みも添える） */
+function describeReservations(list: Reservation[], today: string) {
+  const cal = calendar(today, 90)
+  return list.map(r => { const p = jstParts(r.starts_at); return { id: r.id, date: p.date, wd: p.wd, label: cal.find(c => c.date === p.date)?.labels.join('・') ?? '', time: p.time, menu: r.menu, menu_code: r.menu_code, staff: r.staff_name, status: r.status } })
+}
+
 function describeOverview(o: DayOverview, ctx: AgentContext) {
   if (!o.open || !o.hours) return { date: o.date, open: false }
   const names = new Map(ctx.menus.map(m => [m.code, m]))
@@ -250,8 +290,13 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
   if (ctx.shown?.confirm) remember(ctx.shown.confirm.menu_code, [ctx.shown.confirm.starts_at])
 
   const today = jstParts(ctx.now).date
-  const dates = readDates(utterance, today)
-  const time = readTime(utterance)
+  let dates = readDates(utterance, today)
+  let time = readTime(utterance, jstParts(ctx.now).time)
+  const prevUser = history.filter(t => t.role === 'user').slice(-1)[0]?.text
+  if (prevUser && dates.length === 0 && !time && !ctx.shown?.times?.length && !ctx.shown?.confirm && !/予約|キャンセル/.test(utterance)) {
+    dates = readDates(prevUser, today)
+    time = dates.length ? readTime(prevUser, jstParts(ctx.now).time) : null
+  }
   const hint = (dates.length ? `\n（日付の読み：${dates.map(d => `${d.phrase}＝${d.date}（${jstParts(toIso(d.date, '12:00')).wd}）`).join('、')}）` : '') + (time ? `\n（時刻の読み：${time === 'first' ? 'その日のいちばん早い空き' : time}）` : '')
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt(ctx) },
@@ -263,26 +308,54 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
   // 事前に調べる：日付が分かればその日の空き、メニューだけならその近い空き、予約の話なら予約一覧（DB は速いので先に並べて調べる）
   // 今の言葉にメニューが無ければ、画面の候補・確認中の案・直前の会話から（「やっぱり火曜日にして」）
   const fromScreen = ctx.shown?.confirm?.menu_code ?? ctx.shown?.menu_code
-  const menu = mentionedMenu(utterance, ctx) ?? (fromScreen ? ctx.menus.find(m => m.code === fromScreen) ?? null : null)
-    ?? mentionedMenu(history.filter(t => t.role === "user").slice(-2).map(t => t.text).join("、"), ctx)
+  const adding = !!ctx.shown?.confirm && /追加|も(?:お願い|して|やって|入れ)|一緒に/.test(utterance)
+  const confirmName = ctx.menus.find(m => m.code === ctx.shown?.confirm?.menu_code)?.name
+  const said = (adding && confirmName ? mentionedMenu(`${confirmName}と${utterance}`, ctx) : null) ?? mentionedMenu(utterance, ctx)
+  const onScreen = fromScreen ? ctx.menus.find(m => m.code === fromScreen) ?? null : null
+  const menu = said ?? onScreen ?? mentionedMenu(history.filter(t => t.role === 'user').slice(-2).map(t => t.text).join('、'), ctx)
   const pre: { name: string; args: Record<string, unknown>; run: () => Promise<unknown> }[] = []
   for (const d of dates.slice(0, 2)) pre.push({ name: 'day_overview', args: { date: d.date }, run: async () => { const o = await tools.dayOverview(d.date); overviews.set(o.date, o); o.groups.forEach(g => g.codes.forEach(c => remember(c, g.slots))); return describeOverview(o, ctx) } })
-  const aboutReservation = !ctx.shown?.confirm && /キャンセル|取り消|取消|予約.{0,12}(?:やめ|変|ずら|遅|早|いつ|何時|日にち)|(?:やめ|変|ずら|遅らせ|早め).{0,6}予約|次の予約|行けん|行けな|のやつを/.test(utterance)
+  const aboutReservation = !ctx.shown?.confirm && /キャンセル|取り消|取消|予約.{0,12}(?:やめ|変|ずら|遅|早|いつ|何時|日にち|担当|メニュー)|(?:やめ|変|ずら|遅らせ|早め).{0,6}予約|次の予約|行けん|行けな|いけな|のやつを|なしにし|無しにし|ずらせ|ずらし|ずらす|予約[、,を]?.{0,14}に(?:し|でき|変|ずら|$)/.test(utterance)
+  const cancelTalk = aboutReservation && /キャンセル|取り消|取消|やめ|なしにし|無しにし/.test(utterance)
+  // 取り消しの話：日付の読み（「日曜」＝明日）とその日の空きは使わず、予約一覧から合う予約を選ばせる
+  if (cancelTalk) {
+    pre.splice(0, pre.length, ...pre.filter(p => p.name !== 'day_overview'))
+    messages[messages.length - 1].content = `${utterance}${shownText(ctx)}
+（予約の取り消しの話：予約一覧の wd・label・日付・メニュー・担当が合う予約を選ぶ）`
+  }
   const staffHit = ctx.staff.find(x => utterance.normalize('NFKC').includes(x.name) || (x.name === 'テイテイ' && /ていてい/.test(utterance)) || (x.name === '銀二郎' && /ぎんじろう/.test(utterance))) ?? null
   if (menu && dates.length === 0 && !ctx.shown?.confirm && !ctx.shown?.times?.length) pre.push({ name: 'next_slots', args: { menu_code: menu.code, from: today, staff_id: staffHit?.id ?? null }, run: async () => { const times = await tools.nextSlots(menu.code, today, staffHit?.id ?? null); remember(menu.code, times); return times.map(t => ({ date: jstParts(t).date, time: jstParts(t).time })) } })
-  if (menu && (staffHit || time)) for (const d of dates.slice(0, 1)) pre.push({ name: 'slots', args: { date: d.date, menu_code: menu.code, staff_id: staffHit?.id ?? null }, run: async () => {
+  const slotDates = dates.length ? dates.slice(0, 1) : ctx.shown?.confirm && (staffHit || time) ? [{ phrase: '確認中の案の日', date: jstParts(ctx.shown.confirm.starts_at).date }] : []
+  if (menu && (staffHit || time)) for (const d of slotDates) pre.push({ name: 'slots', args: { date: d.date, menu_code: menu.code, staff_id: staffHit?.id ?? null }, run: async () => {
     const times = await tools.slots(d.date, menu.code, staffHit?.id ?? null)
     remember(menu.code, times)
     const hms = times.map(t => jstParts(t).time)
     const asked = time === 'first' ? hms[0] ?? null : time
     return { date: d.date, menu_code: menu.code, staff_id: staffHit?.id ?? null, times: hms, ...(asked ? { requested: asked, requested_free: hms.includes(asked), requested_iso: hms.includes(asked) ? toIso(d.date, asked) : null } : {}) }
   } })
-  if (aboutReservation) pre.push({ name: 'my_reservations', args: {}, run: async () => { seenReservations = await tools.reservations(); return seenReservations.map(r => ({ id: r.id, date: jstParts(r.starts_at).date, time: jstParts(r.starts_at).time, menu: r.menu, menu_code: r.menu_code, staff: r.staff_name, status: r.status })) } })
-  if (pre.length) {
-    const results = await Promise.all(pre.map(p => p.run().catch(e => ({ error: String((e as Error).message ?? e) }))))
-    const ids = pre.map((_, i) => `pre_${i}`)
-    messages.push({ role: 'assistant', content: '事前に調べた結果', tool_calls: pre.map((p, i) => ({ id: ids[i], type: 'function', function: { name: p.name, arguments: JSON.stringify(p.args) } })) })
-    pre.forEach((_, i) => messages.push({ role: 'tool', tool_call_id: ids[i], content: JSON.stringify(results[i]) }))
+  if (aboutReservation) pre.push({ name: 'my_reservations', args: {}, run: async () => { seenReservations = await tools.reservations(); return describeReservations(seenReservations, today) } })
+  let preNo = 0
+  const runPre = async (list: typeof pre) => {
+    if (!list.length) return
+    const results = await Promise.all(list.map(p => p.run().catch(e => ({ error: String((e as Error).message ?? e) }))))
+    const ids = list.map(() => `pre_${preNo++}`)
+    messages.push({ role: 'assistant', content: '事前に調べた結果', tool_calls: list.map((p, i) => ({ id: ids[i], type: 'function', function: { name: p.name, arguments: JSON.stringify(p.args) } })) })
+    list.forEach((_, i) => messages.push({ role: 'tool', tool_call_id: ids[i], content: JSON.stringify(results[i]) }))
+  }
+  await runPre(pre)
+  const mine = seenReservations as Reservation[] | null
+  if (aboutReservation && !cancelTalk && mine?.length === 1 && (dates.length || time || said || staffHit)) {
+    const r = mine[0], day = dates[0]?.date ?? jstParts(r.starts_at).date, code = said?.code ?? r.menu_code
+    await runPre([{ name: 'slots', args: { date: day, menu_code: code, staff_id: staffHit?.id ?? null }, run: async () => {
+      const times = await tools.slots(day, code, staffHit?.id ?? null); remember(code, times)
+      const hms = times.map(t => jstParts(t).time)
+      return { note: `予約 ${r.id} の変更先の候補（${day}・${code}）`, date: day, menu_code: code, times: hms, ...(time && time !== 'first' ? { requested: time, requested_free: hms.includes(time) } : {}) }
+    } }])
+  }
+  const d0 = dates[0]?.date
+  if (menu && d0 && !aboutReservation && overviews.has(d0) && !overviews.get(d0)!.groups.some(g => g.codes.includes(menu.code))) {
+    const from = addDays(d0, 1)
+    await runPre([{ name: 'next_slots', args: { menu_code: menu.code, from, staff_id: staffHit?.id ?? null }, run: async () => { const times = await tools.nextSlots(menu.code, from, staffHit?.id ?? null); remember(menu.code, times); return { note: `${d0} は ${menu.name} の空きが無いので、次の日からの空き`, times: times.map(t => ({ date: jstParts(t).date, time: jstParts(t).time })) } } }])
   }
   for (let round = 0; round < 6; round++) {
     const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
@@ -302,7 +375,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
       let args: Record<string, unknown> = {}
       try { args = JSON.parse(call.function.arguments || '{}') } catch { /* 空のまま */ }
       if (call.function.name === 'respond') {
-        const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { menu: menu?.code ?? null, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, dates: dates.map(d => d.date), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects++ === 0)
+        const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, declined: !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects++ === 0)
         if (checked.ok) return { say: checked.say, ui: checked.ui, tool_calls: toolCalls }
         // 道具に無い時刻・予約を出そうとした：理由を返して、もう一度考えさせる
         if (process?.env?.JOHNNY_DEBUG) console.error(`[reject] ${checked.error} :: ${JSON.stringify(args.ui)}`)
@@ -328,7 +401,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
           out = { date: String(args.date), times: times.map(t => jstParts(t).time) }
         } else if (call.function.name === 'my_reservations') {
           seenReservations = await tools.reservations()
-          out = seenReservations.map(r => ({ id: r.id, date: jstParts(r.starts_at).date, time: jstParts(r.starts_at).time, menu: r.menu, menu_code: r.menu_code, staff: r.staff_name, status: r.status }))
+          out = describeReservations(seenReservations, today)
         } else out = { error: 'unknown_tool' }
       } catch (e) { out = { error: String((e as Error).message ?? e) } }
       messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(out) })
@@ -339,35 +412,49 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
 
 type Checked = { ok: true; say: string; ui: AgentUi } | { ok: false; error: string }
 
-interface Heard { menu: string | null; staffId: string | null; time: string | null; aboutReservation: boolean; dates: string[]; picking: boolean }
+interface Heard { menu: string | null; said: boolean; staffId: string | null; time: string | null; aboutReservation: boolean; cancel: boolean; declined: boolean; dates: string[]; picking: boolean }
 
 function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: Map<string, Set<string>>, reservations: Reservation[] | null, overviews: Map<string, DayOverview>, heard: Heard, strict: boolean): Checked {
   const mentioned = heard.menu
   const say = typeof args.say === 'string' ? args.say.trim().slice(0, 240) : ''
   const u = { ...((args.ui ?? {}) as Record<string, unknown>) }
-  if (['slots', 'confirm_booking', 'confirm_change'].includes(String(u.type)) && typeof u.staff_id !== 'string') u.staff_id = heard.staffId ?? (u.type === 'confirm_booking' ? ctx.shown?.confirm?.staff_id ?? null : null)
+  if (['slots', 'confirm_booking', 'confirm_change'].includes(String(u.type)) && typeof u.staff_id !== 'string') u.staff_id = heard.staffId ?? (u.type === 'confirm_booking' ? ctx.shown?.confirm?.staff_id ?? ctx.shown?.staff_id ?? null : null)
   // menu_code が書かれていないとき：会話の流れから決まるものは補う
   if (typeof u.menu_code !== 'string' && ['slots', 'confirm_booking', 'confirm_change'].includes(String(u.type))) {
     const fromRes = u.type === 'confirm_change' ? reservations?.find(r => r.id === u.reservation_id)?.menu_code : undefined
     const times = (u.type === 'slots' ? (Array.isArray(u.times) ? u.times : []) : [u.starts_at]).filter((t): t is string => typeof t === 'string')
     const holders = [...seenTimes.entries()].filter(([, set]) => times.length > 0 && times.every(t => [...set].some(x => sameInstant(x, t)))).map(([c]) => c)
-    u.menu_code = fromRes ?? (mentioned && holders.includes(mentioned) ? mentioned : undefined) ?? (holders.length === 1 ? holders[0] : undefined) ?? ctx.shown?.confirm?.menu_code ?? ctx.shown?.menu_code
+    u.menu_code = (mentioned && holders.includes(mentioned) ? mentioned : undefined) ?? fromRes ?? (holders.length === 1 ? holders[0] : undefined) ?? ctx.shown?.confirm?.menu_code ?? ctx.shown?.menu_code
   }
   if (!say) return { ok: false, error: 'say が空です' }
+  if (heard.declined && (u.type === 'confirm_booking' || u.type === 'slots')) return { ok: true, say, ui: { type: 'none' } }
+  if (u.type === 'confirm_booking' && mentioned && ctx.shown?.confirm && u.menu_code === ctx.shown.confirm.menu_code && mentioned !== u.menu_code && typeof u.starts_at === 'string' && [...(seenTimes.get(mentioned) ?? [])].some(x => sameInstant(x, u.starts_at as string))) u.menu_code = mentioned
   const menuOk = (c: unknown): c is string => typeof c === 'string' && ctx.menus.some(m => m.code === c)
   const staffOk = (s: unknown) => s == null || (typeof s === 'string' && ctx.staff.some(x => x.id === s))
   const staffOf = (s: unknown) => (typeof s === 'string' ? s : null)
   const timeSeen = (code: string, t: unknown) => typeof t === 'string' && [...(seenTimes.get(code) ?? [])].some(x => sameInstant(x, t))
   const canon = (code: string, t: string) => [...(seenTimes.get(code) ?? [])].find(x => sameInstant(x, t)) ?? t
   const resOk = (id: unknown) => typeof id === 'string' && !!reservations?.some(r => r.id === id)
+  if (strict && heard.picking && u.type === 'confirm_booking' && !(ctx.shown?.times ?? []).some(x => typeof u.starts_at === 'string' && sameInstant(x, u.starts_at))) {
+    return { ok: false, error: '画面の時刻の候補から選んでいます。starts_at は shown の times の中から（「最初」は1つ目、「最後」は最後）選んでください' }
+  }
   if (strict && heard.picking && u.type !== 'confirm_booking') {
     return { ok: false, error: '画面の時刻の候補から選んでいます。選ばれた時刻（shown の times の中）で ui: confirm_booking を出してください' }
   }
-  if (strict && ctx.shown?.confirm && u.type === 'none' && (heard.time || heard.menu || heard.staffId)) {
+  if (strict && ctx.shown?.confirm && !heard.declined && u.type === 'none' && (heard.time || heard.said || heard.staffId)) {
     return { ok: false, error: '確認中の予約案の一部を変える話です。変えたところを slots で確かめて、ui: confirm_booking を出し直してください（予約の変更ではありません）' }
   }
   if (strict && heard.aboutReservation && (reservations?.length ?? 0) > 0 && (u.type === 'none' || u.type === 'slots') && heard.dates.length > 0 && heard.time) {
     return { ok: false, error: '予約の変更です。新しい日時が空いていれば ui: confirm_change（reservation_id・starts_at）を出してください。空いていなければ近い時刻を slots で' }
+  }
+  if (strict && heard.aboutReservation && !heard.cancel && (reservations?.length ?? 0) === 1 && (heard.dates.length > 0 || heard.menu || heard.staffId) && (u.type === 'menus' || u.type === 'none')) {
+    return { ok: false, error: '今ある予約の変更です。事前に調べた変更先の空きから、言われた時刻（無ければ予約と同じ時刻）が空いていれば ui: confirm_change、無ければ近い時刻を ui: slots にしてください' }
+  }
+  if (strict && heard.aboutReservation && (reservations?.length ?? 0) > 0 && u.type === 'confirm_booking') {
+    return { ok: false, error: '今ある予約の変更です。新しい予約ではなく ui: confirm_change（reservation_id・menu_code・starts_at）にしてください' }
+  }
+  if (strict && heard.cancel && (reservations?.length ?? 0) > 0 && ['none', 'slots', 'menus', 'handoff'].includes(String(u.type))) {
+    return { ok: false, error: 'キャンセルの話です。どの予約か分かれば ui: confirm_cancel、分からなければ ui: reservations で選んでもらってください（「日曜の予約」は予約一覧の wd が日の予約）' }
   }
   if (strict && !heard.aboutReservation && mentioned && (u.type === 'menus' || u.type === 'none')) {
     return { ok: false, error: `お客様はメニュー（${mentioned}）を言っています。聞き返さずに、空き時間の候補（ui: slots）か確認（ui: confirm_booking）を出してください。その日に空きが無ければ next_slots で次の日以降を探して slots に` }
@@ -387,7 +474,7 @@ function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: M
       }
       const first = new Map<string, string>()
       const at = heard.time && heard.dates.includes(o.date) ? toIso(o.date, heard.time) : null
-      o.groups.forEach(g => { const pick = at ? g.slots.find(x => sameInstant(x, at)) : [...g.slots].sort()[0]; if (pick) g.codes.forEach(c => first.set(c, pick)) })
+      o.groups.forEach(g => { const sorted = [...g.slots].sort(); const pick = at ? sorted.find(x => sameInstant(x, at)) ?? sorted.find(x => Date.parse(x) >= Date.parse(at)) : sorted[0]; if (pick) g.codes.forEach(c => first.set(c, pick)) })
       if (first.size === 0) return { ok: false, error: `${o.date} は空きがありません。別の日を day_overview で調べてください` }
       const order = [...picked.filter(c => first.has(c)), ...(ctx.lastMenuCode && first.has(ctx.lastMenuCode) ? [ctx.lastMenuCode] : []), ...ctx.menus.map(m => m.code).filter(c => first.has(c))]
       const items = [...new Set(order)].map(c => ({ menu_code: c, first_time: first.get(c) ?? null }))
