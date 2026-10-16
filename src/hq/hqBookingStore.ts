@@ -9,7 +9,11 @@ export interface BookingSettings {
   customer_cancel_deadline_minutes: number
   app_booking_enabled: boolean
 }
-export interface StaffMember { id: string; display_name: string; is_bookable: boolean; is_active: boolean; sort_order: number }
+export interface StaffMember {
+  id: string; display_name: string; is_bookable: boolean; is_active: boolean; sort_order: number
+  /** 同時に受けられる予約の数（SB の予約表の枠。SALON BOARD の「受付可能数」と合わせる） */
+  booking_capacity?: number
+}
 export interface MenuStaff { staff_id: string; duration_override_min: number | null }
 /** 正規サービスマスター（予約と会計で共通）。price は税込の表示価格 */
 export type ServiceKind = 'service' | 'option' | 'set'
@@ -99,6 +103,7 @@ export const HQ_BOOKING_ERROR: Record<string, string> = {
   invalid_value: '入力内容を確認してください。',
   not_found: '対象が見つかりません。',
   invalid_range: '表示期間が長すぎます。',
+  invalid_capacity: '同時に受ける人数は1〜3人から選んでください。',
 }
 
 const WEEK = ['日', '月', '火', '水', '木', '金', '土']
@@ -124,6 +129,8 @@ export function hqBookingErrorMessage(err: unknown): string {
 export const getBookingMasters = () => callHqRpc<BookingMasters>('hq_booking_masters')
 export const updateBookingSettings = (p: Partial<BookingSettings>) => callHqRpc<BookingSettings>('hq_update_booking_settings', { p })
 export const upsertStaffMember = (p: Partial<StaffMember>) => callHqRpc<StaffMember>('hq_upsert_staff_member', { p })
+export const setBookingCapacity = (staffId: string, capacity: number) =>
+  callHqRpc<{ ok: true }>('hq_set_booking_capacity', { p_staff_id: staffId, p_capacity: capacity })
 export const upsertMenu = (p: Partial<Omit<ServiceMenu, 'staff'>> & { staff?: MenuStaff[] }) => callHqRpc<ServiceMenu>('hq_upsert_menu', { p })
 export const getSchedule = (from: string, to: string) => callHqRpc<Schedule>('hq_list_schedule', { p_from: from, p_to: to })
 /** 通常週を丸ごと保存（含まれない曜日は休み） */
