@@ -44,6 +44,8 @@ export interface AgentReply { say: string; ui: AgentUi; tool_calls: number }
 
 export interface LlmConfig { apiKey: string; model: string; fetchImpl?: typeof fetch }
 
+// 試験（Node）で JOHNNY_DEBUG=1 のときだけ、AI の使った量と差し戻しを出す（Deno には process が無いことがある）
+const DEBUG = !!(globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.JOHNNY_DEBUG
 const JST = 9 * 3600000
 const jstParts = (iso: string) => {
   const d = new Date(new Date(iso).getTime() + JST)
@@ -365,7 +367,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
     })
     if (!res.ok) throw new Error(`ai_unavailable ${res.status} ${(await res.text()).slice(0, 300)}`)
     const data = await res.json()
-    if (process?.env?.JOHNNY_DEBUG) console.error(`[llm] ${JSON.stringify(data.usage)}`)
+    if (DEBUG) console.error(`[llm] ${JSON.stringify(data.usage)}`)
     const msg = data.choices?.[0]?.message
     const calls = (msg?.tool_calls ?? []) as { id: string; function: { name: string; arguments: string } }[]
     if (calls.length === 0) throw new Error('ai_no_tool_call')
@@ -378,7 +380,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
         const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, declined: !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects++ === 0)
         if (checked.ok) return { say: checked.say, ui: checked.ui, tool_calls: toolCalls }
         // 道具に無い時刻・予約を出そうとした：理由を返して、もう一度考えさせる
-        if (process?.env?.JOHNNY_DEBUG) console.error(`[reject] ${checked.error} :: ${JSON.stringify(args.ui)}`)
+        if (DEBUG) console.error(`[reject] ${checked.error} :: ${JSON.stringify(args.ui)}`)
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: checked.error }) })
         continue
       }
