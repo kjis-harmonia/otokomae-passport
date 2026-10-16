@@ -1,0 +1,19 @@
+{
+  "name": "銀二郎SB",
+  "short_name": "銀二郎SB",
+  "description": "銀二郎の予約表（スタッフ専用）",
+  "start_url": "/sb",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/assets/app-icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

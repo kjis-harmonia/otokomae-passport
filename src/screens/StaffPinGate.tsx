@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { StaffHome } from './StaffHome'
 import { isStaging } from '../utils/env'
@@ -24,7 +24,8 @@ const PIN_CSS = `
 }
 `
 
-export function StaffPinGate() {
+/** children を渡すと、認証後にその画面を出す（SB など）。渡さなければ従来どおり店舗端末（StaffHome） */
+export function StaffPinGate({ children }: { children?: ReactNode } = {}) {
   // サーバー発行のスタッフセッション（14時間）を保持している間だけ端末画面を表示する
   const [authed, setAuthed] = useState(() => getStaffToken() !== null)
   const [pin, setPin] = useState('')
@@ -89,7 +90,7 @@ export function StaffPinGate() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleDigit, handleBack])
 
-  if (authed) return <StaffHome />
+  if (authed) return children ?? <StaffHome />
 
   return (
     <AnimatePresence mode="wait">
