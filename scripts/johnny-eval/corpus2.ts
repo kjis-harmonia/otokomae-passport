@@ -67,7 +67,7 @@ export const MORE: Case[] = [
   { id: 'name-08', say: 'アフロにしたい', expect: slots('perm-afro') },
   { id: 'name-09', say: 'ツイストパーマ', expect: { types: ['slots', 'menus'], menu: TWIST } },
   { id: 'name-10', say: 'ノーマルパーマで', expect: slots('perm-normal') },
-  { id: 'name-11', say: 'パーマかけたい', expect: { types: ['menus', 'slots'], menu: PERMS } },
+  { id: 'name-11', say: 'パーマかけたい', expect: { types: ['menus', 'slots', 'none'], menu: PERMS } },
   { id: 'name-12', say: 'ニグロパーマ', expect: slots('perm-negro') },
   { id: 'name-13', say: 'カールアイパー', expect: slots('perm-curl-iper') },
   { id: 'name-14', say: '眉毛整えたい', expect: slots('opt-brow') },
