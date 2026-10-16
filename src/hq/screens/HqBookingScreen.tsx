@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { HQ_COLORS, HQ_SANS } from '../hqTheme'
 import { getJapanDateString, addDaysToDateString } from '../../utils/dateUtils'
 import {
-  getBookingMasters, updateBookingSettings, upsertStaffMember, setBookingCapacity, getSchedule, setShiftTemplate, setDaySchedule,
+  getBookingMasters, updateBookingSettings, setAppBooking, upsertStaffMember, setBookingCapacity, getSchedule, setShiftTemplate, setDaySchedule,
   setBusinessHours, createTimeBlock, deleteTimeBlock, setClosure, deleteClosure, hqBookingErrorMessage, jstIso, BLOCK_KIND_LABEL,
   type BookingMasters, type Schedule, type BlockKind, type StaffMember, type BusinessHour, type DaySchedule,
 } from '../hqBookingStore'
@@ -511,11 +511,37 @@ function SettingsTab({ masters, onSaved }: { masters: BookingMasters; onSaved: (
       <Input label="当日予約の締切（開始の何分前まで）" type="number" value={v.min_lead_minutes} onChange={x => setV({ ...v, min_lead_minutes: x })} />
       <Input label="予約確定前の仮確保（分）" type="number" value={v.hold_minutes} onChange={x => setV({ ...v, hold_minutes: x })} />
       <Input label="アプリからのキャンセル締切（開始の何分前まで）" type="number" value={v.customer_cancel_deadline_minutes} onChange={x => setV({ ...v, customer_cancel_deadline_minutes: x })} />
-      <p style={{ fontSize: 14, color: T.sub }}>
-        お客様アプリからの予約：{s.app_booking_enabled ? '受付中' : '停止中'}（本番公開時に切り替えます）
-      </p>
       {msg && <p style={{ fontSize: 14, color: msg === '保存しました。' ? T.sub : T.danger }}>{msg}</p>}
       <PrimaryButton disabled={busy} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</PrimaryButton>
+      <AppBookingSwitch enabled={s.app_booking_enabled} onSaved={onSaved} />
+    </div>
+  )
+}
+
+/** お客様アプリ（JOHNNY）からの予約の受付。押し間違えないよう、もう一度確かめてから切り替える */
+function AppBookingSwitch({ enabled, onSaved }: { enabled: boolean; onSaved: () => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function apply() {
+    setBusy(true); setError(null)
+    try { await setAppBooking(!enabled); await onSaved(); setConfirming(false) }
+    catch (err) { setError(hqBookingErrorMessage(err)) }
+    finally { setBusy(false) }
+  }
+  return (
+    <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.line}`, display: 'grid', gap: 10 }}>
+      <p style={{ fontSize: 15, color: T.text, margin: 0 }}>お客様アプリからの予約：{enabled ? '受付中' : '停止中'}</p>
+      {confirming ? <>
+        <p style={{ fontSize: 14, color: T.sub, margin: 0, lineHeight: 1.6 }}>
+          {enabled ? 'お客様のアプリ（JOHNNY）から予約できなくなります。入っている予約はそのまま残ります。' : 'お客様のアプリ（JOHNNY）から、空いている時間に予約できるようになります。入った予約は SB に「未転記」で出るので、SALON BOARD にも入れてください。'}
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <PrimaryButton disabled={busy} onClick={() => void apply()}>{busy ? '切り替え中…' : enabled ? '受付を止める' : '受付を始める'}</PrimaryButton>
+          <TextButton onClick={() => { setConfirming(false); setError(null) }}>やめる</TextButton>
+        </div>
+      </> : <div><TextButton onClick={() => setConfirming(true)}>{enabled ? '受付を止める…' : '受付を始める…'}</TextButton></div>}
+      {error && <p style={{ color: T.danger, fontSize: 14, margin: 0 }}>{error}</p>}
     </div>
   )
 }
