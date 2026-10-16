@@ -134,6 +134,7 @@ button svg { flex-shrink:0; }
 .hq-content-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:30px 0 8px; color:#a7a7af; font-size:9px; }
 .hq-content-footer>span:first-child { letter-spacing:1.3px; font-size:8px; }
 .hq-preview-banner { display:flex; justify-content:space-between; gap:12px; padding:7px 39px; background:#edf2f8; color:#61738b; font-size:10px; }
+.hq-preview-banner.hq-staging-banner { background:#fdecea; color:#a8322a; font-weight:600; font-size:12px; }
 .hq-loading { min-height:250px; display:flex; align-items:center; justify-content:center; color:#86868e; font-size:13px; }
 .hq-error { background:#fff; border:1px solid #f0d8d5; border-radius:12px; padding:24px; color:#a24236; }
 .hq-error h2 { color:#4b3531; font-size:16px; margin:0 0 8px; }
