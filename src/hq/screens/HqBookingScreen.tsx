@@ -14,8 +14,8 @@ const T = {
   text: HQ_COLORS.textPrimary,
   sub: HQ_COLORS.textSecondary,
   mute: HQ_COLORS.textMute,
-  line: 'rgba(255,255,255,0.09)',
-  field: 'rgba(255,255,255,0.04)',
+  line: HQ_COLORS.panelBorder,
+  field: HQ_COLORS.panel,
   accent: HQ_COLORS.gold,
   danger: HQ_COLORS.negative,
 }
@@ -550,7 +550,7 @@ function AppBookingSwitch({ enabled, onSaved }: { enabled: boolean; onSaved: () 
 
 const fieldStyle: React.CSSProperties = {
   height: 40, boxSizing: 'border-box', padding: '0 10px', borderRadius: 6, fontSize: 15, fontFamily: HQ_SANS,
-  background: T.field, color: T.text, border: `1px solid ${T.line}`, outline: 'none', colorScheme: 'dark', width: '100%',
+  background: T.field, color: T.text, border: `1px solid ${T.line}`, outline: 'none', colorScheme: 'light', width: '100%',
 }
 
 function SubHeading({ children }: { children: ReactNode }) {

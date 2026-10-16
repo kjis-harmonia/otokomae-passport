@@ -12,12 +12,12 @@ import { ReserveScreen } from './screens/ReserveScreen'
 import { TicketWalletScreen } from './screens/TicketWalletScreen'
 import { MyPageScreen } from './screens/MyPageScreen'
 import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
-import { ShopScreen } from './screens/ShopScreen'
 import { DiagnosisScreen } from './screens/DiagnosisScreen'
 import { OnboardingScreen, type OnboardingDonePayload } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import PremiumGachaExperience from './components/PremiumGachaExperience'
 import { MemberQrModal } from './components/MemberQrModal'
+import { flushPendingContact } from './utils/customerContact'
 import { MOCK_MEMBER } from './data/brand'
 import type { NavTab, MemberStatus } from './data/brand'
 import type { WalletFilter } from './data/wallet'
@@ -799,6 +799,8 @@ function BgmTrackSheet({
 function App() {
   // テストデータを localStorage に1度だけ投入
   seedDevData()
+  // 端末に一時保存した連絡先（本名・電話番号）を、サーバーの仕組みがあれば送る
+  useEffect(() => { void flushPendingContact() }, [])
   const [shopUnlocked, setShopUnlocked] = useState(isShopUnlocked)
   const [showShopPasswordGate, setShowShopPasswordGate] = useState(() => {
     const requestedTab = new URLSearchParams(window.location.search).get('tab')
@@ -841,6 +843,8 @@ function App() {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
+    // 下タブの SHOP（番号入力のあと）は予約の画面を開く。ショップのページへは行かない
+    if (requestedTab === 'shop') return 'reserve'
     const valid: NavTab[] = ['home', 'styles', 'shop', 'diagnosis', 'tryon', 'reserve', 'mypage', 'tickets']
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
@@ -953,7 +957,8 @@ function App() {
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
     if (navTabs.includes(nextTab)) setNavHighlight(nextTab)
     if (nextTab === 'tickets') setTicketInitialFilter('cut')
-    setActiveTab(nextTab)
+    // 下タブの SHOP は予約の画面を開く（タブの表示は SHOP のまま）
+    setActiveTab(nextTab === 'shop' ? 'reserve' : nextTab)
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
   }, [shopUnlocked])
 
@@ -961,7 +966,7 @@ function App() {
     setShopUnlocked(true)
     setShowShopPasswordGate(false)
     setNavHighlight('shop')
-    setActiveTab('shop')
+    setActiveTab('reserve')
   }, [])
 
   const handleGachaComplete = useCallback(() => {
@@ -1021,7 +1026,7 @@ function App() {
         /* App shell: mounted only after onboarding completes */
         <>
           <div className="app-shell flex flex-col h-dvh w-full mx-auto overflow-hidden">
-{activeTab !== 'home' && activeTab !== 'shop' && <AppHeader />}
+{activeTab !== 'home' && <AppHeader />}
             <main className="app-main flex-1 overflow-y-auto">
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -1034,7 +1039,7 @@ function App() {
                   {activeTab === 'home'      && <HomeScreen member={liveMember} onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'gacha'     && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                   {activeTab === 'tryon'     && <TryOnScreen />}
-                  {activeTab === 'reserve'   && <ReserveScreen />}
+                  {activeTab === 'reserve'   && <ReserveScreen onShowQr={() => setShowQrModal(true)} />}
                   {activeTab === 'tickets'   && (
                     <TicketWalletScreen
                       key={`tickets-${ticketInitialFilter}-${ticketRefreshKey}`}
@@ -1044,7 +1049,6 @@ function App() {
                   )}
                   {activeTab === 'styles'    && <StyleLibraryScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'diagnosis' && <DiagnosisScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
-                  {activeTab === 'shop'      && <ShopScreen />}
                   {activeTab === 'mypage'    && <MyPageScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                 </motion.div>
               </AnimatePresence>

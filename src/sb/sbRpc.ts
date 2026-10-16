@@ -1,4 +1,4 @@
-// Staging 用：SB が使うスタッフ RPC の共通処理（antigravity/pos-p0-5 の src/utils/staffRpc.ts と同じ。POS の操作者セッションの部分だけ除く）
+// main・Staging 共通：SB が使うスタッフ RPC の共通処理（antigravity/pos-p0-5 の src/utils/staffRpc.ts と同じ。POS の操作者セッションの部分だけ除く）
 import { supabase } from '../lib/supabase'
 
 const STAFF_TOKEN_KEY = 'ginjiro_staff_session'

@@ -1,12 +1,15 @@
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { PassportCard } from './PassportCard'
+import { formatVisit, useNextReservation } from '../features/johnny/nextReservation'
 
 interface Props {
   onClose: () => void
 }
 
 export function MemberQrModal({ onClose }: Props) {
+  const next = useNextReservation()
+  const visit = next ? formatVisit(next.starts_at) : null
   return (
     <motion.div
       className="fixed inset-0"
@@ -53,6 +56,27 @@ export function MemberQrModal({ onClose }: Props) {
           transition={{ delay: 0.08, duration: 0.36, ease: 'easeOut' }}
           style={{ width: '100%', maxWidth: 400 }}
         >
+          {next && visit && (
+            <section
+              aria-label="次のご予約"
+              style={{
+                margin: '0 16px 14px', padding: '12px 16px', borderRadius: 14,
+                background: 'rgba(28,28,30,0.92)', color: '#FFFFFF',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif',
+                display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12,
+              }}
+            >
+              <span style={{ fontSize: 13, color: 'rgba(235,235,245,0.6)', flexShrink: 0 }}>次のご予約</span>
+              <span style={{ textAlign: 'right' }}>
+                <span style={{ display: 'block', fontSize: 17, fontWeight: 600 }}>
+                  {visit.relative ? `${visit.relative} ` : ''}{visit.date} {visit.time}
+                </span>
+                <span style={{ display: 'block', fontSize: 13, color: 'rgba(235,235,245,0.6)', marginTop: 2 }}>
+                  {next.items.map(i => i.name).join('・')}
+                </span>
+              </span>
+            </section>
+          )}
           <PassportCard />
         </motion.div>
       </div>
