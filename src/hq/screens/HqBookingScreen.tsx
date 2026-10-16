@@ -577,7 +577,7 @@ function Toggle({ on, onClick, disabled, children }: { on: boolean; onClick: () 
     <button type="button" onClick={onClick} disabled={disabled} aria-pressed={on}
       style={{
         minHeight: 40, padding: '0 12px', borderRadius: 20, fontSize: 13, fontFamily: HQ_SANS, cursor: disabled ? 'default' : 'pointer',
-        background: on ? T.text : 'transparent', color: on ? '#0B0B0B' : T.sub, border: `1px solid ${on ? T.text : T.line}`, opacity: disabled ? 0.5 : 1,
+        background: on ? T.text : 'transparent', color: on ? HQ_COLORS.bg : T.sub, border: `1px solid ${on ? T.text : T.line}`, opacity: disabled ? 0.5 : 1,
       }}>
       {children}
     </button>
