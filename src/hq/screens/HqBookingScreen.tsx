@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { HQ_COLORS, HQ_SANS } from '../hqTheme'
 import { getJapanDateString, addDaysToDateString } from '../../utils/dateUtils'
 import {
-  getBookingMasters, updateBookingSettings, upsertStaffMember, getSchedule, setShiftTemplate, setDaySchedule,
+  getBookingMasters, updateBookingSettings, upsertStaffMember, setBookingCapacity, getSchedule, setShiftTemplate, setDaySchedule,
   setBusinessHours, createTimeBlock, deleteTimeBlock, setClosure, deleteClosure, hqBookingErrorMessage, jstIso, BLOCK_KIND_LABEL,
   type BookingMasters, type Schedule, type BlockKind, type StaffMember, type BusinessHour, type DaySchedule,
 } from '../hqBookingStore'
@@ -348,8 +348,19 @@ function StaffTab({ masters, onSaved }: { masters: BookingMasters; onSaved: () =
     <>
       <div style={{ borderTop: `1px solid ${T.line}` }}>
         {masters.staff.map(s => (
-          <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: `1px solid ${T.line}` }}>
-            <span style={{ fontSize: 15, color: s.is_active ? T.text : T.mute }}>{s.display_name}</span>
+          <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '8px 0', borderBottom: `1px solid ${T.line}` }}>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 15, color: s.is_active ? T.text : T.mute }}>{s.display_name}</span>
+              {s.is_active && s.is_bookable && s.booking_capacity !== undefined && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: T.sub }}>
+                  同時に受ける人数
+                  {[1, 2, 3].map(n => (
+                    <Toggle key={n} on={s.booking_capacity === n} disabled={busy}
+                      onClick={() => { if (s.booking_capacity !== n) void run(() => setBookingCapacity(s.id, n)) }}>{n}</Toggle>
+                  ))}
+                </span>
+              )}
+            </span>
             <span style={{ display: 'flex', gap: 8 }}>
               <Toggle on={s.is_bookable} disabled={busy || !s.is_active} onClick={() => void run(() => upsertStaffMember({ id: s.id, is_bookable: !s.is_bookable }))}>予約を受ける</Toggle>
               <Toggle on={s.is_active} disabled={busy} onClick={() => void run(() => upsertStaffMember({ id: s.id, is_active: !s.is_active }))}>在籍</Toggle>
