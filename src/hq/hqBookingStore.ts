@@ -104,6 +104,7 @@ export const HQ_BOOKING_ERROR: Record<string, string> = {
   not_found: '対象が見つかりません。',
   invalid_range: '表示期間が長すぎます。',
   invalid_capacity: '同時に受ける人数は1〜3人から選んでください。',
+  not_ready: '予約を受けるスタッフのシフトと、予約に使えるメニューを先に登録してください。',
 }
 
 const WEEK = ['日', '月', '火', '水', '木', '金', '土']
@@ -128,6 +129,8 @@ export function hqBookingErrorMessage(err: unknown): string {
 
 export const getBookingMasters = () => callHqRpc<BookingMasters>('hq_booking_masters')
 export const updateBookingSettings = (p: Partial<BookingSettings>) => callHqRpc<BookingSettings>('hq_update_booking_settings', { p })
+/** お客様アプリからの予約を始める・止める */
+export const setAppBooking = (enabled: boolean) => callHqRpc<BookingSettings>('hq_set_app_booking', { p_enabled: enabled })
 export const upsertStaffMember = (p: Partial<StaffMember>) => callHqRpc<StaffMember>('hq_upsert_staff_member', { p })
 export const setBookingCapacity = (staffId: string, capacity: number) =>
   callHqRpc<{ ok: true }>('hq_set_booking_capacity', { p_staff_id: staffId, p_capacity: capacity })
