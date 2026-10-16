@@ -1,8 +1,7 @@
 -- 本番に予約の仕組みを入れる前の確認（読み取りのみ。何も変えない）
 -- 結果は1行の JSON。docs/booking-production-rollout.md の「入れる前の確認」と見比べる。
 select jsonb_build_object(
-  'migrations', (select coalesce(jsonb_agg(version order by version), '[]')
-                 from supabase_migrations.schema_migrations),
+  'has_migration_table', to_regclass('supabase_migrations.schema_migrations') is not null,
   'has_app_private', exists (select 1 from pg_namespace where nspname = 'app_private'),
   'has_assert_staff', to_regprocedure('app_private.assert_staff(text)') is not null,
   'has_staff_sessions', to_regclass('app_private.staff_sessions') is not null,

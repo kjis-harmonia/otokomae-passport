@@ -11,6 +11,8 @@ while read -r name; do
   [ -f "$src" ] || { echo "見つかりません: $src" >&2; exit 1; }
   {
     echo "begin;"
+    echo "create schema if not exists supabase_migrations;"
+    echo "create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text);"
     cat "$src"
     echo
     echo "insert into supabase_migrations.schema_migrations(version, name) values ('$version', '$label') on conflict (version) do nothing;"
