@@ -7,9 +7,10 @@ import type { MenuOption } from './menuMatcher'
 import type { Slot } from './slotPlanner'
 import { consultStylist, type ConsultReply } from './consult'
 import type { DayOverview } from './dayAdvisor'
+import { askAgent, type AgentAnswer, type AgentShown, type AgentTurn } from './agentClient'
 
 export interface BookingSettings { slot_minutes: number; booking_window_days: number; min_lead_minutes: number; hold_minutes: number }
-export interface AssistantOptions { settings: BookingSettings; menus: MenuOption[] }
+export interface AssistantOptions { settings: BookingSettings; menus: MenuOption[]; staff?: { id: string; name: string }[] }
 
 export interface CustomerReservation {
   id: string
@@ -31,10 +32,14 @@ export interface BookingAssistantApi {
   dayOverview(date: string): Promise<DayOverview>
   /** 近い日から空きを探す（早い順） */
   nextSlots(menuCode: string, from: string, limit?: number): Promise<Slot[]>
-  hold(startsAt: string, menuCode: string): Promise<Hold>
+  /** staffId があればその担当で押さえる（指名） */
+  hold(startsAt: string, menuCode: string, staffId?: string | null): Promise<Hold>
   confirm(holdId: string): Promise<CustomerReservation>
   release(holdId: string): Promise<void>
   reservations(): Promise<CustomerReservation[]>
+  cancel(reservationId: string): Promise<CustomerReservation>
+  /** 予約の AI。使えないときは null（呼び出し側が決まった規則の JOHNNY に切り替える） */
+  agent(message: string, history: readonly AgentTurn[], shown?: AgentShown): Promise<AgentAnswer | null>
   /** 連絡先（本名・電話番号）。サーバーに仕組みが無ければ null */
   contact(): Promise<CustomerContact | null>
   saveContact(name: string, phone: string): Promise<void>
@@ -47,10 +52,12 @@ export const customerBookingApi: BookingAssistantApi = {
   slots: (date, menuCode) => callCustomerRpc<Slot[]>('customer_available_slots', { p_date: date, p_menu_codes: [menuCode], p_staff_id: null }),
   dayOverview: date => callCustomerRpc<DayOverview>('customer_day_overview', { p_date: date }),
   nextSlots: (menuCode, from, limit = 10) => callCustomerRpc<Slot[]>('customer_next_slots', { p_menu_codes: [menuCode], p_from: from, p_limit: limit }),
-  hold: (startsAt, menuCode) => callCustomerRpc<Hold>('customer_create_hold', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: null }),
+  hold: (startsAt, menuCode, staffId = null) => callCustomerRpc<Hold>('customer_create_hold', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: staffId }),
   confirm: holdId => callCustomerRpc<CustomerReservation>('customer_confirm_reservation', { p_hold_id: holdId, p_note: null }),
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
+  cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),
+  agent: (message, history, shown) => askAgent(message, history, shown),
   contact: () => fetchContact(),
   saveContact: async (name, phone) => { await saveContact(name, phone) },
   consult: (message, menus) => consultStylist(message, menus),
@@ -132,6 +139,15 @@ export const demoBookingApi: BookingAssistantApi = {
   },
   async release() { /* nothing */ },
   async reservations() { await wait(200); return [...demoStore] },
+  async cancel(id) {
+    await wait(300)
+    const r = demoStore.find(x => x.id === id)
+    if (!r) throw new RpcError('not_found', 'not_found')
+    r.status = 'cancelled'
+    return r
+  },
+  // デモは AI を使わない（決まった規則の JOHNNY で動く）
+  async agent() { return null },
   async contact() { await wait(150); return demoContact },
   async saveContact(name, phone) {
     await wait(300)

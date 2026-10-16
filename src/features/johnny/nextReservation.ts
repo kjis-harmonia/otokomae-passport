@@ -67,3 +67,12 @@ export function formatVisit(iso: string): { date: string; time: string; relative
     relative: diff === 0 ? '今日' : diff === 1 ? '明日' : diff === 2 ? '明後日' : null,
   }
 }
+
+/** キャンセルした予約を端末の覚えから外す（一覧を取り直して次の予約を出し直す） */
+export function forgetReservation(id: string): void {
+  try {
+    const v = localStorage.getItem(KEY)
+    if (v && (JSON.parse(v) as CustomerReservation).id === id) localStorage.removeItem(KEY)
+  } catch { /* ignore */ }
+  window.dispatchEvent(new Event(EVENT))
+}
