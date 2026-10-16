@@ -148,8 +148,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
 
   // 聞き取った言葉 → 今の段階で処理（下で定義する handleText を ref 経由で呼ぶ）
   const handleTextRef = useRef<(text: string) => void>(() => {})
-  const voice = useVoice(useCallback((text: string) => handleTextRef.current(text), []))
-  const { speak, startListening, stopListening } = voice
+  // 声は録音してサーバーで文字にする（デモだけ端末の音声認識）
+  const handleAudioRef = useRef<(audio: Blob) => void>(() => {})
+  const onAudio = useCallback((audio: Blob) => handleAudioRef.current(audio), [])
+  const voice = useVoice(useCallback((text: string) => handleTextRef.current(text), []), { server: api.serverVoice, onAudio })
+  const { speak, startListening, stopListening, finishListening } = voice
+  /** 録音を送れなかった・聞き取れなかったときの一言 */
+  const [voiceNote, setVoiceNote] = useState<string | null>(null)
 
   /** 質問を読み上げて、終わったら聞き取りを始める */
   const ask = useCallback((text: string, listenAfter = true) => {
@@ -416,6 +421,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     const text = raw.trim()
     if (!text) return
     setHeard(text)
+    setVoiceNote(null)
     const s = stepRef.current
     // 確認画面の「はい」「いいえ」は、その場で決める（AI に聞かない）
     if (s.k === 'confirm' || s.k === 'confirmCancel') {
@@ -506,6 +512,38 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   }, [advise, api, ask, book, menus, pickFromOverview, search])
   useEffect(() => { handleTextRef.current = handleText }, [handleText])
   useEffect(() => { legacyRef.current = handleLegacy }, [handleLegacy])
+
+  /** 録音した声：サーバーで文字にして、そのまま AI の答えまで受け取る（確認画面・AI が使えないときは文字にするだけ） */
+  const handleAudio = useCallback(async (audio: Blob) => {
+    const s = stepRef.current
+    if (!AI_STEPS.has(s.k)) return
+    const transcribeOnly = !aiOnRef.current || s.k === 'confirm' || s.k === 'confirmCancel'
+    setVoiceNote(null)
+    setHeard('')
+    setStep({ k: 'searching', label: transcribeOnly ? '聞き取っています' : '考えています' })
+    const history = turnsRef.current
+    const r = await api.agentVoice(audio, history, shownFor(s), transcribeOnly)
+    if (!r || !r.heard) {
+      setVoiceNote(r ? '聞き取れませんでした。もう一度話してください。' : '通信できませんでした。もう一度話すか、キーボードで入力してください。')
+      stepRef.current = s
+      setStep({ ...s })
+      return
+    }
+    setHeard(r.heard)
+    if (transcribeOnly) { stepRef.current = s; setStep(s); handleText(r.heard); return }
+    const next = r.answer ? await stepFromAgent(r.answer) : null
+    if (!r.answer || !next) {
+      // 聞き取れたが AI が答えられなかった：決まった規則の JOHNNY で続ける
+      aiOnRef.current = false
+      const back: Step = s.k === 'ai' ? { k: 'askWhen' } : s
+      stepRef.current = back
+      legacyRef.current(r.heard, back)
+      return
+    }
+    turnsRef.current = [...history, { role: 'user' as const, text: r.heard }, { role: 'assistant' as const, text: r.answer.say }].slice(-20)
+    setStep(next)
+  }, [api, handleText, stepFromAgent])
+  useEffect(() => { handleAudioRef.current = audio => { void handleAudio(audio) } }, [handleAudio])
 
   /** 答えに出したおすすめのメニューを選ぶ（今の段階に合わせて続ける） */
   const chooseMenu = useCallback((menu: MenuOption) => {
@@ -828,15 +866,15 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
             <IconButton label={typing ? '音声で答える' : '文字で入力する'} onClick={() => setTyping(t => !t)}>
               <Keyboard size={22} strokeWidth={1.8} />
             </IconButton>
-            <MicButton listening={voice.listen === 'listening'} onClick={() => (voice.listen === 'listening' ? stopListening() : startListening())} />
+            <MicButton listening={voice.listen === 'listening'} onClick={() => (voice.listen === 'listening' ? (voice.recordMode ? finishListening() : stopListening()) : startListening())} />
             <div style={{ width: 44 }} />
           </div>
         )}
         {canTalk && voice.listen === 'denied' && (
           <p style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>マイクが使えないため、文字で入力してください。</p>
         )}
-        {canTalk && voice.listen !== 'denied' && voice.notice && (
-          <p role="status" style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>{voice.notice}</p>
+        {canTalk && voice.listen !== 'denied' && (voice.notice || voiceNote) && (
+          <p role="status" style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>{voice.notice ?? voiceNote}</p>
         )}
       </div>
     </motion.div>
