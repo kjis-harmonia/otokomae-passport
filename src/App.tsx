@@ -1,6 +1,6 @@
+import { flushPendingContact } from './utils/customerContact'
 import { useState, useCallback, useEffect } from 'react'
-import { supabase } from './lib/supabase'
-import { getCustomerSession, clearCustomerSession } from './utils/customerSession'
+import { clearCustomerSession } from './utils/customerSession'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AppHeader } from './components/AppHeader'
@@ -12,7 +12,6 @@ import { ReserveScreen } from './screens/ReserveScreen'
 import { TicketWalletScreen } from './screens/TicketWalletScreen'
 import { MyPageScreen } from './screens/MyPageScreen'
 import { StyleLibraryScreen } from './screens/StyleLibraryScreen'
-import { ShopScreen } from './screens/ShopScreen'
 import { DiagnosisScreen } from './screens/DiagnosisScreen'
 import { OnboardingScreen, type OnboardingDonePayload } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
@@ -40,14 +39,9 @@ import { seedDevData } from './utils/devSeed'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
-const SHOP_AUTH_KEY = 'ginjiro_shop_auth'
 
 type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
-
-function isShopUnlocked(): boolean {
-  return localStorage.getItem(SHOP_AUTH_KEY) === '1'
-}
 
 function isLocalPreviewHost(hostname: string): boolean {
   return (
@@ -430,181 +424,6 @@ function WelcomeCouponDialog({
   )
 }
 
-function ShopPasswordGate({
-  open,
-  onUnlock,
-  onClose,
-}: {
-  open: boolean
-  onUnlock: () => void
-  onClose: () => void
-}) {
-  const [passcode, setPasscode] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [checking, setChecking] = useState(false)
-
-  useEffect(() => {
-    if (!open) {
-      setPasscode('')
-      setError(null)
-    }
-  }, [open])
-
-  // パスコードはサーバー側（verify_shop_passcode RPC）で照合する。フロントは正解を持たない。
-  async function submit() {
-    if (checking || !passcode.trim()) return
-    setChecking(true)
-    try {
-      // 顧客セッションがあれば失敗回数を端末単位で数える（第三者の失敗で全員がロックされない）
-      const { data, error: rpcError } = await supabase.rpc('verify_shop_passcode', { p_passcode: passcode.trim(), p_session: getCustomerSession() })
-      if (rpcError) { setError('通信できません。電波を確認してください'); return }
-      const r = data as { ok?: boolean; error?: string }
-      if (r?.ok) {
-        localStorage.setItem(SHOP_AUTH_KEY, '1')
-        onUnlock()
-        return
-      }
-      setError(r?.error === 'locked' ? '入力ミスが続いたため10分間ロック中です' : 'パスワードが違います')
-      setPasscode('')
-    } catch {
-      setError('通信できません。電波を確認してください')
-    } finally {
-      setChecking(false)
-    }
-  }
-
-  if (typeof document === 'undefined') return null
-
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="shop-password-gate"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 99999,
-            background: 'rgba(0,0,0,0.46)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            display: 'grid',
-            placeItems: 'center',
-            padding: 20,
-          }}
-        >
-          <motion.form
-            initial={{ opacity: 0, y: 18, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.985 }}
-            transition={{ duration: 0.24, ease: [0.22, 0.68, 0.34, 1] }}
-            onSubmit={(event) => {
-              event.preventDefault()
-              void submit()
-            }}
-            style={{
-              width: '100%',
-              maxWidth: 360,
-              borderRadius: 26,
-              background: '#fff',
-              border: '1px solid #eadfce',
-              boxShadow: '0 26px 80px rgba(0,0,0,0.34)',
-              padding: '26px 22px 22px',
-              color: '#111',
-            }}
-          >
-            <p
-              style={{
-                margin: '0 0 6px',
-                color: '#9b1f23',
-                fontFamily: SERIF,
-                fontSize: 13,
-                fontWeight: 800,
-                letterSpacing: '0.18em',
-              }}
-            >
-              GINJIRO SHOP
-            </p>
-            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 900, letterSpacing: 0 }}>
-              パスワード入力
-            </h2>
-            <p style={{ margin: '9px 0 18px', color: '#666', fontSize: 13, lineHeight: 1.7 }}>
-              SHOPは確認用ロック中です。パスワード入力後に表示します。
-            </p>
-
-            <input
-              autoFocus
-              inputMode="numeric"
-              type="password"
-              value={passcode}
-              onChange={(event) => {
-                setPasscode(event.target.value)
-                setError(null)
-              }}
-              placeholder="パスワード"
-              style={{
-                width: '100%',
-                height: 52,
-                borderRadius: 16,
-                border: `1.5px solid ${error ? '#c00019' : '#ddd4c8'}`,
-                background: '#fbfaf8',
-                color: '#111',
-                fontSize: 22,
-                fontWeight: 900,
-                letterSpacing: '0.16em',
-                outline: 'none',
-                padding: '0 16px',
-                boxSizing: 'border-box',
-              }}
-            />
-
-            {error && (
-              <p style={{ margin: '9px 0 0', color: '#c00019', fontSize: 12, fontWeight: 800 }}>
-                {error}
-              </p>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, marginTop: 18 }}>
-              <button
-                type="button"
-                onClick={onClose}
-                style={{
-                  height: 48,
-                  borderRadius: 999,
-                  border: '1px solid #ddd4c8',
-                  background: '#fff',
-                  color: '#333',
-                  fontWeight: 900,
-                }}
-              >
-                戻る
-              </button>
-              <button
-                type="submit"
-                style={{
-                  height: 48,
-                  borderRadius: 999,
-                  border: 0,
-                  background: '#111',
-                  color: '#fff',
-                  fontWeight: 900,
-                  boxShadow: '0 10px 22px rgba(0,0,0,0.18)',
-                }}
-              >
-                SHOPを見る
-              </button>
-            </div>
-          </motion.form>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body,
-  )
-}
-
 type BgmController = ReturnType<typeof useBgm>
 
 function BgmTrackSheet({
@@ -797,13 +616,19 @@ function BgmTrackSheet({
 }
 
 function App() {
+  useEffect(() => {
+    const retry = () => { void flushPendingContact() }
+    retry()
+    window.addEventListener('online', retry)
+    window.addEventListener('ginjiro:customer-session-changed', retry)
+    return () => {
+      window.removeEventListener('online', retry)
+      window.removeEventListener('ginjiro:customer-session-changed', retry)
+    }
+  }, [])
+
   // テストデータを localStorage に1度だけ投入
   seedDevData()
-  const [shopUnlocked, setShopUnlocked] = useState(isShopUnlocked)
-  const [showShopPasswordGate, setShowShopPasswordGate] = useState(() => {
-    const requestedTab = new URLSearchParams(window.location.search).get('tab')
-    return requestedTab === 'shop' && !isShopUnlocked()
-  })
 
   // ── Loading state: min time + critical image preload ──────────────────────────
   const [minTimeDone, setMinTimeDone] = useState(false)
@@ -840,7 +665,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
-    if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
+    if (requestedTab === 'shop') return 'reserve'
     const valid: NavTab[] = ['home', 'styles', 'shop', 'diagnosis', 'tryon', 'reserve', 'mypage', 'tickets']
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
@@ -855,7 +680,6 @@ function App() {
   const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
-    if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
     if (requestedTab === 'diagnosis') return 'shop'
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
     return navTabs.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
@@ -941,10 +765,6 @@ function App() {
 
   const handleTabChange = useCallback((tab: NavTab) => {
     const nextTab = tab
-    if (nextTab === 'shop' && !shopUnlocked) {
-      setShowShopPasswordGate(true)
-      return
-    }
     if (nextTab === 'diagnosis') {
       setNavHighlight('shop')
       setActiveTab('diagnosis')
@@ -953,16 +773,10 @@ function App() {
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
     if (navTabs.includes(nextTab)) setNavHighlight(nextTab)
     if (nextTab === 'tickets') setTicketInitialFilter('cut')
-    setActiveTab(nextTab)
+    setActiveTab(nextTab === 'shop' ? 'reserve' : nextTab)
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
-  }, [shopUnlocked])
-
-  const handleShopUnlock = useCallback(() => {
-    setShopUnlocked(true)
-    setShowShopPasswordGate(false)
-    setNavHighlight('shop')
-    setActiveTab('shop')
   }, [])
+
 
   const handleGachaComplete = useCallback(() => {
     // 結果の表示はガチャ演出側で行う
@@ -1021,7 +835,7 @@ function App() {
         /* App shell: mounted only after onboarding completes */
         <>
           <div className="app-shell flex flex-col h-dvh w-full mx-auto overflow-hidden">
-{activeTab !== 'home' && activeTab !== 'shop' && <AppHeader />}
+{activeTab !== 'home' && <AppHeader />}
             <main className="app-main flex-1 overflow-y-auto">
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -1034,7 +848,7 @@ function App() {
                   {activeTab === 'home'      && <HomeScreen member={liveMember} onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'gacha'     && <GachaScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                   {activeTab === 'tryon'     && <TryOnScreen />}
-                  {activeTab === 'reserve'   && <ReserveScreen />}
+                  {activeTab === 'reserve'   && <ReserveScreen onShowQr={() => setShowQrModal(true)} />}
                   {activeTab === 'tickets'   && (
                     <TicketWalletScreen
                       key={`tickets-${ticketInitialFilter}-${ticketRefreshKey}`}
@@ -1044,7 +858,6 @@ function App() {
                   )}
                   {activeTab === 'styles'    && <StyleLibraryScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
                   {activeTab === 'diagnosis' && <DiagnosisScreen onTabChange={handleTabChange} onModalChange={handleModalChange} />}
-                  {activeTab === 'shop'      && <ShopScreen />}
                   {activeTab === 'mypage'    && <MyPageScreen memberStatus={memberStatus} onMemberStatusChange={setMemberStatus} />}
                 </motion.div>
               </AnimatePresence>
@@ -1176,11 +989,6 @@ function App() {
             )}
           </AnimatePresence>
 
-          <ShopPasswordGate
-            open={showShopPasswordGate}
-            onUnlock={handleShopUnlock}
-            onClose={() => setShowShopPasswordGate(false)}
-          />
 
           {transferToken && (
             <div

@@ -27,6 +27,15 @@ const MIGRATION_ORDER = [
   '20261005000000_checkout.sql',
   '20261006000000_service_master.sql',
   '20261007000000_client_visit_model.sql',
+  '20261015000000_sb_reservation_board.sql',
+  '20261015000100_sb_capacity_setting.sql',
+  '20261015000200_customer_contact.sql',
+  '20261015000300_sb_hotpepper_mail_notices.sql',
+  '20261015000400_sb_hotpepper_no_coupon.sql',
+  '20261015000500_sb_hotpepper_note.sql',
+  '20261016091916_ticket_issue_idempotency.sql',
+  '20261016095032_ticket_issue_require_request_id.sql',
+  '20261016234902_unified_booking_flow.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
@@ -59,15 +68,16 @@ async function main() {
     // base_schema は土台の一括作成で再実行を想定していないため、再適用（冪等性の確認）は base 以外だけ
     const later = migrations.filter((file) => !file.endsWith(BASE_MIGRATION))
     for (const file of migrations) runPsqlMigration(dbUrl, file, `migration ${relative(root, file)}`)
-    for (const file of later) runPsqlMigration(dbUrl, file, `migration replay ${relative(root, file)}`)
+    const replayable = later.filter(file => !file.endsWith('20261016091916_ticket_issue_idempotency.sql'))
+    for (const file of replayable) runPsqlMigration(dbUrl, file, `migration replay ${relative(root, file)}`)
     if (baselineDbUrl) {
       // 本番相当のコピー：本番には base_schema が最初からある。適用前のデータの指紋を取り、base 以外を適用してから比較する
       baselineBefore = snapshot(baselineDbUrl)
       for (const file of later) runPsqlMigration(baselineDbUrl, file, `baseline migration ${relative(root, file)}`)
     }
     return baselineDbUrl
-      ? `clean apply + replay + baseline apply ok (${migrations.length} migrations)`
-      : `clean apply + replay ok (${migrations.length} migrations); baseline skipped`
+      ? `clean apply + replay-safe migrations + baseline apply ok (${migrations.length} migrations)`
+      : `clean apply + replay-safe migrations ok (${migrations.length} migrations); baseline skipped`
   })
 
   await stage('baseline-data', async () => {

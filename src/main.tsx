@@ -41,25 +41,19 @@ function exitCMS() {
 
 // ── Staff scanner detection ───────────────────────────────────────────────────
 
-const STAFF_KEY = 'ginjiro_staff_mode'
-
 function detectStaff(): boolean {
   if (window.location.pathname === '/staff') {
-    sessionStorage.setItem(STAFF_KEY, '1')
     return true
   }
   const params = new URLSearchParams(window.location.search)
   if (params.get('staff') === '1') {
-    sessionStorage.setItem(STAFF_KEY, '1')
     return true
   }
   const hash = window.location.hash
   if (hash === '#staff') {
-    sessionStorage.setItem(STAFF_KEY, '1')
     return true
   }
-  // Session-only persistence (closes on tab close — intentional for staff security)
-  if (sessionStorage.getItem(STAFF_KEY) === '1') return true
+  // The URL selects the screen. Staff authentication remains in StaffPinGate.
   return false
 }
 

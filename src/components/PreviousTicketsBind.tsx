@@ -129,11 +129,17 @@ export function PreviousTicketsEntry({ onBound }: { onBound?: () => void }) {
 
 type Step = 'ask' | 'code' | 'done'
 
-function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBound }: {
+/** 予約アシスタントの上からも引き継ぎコードを入力できる。 */
+export function PreviousTicketsBindDialog({ onClose, onBound, zIndex }: { onClose: () => void; onBound?: () => void; zIndex?: number }) {
+  return <PreviousTicketsDialog startWithCode onLater={onClose} onClose={onClose} onBound={onBound} zIndex={zIndex} />
+}
+
+function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBound, zIndex = 320 }: {
   startWithCode?: boolean
   onLater: () => void
   onClose: () => void
   onBound?: () => void
+  zIndex?: number
 }) {
   const reduced = useReducedMotion() ?? false
   const [step, setStep] = useState<Step>(startWithCode ? 'code' : 'ask')
@@ -158,7 +164,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 320, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
+      style={{ position: 'fixed', inset: 0, zIndex, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
       onClick={step === 'done' ? onClose : onLater}
     >
       <motion.div

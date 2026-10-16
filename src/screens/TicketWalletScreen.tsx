@@ -1,3 +1,4 @@
+import { ReadableQr } from '../components/ReadableQr'
 import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react'
 import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion'
 import { Phone, QrCode } from 'lucide-react'
@@ -168,6 +169,8 @@ export function TicketWalletScreen({
   // undefined = loading
   const [lastVisitDate, setLastVisitDate] = useState<string | null | undefined>(undefined)
   const [tickets,       setTickets]       = useState<TicketRow[] | null>(null)
+  const [ticketsError, setTicketsError] = useState<string | null>(null)
+  const ticketRequest = useRef(0)
   // 当日すでに使った割引種別（null = 未使用）
   const [todayUsedType, setTodayUsedType] = useState<string | null>(null)
   const [now,           setNow]           = useState(() => new Date())
@@ -193,9 +196,15 @@ export function TicketWalletScreen({
   // ── Data loading ────────────────────────────────────────────────────────────
 
   const refreshTickets = useCallback(() => {
-    getUserTickets(userId)
-      .then(setTickets)
-      .catch(() => setTickets([]))
+    const version = ++ticketRequest.current
+    getUserTickets(userId).then(rows => {
+      if (version !== ticketRequest.current) return
+      setTickets(rows)
+      setTicketsError(null)
+    }).catch(() => {
+      if (version !== ticketRequest.current) return
+      setTicketsError('チケットを読み込めませんでした。通信環境を確認して再読み込みしてください。')
+    })
   }, [userId])
 
   const refreshVisit = useCallback(() => {
@@ -241,12 +250,12 @@ export function TicketWalletScreen({
 
   // ── Cards ───────────────────────────────────────────────────────────────────
 
-  const loading = lastVisitDate === undefined || tickets === null
+  const loading = lastVisitDate === undefined || (tickets === null && !ticketsError)
   const maintenance = getMaintenanceState(lastVisitDate ?? null, now)
   const premium     = getPremiumState(now)
 
   const allCards = useMemo<WalletCard[]>(() => {
-    if (loading) return []
+    if (loading || tickets === null) return []
     return [
       buildMaintenanceCard(maintenance),
       ...buildPremiumCards(premium),
@@ -425,6 +434,7 @@ export function TicketWalletScreen({
 
   /** カード前面の小さな CTA */
   function renderCardCta(card: WalletCard): ReactNode {
+    if (ticketsError && card.category === 'otoku') return <MiniCta label="再読み込みが必要です" tone="quiet" disabled />
     if (card.category === 'cut' && maintenance.isEligible) {
       return <MiniCta icon={<QrCode size={14} />} label="提示する" tone="gold" onClick={() => setShowMaintenanceQr(true)} />
     }
@@ -455,6 +465,7 @@ export function TicketWalletScreen({
 
   /** 詳細シートの CTA */
   function renderSheetActions(card: WalletCard): ReactNode {
+    if (ticketsError) return <p role="status">最新のチケットを読み込んでから操作してください。</p>
     if (card.category === 'cut') {
       if (maintenance.isEligible) {
         return (
@@ -568,7 +579,7 @@ export function TicketWalletScreen({
           <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: IVORY, letterSpacing: '0.04em', lineHeight: 1.25, marginTop: 4 }}>
             チケットウォレット
           </h1>
-          {summary && (
+          {summary && !ticketsError && (
             <p style={{
               marginTop: 6, fontSize: 14, letterSpacing: '0.03em',
               color: summary.tone === 'crimson' ? '#F2B2AA' : 'rgba(242,230,200,0.72)',
@@ -603,6 +614,13 @@ export function TicketWalletScreen({
           </div>
         </LayoutGroup>
 
+        {ticketsError && (
+          <div role="alert" style={{ marginTop: 18, padding: 18, borderRadius: 14, border: '1px solid rgba(201,162,74,0.5)', color: '#F2E6C8', lineHeight: 1.7 }}>
+            <p>{ticketsError}</p>
+            {tickets !== null && <p style={{ fontSize: 13 }}>前回取得した内容を表示しています。</p>}
+            <button type="button" onClick={refreshTickets} style={{ marginTop: 12, minHeight: 44, padding: '10px 18px', borderRadius: 10, background: '#F2E6C8', color: '#21110E' }}>再読み込み</button>
+          </div>
+        )}
         {/* Wallet */}
         <div style={{ marginTop: 14 }}>
           {loading ? (
@@ -610,7 +628,7 @@ export function TicketWalletScreen({
           ) : showCutSpecials ? (
             <CutSpecialCouponSection onCallClick={handleCutSpecialCallClick} />
           ) : cards.length === 0 ? (
-            <EmptyState filter={filter} />
+            ticketsError ? null : <EmptyState filter={filter} />
           ) : (
             <>
               {visiblePremiumCards.length > 0 && (
@@ -1013,7 +1031,7 @@ function QrDialog({ eyebrow, title, amount, value, onClose }: {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: reduced ? 0 : 0.24 }}
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.88)', padding: '28px 24px 24px', textAlign: 'center' }}
@@ -1023,8 +1041,8 @@ function QrDialog({ eyebrow, title, amount, value, onClose }: {
         {!!amount && amount > 0 && (
           <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#C9A24A', marginBottom: 16 }}>¥{amount.toLocaleString()}</p>
         )}
-        <div style={{ display: 'inline-block', padding: 14, background: '#FFFFFF', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', marginBottom: 16 }}>
-          <QRCodeSVG value={value} size={188} level="M" />
+        <div style={{ width: '100%', maxWidth: 280, margin: '0 auto 16px', background: '#fff' }}>
+          <ReadableQr value={value} size={280} />
         </div>
         <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.70)', lineHeight: 1.75, marginBottom: 20 }}>
           このQRをスタッフに提示してください。<br />
@@ -1099,7 +1117,7 @@ function MaintenanceCouponQrDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-label="銀二郎Only メンテナンスカット クーポンQR"
-        initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: reduced ? 0 : 0.24 }}
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.88)', padding: '28px 24px 24px', textAlign: 'center' }}
@@ -1112,9 +1130,9 @@ function MaintenanceCouponQrDialog({ onClose }: { onClose: () => void }) {
           <span style={{ fontSize: 12, color: 'rgba(242,230,200,0.6)' }}>担当：銀二郎</span>
         </p>
 
-        <div style={{ width: 216, height: 216, margin: '0 auto 14px', padding: 14, background: '#FFFFFF', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
+        <div style={{ width: '100%', maxWidth: 280, aspectRatio: '1', margin: '0 auto 14px', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
           {token && !error
-            ? <QRCodeSVG value={qrValue} size={188} level="M" />
+            ? <ReadableQr value={qrValue} size={280} />
             : <p style={{ fontSize: 12, color: '#555', lineHeight: 1.7 }}>{loading ? 'QRを準備しています…' : 'QRを表示できません'}</p>}
         </div>
 
@@ -1193,7 +1211,7 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
         role="dialog"
         aria-modal="true"
         aria-label="予約済み確認"
-        initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: reduced ? 0 : 0.22 }}
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(160deg, #180806 0%, #080404 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
@@ -1270,7 +1288,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
         role="dialog"
         aria-modal="true"
         aria-label="予約済み確認"
-        initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: reduced ? 0 : 0.22 }}
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(160deg, #180806 0%, #080404 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
@@ -1339,7 +1357,7 @@ function CutReservationNotice({ reservation, onClose }: {
         role="dialog"
         aria-modal="true"
         aria-label="QR反映完了"
-        initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         transition={{ duration: reduced ? 0 : 0.22 }}
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(160deg, #150706 0%, #070303 100%)', border: '1px solid rgba(201,162,74,0.34)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '28px 22px 22px', textAlign: 'center' }}

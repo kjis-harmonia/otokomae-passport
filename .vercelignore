@@ -1,0 +1,11 @@
+# Source-only deployment; credentials stay in managed environment variables.
+.qa/
+.git/
+.vercel/
+node_modules/
+dist/
+supabase/.temp/
+.env
+.env.*
+supabase/functions/.env
+supabase/functions/.env.*

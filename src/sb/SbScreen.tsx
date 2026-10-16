@@ -13,6 +13,9 @@ import { SbToday } from './SbToday'
 import { SbHotpepper } from './SbHotpepper'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import './sb.css'
+import { Checkout } from '../components/booking/Checkout'
+import { createStaffCheckoutApi } from '../utils/checkoutApi'
+import { createStaffCustomerApi } from '../utils/customerApi'
 
 const ACTOR = 'ginjiro_staff_name'
 const OCCUPYING = new Set(['confirmed', 'checked_in', 'in_service', 'awaiting_payment', 'completed'])
@@ -33,6 +36,9 @@ export function SbScreen() {
   const [actor, setActorState] = useState(loadActor)
   const [pickActor, setPickActor] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [checkoutId, setCheckoutId] = useState<string | null>(null)
+  const checkout = useMemo(() => createStaffCheckoutApi(() => actor), [actor])
+  const customers = useMemo(() => createStaffCustomerApi(() => actor), [actor])
   const [editor, setEditor] = useState<{ preset: SbPreset; reservation?: SbReservation } | null>(null)
   const [view, setView] = useState<'board' | 'list'>('board')
   const [archive, setArchive] = useState<'cancelled' | 'transfer' | null>(null)
@@ -180,9 +186,11 @@ export function SbScreen() {
       onChanged={() => void refresh(dateRef.current)}
       onOpen={(d, id) => { setHpbOpen(false); if (d === dateRef.current) setSelectedId(id); else { wantedId.current = id; setDate(d) } }} />}
     {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
-    {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
+    {selected && !editor && !archive && !checkoutId && <ReservationDetails key={selected.id} reservation={selected} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)} onCheckout={() => { if (!actor) { setPickActor(true); return }; setCheckoutId(selected.id) }}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
     {editor && options && <SbBookingEditor key={editor.reservation?.id ?? 'new'} options={options} preset={editor.preset} reservation={editor.reservation} actor={actor} setActor={setActor} busy={busy} onSend={send} onClose={() => setEditor(null)} />}
+    {checkoutId && <Checkout api={checkout} customers={customers} reservationId={checkoutId} ensureActor={() => !!actor}
+      onClose={() => setCheckoutId(null)} onDone={() => { setCheckoutId(null); setSelectedId(null); setNotice('会計を確定しました'); void refresh(dateRef.current) }} />}
   </div>
 }
 
@@ -218,8 +226,8 @@ function ReservationList({ reservations, onPick }: { reservations: SbReservation
   return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong>{r.customer_name}</strong><small>{r.items.map(i => i.name).join('・')}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}<ChevronRight size={18} /></button>)}</div> : <p className="sb-muted">予約はありません。</p>
 }
 
-function ReservationDetails({ reservation: r, busy, blocked, onClose, onEdit, onSend }: {
-  reservation: SbReservation; busy: boolean; blocked: boolean; onClose: () => void; onEdit: () => void; onSend: (c: SbCommand) => Promise<void>
+function ReservationDetails({ reservation: r, busy, blocked, onClose, onEdit, onSend, onCheckout }: {
+  reservation: SbReservation; busy: boolean; blocked: boolean; onClose: () => void; onEdit: () => void; onSend: (c: SbCommand) => Promise<void>; onCheckout: () => void
 }) {
   const [cancel, setCancel] = useState(false)
   const [reason, setReason] = useState('')
@@ -241,7 +249,8 @@ function ReservationDetails({ reservation: r, busy, blocked, onClose, onEdit, on
     </dl>
     {cancel ? <label className="sb-field">取消理由（任意）<input value={reason} maxLength={100} disabled={busy} onChange={e => setReason(e.target.value)} /></label> : <>
       <div className="sb-quick-actions">{r.status === 'confirmed' && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'checked_in' })}>来店済みにする</button>}
-        {['checked_in', 'in_service', 'awaiting_payment'].includes(r.status) && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'completed' })}>施術完了</button>}
+        {['checked_in', 'in_service', 'awaiting_payment', 'completed'].includes(r.status) && <button className="sb-primary" disabled={blocked} onClick={onCheckout}>{r.status === 'completed' ? '会計を確認' : '会計へ'}</button>}
+        {['checked_in', 'in_service', 'awaiting_payment'].includes(r.status) && <button className="sb-secondary" disabled={blocked} onClick={() => { if (window.confirm('売上を登録せずに予約だけを完了します。会計する場合は「会計へ」を選んでください。')) void onSend({ ...base, kind: 'status', status: 'completed' }) }}>会計なしで完了</button>}
         {r.status === 'confirmed' && Date.parse(r.starts_at) <= openedAt && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'no_show' })}>不来店</button>}
         {r.status === 'confirmed' && <button className="sb-text-danger" disabled={blocked} onClick={() => setCancel(true)}>予約を取り消す</button>}</div>
       {!(r.source === 'hotpepper' && r.transfer_status === 'not_required') && <section className="sb-transfer"><h3>Salon Board <span>{TRANSFER[r.transfer_status]}</span></h3>

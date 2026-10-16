@@ -1,9 +1,11 @@
+import { startCameraLease } from '../utils/qrCameraLifecycle'
+import { pendingIssuance, prepareIssuance, resolveIssuance, type PendingIssuance } from '../utils/ticketIssuance'
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from '../data/ticket'
-import { issueTickets, getTicketsForStaff, redeemTickets } from '../utils/ticketStore'
+import { getTicketsForStaff } from '../utils/ticketStore'
 import {
   registerCustomerWithContext, searchCustomersByName, recoverMember,
   getCustomerContextForStaff, issueBindCode,
@@ -15,6 +17,9 @@ import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 import { normalizeCurrentReservation, isReservationForDate, type CurrentReservation } from '../utils/currentReservation'
 import { PREMIUM_COUPONS } from '../data/wallet'
+
+import { MemberBookingActions } from '../components/booking/MemberBookingActions'
+import type { Sale } from '../utils/checkoutApi'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -193,6 +198,12 @@ export function isQrPayloadExpired(expiresAt?: string): boolean {
 export function parseQR(text: string): AnyQRData | null {
   try {
     const d = JSON.parse(text)
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return null
+    const validText = (v: unknown) => typeof v === 'string' && v.trim().length > 0 && v.length <= 200
+    if ('userId' in d && !validText(d.userId)) return null
+    if ('name' in d && typeof d.name !== 'string') return null
+    if ('selectedTicketId' in d && !validText(d.selectedTicketId)) return null
+    if ('token' in d && !validText(d.token)) return null
     if (d.type === 'ginjiro-ticket-use' && d.userId && d.selectedTicketId) return d as TicketUseQRData
     if (d.type === 'ginjiro-maintenance-coupon' && (d.token || d.userId)) return d as MaintenanceCouponQRData
     if (d.type === 'ginjiro-premium-coupon' && d.userId && d.couponId) {
@@ -235,20 +246,15 @@ type Phase = 'scan' | 'loading' | 'result' | 'ticket-loading' | 'ticket-result' 
 const QR_EL_ID          = 'gj-qr-reader'
 const QR_RECOVERY_EL_ID = 'gj-qr-reader-recovery'
 
-async function haltScanner(scanner: Html5Qrcode): Promise<void> {
-  try { if (scanner.isScanning) await scanner.stop(); scanner.clear() } catch { /* ignore */ }
-}
 
-// 読み取り中の白い四隅ガイドは html5-qrcode が qrbox 設定に合わせて自前で描画する
-// （Constants.BORDER_SHADER_DEFAULT_COLOR = "#ffffff"）。自前のオーバーレイを重ねると
-// 二重表示になるため、ここでは追加しない。
+// 映像全体でQRを読む。中央220pxの切り取りで、大きいQRの端が欠けることを防ぐ。
 
 export function QrCameraScanner({
   onScan,
   onCameraError,
   elId = QR_EL_ID,
   placeholder,
-  boxHeight = 280,
+  boxHeight = 300,
   onActiveChange,
 }: {
   onScan: (t: string) => void
@@ -263,47 +269,49 @@ export function QrCameraScanner({
   boxHeight?: number
   onActiveChange?: (active: boolean) => void
 }) {
-  const scannerRef = useRef<Html5Qrcode | null>(null)
+  const scannerRef = useRef<ReturnType<typeof startCameraLease> | null>(null)
+  const mounted = useRef(true)
+  const callbacks = useRef({ onScan, onCameraError, onActiveChange })
+  useEffect(() => { callbacks.current = { onScan, onCameraError, onActiveChange } }, [onScan, onCameraError, onActiveChange])
   const [active, setActive] = useState(false)
-
-  function claimScanner(): Html5Qrcode | null {
-    const s = scannerRef.current; scannerRef.current = null; return s
-  }
-
   const setActiveState = useCallback((next: boolean) => {
+    if (!mounted.current) return
     setActive(next)
-    onActiveChange?.(next)
-  }, [onActiveChange])
-
+    callbacks.current.onActiveChange?.(next)
+  }, [])
   const stop = useCallback(() => {
-    const s = claimScanner(); if (!s) return
-    setActiveState(false); void haltScanner(s)
-  }, [setActiveState]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const start = useCallback(async () => {
+    const lease = scannerRef.current
+    if (!lease) return
+    void lease.cancel().then(() => {
+      if (scannerRef.current === lease) { scannerRef.current = null; setActiveState(false) }
+    })
+  }, [setActiveState])
+  const start = useCallback(() => {
     if (scannerRef.current) return
     let scanner: Html5Qrcode
-    try { scanner = new Html5Qrcode(elId) }
-    catch { onCameraError('カメラを初期化できません。'); return }
-    scannerRef.current = scanner
-    try {
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decoded) => {
-          const s = claimScanner(); if (!s) return
-          setActiveState(false); void haltScanner(s).then(() => onScan(decoded))
-        },
-        undefined,
-      )
-      setActiveState(true)
-    } catch {
-      const s = claimScanner(); if (s) void haltScanner(s)
-      onCameraError('カメラにアクセスできません。手動入力をご利用ください。')
+    try { scanner = new Html5Qrcode(elId, { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false }) }
+    catch { callbacks.current.onCameraError('カメラを初期化できません。'); return }
+    setActiveState(true)
+    scannerRef.current = startCameraLease({
+      get isScanning() { return scanner.isScanning },
+      start: decoded => scanner.start({ facingMode: 'environment' }, { fps: 10, videoConstraints: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } } }, decoded, undefined),
+      stop: () => scanner.stop(), clear: () => scanner.clear(),
+    }, {
+      onReady: () => {},
+      onScan: text => { if (mounted.current) callbacks.current.onScan(text) },
+      onError: () => { if (mounted.current) callbacks.current.onCameraError('カメラにアクセスできません。手動入力をご利用ください。') },
+      onStopped: () => { scannerRef.current = null; setActiveState(false) },
+    })
+  }, [elId, setActiveState])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      const lease = scannerRef.current
+      scannerRef.current = null
+      if (lease) void lease.cancel()
     }
-  }, [onScan, onCameraError, elId, setActiveState]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => () => { const s = claimScanner(); if (s) void haltScanner(s) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const showBox = placeholder ? true : active
 
@@ -325,6 +333,7 @@ export function QrCameraScanner({
           </div>
         )}
       </div>
+      {active && <p style={{ color: '#d5d8d3', fontSize: 13, lineHeight: 1.6, marginBottom: 12, textAlign: 'center' }}>QR全体が映るよう、少し離してかざしてください</p>}
       {!active ? (
         <button onClick={() => { void start() }} style={{ width: '100%', padding: '20px', borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 20px rgba(107,15,18,0.45)', color: '#F2E6C8', fontFamily: SERIF, fontSize: 20, fontWeight: 700, letterSpacing: '0.2em', cursor: 'pointer' }}>
           QRを読み取る
@@ -366,6 +375,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [quantity, setQuantity]             = useState(1)
   const [issueLoading, setIssueLoading]     = useState(false)
   const [issueError, setIssueError]         = useState<string | null>(null)
+  const [pendingIssue, setPendingIssue] = useState<PendingIssuance | null>(() => {
+    try { return pendingIssuance() } catch { return null }
+  })
+  const issueBusy = useRef(false)
 
   // Confirmation modal
   const [showConfirm, setShowConfirm] = useState(false)
@@ -384,6 +397,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([])
   const [selectNotice, setSelectNotice]           = useState<string | null>(null)
   const [useConfirmLoading, setUseConfirmLoading] = useState(false)
+  const [memberFlow, setMemberFlow] = useState<{ userId: string; ticketIds: string[] } | null>(null)
   const [useError, setUseError]                   = useState<string | null>(null)
   const [todayUsedType, setTodayUsedType]         = useState<string | null>(null)
   const [showUseComplete, setShowUseComplete]     = useState(false)
@@ -393,7 +407,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [ticketUseData, setTicketUseData]         = useState<TicketUseQRData | null>(null)
   const [ticketForUse, setTicketForUse]           = useState<TicketRow | null>(null)
   const [ticketQrExpired, setTicketQrExpired]     = useState(false)
-  const [ticketConfirming, setTicketConfirming]   = useState(false)
+  const [ticketConfirming] = useState(false)
   const [ticketConfirmed, setTicketConfirmed]     = useState(false)
   const [ticketBlockMsg, setTicketBlockMsg]       = useState<string | null>(null)
   const [ticketUsedThisSession, setTicketUsedThisSession] = useState(false)
@@ -445,7 +459,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const isFirstVisit  = prevLastVisitDate === null
   const elapsedDays   = prevLastVisitDate ? daysSince(prevLastVisitDate) : null
   const isEligible    = !isFirstVisit && prevLastVisitDate !== undefined && elapsedDays !== null && elapsedDays <= 14
-  const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0
+  const canIssue      = staffId.trim() !== '' && !issueLoading && !pendingIssue && effectiveAmount > 0
   const activeTickets = userTickets.filter(t => !t.used)
   const selectedTickets = activeTickets.filter(t => selectedTicketIds.includes(t.id))
   const selectedTotal   = selectedTickets.reduce((sum, t) => sum + t.amount, 0)
@@ -607,32 +621,36 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   // Called from confirm modal — does the actual issue + log
   const handleIssueTicket = async () => {
-    if (!scannedData || !staffId.trim() || effectiveAmount <= 0) return
+    if (issueBusy.current) return
+    issueBusy.current = true
     setShowConfirm(false)
     setIssueLoading(true)
     setIssueError(null)
     try {
-      // 一括発行（サーバー側で全件成功 or 全件失敗。発行ログも同じトランザクションで記録）
-      const issued = await issueTickets({
-        userId:       scannedData.userId,
-        type:         ticketTab === 'otoku' ? 'otoku' : 'discount',
-        amount:       effectiveAmount,
-        quantity,
-        staffName:    staffId,
-        customerName: scannedData.name,
-      })
-      setUserTickets(prev => [...issued, ...prev])
-
+      let request = pendingIssuance()
+      if (!request) {
+        if (!scannedData || !staffId.trim() || effectiveAmount <= 0) return
+        request = prepareIssuance({ userId: scannedData.userId, type: ticketTab === 'otoku' ? 'otoku' : 'discount',
+          amount: effectiveAmount, quantity, staffName: staffId, customerName: scannedData.name })
+      }
+      setPendingIssue(request)
+      const issued = await resolveIssuance(request)
+      setPendingIssue(null)
+      // A restored request may belong to the previous customer, so never add it to another customer's list.
+      if (scannedData?.userId === request.userId) setUserTickets(prev => [...issued, ...prev.filter(t => !issued.some(i => i.id === t.id))])
       playSuccessSound()
-      setSuccessInfo({ name: scannedData.name, label: currentTab.autoTitle, amount: effectiveAmount, qty: quantity })
+      setSuccessInfo({ name: request.customerName, label: request.type === 'otoku' ? '漢トク券' : '割引券', amount: request.amount, qty: request.quantity })
       setShowSuccess(true)
       setDiscountAmountInput('')
       setOtokuAmountInput('')
       setQuantity(1)
       setTimeout(() => setShowSuccess(false), 1800)
     } catch (err) {
-      setIssueError(`発行に失敗しました。1枚も発行されていません。${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')}`)
+      setIssueError(err instanceof RpcError && ['invalid_amount', 'invalid_quantity', 'pending_issue_invalid'].includes(err.code)
+        ? err.message
+        : '発行結果を確認できません。新しく発行せず「同じ発行を確認・再試行」を押してください。' + rpcErrorMessage(err, '通信環境を確認してください。'))
     } finally {
+      issueBusy.current = false
       setIssueLoading(false)
     }
   }
@@ -667,60 +685,28 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setUseError(null)
   }
 
-  const handleConfirmUse = async () => {
-    if (selectedTickets.length === 0 || !scannedData || !staffId.trim()) return
-    setUseConfirmLoading(true)
-    setUseError(null)
-    const ticketIds  = selectedTickets.map(t => t.id)
-    const ticketType = selectedTickets[0].type
-    const total      = selectedTotal
-    const count      = selectedTickets.length
-    try {
-      if (selectedTickets.some(t => isWelcomeCouponBlockedToday(t))) {
-        setUseError(WELCOME_COUPON_WEEKEND_MESSAGE)
-        setUseConfirmLoading(false)
-        return
-      }
-      if (!canUseDiscountType(todayUsedType, ticketType)) {
-        setUseError('本日は別の割引をご利用済みのため使用できません（割引の併用は1日1種類まで）。')
-        setUseConfirmLoading(false)
-        return
-      }
-      if (selectedTickets.some(t => t.type !== ticketType)) {
-        setUseError('種別の違う割引券は同時に使用できません。')
-        setUseConfirmLoading(false)
-        return
-      }
-      // 選択した券の used化・使用ログ・来店日更新をサーバー側で1トランザクション（全部成功か全部失敗）
-      const { visitDate: today } = await redeemTickets({
-        userId: scannedData.userId, ticketIds, staffName: staffId, customerName: scannedData.name,
-      })
-      const usedSet   = new Set(ticketIds)
-      const remaining = userTickets.filter(t => !t.used && !usedSet.has(t.id) && t.type === ticketType).length
-      const usedAt    = new Date().toISOString()
-      setUserTickets(prev => prev.map(t => (usedSet.has(t.id) ? { ...t, used: true, used_at: usedAt } : t)))
-      setTodayUsedType(ticketType)
-      setCheckInStatus('done')
-      setCheckInDate(today)
-      setUseCompleteInfo({
-        name:      scannedData.name,
-        label:     TICKET_TYPE_LABELS[ticketType] ?? selectedTickets[0].title,
-        amount:    total,
-        count,
-        remaining,
-        checkedIn: true,
-      })
-      setShowUseConfirm(false)
-      setSelectedTicketIds([])
-      setSelectNotice(null)
-      setShowUseComplete(true)
-      setTimeout(() => setShowUseComplete(false), 3500)
-      playSuccessSound()
-    } catch (err) {
-      setUseError(`使用確定に失敗しました。${rpcErrorMessage(err, 'ネットワークを確認してください。')}`)
-    } finally {
-      setUseConfirmLoading(false)
+  const handleConfirmUse = () => {
+    if (!scannedData || !staffId.trim() || !selectedTickets.length) return
+    if (selectedTickets.some(t => isWelcomeCouponBlockedToday(t))) { setUseError(WELCOME_COUPON_WEEKEND_MESSAGE); return }
+    setShowUseConfirm(false)
+    setMemberFlow({ userId: scannedData.userId, ticketIds: selectedTickets.map(t => t.id) })
+  }
+  async function afterSale(sale: Sale) {
+    const flow = memberFlow
+    setMemberFlow(null)
+    const userId = flow?.userId ?? scannedData?.userId
+    if (userId) {
+      try {
+        const fresh = await getTicketsForStaff(userId)
+        setUserTickets(fresh)
+        setTicketForUse(prev => prev ? fresh.find(t => t.id === prev.id) ?? prev : prev)
+        setTicketConfirmed(!!ticketForUse && fresh.some(t => t.id === ticketForUse.id && t.used))
+      } catch { /* next scan retries; never assume a selected ticket was consumed */ }
+      setTicketUsedThisSession(sale.discounts.some(d => d.kind === 'ticket'))
     }
+    setSelectedTicketIds([])
+    setUseCompleteInfo({ name: sale.customer_name ?? '', label: '会計', amount: sale.total, count: 1, remaining: 0, checkedIn: true })
+    setShowUseComplete(true); setTimeout(() => setShowUseComplete(false), 3500)
   }
 
   /** 本人確認のうえ、お客様の端末をアプリに紐付けるコードを発行（お客様がアプリで入力） */
@@ -753,24 +739,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     }
   }
 
-  const handleConfirmTicketUse = async () => {
-    if (!ticketUseData || !ticketForUse || !staffId.trim()) return
-    if (ticketUsedThisSession) { setTicketBlockMsg('このお会計では既にチケットを1枚使用しています。'); return }
-    if (ticketForUse.used) { setTicketBlockMsg('このチケットはすでに使用済みです。'); return }
+  const handleConfirmTicketUse = () => {
+    if (!ticketUseData || !ticketForUse || !staffId.trim() || ticketForUse.used) return
     if (isWelcomeCouponBlockedToday(ticketForUse)) { setTicketBlockMsg(WELCOME_COUPON_WEEKEND_MESSAGE); return }
-    setTicketConfirming(true); setTicketBlockMsg(null)
-    try {
-      // 当日の併用ルール（異なる割引種別は不可・同種は複数枚可）・本人確認・used化・使用ログ・
-      // 来店日更新はサーバー側で1トランザクション
-      await redeemTickets({
-        userId: ticketUseData.userId, ticketIds: [ticketForUse.id], staffName: staffId, customerName: '',
-      })
-      setTicketForUse(prev => prev ? { ...prev, used: true, used_at: new Date().toISOString() } : prev)
-      setTicketConfirmed(true); setTicketUsedThisSession(true)
-      playSuccessSound()
-    } catch (err) {
-      setTicketBlockMsg(`使用確定できませんでした。${rpcErrorMessage(err, 'ネットワークを確認してください。')}`)
-    } finally { setTicketConfirming(false) }
+    setMemberFlow({ userId: ticketUseData.userId, ticketIds: [ticketForUse.id] })
   }
 
   const handleConfirmMaintenanceCoupon = async () => {
@@ -876,6 +848,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   return (
     <div style={{ minHeight: '100dvh', background: 'linear-gradient(180deg, #080302 0%, #0A0403 60%, #090304 100%)', display: 'flex', flexDirection: 'column' }}>
+      {memberFlow && <div role="dialog" aria-modal="true" aria-label="予約を選んで会計" style={{ position: 'fixed', inset: 0, zIndex: 900, background: '#f5f6f2', color: '#202321', overflowY: 'auto', padding: 16 }}>
+        <button style={{ minHeight: 44, background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: '8px 16px', color: '#202321' }} onClick={() => setMemberFlow(null)}>戻る</button>
+        <MemberBookingActions userId={memberFlow.userId} staffName={staffId} ticketIds={memberFlow.ticketIds} onDone={sale => void afterSale(sale)} />
+      </div>}
       <style>{`
         @keyframes gj-spin   { to { transform: rotate(360deg); } }
         @keyframes gj-slot-in {
@@ -967,6 +943,16 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       }}>
 
         {/* ===== SCAN ===== */}
+        {mainTab === 'issue' && (pendingIssue || issueError) && (
+          <section role="status" style={{ padding: 18, marginBottom: 20, border: '1px solid #C9A24A', borderRadius: 14, color: '#F2E6C8', lineHeight: 1.7 }}>
+            <strong>チケット発行の確認</strong>
+            {pendingIssue && <p>{pendingIssue.customerName}様 · {pendingIssue.amount.toLocaleString()}円 × {pendingIssue.quantity}枚</p>}
+            <p>{issueError || '確認待ちの発行があります。同じ操作を確認してから次の発行へ進んでください。'}</p>
+            <button type="button" disabled={issueLoading} onClick={() => { void handleIssueTicket() }} style={{ marginTop: 12, minHeight: 48, padding: '10px 18px', borderRadius: 10, background: '#F2E6C8', color: '#21110E' }}>
+              {issueLoading ? '確認中…' : '同じ発行を確認・再試行'}
+            </button>
+          </section>
+        )}
         {mainTab === 'issue' && phase === 'scan' && (
           <div>
             {!staffId.trim() ? (
@@ -1292,7 +1278,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               </p>
               {!ticketsLoading && activeTickets.length > 0 && (
                 <p style={{ fontSize: 11, color: '#e5e5e5', marginBottom: 10, lineHeight: 1.6 }}>
-                  使用する割引券をタップして選択し、下の「使用確定」でまとめて使用します（同じ種別のみ）。
+                  使用する割引券をタップして選択し、会計へ引き継ぎ、会計の確定時にまとめて使用します（同じ種別のみ）。
                 </p>
               )}
               {ticketsLoading ? (
@@ -1403,11 +1389,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   >
                     {selectedTickets.length === 0
                       ? '使用する割引券を選択してください'
-                      : `選択した${selectedTickets.length}枚を使用確定${selectedTotal > 0 ? `（合計 ¥${selectedTotal.toLocaleString()}）` : ''}`}
+                      : `選択した${selectedTickets.length}枚で会計へ${selectedTotal > 0 ? `（合計 ¥${selectedTotal.toLocaleString()}）` : ''}`}
                   </button>
                 </div>
               )}
             </div>
+
+            {scannedData && <MemberBookingActions key={scannedData.userId} userId={scannedData.userId} staffName={staffId} onDone={sale => void afterSale(sale)} />}
 
             {/* ── チケット発行フォーム ── */}
             <div style={{ borderRadius: 18, marginBottom: 14, border: '1px solid rgba(201,162,74,0.18)', background: 'linear-gradient(160deg, #0e0808 0%, #090504 100%)', padding: '18px' }}>
@@ -1656,7 +1644,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                       cursor: (ticketConfirming || !staffId.trim() || ticketUsedThisSession || isWelcomeCouponBlockedToday(ticketForUse)) ? 'default' : 'pointer',
                     }}
                   >
-                    {ticketConfirming ? '確定中…' : isWelcomeCouponBlockedToday(ticketForUse) ? '平日のみ利用可' : '使用確定'}
+                    {ticketConfirming ? '確定中…' : isWelcomeCouponBlockedToday(ticketForUse) ? '平日のみ利用可' : '会計へ'}
                   </button>
                 )}
               </>
@@ -2336,7 +2324,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     cursor: useConfirmLoading ? 'default' : 'pointer',
                   }}
                 >
-                  {useConfirmLoading ? '確定中…' : `${selectedTickets.length}枚を使用確定`}
+                  {useConfirmLoading ? '確定中…' : `${selectedTickets.length}枚で会計へ`}
                 </button>
               </div>
             </div>
@@ -2344,35 +2332,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         </div>
       )}
 
-      {/* ── Use complete overlay ── */}
-      {showUseComplete && useCompleteInfo && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 510, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'gj-success-fade 3.5s ease-in-out both' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(4,8,4,0.97)' }} />
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: 'inset 0 0 120px rgba(80,192,80,0.16), inset 0 0 60px rgba(0,100,40,0.12)' }} />
-          <div style={{ position: 'relative', textAlign: 'center', padding: '32px 28px', maxWidth: 380, animation: 'gj-success-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px', background: 'radial-gradient(circle, rgba(80,192,80,0.16) 0%, rgba(20,100,40,0.1) 60%, transparent 100%)', border: '1.5px solid rgba(100,200,100,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(80,192,80,0.28), 0 0 64px rgba(80,192,80,0.12)' }}>
-              <span style={{ fontSize: 38, color: '#64D26E', lineHeight: 1 }}>✓</span>
-            </div>
-            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: 'rgba(100,200,100,1)', marginBottom: 14 }}>USED</p>
-            <p style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 700, color: '#80E060', letterSpacing: '0.14em', marginBottom: 18, lineHeight: 1.1, textShadow: '0 0 40px rgba(80,192,80,0.4), 0 2px 6px rgba(0,0,0,0.95)' }}>
-              使用完了
-            </p>
-            <p style={{ fontFamily: SERIF, fontSize: 16, color: '#F2E6C8', lineHeight: 1.9, letterSpacing: '0.04em', textShadow: '0 1px 10px rgba(0,0,0,0.95)', marginBottom: 16 }}>
-              {useCompleteInfo.name}様の<br />
-              {useCompleteInfo.label}{useCompleteInfo.amount > 0 ? ` 合計 ¥${useCompleteInfo.amount.toLocaleString()}` : ''} を<br />
-              {useCompleteInfo.count}枚使用しました。
-            </p>
-            <p style={{ fontFamily: SERIF, fontSize: 14, color: '#e5e5e5', letterSpacing: '0.06em' }}>
-              残り：{useCompleteInfo.remaining}枚
-            </p>
-            {useCompleteInfo.checkedIn && (
-              <p style={{ fontFamily: SERIF, fontSize: 12, color: 'rgba(128,224,96,1)', marginTop: 14, letterSpacing: '0.08em' }}>
-                来店チェックインも完了しました
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      {showUseComplete && useCompleteInfo && <div role="status" style={{position:'fixed',bottom:24,left:16,right:16,zIndex:960,padding:16,borderRadius:10,background:'#fff',color:'#202321',border:'1px solid #d8dbd2',fontFamily:'sans-serif'}}>
+        会計を確定しました {useCompleteInfo.name} ¥{useCompleteInfo.amount.toLocaleString()}
+      </div>}
 
       {/* ── Success overlay ── */}
       {showSuccess && successInfo && (

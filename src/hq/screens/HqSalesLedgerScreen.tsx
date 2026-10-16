@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { getJapanDateString, addDaysToDateString } from '../../utils/dateUtils'
 import { rpcErrorMessage } from '../../utils/staffSession'
 import { jstDateLabel, jstTime, yen } from '../../utils/bookingApi'
@@ -20,11 +20,22 @@ export function HqSalesLedgerScreen() {
   const [day, setDay] = useState<SalesDay | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const generation = useRef(0)
 
   const load = useCallback(async (d: string) => {
-    try { setDay(await hqSalesApi.day(d)); setError(null) } catch (err) { setError(rpcErrorMessage(err, '会計を読み込めませんでした。')) }
+    const request = ++generation.current
+    try { const result = await hqSalesApi.day(d); if (request === generation.current) { setDay(result); setError(null) } }
+    catch (err) { if (request === generation.current) setError(rpcErrorMessage(err, '会計を読み込めませんでした。')) }
   }, [])
   useEffect(() => { setDay(null); void load(date) }, [date, load]) // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible') void load(date) }
+    const timer = window.setInterval(refresh, 30_000)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    window.addEventListener('online', refresh)
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('focus', refresh); window.removeEventListener('online', refresh) }
+  }, [date, load])
 
   return (
     <div style={{ background: C.bg, color: C.text, fontFamily: SANS }}>

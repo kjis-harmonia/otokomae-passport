@@ -20,12 +20,14 @@ const METHODS: { id: PaymentMethod; label: string }[] = [
 type Line = SaleLine & { key: number }
 let keySeq = 0
 
-export function Checkout({ api, customers, reservationId, ensureActor, onClose, onDone }: {
+export function Checkout({ api, customers, reservationId, clientId = null, initialTicketIds = [], ensureActor, onClose, onDone }: {
   api: CheckoutApi
   /** 予約なしの会計で顧客を探す */
   customers?: CustomerApi
   /** 予約から開くとき。null は予約なしの店頭会計 */
   reservationId: string | null
+  clientId?: string | null
+  initialTicketIds?: readonly string[]
   ensureActor: () => boolean
   onClose: () => void
   onDone: (sale: Sale) => void
@@ -49,16 +51,22 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   // 予約から：予約の顧客・担当・メニュー・予約時価格を引き継ぐ
   useEffect(() => {
     let alive = true
-    api.context(reservationId, null).then(c => {
+    api.context(reservationId, clientId).then(c => {
       if (!alive) return
       setCtx(c)
+      if (c.client) setClient(c.client)
+      const available = c.tickets.filter(t => initialTicketIds.includes(t.id) && !t.blocked)
+      const type = available[0]?.type
+      setTicketIds(available.filter(t => t.type === type).map(t => t.id))
       if (c.reservation) {
         setStylistId(c.reservation.staff_id)
         setLines(c.reservation.items.map(i => ({ key: ++keySeq, source: 'reservation', ref_id: i.menu_code, name: i.name, category: 'menu', unit_price: i.price ?? 0, quantity: 1, discount: 0 })))
       }
     }).catch(err => { if (alive) setError(rpcErrorMessage(err, '会計の準備ができませんでした。')) })
     return () => { alive = false }
-  }, [api, reservationId])
+  // Initial ticket selection belongs to this checkout; later edits stay local.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, reservationId, clientId])
 
   // 予約なし：選んだ顧客（App 会員ならクーポン）を読み直す
   async function chooseClient(c: ClientCandidate | null) {
@@ -117,7 +125,7 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   return (
     <div role="dialog" aria-modal="true" aria-label="会計" style={{ position: 'fixed', inset: 0, zIndex: 950, background: C.bg, color: C.text, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px', borderBottom: `1px solid ${C.line}` }}>
-        <button type="button" onClick={onClose} style={{ ...linkStyle, textDecoration: 'none', color: C.text, fontSize: 15 }}>‹ 戻る</button>
+        <button type="button" disabled={busy} onClick={onClose} style={{ ...linkStyle, textDecoration: 'none', color: C.text, fontSize: 15 }}>‹ 戻る</button>
         <span style={{ fontSize: 13, color: C.mute }}>{ctx?.reservation ? '会計' : '店頭会計'}</span>
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>

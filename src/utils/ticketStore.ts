@@ -146,9 +146,10 @@ export interface IssueTicketsInput {
   customerName: string
 }
 
-/** チケット一括発行。全件成功で発行済みチケットを返し、1枚でも失敗すれば何も発行されない。 */
-export async function issueTickets(input: IssueTicketsInput): Promise<TicketRow[]> {
-  const r = await callStaffRpc<{ tickets: TicketRow[] }>('staff_issue_tickets', {
+/** 同じ requestId の再送は同じ発行結果を返す。通信失敗時は結果が未確認。 */
+export async function issueTickets(input: IssueTicketsInput & { requestId: string }): Promise<TicketRow[]> {
+  const r = await callStaffRpc<{ tickets: TicketRow[] }>('staff_issue_tickets_once', {
+    p_request_id: input.requestId,
     p_user_id:       input.userId,
     p_type:          input.type,
     p_amount:        input.amount,
@@ -156,7 +157,12 @@ export async function issueTickets(input: IssueTicketsInput): Promise<TicketRow[
     p_staff_name:    input.staffName,
     p_customer_name: input.customerName,
   })
-  return r.tickets ?? []
+  if (!r || !Array.isArray(r.tickets) || r.tickets.length !== input.quantity ||
+      new Set(r.tickets.map(t => t.id)).size !== input.quantity ||
+      r.tickets.some(t => !t.id || t.user_id !== input.userId || t.type !== input.type || t.amount !== input.amount)) {
+    throw new RpcError('invalid_issue_receipt', '発行結果を確認できません。同じ操作を再確認してください。')
+  }
+  return r.tickets
 }
 
 export interface UseTicketsInput {

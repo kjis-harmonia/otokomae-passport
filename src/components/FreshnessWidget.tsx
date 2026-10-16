@@ -226,7 +226,7 @@ export function FreshnessWidget({
     notifSupported ? (
       notifPermission === 'granted' ? (
         <p style={{ fontSize: 11, letterSpacing: '0.14em', color: 'rgba(201,162,74,0.80)', textAlign: 'center' }}>
-          通知ON — 来店3日前にお知らせします
+          通知ON — アプリを開いたときにお知らせします
         </p>
       ) : notifPermission === 'denied' ? (
         <p style={{ fontSize: 11, letterSpacing: '0.12em', color: 'rgba(220,80,60,0.78)', textAlign: 'center' }}>
@@ -239,7 +239,7 @@ export function FreshnessWidget({
             background: 'rgba(201,162,74,0.06)', border: '1px solid rgba(201,162,74,0.24)',
             fontSize: 13, letterSpacing: '0.14em', color: 'rgba(212,180,100,0.92)', fontFamily: SERIF,
           }}>
-          カット時期になったら通知する
+          アプリを開いたときの通知を許可
         </button>
       )
     ) : null

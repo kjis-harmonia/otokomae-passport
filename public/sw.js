@@ -1,33 +1,23 @@
-/**
- * 銀二郎 男前パスポート — Service Worker
- *
- * 役割:
- *   1. notificationclick — 通知タップでメンテナンスカット予約 URL を開く
- *
- * install/activate は即時に反映させるため skipWaiting + clients.claim を使用。
- */
-
+/* Foreground maintenance notifications. No background push subscription is configured. */
 self.addEventListener('install', () => self.skipWaiting())
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim())
-})
-
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('activate', event => event.waitUntil(clients.claim()))
+self.addEventListener('notificationclick', event => {
   event.notification.close()
-
-  const url = event.notification.data?.url ?? '/'
-
-  event.waitUntil(
-    clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((windowClients) => {
-        // すでに開いているウィンドウがあればフォーカス
-        for (const client of windowClients) {
-          if ('focus' in client) return client.focus()
-        }
-        // なければ新規タブで開く
-        return clients.openWindow(url)
-      }),
-  )
+  event.waitUntil((async () => {
+    const target = new URL(event.notification.data?.url ?? '/', self.location.origin)
+    if (!['https:', 'http:'].includes(target.protocol)) return
+    const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const matching = windows.find(client => client.url === target.href)
+    if (matching) return matching.focus()
+    if (target.origin === self.location.origin) {
+      const current = windows.find(client => new URL(client.url).origin === target.origin && 'navigate' in client)
+      if (current) {
+        try {
+          const navigated = await current.navigate(target.href)
+          if (navigated) return navigated.focus()
+        } catch { /* Open a new window if navigation failed. */ }
+      }
+    }
+    return clients.openWindow(target.href)
+  })())
 })
