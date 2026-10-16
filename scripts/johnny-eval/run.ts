@@ -53,7 +53,7 @@ async function worker() {
     }
   }
 }
-await Promise.all(Array.from({ length: 6 }, worker))
+await Promise.all(Array.from({ length: Number(process.env.JOHNNY_CONCURRENCY ?? 6) }, worker))
 results.sort((a, b) => a.id.localeCompare(b.id))
 const pass = results.filter(r => r.ok).length
 const ms = results.map(r => r.ms).sort((a, b) => a - b)

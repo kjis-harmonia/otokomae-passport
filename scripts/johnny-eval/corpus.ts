@@ -10,7 +10,7 @@ export interface Case {
   history?: { role: 'user' | 'assistant'; text: string }[]
   reservations?: 'none' | 'one' | 'two'
   lastMenu?: string
-  shown?: { menu_code?: string; times?: string[]; staff_id?: string | null }
+  shown?: { menu_code?: string; times?: string[]; staff_id?: string | null; confirm?: { menu_code: string; starts_at: string; staff_id: string | null } }
   expect: { types: string[]; menu?: string | string[]; date?: string; time?: string; staff?: 'テイテイ' | '銀二郎' | null; reservation?: string; menusInclude?: string; menusExclude?: string }
 }
 
@@ -87,7 +87,7 @@ export const CASES: Case[] = [
   { id: 'staff-02', say: '明日15時に銀二郎さんでカット', expect: { types: ['slots'], menu: CUT, staff: '銀二郎' } }, // 銀二郎は 15-16 埋まり
   { id: 'staff-03', say: 'テイテイさん空いてる日ある？カットで', expect: { types: ['slots'], menu: CUT, staff: 'テイテイ' } },
   { id: 'staff-04', say: '銀二郎さんに濡れパンお願いしたい', expect: { types: ['slots'], menu: 'perm-nurepan', staff: '銀二郎' } },
-  { id: 'staff-05', say: 'ていていで', history: [{ role: 'user', text: '明日の15時にカット' }, { role: 'assistant', text: '明日の15時、通常カットでお取りできます。この日時でお間違いないですか？' }], expect: book(CUT, '2026-10-18', '15:00', 'テイテイ') },
+  { id: 'staff-05', shown: { confirm: { menu_code: 'cut-regular', starts_at: '2026-10-18T15:00:00+09:00', staff_id: null } }, say: 'ていていで', history: [{ role: 'user', text: '明日の15時にカット' }, { role: 'assistant', text: '明日の15時、通常カットでお取りできます。この日時でお間違いないですか？' }], expect: book(CUT, '2026-10-18', '15:00', 'テイテイ') },
   { id: 'staff-06', say: '誰でもいいです', history: [{ role: 'user', text: '明日の15時にカット' }, { role: 'assistant', text: '担当のご希望はありますか？' }], expect: book(CUT, '2026-10-18', '15:00', null) },
 
   // ── 前回と同じ ──
@@ -101,8 +101,8 @@ export const CASES: Case[] = [
   { id: 'pick-03', say: '13時のやつ', shown: { menu_code: 'cut-regular', times: ['2026-10-18T03:00:00.000Z', '2026-10-18T04:00:00.000Z', '2026-10-18T05:00:00.000Z'] }, expect: book(CUT, '2026-10-18', '13:00') },
   { id: 'pick-04', say: 'やっぱり火曜日にして', history: [{ role: 'user', text: '明日カット' }, { role: 'assistant', text: '明日は12時、13時、14時が空いています。どれにしますか？' }], expect: { types: ['slots', 'confirm_booking'], menu: CUT, date: '2026-10-20' } },
   { id: 'pick-05', say: 'もうちょい遅い時間ない？', history: [{ role: 'user', text: '明日カット' }, { role: 'assistant', text: '明日は12時、13時、14時が空いています。どれにしますか？' }], shown: { menu_code: 'cut-regular', times: ['2026-10-18T03:00:00.000Z', '2026-10-18T04:00:00.000Z', '2026-10-18T05:00:00.000Z'] }, expect: slots(CUT, '2026-10-18') },
-  { id: 'pick-06', say: 'メニューやっぱスキンフェードで', history: [{ role: 'user', text: '明日の15時にカット' }, { role: 'assistant', text: '明日の15時、通常カットでお取りできます。この日時でお間違いないですか？' }], expect: book(['cut-skin-fade', 'cut-skin-fade-plus'], '2026-10-18', '15:00') },
-  { id: 'pick-07', say: '時間ずらして16時で', history: [{ role: 'user', text: '明日の15時にカット' }, { role: 'assistant', text: '明日の15時、通常カットでお取りできます。この日時でお間違いないですか？' }], expect: book(CUT, '2026-10-18', '16:00') },
+  { id: 'pick-06', shown: { confirm: { menu_code: 'cut-regular', starts_at: '2026-10-18T15:00:00+09:00', staff_id: null } }, say: 'メニューやっぱスキンフェードで', history: [{ role: 'user', text: '明日の15時にカット' }, { role: 'assistant', text: '明日の15時、通常カットでお取りできます。この日時でお間違いないですか？' }], expect: book(['cut-skin-fade', 'cut-skin-fade-plus'], '2026-10-18', '15:00') },
+  { id: 'pick-07', shown: { confirm: { menu_code: 'cut-regular', starts_at: '2026-10-18T15:00:00+09:00', staff_id: null } }, say: '時間ずらして16時で', history: [{ role: 'user', text: '明日の15時にカット' }, { role: 'assistant', text: '明日の15時、通常カットでお取りできます。この日時でお間違いないですか？' }], expect: book(CUT, '2026-10-18', '16:00') },
 
   // ── 質問まじり ──
   { id: 'ask-01', say: '濡れパンっていくら？', expect: { types: ['none', 'slots', 'menus'] } },
@@ -128,7 +128,7 @@ export const CASES: Case[] = [
   // ── 2人・できないこと・関係ない話 ──
   { id: 'multi-01', say: 'わしと息子で明日行きたい', expect: { types: ['none', 'handoff', 'menus', 'slots'] } },
   { id: 'multi-02', say: '3人でいけますか', expect: { types: ['handoff', 'none'] } },
-  { id: 'off-01', say: '今日の天気は？', expect: { types: ['none'] } },
+  { id: 'off-01', say: '今日の天気は？', expect: { types: ['none', 'menus'] } }, // 天気は答えられないと言って、今日の空きを案内するのは可
   { id: 'off-02', say: 'ありがとう', expect: { types: ['none'] } },
   { id: 'off-03', say: 'もしもし', expect: { types: ['none'] } },
   { id: 'off-04', say: '駐車場ありますか', expect: { types: ['none', 'handoff'] } },

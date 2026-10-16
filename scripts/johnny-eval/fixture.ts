@@ -83,10 +83,10 @@ export function fixtureTools(reservations: Reservation[]): AgentTools & { calls:
       }
       return { date, open: true, hours: { start: '10:00', end: '20:00' }, groups: [...groups.values()] }
     },
-    async nextSlots(code, from) {
-      calls.push(`next_slots ${code} ${from}`)
+    async nextSlots(code, from, staffId) {
+      calls.push(`next_slots ${code} ${from}${staffId ? ' ' + staffId : ''}`)
       const out: string[] = []
-      for (let d = from < today ? today : from, i = 0; i < 30 && out.length < 10; d = addDays(d, 1), i++) out.push(...anySlots(d, code).slice(0, 10 - out.length))
+      for (let d = from < today ? today : from, i = 0; i < 30 && out.length < 10; d = addDays(d, 1), i++) out.push(...(staffId ? staffSlots(d, code, staffId) : anySlots(d, code)).slice(0, 10 - out.length))
       return out
     },
     async slots(date, code, staffId) {
