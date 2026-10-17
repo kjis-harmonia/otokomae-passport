@@ -1,0 +1,3 @@
+# Shortcuts authenticates its own scoped token. Existing johnny-agent remains unchanged.
+[functions.customer-shortcuts]
+verify_jwt = false

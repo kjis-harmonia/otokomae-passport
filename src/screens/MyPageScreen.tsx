@@ -814,6 +814,11 @@ export function MyPageScreen({ memberStatus }: Props) {
           <PreviousTicketsEntry onBound={() => { void fetchTickets() }} />
         </div>
 
+        {import.meta.env.VITE_SUPABASE_URL === 'https://kfufxzmucjljjouzpumi.supabase.co' && (
+          <div style={{ margin: '24px 20px 0', paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+            <a href="/shortcuts.html" style={{ color: '#F2F2F2', fontSize: 15, lineHeight: 1.8, textUnderlineOffset: 4 }}>ホーム画面から予約・メンテナンス</a>
+          </div>
+        )}
         <div style={{ height: 56 }} />
       </div>
     </>
