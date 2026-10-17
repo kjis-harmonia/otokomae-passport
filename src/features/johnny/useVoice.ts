@@ -5,6 +5,7 @@
 //   読み上げ：AI の声（aiVoice.ts）。鳴らせないときだけ端末の読み上げ。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { playAiVoice } from './aiVoice'
+import { toSpeech } from './speechText'
 
 interface RecognitionResultLike { isFinal: boolean; 0: { transcript: string } }
 interface RecognitionEventLike { resultIndex: number; results: ArrayLike<RecognitionResultLike> }
@@ -267,7 +268,9 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
   }, [recordMode, startRecording])
 
   /** 読み上げ。終わったら then を呼ぶ（消音・非対応ならすぐ呼ぶ） */
-  const speak = useCallback((text: string, then?: () => void) => {
+  const speak = useCallback((shown: string, then?: () => void) => {
+    // 読み上げは日付の読みをひらがなにして（14日→じゅうよっか）
+    const text = toSpeech(shown)
     const synth = window.speechSynthesis
     speakAbortRef.current?.abort()
     speakAbortRef.current = null
