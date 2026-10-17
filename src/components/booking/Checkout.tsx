@@ -20,12 +20,16 @@ const METHODS: { id: PaymentMethod; label: string }[] = [
 type Line = SaleLine & { key: number }
 let keySeq = 0
 
-export function Checkout({ api, customers, reservationId, ensureActor, onClose, onDone }: {
+export function Checkout({ api, customers, reservationId, clientId = null, initialTicketIds, ensureActor, onClose, onDone }: {
   api: CheckoutApi
   /** 予約なしの会計で顧客を探す */
   customers?: CustomerApi
   /** 予約から開くとき。null は予約なしの店頭会計 */
   reservationId: string | null
+  /** 予約なしで、顧客が決まっているとき（店舗端末で会員QRを読んだ）。顧客を探す手順を飛ばす */
+  clientId?: string | null
+  /** 最初から選んでおくクーポン（会員QRでお客様が選んだ券）。使えない券は外す */
+  initialTicketIds?: readonly string[]
   ensureActor: () => boolean
   onClose: () => void
   onDone: (sale: Sale) => void
@@ -49,15 +53,23 @@ export function Checkout({ api, customers, reservationId, ensureActor, onClose, 
   // 予約から：予約の顧客・担当・メニュー・予約時価格を引き継ぐ
   useEffect(() => {
     let alive = true
-    api.context(reservationId, null).then(c => {
+    api.context(reservationId, reservationId ? null : clientId).then(c => {
       if (!alive) return
       setCtx(c)
+      if (!c.reservation && clientId && c.client) setClient(c.client)
+      if (initialTicketIds?.length) {
+        // 違う種類は一緒に使えないので、最初に選ばれた券と同じ種類だけ
+        const usable = c.tickets.filter(t => !t.blocked && initialTicketIds.includes(t.id))
+        setTicketIds(usable.filter(t => t.type === usable[0]?.type).map(t => t.id))
+      }
       if (c.reservation) {
         setStylistId(c.reservation.staff_id)
         setLines(c.reservation.items.map(i => ({ key: ++keySeq, source: 'reservation', ref_id: i.menu_code, name: i.name, category: 'menu', unit_price: i.price ?? 0, quantity: 1, discount: 0 })))
       }
     }).catch(err => { if (alive) setError(rpcErrorMessage(err, '会計の準備ができませんでした。')) })
     return () => { alive = false }
+    // 開いたときの顧客・券だけを使う（あとからの変更はこの画面の中で）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, reservationId])
 
   // 予約なし：選んだ顧客（App 会員ならクーポン）を読み直す

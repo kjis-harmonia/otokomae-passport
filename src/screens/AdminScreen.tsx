@@ -17,6 +17,7 @@ import { normalizeCurrentReservation, isReservationForDate, type CurrentReservat
 import { PREMIUM_COUPONS } from '../data/wallet'
 import { VisitMenuPicker, type VisitInfo } from '../components/VisitMenuPicker'
 import { CheckoutSummary } from '../components/CheckoutSummary'
+import { MemberCheckout } from '../components/MemberCheckout'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -1260,6 +1261,20 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   </p>
                   {visitInfo && <VisitMenuPicker key={scannedData.userId} userId={scannedData.userId} info={visitInfo} staffName={staffId} />}
                   {visitInfo && <CheckoutSummary info={visitInfo} selected={selectedTickets} />}
+                  {/* お会計（銀Pay・現金ほか）は会計の仕組みがある Staging だけ。券は会計の中で使用済みになる */}
+                  {isStaging() && (
+                    <MemberCheckout
+                      key={scannedData.userId}
+                      userId={scannedData.userId}
+                      staffName={staffId}
+                      ticketIds={selectedTicketIds}
+                      onPaid={() => {
+                        setSelectedTicketIds([])
+                        playSuccessSound()
+                        getTicketsForStaff(scannedData.userId).then(setUserTickets).catch(() => {})
+                      }}
+                    />
+                  )}
                   {/* 次にやること */}
                   <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: '#f8f7f4', border: '1px solid rgba(151,115,43,0.28)' }}>
                     <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>NEXT STEP</p>

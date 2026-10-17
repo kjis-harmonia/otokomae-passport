@@ -31,9 +31,12 @@ async function registration(): Promise<ServiceWorkerRegistration | null> {
 export async function pushState(): Promise<PushState> {
   if (!isPushSupported()) return isIOS() && !isStandalone() ? 'needs-install' : 'unsupported'
   if (Notification.permission === 'denied') return 'denied'
-  const reg = await registration()
-  const sub = await reg?.pushManager.getSubscription()
-  return sub && Notification.permission === 'granted' ? 'on' : 'off'
+  if (Notification.permission !== 'granted') return 'off'
+  try {
+    const reg = await registration()
+    const sub = await reg?.pushManager.getSubscription()
+    return sub ? 'on' : 'off'
+  } catch { return 'off' }
 }
 
 async function save(sub: PushSubscription): Promise<void> {
