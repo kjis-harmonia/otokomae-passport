@@ -37,6 +37,7 @@ import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
 import { getUserId, MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
 import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
+import { InstallGuide } from './components/InstallGuide'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
@@ -1144,6 +1145,9 @@ function App() {
               <MusicGuidePopup key="music-guide" onDismiss={dismissMusicGuide} />
             )}
           </AnimatePresence>
+
+          {/* ホーム画面に追加の案内（Safari などで開いているときだけ。音楽の案内・クーポンのあと） */}
+          <InstallGuide autoAllowed={activeTab === 'home' && !showMusicGuide && !welcomeCouponDialog && !showQrModal} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (
