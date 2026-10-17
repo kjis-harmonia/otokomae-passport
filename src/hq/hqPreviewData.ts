@@ -78,6 +78,7 @@ export async function previewHqRpc(fn: string, params: Record<string, unknown>):
     case 'hq_ginpay_ledger': return { accounts: [], transactions: [], merged_accounts: [], total_balance: 0 }
     case 'hq_sales': { const rows = dateSessions(String(params.p_date)); return { date: params.p_date, count: rows.length, total: summarizeInsights(rows).sales, voided: 0, rows: rows.map((s, i) => ({ id: s.id, status: 'completed', completed_at: s.created_at, customer_name: names[i % names.length], stylist_name: s.stylist_name, payment_method: s.payment_method, total: s.total, items: menuNames[i % menuNames.length], has_reservation: false })) } }
     case 'hq_sale_detail': { const s = sessions.find(s => s.id === params.p_id) ?? sessions[0]; return { id: s.id, status: 'completed', completed_at: s.created_at, client: null, customer_name: names[0], reservation: null, stylist_name: s.stylist_name, operator: s.staff_name, subtotal: s.total, discount_total: 0, total: s.total, payment_method: s.payment_method, tax_mode: null, tax_rate: null, items: [], discounts: [], payments: [{ method: s.payment_method, amount: s.total }], voided_at: null, voided_by: null, void_reason: null, events: [] } }
+    case 'hq_messages_list': return []
     default: throw Object.assign(new Error('プレビューでは変更・保存できません。'), { code: 'preview_read_only' })
   }
 }
