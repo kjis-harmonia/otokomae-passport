@@ -42,3 +42,11 @@ supabase/tests/preflight_customer_passkeys.sql は使い捨てDBかStagingで実
 再検証：`node scripts/customer-passkeys.test.mjs`。Supabase SQLテストは上記rollbackファイルを使用する。
 
 - 最新origin/stagingを統合し、Johnny・通知・銀Pay・ホーム追加ガイドの変更を保持。パスキー設定中はホーム追加の自動案内を抑制し、StagingのBGM自動案内は省略（手動操作は維持）。
+
+## 2026-10-18 Staging適用
+
+- customer_passkeysを履歴version 20261017202804で適用。ローカルSQL名も実際の履歴に一致させた。
+- customer-passkeys Edge Function v1 ACTIVE。既存JohnnyなどのFunctionは変更していない。
+- Staging上のrollbackテストはエラーなく終了。認証テーブル・公開/非公開RPCはanon/authenticatedからアクセス不可。app_booking_enabled=trueを維持。
+- API確認：セッションなしstatus=401、許可外origin=403、login_options=200・正しいRP ID・userVerification=required。
+- 公開画面の反映と実iPhone確認は、この段階では未完了。
