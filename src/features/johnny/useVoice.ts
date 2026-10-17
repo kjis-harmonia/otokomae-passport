@@ -2,7 +2,9 @@
 //   聞き取り：録音して、話し終わり（約 0.9 秒の無音）で区切り、録音をサーバーに渡す（onAudio）。文字にするのはサーバー。
 //     iPhone の音声認識は遅く、途中で止まって戻らないことがあるため、録音できる端末は録音を使う。
 //   録音できない端末・デモ（server: false）だけ、ブラウザの音声認識（onFinal に文字が来る）。
+//   読み上げ：AI の声（aiVoice.ts）。鳴らせないときだけ端末の読み上げ。
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { playAiVoice } from './aiVoice'
 
 interface RecognitionResultLike { isFinal: boolean; 0: { transcript: string } }
 interface RecognitionEventLike { resultIndex: number; results: ArrayLike<RecognitionResultLike> }
@@ -54,12 +56,17 @@ function audioCtx(): AudioContext | null {
   if (!sharedCtx || sharedCtx.state === 'closed') sharedCtx = new Ctor()
   return sharedCtx
 }
+// iPhone は画面に触れたときでないと音を鳴らせない：アプリのどこかに触れたら AudioContext を動かしておく
+//（JOHNNY を開くボタンを押したときに動けば、最初の「いつのご来店を…」から AI の声で話せる）
+if (typeof window !== 'undefined') window.addEventListener('pointerdown', () => { void audioCtx()?.resume().catch(() => {}) }, true)
 
 export interface VoiceOptions {
   /** 録音してサーバーで文字にする（false ならブラウザの音声認識） */
   server: boolean
   /** 録音が終わったとき（server のとき） */
   onAudio?: (audio: Blob) => void
+  /** AI の声で読み上げる（false なら端末の読み上げ） */
+  aiVoice?: boolean
 }
 
 export function useVoice(onFinal: (text: string) => void, options: VoiceOptions = { server: false }) {
@@ -81,17 +88,15 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
   /** 録音中のものを止める（cancel なら送らない） */
   const recStopRef = useRef<((cancel: boolean) => void) | null>(null)
 
-  // iPhone：画面に触れたときに AudioContext を動かしておく（話し終わりを見つけるのに使う）
-  useEffect(() => {
-    if (!recordMode) return
-    const unlock = () => { void audioCtx()?.resume().catch(() => {}) }
-    window.addEventListener('pointerdown', unlock, true)
-    return () => window.removeEventListener('pointerdown', unlock, true)
-  }, [recordMode])
+  const aiVoiceRef = useRef(!!options.aiVoice)
+  useEffect(() => { aiVoiceRef.current = !!options.aiVoice }, [options.aiVoice])
+  /** AI の声を止める */
+  const speakAbortRef = useRef<AbortController | null>(null)
 
   /** 録音して、話し終わりで区切る */
   const startRecording = useCallback(async () => {
     recStopRef.current?.(true)
+    speakAbortRef.current?.abort()
     window.speechSynthesis?.cancel()
     setSpeaking(false)
     setNotice(null)
@@ -185,6 +190,7 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
 
   const startListening = useCallback(() => {
     if (recordMode) { void startRecording(); return }
+    speakAbortRef.current?.abort()
     const Ctor = recognitionCtor()
     if (!Ctor) { setListen('unsupported'); return }
     window.speechSynthesis?.cancel()
@@ -263,32 +269,51 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
   /** 読み上げ。終わったら then を呼ぶ（消音・非対応ならすぐ呼ぶ） */
   const speak = useCallback((text: string, then?: () => void) => {
     const synth = window.speechSynthesis
-    if (muted || !synth || typeof SpeechSynthesisUtterance === 'undefined') { then?.(); return }
+    speakAbortRef.current?.abort()
+    speakAbortRef.current = null
+    if (muted) { then?.(); return }
     recStopRef.current?.(true)
     recRef.current?.abort()
-    synth.cancel()
-    const u = new SpeechSynthesisUtterance(text)
-    u.lang = 'ja-JP'
-    u.rate = 1.04
-    const voice = pickJapaneseVoice()
-    if (voice) u.voice = voice
+    synth?.cancel()
     let done = false
     const finish = () => { if (done) return; done = true; setSpeaking(false); then?.() }
-    u.onend = finish
-    u.onerror = finish
-    setSpeaking(true)
-    synth.speak(u)
-    // 読み上げの終わりが通知されない端末があるので、長さから見積もった時間で打ち切る
-    window.setTimeout(finish, 1500 + text.length * 220)
+    // 端末の読み上げ（AI の声が使えないとき）
+    const viaDevice = () => {
+      if (!synth || typeof SpeechSynthesisUtterance === 'undefined') { finish(); return }
+      const u = new SpeechSynthesisUtterance(text)
+      u.lang = 'ja-JP'
+      u.rate = 1.04
+      const voice = pickJapaneseVoice()
+      if (voice) u.voice = voice
+      u.onend = finish
+      u.onerror = finish
+      setSpeaking(true)
+      synth.speak(u)
+      // 読み上げの終わりが通知されない端末があるので、長さから見積もった時間で打ち切る
+      window.setTimeout(finish, 1500 + text.length * 220)
+    }
+    const ctx = aiVoiceRef.current ? audioCtx() : null
+    if (ctx && ctx.state === 'running') {
+      const ac = new AbortController()
+      speakAbortRef.current = ac
+      setSpeaking(true)
+      void playAiVoice(text, ctx, ac.signal).then(r => {
+        if (r === 'aborted') { setSpeaking(false); return }
+        if (speakAbortRef.current === ac) speakAbortRef.current = null
+        if (r === 'failed') viaDevice(); else finish()
+      })
+      return
+    }
+    viaDevice()
   }, [muted])
 
   const setMuted = useCallback((m: boolean) => {
     setMutedState(m)
     try { localStorage.setItem(MUTE_KEY, m ? '1' : '0') } catch { /* ignore */ }
-    if (m) { window.speechSynthesis?.cancel(); setSpeaking(false) }
+    if (m) { speakAbortRef.current?.abort(); window.speechSynthesis?.cancel(); setSpeaking(false) }
   }, [])
 
-  useEffect(() => () => { recStopRef.current?.(true); recRef.current?.abort(); window.speechSynthesis?.cancel() }, [])
+  useEffect(() => () => { recStopRef.current?.(true); speakAbortRef.current?.abort(); recRef.current?.abort(); window.speechSynthesis?.cancel() }, [])
 
   return { listen, interim, notice, speaking, muted, setMuted, startListening, stopListening, finishListening, speak, recordMode }
 }

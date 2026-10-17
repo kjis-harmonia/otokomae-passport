@@ -1,6 +1,7 @@
 // JOHNNY の予約 AI の入口（Edge Function）。お客様アプリの予約アシスタントから呼ぶ。
 //   入力：{ session: 顧客セッション, message: お客様の言葉（300字まで）, history: 直前の会話（10往復まで）, shown: 画面に出している候補 }
 //         声で話したときは message の代わりに audio（録音の base64）と mime。transcribe_only なら文字にするだけ（確認画面の「はい」など）
+//         speak（話す言葉）なら、JOHNNY の声（PCM 16bit・24kHz・モノラル）を少しずつ返す
 //   出力：{ heard?: 聞き取った文, say: 話す言葉, ui: 画面に出すもの }（agent.ts の AgentReply）。聞き取れたが AI が失敗したら { heard, error }
 // 決まり：
 //   ・空き・予約は、お客様のセッションで DB の customer_* RPC を呼んで調べる（他のお客様のものは見えない）
@@ -14,6 +15,9 @@ const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const OPENAI_KEY = Deno.env.get('OPENAI_API_KEY') ?? ''
 const MODEL = Deno.env.get('OPENAI_MODEL') ?? 'gpt-6-luna'
 const STT_MODEL = Deno.env.get('OPENAI_TRANSCRIBE_MODEL') ?? 'gpt-transcribe'
+const TTS_MODEL = Deno.env.get('OPENAI_TTS_MODEL') ?? 'gpt-4o-mini-tts'
+const TTS_VOICE = Deno.env.get('OPENAI_TTS_VOICE') ?? 'cedar'
+const TTS_STYLE = '理容室「二代目銀二郎」の受付。親しみやすく落ち着いた話し方で、はっきり、少し速めに。日本語の自然な抑揚で。'
 /** 録音の上限（base64 で約 2MB＝20 秒ほど） */
 const MAX_AUDIO_B64 = 2_000_000
 
@@ -120,6 +124,22 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json(400, { error: 'invalid_request' }) }
   const session = str(body.session, 200)
+  // JOHNNY の声：OpenAI の音声をそのまま流す（アプリは届いた分から再生する）
+  const speakText = str(body.speak, 300)
+  if (speakText) {
+    if (session.length < 32) return json(401, { error: 'customer_auth_required' })
+    // ログインの確認と音声づくりを同時に始める（確認できなければ音声は返さない）
+    const authed = rpc('customer_get_tickets', session).then(() => true, () => false)
+    const speech = fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: TTS_MODEL, voice: TTS_VOICE, input: speakText, instructions: TTS_STYLE, response_format: 'pcm' }),
+    })
+    if (!(await authed)) { speech.then(x => x.body?.cancel()).catch(() => {}); return json(401, { error: 'customer_auth_required' }) }
+    const r = await speech
+    if (!r.ok || !r.body) return json(502, { error: 'tts_unavailable' })
+    return new Response(r.body, { status: 200, headers: { ...CORS, 'Content-Type': 'audio/pcm', 'Cache-Control': 'no-store' } })
+  }
   let message = str(body.message, 300)
   const audio = typeof body.audio === 'string' && body.audio.length <= MAX_AUDIO_B64 ? body.audio : ''
   if (!message && !audio) return json(400, { error: 'invalid_request' })

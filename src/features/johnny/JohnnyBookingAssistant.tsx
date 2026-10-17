@@ -151,7 +151,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   // 声は録音してサーバーで文字にする（デモだけ端末の音声認識）
   const handleAudioRef = useRef<(audio: Blob) => void>(() => {})
   const onAudio = useCallback((audio: Blob) => handleAudioRef.current(audio), [])
-  const voice = useVoice(useCallback((text: string) => handleTextRef.current(text), []), { server: api.serverVoice, onAudio })
+  const voice = useVoice(useCallback((text: string) => handleTextRef.current(text), []), { server: api.serverVoice, onAudio, aiVoice: api.serverVoice })
   const { speak, startListening, stopListening, finishListening } = voice
   /** 録音を送れなかった・聞き取れなかったときの一言 */
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
