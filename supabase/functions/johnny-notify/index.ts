@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
   }
   if (typeof body.test_user_id === 'string' && body.test_user_id) {
     const subs = await rpc<{ endpoint: string; p256dh: string; auth: string }[]>('notify_subs_for_sender', { p_secret: SECRET, p_user_id: body.test_user_id })
-    const payload = JSON.stringify({ title: '銀二郎 JOHNNY', body: 'お知らせのテストです。押すと JOHNNY が開きます。', url: '/?tab=reserve&johnny=1', tag: 'johnny-test' })
+    const payload = JSON.stringify({ title: '銀二郎 JOHNNY', body: 'お知らせのテストです。押すと JOHNNY が開きます。', url: '/?tab=reserve&johnny=1', tag: `johnny-test-${Date.now()}` })
     const results = await Promise.all((subs ?? []).map(s => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 600 })
       .then(() => 'ok', (e: unknown) => String((e as { statusCode?: number }).statusCode ?? 'error'))))
     return new Response(JSON.stringify({ test: true, subs: results.length, results }), { headers: { 'Content-Type': 'application/json' } })
