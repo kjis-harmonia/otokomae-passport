@@ -1,3 +1,4 @@
+import {CustomerAccessSettings} from '../features/customerAccess/CustomerAccess'
 import { useState, useEffect, useCallback } from 'react'
 import type { MemberStatus } from '../data/brand'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -842,6 +843,7 @@ export function MyPageScreen({ memberStatus }: Props) {
           <PreviousTicketsEntry onBound={() => { void fetchTickets() }} />
         </div>
 
+        <div style={{margin:'24px 20px 0'}}><CustomerAccessSettings onRecovered={()=>window.location.reload()}/></div>
         <div style={{ height: 56 }} />
       </div>
     </>
