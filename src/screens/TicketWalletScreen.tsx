@@ -524,7 +524,9 @@ export function TicketWalletScreen({
         </PrimaryButton>
         {blockedToday(usable[0]) && (
           <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.5)', textAlign: 'center', lineHeight: 1.6 }}>
-            本日は別の割引をご利用済みです（割引の併用は1日1種類まで）。
+            {usable[0].type === 'coupon'
+              ? '本日はほかの券をご利用済みのため、メンテナンスクーポンは使えません。'
+              : '本日はメンテナンスクーポンをご利用済みのため、ほかの券は使えません。'}
           </p>
         )}
         <button
