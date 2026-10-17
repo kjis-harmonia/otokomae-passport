@@ -21,6 +21,7 @@ import {
   triggerMaintenanceNotification,
 } from '../utils/pushNotification'
 import { turnOnPush } from '../utils/webPush'
+import { PushToggle } from '../components/PushToggle'
 import { getUserId } from '../utils/userId'
 import { getStoredValue } from '../utils/storage'
 
@@ -416,6 +417,8 @@ function MaintenanceScheduleSection() {
         notifPermission={notifPerm}
         onRequestNotif={handleRequestPermission}
       />
+      {/* JOHNNY のお知らせ（受け取っていない人にだけ出す） */}
+      <div style={{ marginTop: 12 }}><PushToggle tone="gold" hideWhenOn /></div>
     </div>
   )
 }

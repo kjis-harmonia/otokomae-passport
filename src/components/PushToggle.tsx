@@ -7,15 +7,16 @@ import { SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
 /** tone：gold＝マイページ（黒と金）、mono＝JOHNNY の画面（白黒） */
-export function PushToggle({ tone }: { tone: 'gold' | 'mono' }) {
+export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWhenOn?: boolean }) {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 調べるのに失敗しても（古い端末など）、ボタンは出す
   useEffect(() => { pushState().then(setState, () => setState('off')) }, [])
   if (!state) return null
-  if (state === 'unsupported') return tone === 'gold' ? <Unsupported /> : null
-  if (tone === 'mono' && state === 'on') return null
+  // 受け取れない端末：QR の画面では理由を出す（ホームでは出さない）
+  if (state === 'unsupported') return tone === 'gold' && !hideWhenOn ? <Unsupported /> : null
+  if ((tone === 'mono' || hideWhenOn) && state === 'on') return null
 
   const act = async () => {
     setBusy(true); setError(null)
