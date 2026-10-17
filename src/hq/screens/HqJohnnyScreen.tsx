@@ -30,9 +30,9 @@ function jstNow() {
 }
 
 function greeting(hour: number): string {
-  if (hour >= 5 && hour < 11) return 'テイテイ、おはよう。'
-  if (hour >= 11 && hour < 18) return 'テイテイ、おつかれさま。'
-  return 'テイテイ、今日もおつかれ。'
+  if (hour >= 5 && hour < 11) return 'テイテイさん、おはよう。'
+  if (hour >= 11 && hour < 18) return 'テイテイさん、おつかれさま。'
+  return 'テイテイさん、今日もおつかれ。'
 }
 
 /** 文字の位置：球の下から、操作ボタンの上まで */
@@ -175,7 +175,7 @@ export function HqJohnnyScreen() {
         ) : (
           <>
             <h2 className="hqj-title">{greeting(now.hour)}</h2>
-            <p className="hqj-sub">{waiting.length ? `慶一郎さんから伝言が${waiting.length}件あるよ。` : 'マイクを押して、何でも話しかけてね。'}</p>
+            <p className="hqj-sub">{waiting.length ? `BOS から伝言が${waiting.length}件あるよ。` : 'マイクを押して、何でも話しかけてね。'}</p>
           </>
         ))}
         {error && <p role="alert" className="hqj-error">{error}</p>}
@@ -220,13 +220,13 @@ export function HqJohnnyScreen() {
               {turns.map((t, i) => <div key={i} className={'hqj-bubble ' + (t.role === 'user' ? 'is-user' : 'is-johnny')}>{t.content}</div>)}
             </div>
             {!!turns.length && <button type="button" className="hqj-btn" style={{ marginTop: 10 }} onClick={() => { setTurns([]); saveChat([]); setHeard(''); setReply('') }}>会話を消す</button>}
-            <h4>慶一郎さんとの伝言</h4>
+            <h4>BOS との伝言</h4>
             {!(messages ?? []).length && <p className="hqj-muted">まだ伝言はありません。</p>}
             <div style={{ display: 'grid', gap: 10 }}>
               {(messages ?? []).slice(0, 20).map(m => (
                 <div key={m.id} className="hqj-item">
                   <div className="hqj-item-head">
-                    <strong>{m.direction === 'to_owner' ? '→ 慶一郎さん' : '← 慶一郎さん'}{' '}{m.kind === 'request' ? '【確認して】' : ''}{m.title}</strong>
+                    <strong>{m.direction === 'to_owner' ? '→ BOS' : '← BOS'}{' '}{m.kind === 'request' ? '【確認して】' : ''}{m.title}</strong>
                     <span className="hqj-time">{when(m.created_at)}</span>
                   </div>
                   <p className="hqj-item-body">{m.body}</p>
@@ -252,7 +252,7 @@ function InboxItem({ m, onDone }: { m: HqMessage; onDone: () => void }) {
   return (
     <div className={'hqj-item' + (m.urgent ? ' is-urgent' : '')}>
       <div className="hqj-item-head">
-        <strong>慶一郎さん：{m.urgent ? '【急ぎ】' : ''}{m.kind === 'request' ? '【確認して】' : ''}{m.title}</strong>
+        <strong>BOS：{m.urgent ? '【急ぎ】' : ''}{m.kind === 'request' ? '【確認して】' : ''}{m.title}</strong>
         <span className="hqj-time">{when(m.created_at)}</span>
       </div>
       <p className="hqj-item-body">{m.body}</p>

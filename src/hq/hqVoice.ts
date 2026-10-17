@@ -97,7 +97,8 @@ export async function speak(text: string, signal: AbortSignal): Promise<boolean>
     const res = await fetch(`${URL_BASE}/functions/v1/hq-johnny`, {
       method: 'POST',
       headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hq, speak: text }),
+      // 「BOS」は「ボス」と読ませる
+      body: JSON.stringify({ hq, speak: text.replace(/BOSS?/gi, 'ボス') }),
       signal,
     })
     if (!res.ok || !res.body) return false
