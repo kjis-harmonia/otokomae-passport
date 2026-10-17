@@ -26,9 +26,9 @@ const STATUS_LABEL: Record<StockStatus, string> = {
 }
 
 const STATUS_COLOR: Record<StockStatus, string> = {
-  ok: '#80E060',
-  low: '#E0B84A',
-  reorder: '#E06060',
+  ok: '#246b52',
+  low: '#97732b',
+  reorder: '#b23a3a',
 }
 
 type LoadState =
@@ -53,8 +53,8 @@ export interface StaffInventoryHandle {
 
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10,
-  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)',
-  color: '#ffffff', fontSize: 14, outline: 'none',
+  background: '#ffffff', border: '1px solid #e6e3dd',
+  color: '#1c1f1d', fontSize: 14, outline: 'none',
 }
 
 const smallBtnStyle: React.CSSProperties = {
@@ -241,16 +241,16 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
           onClick={() => setShowAddForm(true)}
           style={{
             width: '100%', padding: '11px', borderRadius: 10, marginBottom: 8,
-            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(201,162,74,0.4)',
-            color: '#C9A24A', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.06em',
+            background: '#ffffff', border: '1px solid rgba(151,115,43,0.4)',
+            color: '#97732b', fontFamily: SERIF, fontSize: 14, fontWeight: 700, letterSpacing: '0.06em',
             cursor: 'pointer',
           }}
         >
           ＋ 商品追加
         </button>
       ) : (
-        <div style={{ borderRadius: 12, background: '#0A0A0A', border: '1px solid rgba(201,162,74,0.28)', padding: 12, marginBottom: 8 }}>
-          <p style={{ fontSize: 11, letterSpacing: '0.1em', color: '#e5e5e5', marginBottom: 8 }}>新商品を追加</p>
+        <div style={{ borderRadius: 12, background: '#ffffff', border: '1px solid rgba(151,115,43,0.28)', padding: 12, marginBottom: 8 }}>
+          <p style={{ fontSize: 11, letterSpacing: '0.1em', color: '#1c1f1d', marginBottom: 8 }}>新商品を追加</p>
           <input placeholder="商品名" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ ...inputStyle, marginBottom: 8 }} />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
             {PRODUCT_CATEGORIES.map((cat) => (
@@ -258,9 +258,9 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
                 key={cat} type="button" onClick={() => setNewCategory(cat)}
                 style={{
                   padding: '6px 10px', borderRadius: 8, fontSize: 11, cursor: 'pointer',
-                  background: newCategory === cat ? 'rgba(201,162,74,0.18)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${newCategory === cat ? '#C9A24A' : 'rgba(255,255,255,0.1)'}`,
-                  color: newCategory === cat ? '#C9A24A' : '#e5e5e5',
+                  background: newCategory === cat ? 'rgba(151,115,43,0.18)' : '#ffffff',
+                  border: `1px solid ${newCategory === cat ? '#97732b' : '#e6e3dd'}`,
+                  color: newCategory === cat ? '#97732b' : '#1c1f1d',
                 }}
               >
                 {cat}
@@ -288,17 +288,17 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
             <option value="シャンプー・ケア" />
             <option value="その他" />
           </datalist>
-          {addError && <p style={{ fontSize: 12, color: '#E06060', marginBottom: 8 }}>{addError}</p>}
+          {addError && <p style={{ fontSize: 12, color: '#b23a3a', marginBottom: 8 }}>{addError}</p>}
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="button" onClick={() => void handleAdd()} disabled={adding}
-              style={{ flex: 1, padding: '11px 0', borderRadius: 10, background: 'rgba(201,162,74,0.16)', border: '1px solid #C9A24A', color: '#C9A24A', fontFamily: SERIF, fontSize: 13, fontWeight: 700, cursor: adding ? 'default' : 'pointer' }}
+              style={{ flex: 1, padding: '11px 0', borderRadius: 10, background: 'rgba(151,115,43,0.16)', border: '1px solid #97732b', color: '#97732b', fontFamily: SERIF, fontSize: 13, fontWeight: 700, cursor: adding ? 'default' : 'pointer' }}
             >
               {adding ? '追加中…' : '追加する'}
             </button>
             <button
               type="button" onClick={() => { setShowAddForm(false); setAddError(null) }}
-              style={{ flex: 1, padding: '11px 0', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5', fontFamily: SERIF, fontSize: 13, cursor: 'pointer' }}
+              style={{ flex: 1, padding: '11px 0', borderRadius: 10, background: '#ffffff', border: '1px solid #e6e3dd', color: '#1c1f1d', fontFamily: SERIF, fontSize: 13, cursor: 'pointer' }}
             >
               キャンセル
             </button>
@@ -322,9 +322,9 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
             key={cat} type="button" onClick={() => setCategoryFilter(cat)}
             style={{
               flexShrink: 0, padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-              background: categoryFilter === cat ? 'rgba(201,162,74,0.18)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${categoryFilter === cat ? '#C9A24A' : 'rgba(255,255,255,0.12)'}`,
-              color: categoryFilter === cat ? '#C9A24A' : '#e5e5e5',
+              background: categoryFilter === cat ? 'rgba(151,115,43,0.18)' : '#ffffff',
+              border: `1px solid ${categoryFilter === cat ? '#97732b' : '#e6e3dd'}`,
+              color: categoryFilter === cat ? '#97732b' : '#1c1f1d',
             }}
           >
             {cat}
@@ -339,9 +339,9 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
         disabled={pendingCount === 0 || confirming}
         style={{
           width: '100%', padding: '13px 0', borderRadius: 12, marginBottom: 10,
-          background: pendingCount > 0 ? 'linear-gradient(90deg, #C9A24A 0%, #E6CA65 100%)' : 'rgba(255,255,255,0.04)',
-          border: `1.5px solid ${pendingCount > 0 ? '#E6CA65' : 'rgba(255,255,255,0.1)'}`,
-          color: pendingCount > 0 ? '#1a1206' : '#666666',
+          background: pendingCount > 0 ? 'linear-gradient(90deg, #97732b 0%, #97732b 100%)' : '#ffffff',
+          border: `1.5px solid ${pendingCount > 0 ? '#97732b' : '#e6e3dd'}`,
+          color: pendingCount > 0 ? '#fffaf0' : '#6b716d',
           fontFamily: SERIF, fontSize: 14, fontWeight: 800, letterSpacing: '0.06em',
           cursor: pendingCount > 0 && !confirming ? 'pointer' : 'default',
         }}
@@ -350,39 +350,39 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
       </button>
 
       {confirmError && (
-        <p style={{ fontSize: 12, color: '#E06060', marginBottom: 10, textAlign: 'center' }}>{confirmError}</p>
+        <p style={{ fontSize: 12, color: '#b23a3a', marginBottom: 10, textAlign: 'center' }}>{confirmError}</p>
       )}
 
       {state.phase === 'loading' && (
-        <p style={{ textAlign: 'center', color: '#e5e5e5', fontSize: 13, padding: '24px 0' }}>読み込み中…</p>
+        <p style={{ textAlign: 'center', color: '#1c1f1d', fontSize: 13, padding: '24px 0' }}>読み込み中…</p>
       )}
 
       {state.phase === 'error' && (
-        <div style={{ borderRadius: 14, background: 'rgba(224,96,80,0.08)', border: '1px solid rgba(224,96,80,0.28)', padding: '16px' }}>
-          <p style={{ fontSize: 13, color: '#E06060', textAlign: 'center' }}>{state.message}</p>
+        <div style={{ borderRadius: 14, background: 'rgba(178,58,58,0.08)', border: '1px solid rgba(178,58,58,0.28)', padding: '16px' }}>
+          <p style={{ fontSize: 13, color: '#b23a3a', textAlign: 'center' }}>{state.message}</p>
         </div>
       )}
 
       {/* ── 商品一覧（コンパクトな行リスト） ── */}
       {state.phase === 'ready' && (
         state.products.length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#999999', fontSize: 13, padding: '24px 0' }}>
+          <p style={{ textAlign: 'center', color: '#6b716d', fontSize: 13, padding: '24px 0' }}>
             商品が登録されていません
           </p>
         ) : filteredProducts.length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#999999', fontSize: 13, padding: '24px 0' }}>
+          <p style={{ textAlign: 'center', color: '#6b716d', fontSize: 13, padding: '24px 0' }}>
             該当する商品がありません
           </p>
         ) : (
-          <div style={{ borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+          <div style={{ borderRadius: 10, border: '1px solid #e6e3dd', overflow: 'hidden' }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
-              background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.1)',
+              background: '#ffffff', borderBottom: '1px solid #e6e3dd',
             }}>
-              <span style={{ flex: '1 1 auto', minWidth: 0, fontSize: 10, letterSpacing: '0.06em', color: '#999999' }}>商品名</span>
-              <span style={{ flexShrink: 0, width: 36, fontSize: 10, color: '#999999', textAlign: 'right' }}>現在庫</span>
-              <span style={{ flexShrink: 0, width: 32, fontSize: 10, color: '#999999', textAlign: 'right' }}>最低</span>
-              <span style={{ flexShrink: 0, width: 44, fontSize: 10, color: '#999999', textAlign: 'right' }}>状態</span>
+              <span style={{ flex: '1 1 auto', minWidth: 0, fontSize: 10, letterSpacing: '0.06em', color: '#6b716d' }}>商品名</span>
+              <span style={{ flexShrink: 0, width: 36, fontSize: 10, color: '#6b716d', textAlign: 'right' }}>現在庫</span>
+              <span style={{ flexShrink: 0, width: 32, fontSize: 10, color: '#6b716d', textAlign: 'right' }}>最低</span>
+              <span style={{ flexShrink: 0, width: 44, fontSize: 10, color: '#6b716d', textAlign: 'right' }}>状態</span>
               <span style={{ flexShrink: 0, width: 4 }} />
             </div>
 
@@ -397,9 +397,9 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
                   style={{
                     padding: '6px 8px',
                     background: pendingDelta !== 0
-                      ? 'rgba(201,162,74,0.06)'
-                      : idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                      ? 'rgba(151,115,43,0.06)'
+                      : idx % 2 === 0 ? 'transparent' : '#ffffff',
+                    borderBottom: '1px solid #ffffff',
                   }}
                 >
                   {isEditing ? (
@@ -439,13 +439,13 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           type="button" onClick={() => void handleSaveEdit()} disabled={savingEdit}
-                          style={{ ...smallBtnStyle, flex: 1, padding: '7px 0', background: 'rgba(100,200,100,0.14)', border: '1px solid rgba(100,200,100,0.4)', color: '#80E060' }}
+                          style={{ ...smallBtnStyle, flex: 1, padding: '7px 0', background: 'rgba(36,107,82,0.14)', border: '1px solid rgba(36,107,82,0.4)', color: '#246b52' }}
                         >
                           {savingEdit ? '保存中…' : '保存'}
                         </button>
                         <button
                           type="button" onClick={() => setEditingId(null)}
-                          style={{ ...smallBtnStyle, flex: 1, padding: '7px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5' }}
+                          style={{ ...smallBtnStyle, flex: 1, padding: '7px 0', background: '#ffffff', border: '1px solid #e6e3dd', color: '#1c1f1d' }}
                         >
                           キャンセル
                         </button>
@@ -454,19 +454,19 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-                        <p style={{ fontSize: 13, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+                        <p style={{ fontSize: 13, color: '#1c1f1d', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
                           {p.name}
                         </p>
-                        <p style={{ fontSize: 10, color: pendingDelta !== 0 ? '#C9A24A' : '#777777', margin: 0, fontWeight: pendingDelta !== 0 ? 700 : 400 }}>
+                        <p style={{ fontSize: 10, color: pendingDelta !== 0 ? '#97732b' : '#6b716d', margin: 0, fontWeight: pendingDelta !== 0 ? 700 : 400 }}>
                           {p.category}
                           {p.category === '店販' && ` ・¥${(p.price ?? 0).toLocaleString()}（${p.accounting_group?.trim() || 'その他'}）`}
                           {pendingDelta !== 0 && ` ・未確定 ${pendingDelta > 0 ? '+' : ''}${pendingDelta}`}
                         </p>
                       </div>
-                      <span style={{ flexShrink: 0, width: 36, fontSize: 13, fontWeight: 700, color: pendingDelta !== 0 ? '#C9A24A' : '#ffffff', textAlign: 'right' }}>
+                      <span style={{ flexShrink: 0, width: 36, fontSize: 13, fontWeight: 700, color: pendingDelta !== 0 ? '#97732b' : '#1c1f1d', textAlign: 'right' }}>
                         {displayStock}
                       </span>
-                      <span style={{ flexShrink: 0, width: 32, fontSize: 12, color: '#999999', textAlign: 'right' }}>
+                      <span style={{ flexShrink: 0, width: 32, fontSize: 12, color: '#6b716d', textAlign: 'right' }}>
                         {p.min_stock}
                       </span>
                       <span style={{ flexShrink: 0, width: 44, fontSize: 11, fontWeight: 700, color: STATUS_COLOR[status], textAlign: 'right' }}>
@@ -479,25 +479,25 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
                     <div style={{ display: 'flex', gap: 5, marginTop: 6, overflowX: 'auto' }}>
                       <button
                         type="button" onClick={() => handleAdjust(p.id, 1)}
-                        style={{ ...smallBtnStyle, background: 'rgba(201,162,74,0.16)', border: '1px solid #C9A24A', color: '#C9A24A' }}
+                        style={{ ...smallBtnStyle, background: 'rgba(151,115,43,0.16)', border: '1px solid #97732b', color: '#97732b' }}
                       >
                         ＋入庫
                       </button>
                       <button
                         type="button" onClick={() => handleAdjust(p.id, -1)}
-                        style={{ ...smallBtnStyle, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5' }}
+                        style={{ ...smallBtnStyle, background: '#ffffff', border: '1px solid #e6e3dd', color: '#1c1f1d' }}
                       >
                         −出庫
                       </button>
                       <button
                         type="button" onClick={() => startEdit(p)}
-                        style={{ ...smallBtnStyle, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5' }}
+                        style={{ ...smallBtnStyle, background: '#ffffff', border: '1px solid #e6e3dd', color: '#1c1f1d' }}
                       >
                         編集
                       </button>
                       <button
                         type="button" onClick={() => setDeleteTarget(p)}
-                        style={{ ...smallBtnStyle, background: 'transparent', border: '1px solid rgba(224,96,80,0.35)', color: '#E06060' }}
+                        style={{ ...smallBtnStyle, background: 'transparent', border: '1px solid rgba(178,58,58,0.35)', color: '#b23a3a' }}
                       >
                         削除
                       </button>
@@ -512,26 +512,26 @@ export const StaffInventoryScreen = forwardRef<StaffInventoryHandle>(function St
 
       {deleteTarget && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.85)',
+          position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(28,31,29,0.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
-          <div style={{ width: '100%', maxWidth: 340, borderRadius: 16, background: '#0A0A0A', border: '1px solid rgba(201,162,74,0.3)', padding: 20 }}>
-            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#ffffff', marginBottom: 6 }}>
+          <div style={{ width: '100%', maxWidth: 340, borderRadius: 16, background: '#ffffff', border: '1px solid rgba(151,115,43,0.3)', padding: 20 }}>
+            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#1c1f1d', marginBottom: 6 }}>
               商品を削除しますか？
             </p>
-            <p style={{ fontSize: 13, color: '#e5e5e5', marginBottom: 20 }}>
+            <p style={{ fontSize: 13, color: '#1c1f1d', marginBottom: 20 }}>
               「{deleteTarget.name}」を削除します。この操作は元に戻せません。
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button" onClick={() => setDeleteTarget(null)} disabled={deleting}
-                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5', fontFamily: SERIF, fontSize: 14, cursor: 'pointer' }}
+                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: '#ffffff', border: '1px solid #e6e3dd', color: '#1c1f1d', fontFamily: SERIF, fontSize: 14, cursor: 'pointer' }}
               >
                 いいえ
               </button>
               <button
                 type="button" onClick={() => void handleConfirmDelete()} disabled={deleting}
-                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(224,96,80,0.16)', border: '1px solid #E06060', color: '#E06060', fontFamily: SERIF, fontSize: 14, fontWeight: 700, cursor: deleting ? 'default' : 'pointer' }}
+                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(178,58,58,0.16)', border: '1px solid #b23a3a', color: '#b23a3a', fontFamily: SERIF, fontSize: 14, fontWeight: 700, cursor: deleting ? 'default' : 'pointer' }}
               >
                 {deleting ? '削除中…' : 'はい'}
               </button>

@@ -71,36 +71,12 @@ export function StaffHome() {
     )
   }
 
-  // 予約台帳は一日中表示する明るい画面なので、戻るバーも明るく揃える
-  const light = mode === 'reservations' || mode === 'clients' || mode === 'ginpay'
+  // どの画面も明るい地。予約・顧客は白、それ以外（銀Pay・店舗端末・在庫・会員復旧）はメニューと同じあたたかい白
+  const white = mode === 'reservations' || mode === 'clients'
 
   return (
-    <div className={mode === 'ginpay' ? 'st-app' : undefined} style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: mode === 'ginpay' ? undefined : light ? '#FFFFFF' : '#080302' }}>
-      {light ? (
-        <div className="st-app st-bar"><button type="button" className="st-back" onClick={handleBackClick}><ChevronLeft size={24} />メニュー</button></div>
-      ) : (
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 650,
-        background: light ? '#FFFFFF' : '#000000', borderBottom: light ? '1px solid #E7E7E3' : '1px solid rgba(201,162,74,0.2)',
-        padding: '10px 16px', flexShrink: 0,
-      }}>
-        <button
-          type="button"
-          onClick={handleBackClick}
-          style={light ? {
-            padding: '8px 4px', minHeight: 36, background: 'none', border: 'none',
-            color: '#1B1B1A', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          } : {
-            padding: '8px 16px', borderRadius: 10,
-            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.16)',
-            color: '#e5e5e5', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.06em',
-            cursor: 'pointer',
-          }}
-        >
-          ← 戻る
-        </button>
-      </div>
-      )}
+    <div className={white ? undefined : 'st-app'} style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: white ? '#FFFFFF' : '#f6f5f2' }}>
+      <div className="st-app st-bar"><button type="button" className="st-back" onClick={handleBackClick}><ChevronLeft size={24} />メニュー</button></div>
 
       <div style={{ flex: '1 1 auto' }}>
         {mode === 'shop'
@@ -118,22 +94,22 @@ export function StaffHome() {
 
       {pendingSummary && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.85)',
+          position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(28,31,29,0.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
-          <div style={{ width: '100%', maxWidth: 360, borderRadius: 16, background: '#0A0A0A', border: '1px solid rgba(201,162,74,0.3)', padding: 20 }}>
-            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#ffffff', marginBottom: 6 }}>
+          <div style={{ width: '100%', maxWidth: 360, borderRadius: 16, background: '#ffffff', border: '1px solid rgba(151,115,43,0.3)', padding: 20 }}>
+            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#1c1f1d', marginBottom: 6 }}>
               未確定の在庫変更があります。
             </p>
-            <p style={{ fontSize: 13, color: '#e5e5e5', marginBottom: 14 }}>
+            <p style={{ fontSize: 13, color: '#1c1f1d', marginBottom: 14 }}>
               変更内容を確定して戻りますか？
             </p>
             <div style={{
-              borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 10, background: '#ffffff', border: '1px solid #e6e3dd',
               padding: '10px 12px', marginBottom: 18,
             }}>
               {pendingSummary.map((c) => (
-                <p key={c.productId} style={{ fontSize: 13, color: '#C9A24A', margin: '2px 0' }}>
+                <p key={c.productId} style={{ fontSize: 13, color: '#97732b', margin: '2px 0' }}>
                   ・{c.name} {c.delta > 0 ? '+' : ''}{c.delta}
                 </p>
               ))}
@@ -141,13 +117,13 @@ export function StaffHome() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button" onClick={handleDiscardAndBack} disabled={confirmingBack}
-                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5', fontFamily: SERIF, fontSize: 14, cursor: 'pointer' }}
+                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: '#ffffff', border: '1px solid #e6e3dd', color: '#1c1f1d', fontFamily: SERIF, fontSize: 14, cursor: 'pointer' }}
               >
                 いいえ
               </button>
               <button
                 type="button" onClick={() => void handleConfirmAndBack()} disabled={confirmingBack}
-                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(201,162,74,0.18)', border: '1px solid #C9A24A', color: '#C9A24A', fontFamily: SERIF, fontSize: 14, fontWeight: 700, cursor: confirmingBack ? 'default' : 'pointer' }}
+                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(151,115,43,0.18)', border: '1px solid #97732b', color: '#97732b', fontFamily: SERIF, fontSize: 14, fontWeight: 700, cursor: confirmingBack ? 'default' : 'pointer' }}
               >
                 {confirmingBack ? '保存中…' : 'はい'}
               </button>
