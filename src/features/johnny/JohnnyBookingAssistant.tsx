@@ -22,6 +22,8 @@ import { useVoice } from './useVoice'
 import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvisor'
 import { JohnnyRider, type OrbState } from './JohnnyRider'
 import { planCompanion } from './partyPlanner'
+import { buildWelcome, welcomeText, type Welcome } from './welcome'
+import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 
 // ── 見た目（黒・白・グレーだけ） ─────────────────────────────────
 
@@ -42,6 +44,8 @@ const C = {
 type Step =
   | { k: 'loading' }
   | { k: 'contact'; name: string }
+  /** 2回目以降：おかえりなさい（前回からの日数・メンテナンスカットの期限・いつものメニュー） */
+  | { k: 'welcome'; w: Welcome }
   | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption }
   | { k: 'askMenu'; req: VisitRequest }
   /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
@@ -81,6 +85,8 @@ type AiView =
   | { kind: 'menus'; date: string | null; items: { menu: MenuOption; first: string | null }[] }
   | { kind: 'slots'; menu: MenuOption; staffId: string | null; slots: Slot[] }
   | { kind: 'reservations'; list: CustomerReservation[] }
+  /** メンテナンスカット（ホットペッパーのクーポンで予約） */
+  | { kind: 'maintenance' }
 
 interface Props {
   onClose: () => void
@@ -142,7 +148,7 @@ function dateWord(date: string): string {
   return `${d.getUTCMonth() + 1}月${d.getUTCDate()}日`
 }
 
-const AI_STEPS = new Set<Step['k']>(['askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel'])
+const AI_STEPS = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel'])
 
 const BUSINESS_ERRORS = new Set(['slot_taken', 'too_late', 'date_not_open', 'invalid_starts_at', 'menu_not_available', 'hold_expired', 'hold_not_found'])
 
@@ -188,8 +194,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       api.options(),
       api.reservations().catch(() => [] as CustomerReservation[]),
       api.contact().catch(() => null),
+      api.lastVisit().catch(() => null),
     ])
-      .then(([opts, list, contact]) => {
+      .then(([opts, list, contact, lastVisit]) => {
         if (!alive) return
         setOptions(opts)
         setMyReservations(list)
@@ -197,8 +204,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         const last = [...list].filter(r => r.status !== 'cancelled').sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0]
         setLastMenuCode(last?.items[0]?.menu_code ?? null)
         // 連絡先（本名・電話番号）が未登録なら、日時の前に1回だけ聞く。仕組みが無い環境（null）では聞かない
-        if (contact && !contact.registered) setStep({ k: 'contact', name: contact.name })
-        else setStep({ k: 'askWhen' })
+        if (contact && !contact.registered) { setStep({ k: 'contact', name: contact.name }); return }
+        // 2回目以降のお客様は「おかえりなさい」から
+        const w = buildWelcome(lastVisit, list, opts.menus)
+        if (w) {
+          turnsRef.current = [{ role: 'assistant', text: `おかえりなさい！${welcomeText(w).lines.join('')}ご予約はどうしますか？` }]
+          setStep({ k: 'welcome', w })
+        } else setStep({ k: 'askWhen' })
       })
       .catch((err: unknown) => {
         if (!alive) return
@@ -464,7 +476,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     const next = a ? await stepFromAgent(a) : null
     if (!a || !next) {
       aiOnRef.current = false
-      const back: Step = s.k === 'ai' || s.k === 'confirmCancel' ? { k: 'askWhen' } : s
+      const back: Step = s.k === 'ai' || s.k === 'confirmCancel' || s.k === 'welcome' ? { k: 'askWhen' } : s
       stepRef.current = back
       legacyRef.current(text, back)
       return
@@ -490,6 +502,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     setHeard(text)
     setVoiceNote(null)
     const s = stepRef.current
+    // メンテナンスカットはアプリのメニューではなくホットペッパーのクーポン：予約のボタンを出す
+    if (AI_STEPS.has(s.k) && s.k !== 'confirm' && s.k !== 'confirmCancel' && /メンテ|めんて/.test(text)) {
+      setStep({ k: 'ai', say: 'メンテナンスカットは、ホットペッパーのクーポンでご予約いただけます。下のボタンからどうぞ。', view: { kind: 'maintenance' } })
+      return
+    }
     // お連れ様の段階（AI に聞かない）
     if (s.k === 'confirm' && !s.change && parseYesNo(text) === null && COMPANION_WORDS.test(text)) {
       setStep({ k: 'companionMenu', primary: { menu: s.menu, slot: s.slot, staffId: s.staffId ?? null, req: s.req } })
@@ -519,7 +536,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     // 髪型の相談（日時・メニューの話が無いもの）だけは、相談用の AI に聞く
     const consultOnly = detectAsk(text, menus)?.kind === 'consult' && isEmptyRequest(parseVisitRequest(text)) && !matchMenu(text, menus)
     if (aiOnRef.current && AI_STEPS.has(s.k) && !consultOnly) { void viaAgent(text, s); return }
-    legacyRef.current(text, s.k === 'ai' || s.k === 'confirmCancel' ? { k: 'askWhen' } : s)
+    legacyRef.current(text, s.k === 'ai' || s.k === 'confirmCancel' || s.k === 'welcome' ? { k: 'askWhen' } : s)
   }, [book, bookParty, cancelReservation, declineConfirm, menus, planParty, viaAgent])
 
   /** 決まった規則の JOHNNY（AI が使えないとき・デモ） */
@@ -623,7 +640,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     if (!r.answer || !next) {
       // 聞き取れたが AI が答えられなかった：決まった規則の JOHNNY で続ける
       aiOnRef.current = false
-      const back: Step = s.k === 'ai' ? { k: 'askWhen' } : s
+      const back: Step = s.k === 'ai' || s.k === 'welcome' ? { k: 'askWhen' } : s
       stepRef.current = back
       legacyRef.current(r.heard, back)
       return
@@ -651,6 +668,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         title: 'お名前とお電話番号を教えてください',
         sub: 'ご予約の確認でお店からご連絡することがあります。',
         speech: 'ご予約のために、お名前とお電話番号を教えてください。',
+      }
+      case 'welcome': {
+        const t = welcomeText(step.w)
+        return { title: 'おかえりなさい！', sub: t.lines.join(''), speech: t.speech, listen: true }
       }
       case 'askWhen': {
         const title = step.again === 'unclear' ? 'すみません、日時を聞き取れませんでした。'
@@ -737,9 +758,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   const orb: OrbState = voice.listen === 'listening' ? 'listening'
     : step.k === 'searching' || step.k === 'booking' || step.k === 'loading' || step.k === 'cancelling' ? 'thinking'
     : voice.speaking ? 'speaking' : 'idle'
-  const canTalk = ['askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'confirmParty'].includes(step.k)
+  const canTalk = ['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'confirmParty'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
-  const compact = ['askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'confirmParty'].includes(step.k)
+  const compact = ['welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'confirmParty'].includes(step.k)
     || (step.k === 'ai' && step.view.kind !== 'talk')
   const voiceOff = voice.listen === 'unsupported' || voice.listen === 'denied'
 
@@ -790,6 +811,18 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
               <p style={{ margin: '8px 0 0', fontSize: 15, lineHeight: 1.5, color: C.secondary, textAlign: 'center' }}>{prompt.sub}</p>
             )}
 
+            {step.k === 'welcome' && (
+              <List>
+                {step.w.maintenanceLeft != null && (
+                  <Row href={MAINTENANCE_CUT_URL} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
+                )}
+                {step.w.usual.map(m => (
+                  <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={`${m.duration_min}分・${yen(m)}`} note="いつもの" />
+                ))}
+                <Row onClick={() => setStep({ k: 'askWhen' })} title="日時を伝えて予約する" muted />
+              </List>
+            )}
+
             {step.k === 'askMenu' && (
               <List>
                 {menus.map(m => (
@@ -837,6 +870,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
                   <Row key={r.id} onClick={() => handleText(`${visitLabel(r.starts_at)}の予約`)}
                     title={visitLabel(r.starts_at)} detail={`${r.items.map(i => i.name).join('・')}${companionIds().includes(r.id) ? '（お連れ様）' : ''}`} />
                 ))}
+              </List>
+            )}
+
+            {step.k === 'ai' && step.view.kind === 'maintenance' && (
+              <List>
+                <Row href={MAINTENANCE_CUT_URL} title="メンテナンスカットで予約" detail="ホットペッパー" />
               </List>
             )}
 
