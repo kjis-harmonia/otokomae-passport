@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, LifeBuoy, Package, ScanLine, Users, Wallet } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Database, Package, ScanLine, Users, Wallet } from 'lucide-react'
 import { AdminScreen } from './AdminScreen'
 import { StaffInventoryScreen } from './StaffInventoryScreen'
 import { StaffReservationsScreen } from './StaffReservationsScreen'
@@ -47,21 +47,24 @@ export function StaffHome() {
   if (mode === 'menu') {
     return (
       <div className="st-app">
-        <div className="st-menu">
-          <header className="st-head"><h1><span className="st-wordmark">銀二郎</span><span className="st-mark">端末</span></h1></header>
+        <div className="st-menu st-home">
+          <header className="st-head">
+            <h1><span className="st-wordmark">銀二郎</span><span className="st-mark">端末</span></h1>
+            <p className="st-latin"><i aria-hidden="true" />GINJIRO</p>
+          </header>
 
-          <h2 className="st-group-title">毎日の業務</h2>
-          <div className="st-group">
-            <MenuRow icon={<ScanLine size={20} />} gold title="店舗端末" sub="会員QR・来店・割引券" onClick={() => setMode('shop')} />
-            <MenuRow icon={<Wallet size={20} />} title="銀Pay チャージ" sub="現金を受け取ってチャージ" onClick={() => setMode('ginpay')} />
-            <MenuRow icon={<CalendarDays size={20} />} title="予約" sub="予約台帳・電話予約" onClick={() => setMode('reservations')} />
-            <MenuRow icon={<Users size={20} />} title="顧客" sub="顧客一覧・顧客台帳" onClick={() => setMode('clients')} />
+          <h2 className="st-section"><span>毎日の業務</span><small>DAILY WORK</small></h2>
+          <div className="st-tray">
+            <MenuRow icon={<ScanLine size={30} />} tone="gold" title="店舗端末" sub="会員QR・来店・割引券" onClick={() => setMode('shop')} />
+            <MenuRow icon={<Wallet size={30} />} tone="dark" title="銀Pay チャージ" sub="現金でチャージ・残高" onClick={() => setMode('ginpay')} />
+            <MenuRow icon={<CalendarDays size={30} />} title="予約" sub="予約台帳・電話予約" onClick={() => setMode('reservations')} />
+            <MenuRow icon={<Users size={30} />} title="顧客" sub="顧客一覧・顧客台帳" onClick={() => setMode('clients')} />
           </div>
 
-          <h2 className="st-group-title">管理</h2>
-          <div className="st-group">
-            <MenuRow icon={<Package size={20} />} title="在庫管理" sub="店販・在庫・発注" onClick={() => setMode('inventory')} />
-            <MenuRow icon={<LifeBuoy size={20} />} title="会員復旧" sub="機種変更・データ移管" onClick={() => setMode('recovery')} />
+          <h2 className="st-section"><span>管理</span><small>MANAGEMENT</small></h2>
+          <div className="st-tray">
+            <MenuRow icon={<Package size={30} />} title="在庫管理" sub="店販・在庫・発注" onClick={() => setMode('inventory')} />
+            <MenuRow icon={<Database size={30} />} title="会員復旧" sub="機種変更・データ移管" onClick={() => setMode('recovery')} />
           </div>
         </div>
       </div>
@@ -156,12 +159,12 @@ export function StaffHome() {
   )
 }
 
-function MenuRow({ icon, title, sub, gold, onClick }: { icon: ReactNode; title: string; sub: string; gold?: boolean; onClick: () => void }) {
+function MenuRow({ icon, title, sub, tone = 'light', onClick }: { icon: ReactNode; title: string; sub: string; tone?: 'gold' | 'dark' | 'light'; onClick: () => void }) {
   return (
     <button type="button" className="st-row" onClick={onClick}>
-      <span className={gold ? 'st-tile st-tile-gold' : 'st-tile'}>{icon}</span>
+      <span className={`st-tile st-tile-${tone}`}>{icon}</span>
       <span className="st-row-main"><strong>{title}</strong><small>{sub}</small></span>
-      <ChevronRight size={20} />
+      <ChevronRight size={24} />
     </button>
   )
 }
