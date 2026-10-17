@@ -1,72 +1,10 @@
-# iPhoneから銀二郎を使う（Staging試作）
+# iPhone Shortcuts試作は顧客導線から廃止
 
-初回だけ、Stagingの銀二郎PWAのマイページ下部「ホーム画面から予約・メンテナンス」を開く。
-マイページ内のダイアログで連携キーを発行し、記載した手順でiPhoneのショートカットを2つ作る。Macは不要。
+キー発行・JSON設定・手動ショートカット作成は、店頭運用に負担が大きいため採用しない。
+/shortcuts.html の既存リンクはJohnnyの予約画面へ移動する。
 
-ブラウザーに会員情報がない初回Staging検証では、設定ページの「検証用会員を作成して連携」を明示的に選ぶ。本番の会員情報・履歴・チケットとは別。新しい検証用会員に限り、テスト用電話番号09000000000を設定する。既存会員がある場合は登録や連絡先の書き換えを行わない。
+現在の導線と認証設計は [CUSTOMER_ONE_TAP.md](CUSTOMER_ONE_TAP.md) を参照。
 
-- メンテナンス確認：最終来店から14日以内の優待の残日数と、次回予約を読み上げる。
-- Johnnyで予約：iPhoneの音声入力で文字にし、既存johnny-agentに会話を渡す。DBの仮確保で日時・担当・メニュー・料金を確認し、メニューで「この内容で予約する」を選ぶと確定。
-
-設定ページ：https://otokomae-passport-staging.vercel.app/shortcuts.html
-
-これはショートカットの起動用ウィジェット。日数を常時表示するWidgetKit版は未実装。操作によってショートカットアプリが開く。実際のiPhoneでの導入・音声操作は未検証。
-
-## 実装とデータ
-
-専用API：`https://kfufxzmucjljjouzpumi.supabase.co/functions/v1/customer-shortcuts`
-
-POSTの入力と出力：
-
-| action | 入力 | 出力 |
-|---|---|---|
-| pair | session（初回PWA内だけ） | kind=paired, token, expires_at |
-| status | token | kind=status, say, days_remaining, next_booking |
-| talk | token, message, state（初回空） | kind=message / confirm / handoff / error, say, state |
-| confirm | token, state | kind=complete, say, reservation_id |
-
-`say`を読み上げ、`state`を次のリクエストへ渡す。confirmの場合だけ「この内容で予約する／話し直す／終了」のメニューを表示する。error・handoffでは停止する。「はい」という発言だけでは確定しない。
-
-専用キーは30日有効、DBにはハッシュだけ保存。元の顧客セッションはサーバー側でAES-GCM暗号化し、クライアントには返さない。連携は元の顧客セッションの失効にも追従する。PWAから全連携を解除できる。APIはStagingのproject refを明示検査し、他環境では動かない。サービスキーの変更後は連携し直す。
-
-会話stateはサーバーが署名し、端末・有効期限に結びつける。DB内部RPCはservice_roleだけ実行可。顧客用の連携解除RPCは既存の会員トークンで所有者を検査する。端末ごとに20リクエスト／分まで。
-
-会話は既存johnny-agentを呼び、既存のモデル設定を維持。iPhoneの音声入力・読み上げを使い、この機能からSTT/TTSを追加呼び出ししない。メンテナンス確認と最終確定ではGPTを呼ばない。変更・キャンセルはPWAへ案内する。
-
-## 2026-10-17の反映・検証
-
-- Staging migration：`20261017030847_customer_shortcuts`。履歴21本。予約受付true、スタッフ枠数設定は維持。本番への接続・変更なし。
-- Edge Function：customer-shortcuts v1 / ACTIVE。既存johnny-agentは更新していない。
-- Vercel：`dpl_B7ZXkz8r4hr5uYrho4kskfixj8Jc`。通常URLの旧配信が変わっていないことを確認して昇格。
-- フロント配信は最新共有済みStaging `88e8086d634705ce3bf528d9d7b3f09d0f09eac9` のソースに新ページ・入口・Vite入力のみ追加。Claudeの作業ツリーには書き込んでいない。
-- APIモック20項目、実スキーマのローカルPostgreSQL18項目が成功。外部AI呼び出し0回。
-- Stagingで `supabase/tests/preflight_customer_shortcuts.sql` 成功。キー連携、残日数、料金変更、本人所有、確定、重複送信、権限、解除を確認後rollback。顧客1・予約27・連携端末0・提案0は実行前後一致。
-- TypeScript＋Viteのローカルビルド・最新Stagingベースのクラウドビルド成功。
-- 公開APIは無効キーを401で拒否。公開ページ200。ブラウザー390pxでレイアウトと未認証時の案内を確認。
-- setup.tsのlintは0件。MyPageScreenの148行（既存の同期setState）の指摘1件は変更していない。全体lint成功とは扱わない。
-- Security Advisorは既存の可変search_path・公開SECURITY DEFINER実行権限等を報告。新しい内部RPC／テーブルはanon・authenticatedから実行／参照できないことを別途確認。Advisorの全件解消は行っていない。
-
-## 再検証
-
-Node.js 24以降：`node scripts/customer-shortcuts.test.mjs`（外部通信なし）。
-
-`supabase/tests/preflight_customer_shortcuts.sql` はテスト用の予約を作成し、最後にrollbackする。使い捨てDBまたは予約受付を有効にしたStagingだけで実行する。本番で実行しない。
-
-## 参考
-
-- [Apple：ショートカットからAPIを呼ぶ](https://support.apple.com/guide/shortcuts/request-your-first-api-apd58d46713f/ios)
-- [Apple：ショートカットウィジェット](https://support.apple.com/guide/shortcuts/set-up-and-run-shortcuts-from-a-widget-apd029b36d05/ios)
-- [Supabase：Edge Functionの認証](https://supabase.com/docs/guides/functions/auth-headers)
-- [Advisor：SECURITY DEFINERの公開](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)
-- [Advisor：関数のsearch_path](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable)
-
-## 初回連携の案内修正（2026-10-17）
-
-- PWA内の入口を同一オリジンのiframeダイアログへ変更。別ブラウザーの会員保存領域に移動しない。
-- 初回Staging検証用の明示的な登録フォームを追加。連絡先設定に失敗した場合は同じ会員で再試行し、重複登録を避ける。登録のみレスポンスを受け取れず失われた場合の完全な冪等性までは既存APIで保証できない。
-- 追加12項目の回帰テスト成功。ローカルの実PostgreSQL・実連携API・ブラウザーで初回登録からキー発行まで成功。顧客1・連携端末1・連絡先1。閉じた後の会員認識と再表示時の既存会員保持も確認。外部AI呼び出し0回。
-- TypeScriptとViteビルド成功。追加したsetup・testMember・ShortcutSetupDialogのlintは0件。
-- 並行更新された共有Staging d6f673ea503d1250f404537ea2ae1451e9268377を配信元として保持し、フロントの入口と連携画面のみ重ねる。新しいDB migrationやEdge Functionの変更は不要。
-- iPhone実機の音声操作は引き続きユーザーによる確認が必要。
-
-追加テスト：`node scripts/shortcut-test-member.test.mjs`（外部通信なし）。
+すでに試作用に発行された連携キーの互換API customer-shortcuts は維持し、DBや既存のキーを無断で削除しない。
+以前の履歴migration 20261017030847_customer_shortcuts はそのまま保持する。
+本物のiPhoneウィジェットは、会員認証を内蔵したiPhoneアプリとして別途実装する。

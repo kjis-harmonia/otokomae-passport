@@ -1,3 +1,4 @@
+import {ONE_TAP_STAGING} from '../features/customerAccess/passkeys'
 import { useState, useEffect, useRef } from 'react'
 import type { CSSProperties, TouchEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -731,6 +732,7 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
     <div className="ginjiro-luxury-bg ginjiro-luxury-bg--home">
       <div className="relative z-10">
         <HeroSlider slides={heroSlides} onPick={setSelectedStyle} />
+        {ONE_TAP_STAGING&&<div className="customer-access" style={{margin:'20px 20px 0'}}><button type="button" className="access-primary" onClick={()=>onTabChange('reserve')}>Johnnyで予約</button></div>}
 
         <div className="space-y-10 pt-5 pb-16">
 

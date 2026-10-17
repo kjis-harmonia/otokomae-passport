@@ -1,3 +1,6 @@
+import {ONE_TAP_STAGING} from '../features/customerAccess/passkeys'
+import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
+import {useCustomerAccessSession} from '../features/customerAccess/useCustomerAccessSession'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence } from 'framer-motion'
@@ -20,7 +23,12 @@ const HOTPEPPER_MENUS: { label: string; url: string }[] = [
     .filter(m => m.url),
 ]
 
-export function ReserveScreen({ onShowQr }: { onShowQr?: () => void }) {
+export function ReserveScreen(props:{onShowQr?:()=>void}){
+  const session=useCustomerAccessSession()
+  if(ONE_TAP_STAGING&&!session)return <section className="customer-access" style={{padding:'48px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="予約の会員認証"><h1>会員情報で予約へ</h1><p>登録済みのFace IDなどで、そのままJohnnyへ進めます。</p><PasskeyLoginButton label="本人確認して予約へ" onSignedIn={()=>{}}/></section>
+  return <ReservationContent key={ONE_TAP_STAGING?session:'legacy'} {...props}/>
+}
+function ReservationContent({ onShowQr }: { onShowQr?: () => void }) {
   const [assistantOpen, setAssistantOpen] = useState(true)
   const next = useNextReservation()
   const visit = next ? formatVisit(next.starts_at) : null
