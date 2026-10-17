@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { pushState, turnOffPush, turnOnPush, type PushState } from '../utils/webPush'
 import { SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
+import { localTestNotification, pushDiag, type PushDiagInfo } from './pushDiag'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -49,6 +50,24 @@ export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWh
         {state !== 'denied' && <span aria-hidden="true" style={{ color: gold ? '#C9A24A' : 'rgba(235,235,245,0.6)', fontSize: 18 }}>{state === 'on' ? '✓' : '›'}</span>}
       </button>
       {error && <p role="alert" style={{ margin: '8px 4px 0', fontSize: 12, color: '#E06060' }}>{error}</p>}
+      {gold && state === 'on' && <Diag />}
+    </div>
+  )
+}
+
+/** 届かないときの確かめ：SW の版・最後に受け取った時刻・この端末だけで出してみるボタン */
+function Diag() {
+  const [info, setInfo] = useState<PushDiagInfo | null>(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => { pushDiag().then(setInfo, () => {}) }, [])
+  const test = async () => {
+    try { setMsg((await localTestNotification()) ? '出しました' : 'SW がありません') } catch (e) { setMsg(`出せません：${String(e).slice(0, 60)}`) }
+  }
+  return (
+    <div style={{ margin: '8px 4px 0', fontSize: 11, color: 'rgba(242,230,200,0.4)', lineHeight: 1.6 }}>
+      {info && <span>版 {info.version}・SW {info.active}・最後の受信 {info.lastPush}</span>}
+      <button type="button" onClick={() => void test()} style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 8, border: '1px solid rgba(201,162,74,0.3)', background: 'transparent', color: 'rgba(242,230,200,0.6)', fontSize: 11 }}>表示テスト</button>
+      {msg && <span style={{ marginLeft: 6 }}>{msg}</span>}
     </div>
   )
 }
