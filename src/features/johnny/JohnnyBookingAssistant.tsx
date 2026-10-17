@@ -20,7 +20,7 @@ import { forgetReservation, formatVisit, rememberReservation } from './nextReser
 import type { AgentAnswer, AgentShown, AgentTurn } from './agentClient'
 import { useVoice } from './useVoice'
 import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvisor'
-import { VoiceOrb, type OrbState } from './VoiceOrb'
+import { JohnnyRider, type OrbState } from './JohnnyRider'
 
 // ── 見た目（黒・白・グレーだけ） ─────────────────────────────────
 
@@ -661,10 +661,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         </IconButton>
       </div>
 
-      {/* 中央：球・質問・聞き取った言葉・選択肢 */}
+      {/* 中央：JOHNNY・質問・聞き取った言葉・選択肢 */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 20px 16px' }}>
-        <div style={{ marginTop: 'min(4vh, 32px)' }}>
-          <VoiceOrb state={orb} size={compact ? 96 : 168} />
+        <div style={{ marginTop: 'min(4vh, 32px)', width: '100%', display: 'flex', justifyContent: 'center' }}>
+          <JohnnyRider state={orb} width={compact ? 200 : 340} />
         </div>
 
         <AnimatePresence mode="wait">
