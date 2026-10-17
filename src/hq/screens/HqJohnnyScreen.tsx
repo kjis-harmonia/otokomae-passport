@@ -1,8 +1,9 @@
 // 本部 JOHNNY：テイテイと何でも話す相棒＋慶一郎さんとの伝言（「確認して」は OK / NG / 返事で答える）。
+// 見た目は紺と水色の近未来（呼吸するホログラムのコア）。本部のほかの画面は白のまま。
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { HqPanel } from '../components/HqPanel'
-import { HQ_COLORS, HQ_SANS } from '../hqTheme'
+import { JohnnyCore } from '../components/JohnnyCore'
 import { answerMessage, askJohnny, listMessages, STATUS_LABEL, type ChatTurn, type HqMessage } from '../hqJohnnyStore'
+import './hqJohnny.css'
 
 const CHAT_KEY = 'ginjiro_hq_johnny_chat'
 function loadChat(): ChatTurn[] {
@@ -14,9 +15,30 @@ function saveChat(turns: ChatTurn[]) {
 
 const when = (iso: string) => new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
+function greeting(): string {
+  const h = Number(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }))
+  if (h >= 5 && h < 11) return 'テイテイ、おはよう。'
+  if (h >= 11 && h < 18) return 'テイテイ、おつかれさま。'
+  return 'テイテイ、今日もおつかれ。'
+}
+
+/** コアの大きさ：画面の幅に合わせる */
+function useCoreSize(): number {
+  const [size, setSize] = useState(300)
+  useEffect(() => {
+    const fit = () => setSize(Math.max(240, Math.min(340, window.innerWidth - 64, Math.round(window.innerHeight * 0.42))))
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [])
+  return size
+}
+
 export function HqJohnnyScreen() {
   const [messages, setMessages] = useState<HqMessage[] | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const [thinking, setThinking] = useState(false)
+  const coreSize = useCoreSize()
   const reload = useCallback(() => { listMessages().then(m => { setMessages(m); setLoadError(false) }, () => setLoadError(true)) }, [])
   useEffect(() => {
     reload()
@@ -29,36 +51,59 @@ export function HqJohnnyScreen() {
   const sent = (messages ?? []).filter(m => m.direction === 'to_owner').slice(0, 8)
 
   return (
-    <div style={{ display: 'grid', gap: 16, fontFamily: HQ_SANS }}>
-      <HqPanel title={waiting.length ? `慶一郎さんからの伝言（${waiting.length}件）` : '慶一郎さんからの伝言'} code="INBOX">
-        {loadError && <p style={{ color: HQ_COLORS.red, fontSize: 13 }}>伝言を読み込めませんでした。</p>}
-        {messages && !inbox.length && <p style={{ color: HQ_COLORS.textMute, fontSize: 13, margin: 0 }}>まだ伝言はありません。</p>}
-        <div style={{ display: 'grid', gap: 10 }}>
-          {inbox.slice(0, 10).map(m => <InboxItem key={m.id} m={m} onDone={reload} />)}
-        </div>
-      </HqPanel>
+    <div className="hqj">
+      <div className="hqj-scan" aria-hidden="true" />
+      <header className="hqj-hero">
+        <JohnnyCore size={coreSize} mode={thinking ? 'thinking' : 'idle'} />
+        <p className="hqj-label"><span className="hqj-dot" aria-hidden="true" />{thinking ? 'JOHNNY · THINKING' : 'JOHNNY · ONLINE'}</p>
+        <h2 className="hqj-title">{greeting()}</h2>
+        <p className="hqj-sub">{waiting.length ? `慶一郎さんから伝言が${waiting.length}件あります。` : '何でも話しかけてね。慶一郎さんへの伝言もまかせて。'}</p>
+      </header>
 
-      <HqPanel title="JOHNNY と話す" code="CHAT">
-        <Chat onChanged={reload} />
-      </HqPanel>
+      <div className="hqj-grid">
+        {(waiting.length > 0 || loadError) && (
+          <section className="hqj-panel">
+            <h3>慶一郎さんからの伝言<span>INBOX</span></h3>
+            {loadError && <p className="hqj-error">伝言を読み込めませんでした。</p>}
+            <div style={{ display: 'grid', gap: 10 }}>
+              {waiting.map(m => <InboxItem key={m.id} m={m} onDone={reload} />)}
+            </div>
+          </section>
+        )}
 
-      {!!sent.length && (
-        <HqPanel title="慶一郎さんへ送った伝言" code="SENT">
-          <div style={{ display: 'grid', gap: 8 }}>
-            {sent.map(m => (
-              <div key={m.id} style={{ fontSize: 13, borderBottom: `1px solid ${HQ_COLORS.panelBorder}`, paddingBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <strong>{m.urgent ? '【急ぎ】' : ''}{m.title}</strong>
-                  <span style={{ color: m.status === 'open' ? HQ_COLORS.textMute : HQ_COLORS.positive, whiteSpace: 'nowrap' }}>{m.status === 'open' ? 'まだ読まれていない' : STATUS_LABEL[m.status]}</span>
+        <section className="hqj-panel">
+          <h3>JOHNNY と話す<span>CHAT</span></h3>
+          <Chat onChanged={reload} onThinking={setThinking} />
+        </section>
+
+        {inbox.length > waiting.length && (
+          <section className="hqj-panel">
+            <h3>返事した伝言<span>DONE</span></h3>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {inbox.filter(m => !waiting.includes(m)).slice(0, 6).map(m => <InboxItem key={m.id} m={m} onDone={reload} />)}
+            </div>
+          </section>
+        )}
+
+        {!!sent.length && (
+          <section className="hqj-panel">
+            <h3>慶一郎さんへ送った伝言<span>SENT</span></h3>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {sent.map(m => (
+                <div key={m.id} className="hqj-item">
+                  <div className="hqj-item-head">
+                    <strong>{m.urgent ? '【急ぎ】' : ''}{m.kind === 'request' ? '【確認して】' : ''}{m.title}</strong>
+                    <span className={m.status === 'open' ? 'hqj-time' : 'hqj-ok'}>{m.status === 'open' ? 'まだ読まれていない' : STATUS_LABEL[m.status]}</span>
+                  </div>
+                  <p className="hqj-item-body" style={{ color: 'var(--hqj-fg-2)' }}>{m.body}</p>
+                  {m.reply && <p className="hqj-item-body">慶一郎さん：{m.reply}</p>}
+                  <p className="hqj-time" style={{ margin: '6px 0 0' }}>{when(m.created_at)}</p>
                 </div>
-                <p style={{ margin: '4px 0 0', color: HQ_COLORS.textSecondary, whiteSpace: 'pre-wrap' }}>{m.body}</p>
-                {m.reply && <p style={{ margin: '4px 0 0', color: HQ_COLORS.textPrimary }}>慶一郎さん：{m.reply}</p>}
-                <p style={{ margin: '4px 0 0', color: HQ_COLORS.textMute, fontSize: 11 }}>{when(m.created_at)}</p>
-              </div>
-            ))}
-          </div>
-        </HqPanel>
-      )}
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
     </div>
   )
 }
@@ -73,28 +118,28 @@ function InboxItem({ m, onDone }: { m: HqMessage; onDone: () => void }) {
     try { await answerMessage(m.id, status, reply.trim() || null); onDone() } finally { setBusy(false) }
   }
   return (
-    <div style={{ border: `1px solid ${m.urgent && pending ? HQ_COLORS.red : HQ_COLORS.panelBorder}`, borderRadius: 10, padding: '12px 14px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
+    <div className={'hqj-item' + (m.urgent && pending ? ' is-urgent' : '')}>
+      <div className="hqj-item-head">
         <strong>{m.urgent ? '【急ぎ】' : ''}{m.kind === 'request' ? '【確認して】' : ''}{m.title}</strong>
-        <span style={{ color: HQ_COLORS.textMute, whiteSpace: 'nowrap' }}>{when(m.created_at)}</span>
+        <span className="hqj-time">{when(m.created_at)}</span>
       </div>
-      <p style={{ margin: '6px 0 0', fontSize: 14, whiteSpace: 'pre-wrap', color: HQ_COLORS.textPrimary }}>{m.body}</p>
+      <p className="hqj-item-body">{m.body}</p>
       {m.kind === 'request' && pending && (
         <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-          <input value={reply} onChange={e => setReply(e.target.value)} placeholder="ひとこと（なくても OK）" style={{ padding: '8px 10px', borderRadius: 8, border: `1px solid ${HQ_COLORS.panelBorderStrong}`, fontSize: 14 }} />
+          <input className="hqj-input" value={reply} onChange={e => setReply(e.target.value)} placeholder="ひとこと（なくても OK）" />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="hq-button hq-button-primary" disabled={busy} onClick={() => void act('approved')}>OK</button>
-            <button className="hq-button" disabled={busy} onClick={() => void act('rejected')}>NG</button>
-            <button className="hq-button" disabled={busy || !reply.trim()} onClick={() => void act('answered')}>返事だけ送る</button>
+            <button className="hqj-btn hqj-btn-primary" disabled={busy} onClick={() => void act('approved')}>OK</button>
+            <button className="hqj-btn" disabled={busy} onClick={() => void act('rejected')}>NG</button>
+            <button className="hqj-btn" disabled={busy || !reply.trim()} onClick={() => void act('answered')}>返事だけ送る</button>
           </div>
         </div>
       )}
-      {!pending && <p style={{ margin: '8px 0 0', fontSize: 12, color: HQ_COLORS.positive }}>{STATUS_LABEL[m.status]}{m.reply ? `：${m.reply}` : ''}</p>}
+      {!pending && <p className="hqj-ok" style={{ margin: '8px 0 0', fontSize: 12 }}>{STATUS_LABEL[m.status]}{m.reply ? `：${m.reply}` : ''}</p>}
     </div>
   )
 }
 
-function Chat({ onChanged }: { onChanged: () => void }) {
+function Chat({ onChanged, onThinking }: { onChanged: () => void; onThinking: (on: boolean) => void }) {
   const [turns, setTurns] = useState<ChatTurn[]>(loadChat)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -107,7 +152,7 @@ function Chat({ onChanged }: { onChanged: () => void }) {
     if (!message || busy) return
     const before = turns
     const next = [...before, { role: 'user' as const, content: message }]
-    setTurns(next); setText(''); setBusy(true); setError('')
+    setTurns(next); setText(''); setBusy(true); setError(''); onThinking(true)
     try {
       const r = await askJohnny(message, before)
       const done = [...next, { role: 'assistant' as const, content: r.reply }]
@@ -116,28 +161,24 @@ function Chat({ onChanged }: { onChanged: () => void }) {
     } catch {
       setError('JOHNNY が返事できませんでした。もう一度送ってください。')
       setTurns(before); setText(message)
-    } finally { setBusy(false) }
+    } finally { setBusy(false); onThinking(false) }
   }
 
   return (
     <div>
-      <div style={{ display: 'grid', gap: 10, maxHeight: 460, overflowY: 'auto', padding: '4px 2px' }}>
-        {!turns.length && <p style={{ margin: 0, fontSize: 13, color: HQ_COLORS.textMute }}>例：「今週ヒマな日ある？」「慶一郎さんに、来週の土曜イベントしたいって伝えといて」</p>}
-        {turns.map((t, i) => (
-          <div key={i} style={{ justifySelf: t.role === 'user' ? 'end' : 'start', maxWidth: '85%', padding: '9px 13px', borderRadius: 14, fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap',
-            background: t.role === 'user' ? '#0071e3' : '#f0f0f3', color: t.role === 'user' ? '#fff' : HQ_COLORS.textPrimary }}>{t.content}</div>
-        ))}
-        {busy && <div style={{ justifySelf: 'start', fontSize: 13, color: HQ_COLORS.textMute }}>JOHNNY が考えています…</div>}
+      <div className="hqj-chat">
+        {!turns.length && <p className="hqj-muted">例：「今週ヒマな日ある？」「慶一郎さんに、来週の土曜イベントしたいって伝えといて」</p>}
+        {turns.map((t, i) => <div key={i} className={'hqj-bubble ' + (t.role === 'user' ? 'is-user' : 'is-johnny')}>{t.content}</div>)}
+        {busy && <p className="hqj-muted">JOHNNY が考えています…</p>}
         <div ref={end} />
       </div>
-      {error && <p role="alert" style={{ color: HQ_COLORS.red, fontSize: 12, margin: '8px 0 0' }}>{error}</p>}
+      {error && <p role="alert" className="hqj-error">{error}</p>}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="JOHNNY に話しかける"
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }}
-          style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: `1px solid ${HQ_COLORS.panelBorderStrong}`, fontSize: 15, fontFamily: HQ_SANS, resize: 'none' }} />
-        <button className="hq-button hq-button-primary" disabled={busy || !text.trim()} onClick={() => void send()}>送る</button>
+        <textarea className="hqj-textarea" value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="JOHNNY に話しかける"
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }} />
+        <button className="hqj-btn hqj-btn-primary" disabled={busy || !text.trim()} onClick={() => void send()}>送る</button>
       </div>
-      {!!turns.length && <button className="hq-button hq-button-quiet" style={{ marginTop: 8 }} onClick={() => { setTurns([]); saveChat([]) }}>会話を消す</button>}
+      {!!turns.length && <button className="hqj-btn" style={{ marginTop: 8 }} onClick={() => { setTurns([]); saveChat([]) }}>会話を消す</button>}
     </div>
   )
 }
