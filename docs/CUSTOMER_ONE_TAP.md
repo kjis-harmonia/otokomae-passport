@@ -35,8 +35,10 @@ supabase/tests/preflight_customer_passkeys.sql は使い捨てDBかStagingで実
 - SQLのrollbackテスト成功。チャレンジ再利用、カウンター競合、権限、全セッション失効、従来の会員ID引継ぎとの互換性を確認。テスト後の会員・パスキー・challengeは0件。
 - ブラウザーで一画面の登録、パスキー設定、保存情報の全削除、ワンタップ認証、同じ会員としてJohnnyの日時質問へ復帰まで成功。OS認証器はローカルの使い捨てソフトウェア認証器で代用。検証DBは会員1・パスキー1・予約0を維持。
 - TypeScript/Viteビルド成功。追加した認証モジュール・予約入口・引継ぎ画面のlintは0件。全体の既存lint解消は対象にしない。
-- Stagingへのmigration要求は `Invalid or expired requestState` で拒否され、指定に従い再実行していない。読み取りは通る。履歴21本・最新20261017030847、パスキーテーブルとRPCなし、app_booking_enabled=trueを再確認。
+- Stagingへのmigration要求は `Invalid or expired requestState` で拒否され、再開指示後の再試行でも同じ確認エラーとなったため後続変更を停止。読み取りは通る。履歴23本・最新20261017050000、パスキーテーブルとRPCなし、app_booking_enabled=trueを再確認。
 - DB未適用のためEdge Functionのデプロイとフロント公開も実施していない。未動作の認証画面へ公開先を切り替えない。本番への接続・変更なし。
 - 再開時はSupabaseの変更確認を更新し、Stagingの最新履歴と未適用を再確認してからcustomer_passkeysだけを適用する。リポジトリ内の他の未適用migrationを一括適用しない。適用の版番号は実際の履歴とローカルファイルを一致させる。
 
 再検証：`node scripts/customer-passkeys.test.mjs`。Supabase SQLテストは上記rollbackファイルを使用する。
+
+- 最新origin/stagingを統合し、Johnny・通知・銀Pay・ホーム追加ガイドの変更を保持。パスキー設定中はホーム追加の自動案内を抑制し、StagingのBGM自動案内は省略（手動操作は維持）。

@@ -1002,7 +1002,7 @@ function App() {
   const [showMusicGuide, setShowMusicGuide] = useState(false)
 
   useEffect(() => {
-    if (phase !== 'app') return
+    if (phase !== 'app' || ONE_TAP_STAGING) return
     if (welcomeCouponDialog) return
     // ホーム画面でのみ案内する（「クーポンを見る」でWalletへ直行したときにクーポンを隠さない）
     if (activeTab !== 'home') return
@@ -1164,7 +1164,7 @@ function App() {
           </AnimatePresence>
 
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。音楽の案内・クーポンのあと） */}
-          <InstallGuide autoAllowed={activeTab === 'home' && !showMusicGuide && !welcomeCouponDialog && !showQrModal} />
+          <InstallGuide autoAllowed={activeTab === 'home' && !passkeyOffer && !showMusicGuide && !welcomeCouponDialog && !showQrModal} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (
