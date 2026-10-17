@@ -30,8 +30,8 @@ export function CheckoutSummary({ info, selected }: { info: VisitInfo; selected:
   return (
     <div style={box}>
       <p style={eyebrow}>お会計（予約から）</p>
-      {row(info.menu_name ?? 'ご予約のメニュー', price.normal != null ? yen(price.normal) : yen(price.base))}
-      {p && price.normal != null && row(p.def.title, `→ ${yen(price.base)}`)}
+      {row(`料金（${info.menu_name ?? 'ご予約のメニュー'}）`, yen(price.normal ?? price.base))}
+      {p && price.normal != null && row(p.def.title, `−${yen(price.normal - price.base)}`)}
       {p && !p.eligible && <p style={{ fontSize: 11, color: '#bdbdbd', marginTop: 4 }}>{p.def.title} は土日祝 17:00〜19:00 開始のみ（この予約は対象外）</p>}
       {selected.map(t => row(TICKET_TYPE_LABELS[t.type], `−${yen(t.amount)}`, t.id))}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(201,162,74,0.25)' }}>

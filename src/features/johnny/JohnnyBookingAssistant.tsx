@@ -948,7 +948,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
             )}
 
             {step.k === 'confirm' && confirmPrice && (
-              <PriceBox price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
+              <PriceBox menuName={step.menu.name} price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
                 onToggle={id => toggleCoupon(confirmPrice.key, id)} />
             )}
 
@@ -1268,16 +1268,14 @@ function couponSpeech(price: PriceBreakdown | null, usableCount: number): string
 }
 
 /** お会計（プレミアムクーポン・選んだ券）と、使える券のボタン */
-function PriceBox({ price, usable, selected, onToggle }: { price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void }) {
+function PriceBox({ menuName, price, usable, selected, onToggle }: { menuName: string; price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void }) {
   const p = price.premium
   return (
     <div style={{ width: '100%', marginTop: 12 }}>
+      {/* レシートのように：料金 → クーポンの割引 → 券の割引 → お会計 */}
       <div style={{ borderRadius: 14, overflow: 'hidden', background: C.fill }}>
-        {price.normal != null && p ? (
-          <SummaryRow label={p.def.title} value={`${yenOf(price.normal)} → ${yenOf(price.base)}`} />
-        ) : (
-          <SummaryRow label="料金" value={yenOf(price.base)} />
-        )}
+        <SummaryRow label={`料金（${menuName}）`} value={yenOf(price.normal ?? price.base)} />
+        {price.normal != null && p && <SummaryRow label={p.def.title} value={`−${yenOf(price.normal - price.base)}`} />}
         {selected.map(t => <SummaryRow key={t.id} label={TICKET_TYPE_LABELS[t.type]} value={`−${yenOf(t.amount)}`} />)}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 54, padding: '0 16px', borderTop: `0.5px solid ${C.separator}` }}>
           <span style={{ fontSize: 15, color: C.secondary }}>お会計（店頭で）</span>
