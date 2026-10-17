@@ -49,4 +49,15 @@ supabase/tests/preflight_customer_passkeys.sql は使い捨てDBかStagingで実
 - customer-passkeys Edge Function v1 ACTIVE。既存JohnnyなどのFunctionは変更していない。
 - Staging上のrollbackテストはエラーなく終了。認証テーブル・公開/非公開RPCはanon/authenticatedからアクセス不可。app_booking_enabled=trueを維持。
 - API確認：セッションなしstatus=401、許可外origin=403、login_options=200・正しいRP ID・userVerification=required。
-- 公開画面の反映と実iPhone確認は、この段階では未完了。
+- 公開画面の反映は完了。実iPhoneのFace ID・iCloud同期は利用者の実機確認が必要。
+
+## 公開確認
+
+- URL: https://otokomae-passport-staging.vercel.app/?tab=reserve
+- Deployment: dpl_2nt54JNJdeMZzYY7zZsgEXg7j2Wb / source 539ae55327ac18b5e34e8c92bed782d381ee57d2。Staging専用Vercelプロジェクトのみ。
+- 公開済み会計変更 fb4d88f と checkout_ticket_mix の適用を確認し、両方を保持して統合。今回追加で適用したDB変更は customer_passkeys の1本だけ。
+- クリーンなクラウド環境でTypeScript/Viteビルド成功。公開アセットにかんたんログイン・Staging参照を確認し、本番refが混入していないことを確認。
+- 公開URLを390x844で確認。一画面の初回登録と会員情報で続けるボタンを表示。古い /shortcuts.html は /?tab=reserve へ移動。ウィジェット用の手動キー設定は表示しない。
+- rollback後のテスト会員・パスキーは0件。履歴26本（同時作業のcheckout_ticket_mixを含む）、予約受付設定trueを維持。本番への接続・変更なし。
+- 実WebAuthn署名とSQLの検証は成功済み。実iPhoneのFace ID認証・iCloud同期を実施済みとは扱わない。
+- Advisorの新規4テーブルのRLS有効・policyなしは外部拒否の設計どおり。既存の検索パス警告・public拡張・既存RPCの警告はこの変更で変更していない。参考: https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable
