@@ -1,12 +1,33 @@
 // 本部 JOHNNY（Edge Function）。本部画面でテイテイと話す相棒。普通の会話も、お店の様子の質問も、慶一郎さんへの伝言も。
 //   入力：{ hq: 本部セッション, message: 言葉（2000字まで）, history: 直前の会話（20往復まで） }
-//   出力：{ reply: 返事, changed: 伝言の箱を書き換えたか }
+//         声で話したときは message の代わりに audio（録音の base64）と mime。speak（話す言葉）なら JOHNNY の声（PCM）を流す
+//   出力：{ heard?: 聞き取った文, reply: 返事, changed: 伝言の箱を書き換えたか }
 // 道具：shop_overview（期間の予約・休み・お知らせ）、list_messages（伝言の箱）、send_to_owner（慶一郎さんへ伝言）、answer_owner（慶一郎さんの「確認して」に OK/NG/返事）
 // 本部セッションのまま DB の hq_* RPC を呼ぶので、本部 PIN を通った人しか使えない。API キーは Secrets（OPENAI_API_KEY）だけ。
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const OPENAI_KEY = Deno.env.get('OPENAI_API_KEY') ?? ''
 const MODEL = Deno.env.get('HQ_JOHNNY_MODEL') ?? Deno.env.get('OPENAI_MODEL') ?? 'gpt-6-luna'
+const STT_MODEL = Deno.env.get('OPENAI_TRANSCRIBE_MODEL') ?? 'gpt-transcribe'
+const TTS_MODEL = Deno.env.get('OPENAI_TTS_MODEL') ?? 'gpt-4o-mini-tts'
+const TTS_VOICE = Deno.env.get('HQ_JOHNNY_VOICE') ?? Deno.env.get('OPENAI_TTS_VOICE') ?? 'cedar'
+const TTS_STYLE = '近未来の AI の相棒。落ち着いて頼もしく、少し親しみのある話し方。はっきり、少し速めに。日本語の自然な抑揚で。'
+/** 録音の上限（base64 で約 3MB＝30 秒ほど） */
+const MAX_AUDIO_B64 = 3_000_000
+
+async function transcribe(b64: string, mime: string): Promise<string> {
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+  const ext = /mpeg|mp3/.test(mime) ? 'mp3' : /mp4|m4a|aac/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : /wav/.test(mime) ? 'wav' : 'webm'
+  const form = new FormData()
+  form.append('file', new Blob([bytes], { type: mime || 'audio/webm' }), `voice.${ext}`)
+  form.append('model', STT_MODEL)
+  form.append('language', 'ja')
+  form.append('prompt', '理容室「二代目銀二郎」の本部の会話。テイテイ、慶一郎さん、JOHNNY、予約、伝言、パンチパーマ、メンテナンスカット。')
+  const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_KEY}` }, body: form })
+  if (!r.ok) throw new Error(`stt_unavailable_${r.status}`)
+  const data = await r.json()
+  return typeof data.text === 'string' ? data.text.trim().slice(0, 2000) : ''
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -47,6 +68,7 @@ const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部に�
 ・「慶一郎さんに伝えて」「オーナーに言っといて」と頼まれたら send_to_owner で伝言を送り、送った中身を短く伝える。頼まれていないのに送らない。
 ・話の最初や「伝言ある？」と聞かれたら list_messages で慶一郎さんからの伝言（to_shop で status が open/seen）を確かめ、あれば先に伝える。kind=request は OK か NG か返事をもらう。
 ・テイテイが OK / NG / 返事を言ったら answer_owner で答える（どの伝言かわからなければ聞き返す）。
+・返事は声でも読み上げるので、長くても4〜5文。
 ・画面はふつうの文字だけ。**や#などの記号は使わず、箇条書きは「・」で。
 ・お客様の名前や電話番号は扱わない。今は ${todayJst()}（日本時間）。`
 
@@ -54,11 +76,35 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' })
   if (!OPENAI_KEY) return json(503, { error: 'not_configured' })
-  const body = await req.json().catch(() => ({})) as { hq?: unknown; message?: unknown; history?: unknown }
+  const body = await req.json().catch(() => ({})) as { hq?: unknown; message?: unknown; history?: unknown; speak?: unknown; audio?: unknown; mime?: unknown }
   const hq = typeof body.hq === 'string' ? body.hq : ''
-  const message = typeof body.message === 'string' ? body.message.trim().slice(0, 2000) : ''
-  if (!hq || !message) return json(400, { error: 'invalid_request' })
-  try { await rpc('hq_get_notify', { p_hq: hq }) } catch { return json(401, { error: 'hq_auth_required' }) }
+  if (!hq) return json(401, { error: 'hq_auth_required' })
+  const authed = rpc('hq_get_notify', { p_hq: hq }).then(() => true, () => false)
+
+  // JOHNNY の声：本部セッションを確かめながら音声を作り、届いた分から流す（PCM 16bit・24kHz・モノラル）
+  const speakText = typeof body.speak === 'string' ? body.speak.trim().slice(0, 800) : ''
+  if (speakText) {
+    const speech = fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: TTS_MODEL, voice: TTS_VOICE, input: speakText, instructions: TTS_STYLE, response_format: 'pcm' }),
+    })
+    if (!(await authed)) { speech.then(x => x.body?.cancel()).catch(() => {}); return json(401, { error: 'hq_auth_required' }) }
+    const r = await speech
+    if (!r.ok || !r.body) return json(502, { error: 'tts_unavailable' })
+    return new Response(r.body, { status: 200, headers: { ...CORS, 'Content-Type': 'audio/pcm', 'Cache-Control': 'no-store' } })
+  }
+
+  let message = typeof body.message === 'string' ? body.message.trim().slice(0, 2000) : ''
+  const audio = typeof body.audio === 'string' && body.audio.length <= MAX_AUDIO_B64 ? body.audio : ''
+  if (!message && !audio) return json(400, { error: 'invalid_request' })
+  if (!(await authed)) return json(401, { error: 'hq_auth_required' })
+  let heard: string | undefined
+  if (audio) {
+    try { heard = await transcribe(audio, typeof body.mime === 'string' ? body.mime.slice(0, 60) : '') } catch { return json(502, { error: 'stt_unavailable' }) }
+    if (!heard) return json(200, { heard: '' })
+    message = heard
+  }
 
   const history = (Array.isArray(body.history) ? body.history : [])
     .filter((t): t is Turn => !!t && (t.role === 'user' || t.role === 'assistant') && typeof t.content === 'string')
@@ -87,7 +133,7 @@ Deno.serve(async (req) => {
       const msg = (await r.json()).choices?.[0]?.message
       if (!msg) return json(502, { error: 'openai_empty' })
       const calls = (msg.tool_calls ?? []) as { id: string; function: { name: string; arguments: string } }[]
-      if (!calls.length) return json(200, { reply: String(msg.content ?? '').trim() || '…', changed })
+      if (!calls.length) return json(200, { heard, reply: String(msg.content ?? '').trim() || '…', changed })
       messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls })
       for (const c of calls) {
         let out: unknown
@@ -95,7 +141,7 @@ Deno.serve(async (req) => {
         messages.push({ role: 'tool', tool_call_id: c.id, content: JSON.stringify(out).slice(0, 30000) })
       }
     }
-    return json(200, { reply: 'ごめん、うまくまとめられんかった。もう一回言ってみて。', changed })
+    return json(200, { heard, reply: 'ごめん、うまくまとめられんかった。もう一回言ってみて。', changed })
   } catch (e) {
     return json(500, { error: String((e as Error).message ?? e) })
   }

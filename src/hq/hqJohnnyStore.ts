@@ -23,14 +23,18 @@ export const listMessages = () => callHqRpc<HqMessage[]>('hq_messages_list', { p
 export const answerMessage = (id: string, status: 'seen' | 'approved' | 'rejected' | 'answered', reply: string | null = null) =>
   callHqRpc<HqMessage | { error: string }>('hq_message_answer', { p_id: id, p_status: status, p_reply: reply })
 
-export async function askJohnny(message: string, history: ChatTurn[]): Promise<{ reply: string; changed: boolean }> {
+/** 文字か声（録音）で話しかける。声のときは heard（聞き取った文）も返る。聞き取れなければ reply は空 */
+export async function askJohnny(input: string | { b64: string; mime: string }, history: ChatTurn[]): Promise<{ heard?: string; reply: string; changed: boolean }> {
   const hq = getHqToken()
   if (!hq) throw new Error('hq_auth_required')
-  const { data, error } = await supabase.functions.invoke<{ reply?: string; changed?: boolean; error?: string }>('hq-johnny', {
-    body: { hq, message, history: history.slice(-40) },
+  const payload = typeof input === 'string' ? { message: input } : { audio: input.b64, mime: input.mime }
+  const { data, error } = await supabase.functions.invoke<{ heard?: string; reply?: string; changed?: boolean; error?: string }>('hq-johnny', {
+    body: { hq, ...payload, history: history.slice(-40) },
   })
-  if (error || !data?.reply) throw new Error(data?.error ?? 'johnny_failed')
-  return { reply: data.reply, changed: !!data.changed }
+  if (error || !data) throw new Error(data?.error ?? 'johnny_failed')
+  if (typeof input !== 'string' && data.heard === '') return { heard: '', reply: '', changed: false }
+  if (!data.reply) throw new Error(data.error ?? 'johnny_failed')
+  return { heard: data.heard, reply: data.reply, changed: !!data.changed }
 }
 
 export const STATUS_LABEL: Record<HqMessage['status'], string> = { open: '未読', seen: '見た', approved: 'OK', rejected: 'NG', answered: '返事あり' }
