@@ -28,13 +28,16 @@ export interface Hold { hold_id: string; starts_at: string; ends_at: string; sta
 export interface BookingAssistantApi {
   options(): Promise<AssistantOptions>
   slots(date: string, menuCode: string): Promise<Slot[]>
+  /** その担当だけの空き（お連れ様の時間を決めるのに使う） */
+  staffSlots(date: string, menuCode: string, staffId: string): Promise<Slot[]>
   /** その日の受付時間と、メニューごとの空き（空きのあるメニューだけ） */
   dayOverview(date: string): Promise<DayOverview>
   /** 近い日から空きを探す（早い順） */
   nextSlots(menuCode: string, from: string, limit?: number): Promise<Slot[]>
   /** staffId があればその担当で押さえる（指名） */
   hold(startsAt: string, menuCode: string, staffId?: string | null): Promise<Hold>
-  confirm(holdId: string): Promise<CustomerReservation>
+  /** note はお店に見えるメモ（お連れ様など） */
+  confirm(holdId: string, note?: string | null): Promise<CustomerReservation>
   release(holdId: string): Promise<void>
   reservations(): Promise<CustomerReservation[]>
   cancel(reservationId: string): Promise<CustomerReservation>
@@ -53,10 +56,11 @@ export interface BookingAssistantApi {
 export const customerBookingApi: BookingAssistantApi = {
   options: () => callCustomerRpc<AssistantOptions>('customer_booking_options'),
   slots: (date, menuCode) => callCustomerRpc<Slot[]>('customer_available_slots', { p_date: date, p_menu_codes: [menuCode], p_staff_id: null }),
+  staffSlots: (date, menuCode, staffId) => callCustomerRpc<Slot[]>('customer_available_slots', { p_date: date, p_menu_codes: [menuCode], p_staff_id: staffId }),
   dayOverview: date => callCustomerRpc<DayOverview>('customer_day_overview', { p_date: date }),
   nextSlots: (menuCode, from, limit = 10) => callCustomerRpc<Slot[]>('customer_next_slots', { p_menu_codes: [menuCode], p_from: from, p_limit: limit }),
   hold: (startsAt, menuCode, staffId = null) => callCustomerRpc<Hold>('customer_create_hold', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: staffId }),
-  confirm: holdId => callCustomerRpc<CustomerReservation>('customer_confirm_reservation', { p_hold_id: holdId, p_note: null }),
+  confirm: (holdId, note = null) => callCustomerRpc<CustomerReservation>('customer_confirm_reservation', { p_hold_id: holdId, p_note: note }),
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),
@@ -109,8 +113,9 @@ let demoContact: CustomerContact = { name: '銀二 太郎', phone: null, registe
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export const demoBookingApi: BookingAssistantApi = {
-  async options() { await wait(250); return { settings: { slot_minutes: 30, booking_window_days: 60, min_lead_minutes: 30, hold_minutes: 2 }, menus: DEMO_MENUS } },
+  async options() { await wait(250); return { settings: { slot_minutes: 30, booking_window_days: 60, min_lead_minutes: 30, hold_minutes: 2 }, menus: DEMO_MENUS, staff: [{ id: 'demo-a', name: 'テイテイ' }, { id: 'demo-b', name: '銀二郎' }] } },
   async slots(date, menuCode) { await wait(450); const m = DEMO_MENUS.find(x => x.code === menuCode); return m ? demoSlotsForMenu(date, m) : [] },
+  async staffSlots(date, menuCode, staffId) { await wait(300); const m = DEMO_MENUS.find(x => x.code === menuCode); return m ? demoSlotsForMenu(date, m).filter((_, i) => staffId === 'demo-b' ? i % 2 === 0 : true) : [] },
   async dayOverview(date) {
     await wait(500)
     return { date, open: true, hours: { start: '10:00', end: '19:30' },
