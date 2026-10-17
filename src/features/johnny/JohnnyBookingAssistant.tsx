@@ -24,6 +24,9 @@ import { JohnnyRider, type OrbState } from './JohnnyRider'
 import { planCompanion } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
+import type { TicketRow } from '../../data/ticket'
+import { TICKET_TYPE_LABELS } from '../../data/ticket'
+import { clearCouponPlan, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
 import { BGM_PAUSE_EVENT, BGM_RESUME_EVENT } from '../../hooks/useBgm'
 
 // ── 見た目（黒・白・グレーだけ） ─────────────────────────────────
@@ -167,8 +170,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   useEffect(() => { stepRef.current = step }, [step])
   // 予約の AI：使えなくなったら、この画面のあいだは決まった規則の JOHNNY で続ける
   const aiOnRef = useRef(true)
+  const couponPickRef = useRef<{ key: string; ids: string[] }>({ key: '', ids: [] })
   const turnsRef = useRef<AgentTurn[]>([{ role: 'assistant', text: 'いつのご来店をご希望ですか？' }])
   const [myReservations, setMyReservations] = useState<CustomerReservation[]>([])
+  // 手持ちの券と、確認画面で選んだ券（key：その確認画面のメニューと時刻）
+  const [myTickets, setMyTickets] = useState<TicketRow[]>([])
+  const [couponPick, setCouponPick] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] })
+  useEffect(() => { couponPickRef.current = couponPick }, [couponPick])
 
   // 聞き取った言葉 → 今の段階で処理（下で定義する handleText を ref 経由で呼ぶ）
   const handleTextRef = useRef<(text: string) => void>(() => {})
@@ -208,6 +216,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         if (!alive) return
         setOptions(opts)
         setMyReservations(list)
+        api.tickets().then(setMyTickets).catch(() => {})
         // 前回のメニュー（キャンセル以外で一番新しい予約）を選択肢の先頭に出す
         const last = [...list].filter(r => r.status !== 'cancelled').sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0]
         setLastMenuCode(last?.items[0]?.menu_code ?? null)
@@ -321,6 +330,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         try { await api.cancel(change.id); forgetReservation(change.id) } catch { oldKept = true }
       }
       rememberReservation(reservation)
+      // 一緒に使う券（予約の日の会員 QR に入る）。変更なら元の予約の券は外す
+      if (change) clearCouponPlan(change.id)
+      const pickKey = `${menu.code}|${slot.starts_at}`
+      const pickedIds = couponPickRef.current.key === pickKey ? couponPickRef.current.ids : []
+      if (pickedIds.length) saveCouponPlan({ date: slotDate(reservation.starts_at), reservationId: reservation.id, ticketIds: pickedIds })
       api.reservations().then(setMyReservations).catch(() => {})
       setStep({ k: 'done', reservation, changedFrom: change, oldKept })
     } catch (err) {
@@ -347,6 +361,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     try {
       const r = await api.cancel(reservation.id)
       forgetReservation(reservation.id)
+      clearCouponPlan(reservation.id)
       api.reservations().then(setMyReservations).catch(() => {})
       setStep({ k: 'cancelled', reservation: r })
     } catch (err) {
@@ -668,6 +683,21 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     else if (s.k === 'askMenu' || s.k === 'pick') void search(s.req, menu)
   }, [handleText, pickFromOverview, search])
 
+  /** 確認画面のお会計と、使える券 */
+  const confirmPrice = useMemo((): { key: string; usable: TicketRow[]; selected: TicketRow[]; price: PriceBreakdown } | null => {
+    if (step.k !== 'confirm' || step.change) return null
+    const key = `${step.menu.code}|${step.slot.starts_at}`
+    const usable = usableTickets(myTickets, step.slot.starts_at)
+    const ids = couponPick.key === key ? couponPick.ids : []
+    const selected = usable.filter(t => ids.includes(t.id))
+    const price = priceFor(step.menu.code, step.menu.price, step.slot.starts_at, selected)
+    return price ? { key, usable, selected, price } : null
+  }, [step, myTickets, couponPick])
+  const toggleCoupon = (key: string, id: string) => setCouponPick(p => {
+    const ids = p.key === key ? p.ids : []
+    return { key, ids: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] }
+  })
+
   // ── 段階ごとの言葉（画面と読み上げ） ──
   const prompt = useMemo((): { title: string; sub?: string; speech?: string; listen?: boolean } => {
     switch (step.k) {
@@ -733,7 +763,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       }
       case 'confirm': return {
         title: step.change ? 'この日時に変更しますか？' : 'この日時でお間違いないですか？',
-        speech: step.say ?? `${spokenVisit(step.slot.starts_at)}、${step.menu.name}でお取りできます。この日時でお間違いないですか？`,
+        speech: `${step.say ?? `${spokenVisit(step.slot.starts_at)}、${step.menu.name}でお取りできます。この日時でお間違いないですか？`}${couponSpeech(step.change ? null : priceFor(step.menu.code, step.menu.price, step.slot.starts_at, []), step.change ? 0 : usableTickets(myTickets, step.slot.starts_at).length)}`,
         listen: true,
       }
       case 'booking': return { title: 'ご予約を確定しています' }
@@ -753,6 +783,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
           ? { title: 'ご予約には会員の引き継ぎが必要です', sub: '店頭で受け取った6桁の引き継ぎコードを入力してください。お電話でもご予約いただけます。' }
           : { title: '通信できませんでした', sub: '電波の良い場所で、もう一度お試しください。' }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 券の読み込みで読み上げ直さない
   }, [step])
 
   // 段階が変わったら読み上げ（同じ段階の聞き直しでも読み上げる）
@@ -896,7 +927,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
             )}
 
             {(step.k === 'confirm' || step.k === 'booking') && (
-              <Summary menu={step.menu} slot={step.slot}
+              <Summary menu={step.menu} slot={step.slot} hidePrice={step.k === 'confirm' && !!confirmPrice}
                 staffName={step.k === 'confirm' && step.staffId ? options?.staff?.find(x => x.id === step.staffId)?.name ?? '指名あり' : undefined}
                 before={step.k === 'confirm' ? step.change : undefined} />
             )}
@@ -914,6 +945,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
                 <SummaryRow label="ご本人" value={`${visitLabel(step.primary.slot.starts_at)}・${step.primary.menu.name}`} />
                 <SummaryRow label="お連れ様" value={`${formatVisit(step.companion.slot.starts_at).time}・${step.companion.menu.name}`} />
               </div>
+            )}
+
+            {step.k === 'confirm' && confirmPrice && (
+              <PriceBox price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
+                onToggle={id => toggleCoupon(confirmPrice.key, id)} />
             )}
 
             {step.k === 'done' && <ReservationSummary r={step.reservation} />}
@@ -1223,7 +1259,59 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Summary({ menu, slot, staffName, before }: { menu: MenuOption; slot: Slot; staffName?: string; before?: CustomerReservation }) {
+/** 読み上げ：プレミアムクーポンと券のひとこと */
+function couponSpeech(price: PriceBreakdown | null, usableCount: number): string {
+  const p = price?.premium
+  const head = p ? (p.eligible ? `${p.def.title}で${p.memberPrice.toLocaleString('ja-JP')}円です。`
+    : `土日祝は17時から19時のご来店なら、${p.def.title}で${p.memberPrice.toLocaleString('ja-JP')}円になります。`) : ''
+  return head + (usableCount > 0 ? '割引券や漢トク券も使えますよ。' : '')
+}
+
+/** お会計（プレミアムクーポン・選んだ券）と、使える券のボタン */
+function PriceBox({ price, usable, selected, onToggle }: { price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void }) {
+  const p = price.premium
+  return (
+    <div style={{ width: '100%', marginTop: 12 }}>
+      <div style={{ borderRadius: 14, overflow: 'hidden', background: C.fill }}>
+        {price.normal != null && p ? (
+          <SummaryRow label={p.def.title} value={`${yenOf(price.normal)} → ${yenOf(price.base)}`} />
+        ) : (
+          <SummaryRow label="料金" value={yenOf(price.base)} />
+        )}
+        {selected.map(t => <SummaryRow key={t.id} label={TICKET_TYPE_LABELS[t.type]} value={`−${yenOf(t.amount)}`} />)}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 54, padding: '0 16px', borderTop: `0.5px solid ${C.separator}` }}>
+          <span style={{ fontSize: 15, color: C.secondary }}>お会計（店頭で）</span>
+          <span style={{ fontSize: 22, fontWeight: 700 }}>{yenOf(price.total)}</span>
+        </div>
+      </div>
+      {p && !p.eligible && (
+        <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>
+          土日祝は 17:00〜19:00 のご来店なら {p.def.title} で {yenOf(p.memberPrice)} になります。
+        </p>
+      )}
+      {usable.length > 0 && (
+        <>
+          <p style={{ margin: '14px 4px 8px', fontSize: 13, color: C.secondary }}>使える券（押すと使う・もう一度押すと外す）</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {usable.map(t => {
+              const on = selected.some(s => s.id === t.id)
+              return (
+                <button key={t.id} type="button" aria-pressed={on} onClick={() => onToggle(t.id)} style={{
+                  padding: '9px 14px', borderRadius: 20, fontSize: 15, fontFamily: FONT, cursor: 'pointer',
+                  border: `1px solid ${on ? C.text : C.separator}`, background: on ? C.text : 'transparent', color: on ? C.bg : C.text,
+                }}>
+                  {TICKET_TYPE_LABELS[t.type]} {yenOf(t.amount)}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function Summary({ menu, slot, staffName, before, hidePrice }: { menu: MenuOption; slot: Slot; staffName?: string; before?: CustomerReservation; hidePrice?: boolean }) {
   return (
     <div style={{ width: '100%', marginTop: 24, borderRadius: 14, overflow: 'hidden', background: C.fill }}>
       {before && <SummaryRow label="変更前" value={visitLabel(before.starts_at)} />}
@@ -1231,7 +1319,7 @@ function Summary({ menu, slot, staffName, before }: { menu: MenuOption; slot: Sl
       <SummaryRow label="メニュー" value={menu.name} />
       {staffName && <SummaryRow label="担当" value={staffName} />}
       <SummaryRow label="所要時間" value={`${menu.duration_min}分`} />
-      <SummaryRow label="料金" value={yen(menu)} />
+      {!hidePrice && <SummaryRow label="料金" value={yen(menu)} />}
     </div>
   )
 }

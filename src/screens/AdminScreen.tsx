@@ -16,6 +16,7 @@ import { StgBadge } from '../components/StgBadge'
 import { normalizeCurrentReservation, isReservationForDate, type CurrentReservation } from '../utils/currentReservation'
 import { PREMIUM_COUPONS } from '../data/wallet'
 import { VisitMenuPicker, type VisitInfo } from '../components/VisitMenuPicker'
+import { CheckoutSummary } from '../components/CheckoutSummary'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -37,8 +38,9 @@ const TICKET_TABS: { type: TicketType; label: string; autoTitle: string }[] = [
  */
 export function canUseDiscountType(usedType: string | null, attemptedType: string): boolean {
   if (usedType === null) return true
-  if (usedType !== attemptedType) return false // 異なる割引種別の併用は不可（1日どれか一つ）
-  return attemptedType !== 'coupon' // メンテナンスクーポンのみ1日1回。漢トク券・割引券は同種なら複数枚可
+  if (usedType === 'coupon') return false   // メンテナンスクーポンを使った日は、ほかの券は使えない
+  if (attemptedType === 'coupon') return false // ほかの券を使った日は、メンテナンスクーポンは使えない（1日1回）
+  return true                                // 割引券・漢トク券は何枚でも、種類をまたいでも使える
 }
 
 const DISCOUNT_TYPE_LABEL: Record<string, string> = {
@@ -89,7 +91,8 @@ export async function checkInVisit(userId: string): Promise<{ date: string; info
   const r = await callStaffRpc<{ visit_date: string } & Partial<VisitInfo>>('staff_check_in', { p_user_id: userId })
   return {
     date: String(r.visit_date).slice(0, 10),
-    info: { menu_code: r.menu_code ?? null, menu_name: r.menu_name ?? null, menu_source: r.menu_source ?? null, recent: Array.isArray(r.recent) ? r.recent : [] },
+    info: { menu_code: r.menu_code ?? null, menu_name: r.menu_name ?? null, menu_source: r.menu_source ?? null, recent: Array.isArray(r.recent) ? r.recent : [],
+      reservation_starts_at: r.reservation_starts_at ?? null, reservation_price: typeof r.reservation_price === 'number' ? r.reservation_price : null },
   }
 }
 
@@ -151,6 +154,8 @@ export interface PassportQRData {
   userId: string
   name: string
   reservation?: CurrentReservation | null
+  /** JOHNNY の予約で選んだ券（予約の日の会員 QR） */
+  ticketIds?: string[]
 }
 
 export interface TicketUseQRData {
@@ -224,6 +229,7 @@ export function parseQR(text: string): AnyQRData | null {
         userId: d.userId,
         name: d.name || '名前未設定',
         reservation: normalizeCurrentReservation(d.reservation),
+        ticketIds: Array.isArray(d.t) ? (d.t as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 30) : undefined,
       }
     }
     return null
@@ -600,6 +606,12 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     else playWarningSound()
     setUserTickets(ctx.tickets)
     setTodayUsedType(ctx.today_used_type)
+    // JOHNNY の予約で選んでおいた券は、選んだ状態にする（使用の確定はスタッフが押す）
+    if (passportData.ticketIds?.length) {
+      const now = new Date()
+      setSelectedTicketIds(ctx.tickets.filter(t => passportData.ticketIds!.includes(t.id) && !t.used && !t.pending_transfer
+        && (!t.expires_at || new Date(t.expires_at) > now) && canUseDiscountType(ctx.today_used_type, t.type) && !isWelcomeCouponBlockedToday(t)).map(t => t.id))
+    }
     // 会員QRの読み取り＝来店登録（14日サイクルを本日からリセット）
     setCheckInStatus('loading')
     try {
@@ -671,9 +683,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       setSelectNotice(null)
       return
     }
-    if (selectedType && selectedType !== ticket.type) {
+    if (selectedType && selectedType !== ticket.type && (selectedType === 'coupon' || ticket.type === 'coupon')) {
       setSelectedTicketIds([ticket.id])
-      setSelectNotice(`種別の違う割引券は同時に使えないため、${TICKET_TYPE_LABELS[ticket.type]}に選び直しました。`)
+      setSelectNotice(`メンテナンスクーポンはほかの券と一緒に使えないため、${TICKET_TYPE_LABELS[ticket.type]}に選び直しました。`)
       return
     }
     setSelectedTicketIds(prev => [...prev, ticket.id])
@@ -709,13 +721,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         setUseConfirmLoading(false)
         return
       }
-      if (!canUseDiscountType(todayUsedType, ticketType)) {
-        setUseError('本日は別の割引をご利用済みのため使用できません（割引の併用は1日1種類まで）。')
+      if (selectedTickets.some(t => !canUseDiscountType(todayUsedType, t.type))) {
+        setUseError('本日はメンテナンスクーポンとほかの券を一緒に使えません。')
         setUseConfirmLoading(false)
         return
       }
-      if (selectedTickets.some(t => t.type !== ticketType)) {
-        setUseError('種別の違う割引券は同時に使用できません。')
+      if (selectedTickets.some(t => t.type === 'coupon') && selectedTickets.some(t => t.type !== 'coupon')) {
+        setUseError('メンテナンスクーポンは、ほかの券と一緒に使えません。')
         setUseConfirmLoading(false)
         return
       }
@@ -1238,6 +1250,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     として記録しました。
                   </p>
                   {visitInfo && <VisitMenuPicker key={scannedData.userId} userId={scannedData.userId} info={visitInfo} staffName={staffId} />}
+                  {visitInfo && <CheckoutSummary info={visitInfo} selected={selectedTickets} />}
                   {/* 次にやること */}
                   <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(201,162,74,0.28)' }}>
                     <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#C9A24A', marginBottom: 8 }}>NEXT STEP</p>
@@ -1386,7 +1399,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                           {isBlockedToday && (
                             <p style={{ fontSize: 9, color: 'rgba(224,96,80,1)', marginTop: 8, lineHeight: 1.5 }}>
                               本日は{todayUsedType ? DISCOUNT_TYPE_LABEL[todayUsedType] ?? todayUsedType : '他の割引'}をご利用済みのため使用できません。<br />
-                              割引の併用は1日1種類までです（同じ種別は複数枚使用できます）。
+                              メンテナンスクーポンは、ほかの券と一緒に使えません。
                             </p>
                           )}
                           {noStaff && !isBlockedToday && !isWelcomeBlocked && (

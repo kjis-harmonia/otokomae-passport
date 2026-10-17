@@ -140,9 +140,9 @@ export async function staffLogout(): Promise<void> {
 const MESSAGES: Record<string, string> = {
   staff_auth_required: 'スタッフ認証の有効期限が切れました。PINを入力し直してください。',
   invalid_tickets:     'チケットが見つからないか、すでに使用済み・期限切れです。',
-  mixed_types:         '種類の異なるチケットは同時に使用できません。',
+  mixed_types:         'メンテナンスクーポンは、ほかの券と一緒に使えません。',
   transfer_pending:    '譲渡手続き中のチケットは使用できません。',
-  daily_rule:          '本日は別の割引をご利用済みのため使用できません（割引の併用は1日1種類まで）。',
+  daily_rule:          '本日はメンテナンスクーポンとほかの券を一緒に使えません。',
   welcome_weekend:     'Welcomeクーポンは平日のみ利用できます。土日は利用できません。',
   used_today:          '本日はすでに割引・クーポンをご利用済みです（メンテナンスクーポンは1日1回、他の割引との併用不可）。',
   not_found:           'クーポンQRが見つかりません。お客様にQRを再表示してもらってください。',

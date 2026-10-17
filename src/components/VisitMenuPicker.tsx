@@ -9,6 +9,9 @@ export interface VisitInfo {
   menu_name: string | null
   menu_source: 'reservation' | 'staff' | null
   recent: { visit_date: string; menu_code: string | null; menu_name: string | null }[]
+  /** その日の予約の開始時刻と料金（予約があるとき） */
+  reservation_starts_at?: string | null
+  reservation_price?: number | null
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
