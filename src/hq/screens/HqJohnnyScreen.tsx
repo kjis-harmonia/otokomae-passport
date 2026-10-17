@@ -170,7 +170,7 @@ export function HqJohnnyScreen() {
       <section className="hqj-center" aria-live="polite" style={{ top: textTop }}>
         <p className="hqj-label"><span className="hqj-dot" aria-hidden="true" />JOHNNY · {status}</p>
         {mode === 'listening' && <p className="hqj-title">聞いてるよ…</p>}
-        {mode === 'thinking' && <>{heard && <p className="hqj-heard">「{heard}」</p>}<p className="hqj-title is-small">考えよる…</p></>}
+        {mode === 'thinking' && <>{heard && <p className="hqj-heard">「{heard}」</p>}<p className="hqj-title is-small">考えてるけん待ってね…</p></>}
         {(mode === 'idle' || mode === 'speaking') && (reply ? (
           <>
             {heard && <p className="hqj-heard">「{heard}」</p>}

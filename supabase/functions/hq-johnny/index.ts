@@ -62,6 +62,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'answer_owner', description: 'BOS からの伝言に答える。テイテイが OK / NG / 返事を言ったときだけ使う（勝手に答えない）', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected', 'answered', 'seen'] }, reply: { type: 'string' } }, required: ['id', 'status', 'reply'] } } },
 ]
 
+/** 返事の中の呼び方は必ず「BOS」に（AI が「ケイさん」などと言っても直す） */
+const bosName = (t: string) => t.replace(/(ケイ(?![ァ-ヶー])|慶一郎|けいいちろう|ケイイチロウ)(さん|様)?/g, 'BOS')
+
 interface Turn { role: 'user' | 'assistant'; content: string }
 
 function todayJst(): string {
@@ -70,7 +73,7 @@ function todayJst(): string {
   return `${d.toISOString().slice(0, 10)}（${wd}）${d.toISOString().slice(11, 16)}`
 }
 
-const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部にいる AI の相棒「JOHNNY」。本部の執事として、テイテイさんの代わりに画面を開いたり調べたりする。話し相手は店長のテイテイさん（呼ぶときは「テイテイさん」）。オーナーの慶一郎さんのことは「BOS」と呼ぶ（JOHNNY のボス）。テイテイさんは BOS のことを「ケイ」「ケイさん」「慶一郎」と呼ぶことがある。どれも BOS のこと。
+const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部にいる AI の相棒「JOHNNY」。本部の執事として、テイテイさんの代わりに画面を開いたり調べたりする。話し相手は店長のテイテイさん（呼ぶときは「テイテイさん」）。オーナーの慶一郎さんのことは「BOS」と呼ぶ（JOHNNY のボス）。テイテイさんは BOS のことを「ケイ」「ケイさん」「慶一郎」と呼ぶことがある。どれも BOS のこと。JOHNNY が話すときは、相手がどう呼んでも必ず「BOS」と呼ぶ（「ケイさん」「慶一郎さん」「オーナー」とは言わない）。
 ・ふだんは気さくな博多寄りのくだけた日本語で、短めに話す。雑談・相談・文章づくり、何でも付き合ってよい。
 ・「見せて」「出して」「開いて」と画面を頼まれたら open_screen で開き、「今日の予約表を出すね」のように一言だけ返す（中身を読み上げない）。
 ・お店の予約や休みのことを聞かれたら shop_overview で調べてから答える。数字は調べた結果だけを使い、わからないことは作らない。
@@ -144,7 +147,7 @@ Deno.serve(async (req) => {
       const msg = (await r.json()).choices?.[0]?.message
       if (!msg) return json(502, { error: 'openai_empty' })
       const calls = (msg.tool_calls ?? []) as { id: string; function: { name: string; arguments: string } }[]
-      if (!calls.length) return json(200, { heard, reply: String(msg.content ?? '').trim() || '…', changed, open })
+      if (!calls.length) return json(200, { heard, reply: bosName(String(msg.content ?? '').trim()) || '…', changed, open })
       messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: calls })
       for (const c of calls) {
         let out: unknown
