@@ -63,7 +63,7 @@ export function maintenanceDeadline(left: number, now = Date.now()): string {
 
 /** 画面と読み上げの言葉 */
 export function welcomeText(w: Welcome): { lines: string[]; speech: string } {
-  const since = w.days === 0 ? '前回のご来店は今日です。'
+  const since = w.days === 0 ? '今日はご来店ありがとうございました！'
     : `前回の${w.lastMenu ? w.lastMenu.name : 'ご来店'}から${w.days}日経ちました。`
   const lines = [since]
   if (w.maintenanceLeft != null) lines.push(`${maintenanceDeadline(w.maintenanceLeft)}、メンテナンスカットが使えます！`)
