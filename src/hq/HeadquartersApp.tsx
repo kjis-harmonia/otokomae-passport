@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleHelp, CreditCard, House, LayoutDashboard, LogOut, Menu, Package, Search, Settings2, SlidersHorizontal, Store, Users, UserRound, Wallet, X, FileText } from 'lucide-react'
+import { ArrowUpRight, Bot, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleHelp, CreditCard, House, LayoutDashboard, LogOut, Menu, Package, Search, Settings2, SlidersHorizontal, Store, Users, UserRound, Wallet, X, FileText } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { HQ_TABS, hqTabEnabled, type HqTab } from './hqMockData'
 import { HqDashboardScreen } from './screens/HqDashboardScreen'
@@ -21,17 +21,18 @@ const HqServiceMasterScreen = lazy(() => import('./screens/HqServiceMasterScreen
 const HqInventoryScreen = lazy(() => import('./screens/HqInventoryScreen').then(m => ({ default: m.HqInventoryScreen })))
 const HqDailyReportScreen = lazy(() => import('./screens/HqDailyReportScreen').then(m => ({ default: m.HqDailyReportScreen })))
 const HqSettingsScreen = lazy(() => import('./screens/HqSettingsScreen').then(m => ({ default: m.HqSettingsScreen })))
+const HqJohnnyScreen = lazy(() => import('./screens/HqJohnnyScreen').then(m => ({ default: m.HqJohnnyScreen })))
 const HqReservationScreen = lazy(() => import('./screens/HqReservationScreen').then(m => ({ default: m.HqReservationScreen })))
 
-const ICONS: Record<HqTab, LucideIcon> = { dashboard: LayoutDashboard, stores: Store, sales: ChartNoAxesCombined, stylist: UserRound, members: Users, customers: Users, ledger: CalendarDays, ginpay: Wallet, register: CreditCard, menus: SlidersHorizontal, booking: CalendarDays, inventory: Package, reports: FileText, settings: Settings2 }
+const ICONS: Record<HqTab, LucideIcon> = { johnny: Bot, dashboard: LayoutDashboard, stores: Store, sales: ChartNoAxesCombined, stylist: UserRound, members: Users, customers: Users, ledger: CalendarDays, ginpay: Wallet, register: CreditCard, menus: SlidersHorizontal, booking: CalendarDays, inventory: Package, reports: FileText, settings: Settings2 }
 const GROUPS: { label: string; tabs: HqTab[] }[] = [
-  { label: '全体をみる', tabs: ['dashboard', 'stores', 'sales', 'stylist'] },
+  { label: '全体をみる', tabs: ['johnny', 'dashboard', 'stores', 'sales', 'stylist'] },
   { label: 'お客様', tabs: ['customers', 'members'] },
   { label: '店舗の運営', tabs: ['ledger', 'register', 'ginpay', 'inventory', 'reports'] },
   { label: '管理', tabs: ['menus', 'booking', 'settings'] },
 ]
 const DESCRIPTIONS: Record<HqTab, string> = {
-  dashboard: '売上・予約・店舗運営の状況。', stores: '接続されている店舗の状況を確認。', sales: '確定した会計から、売上の動きを知る。',
+  johnny: '何でも話せる相棒。慶一郎さんとの伝言も。', dashboard: '売上・予約・店舗運営の状況。', stores: '接続されている店舗の状況を確認。', sales: '確定した会計から、売上の動きを知る。',
   stylist: '一人ひとりの仕事を、同じ基準で。', members: '会員と店舗のつながりを見渡す。', customers: 'お客様の情報と、これまでの来店。',
   ledger: '予約と来店の流れを確認。', register: '確定した会計と取消の記録。', ginpay: '残高と取引を、台帳から確認。', inventory: '在庫数と発注が必要な商品。',
   reports: '一日の記録を、振り返りやすく。', menus: '予約と会計で使う、共通のメニュー。', booking: 'スタッフ・シフト・営業時間を管理。', settings: '本部の表示と接続情報。',
@@ -84,6 +85,7 @@ export function HeadquartersApp() {
   }
   function screen() {
     switch (tab) {
+      case 'johnny': return <HqJohnnyScreen />
       case 'dashboard': return <HqDashboardScreen onNavigate={navigate} />
       case 'stores': return <HqStoresScreen onNavigate={navigate} />
       case 'sales': return <HqSalesScreen />
