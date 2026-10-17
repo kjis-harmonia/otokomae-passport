@@ -1,5 +1,6 @@
-import {ONE_TAP_STAGING,resumeSavedMember,supportsPasskeys} from './features/customerAccess/passkeys'
+import {ONE_TAP_STAGING,resumeSavedMember,supportsPasskeys,passkeyStatus} from './features/customerAccess/passkeys'
 import {PasskeyEnrollmentOffer} from './features/customerAccess/CustomerAccess'
+import {useCustomerAccessSession} from './features/customerAccess/useCustomerAccessSession'
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import { getCustomerSession, clearCustomerSession } from './utils/customerSession'
@@ -45,6 +46,7 @@ import { refreshPushIfGranted } from './utils/webPush'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
 const SHOP_AUTH_KEY = 'ginjiro_shop_auth'
+const PASSKEY_SETUP_PROMPT_KEY = 'ginjiro_passkey_setup_prompt_v1'
 
 type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
@@ -855,6 +857,7 @@ function App() {
   })
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
   const [passkeyOffer,setPasskeyOffer]=useState(false)
+  const customerAccessSession=useCustomerAccessSession()
   useEffect(()=>{
     if(!ONE_TAP_STAGING)return
     const changed=()=>{if(getCustomerSession()&&getStoredValue<boolean>(ONBOARDING_DONE_KEY,false)){setMemberStatus(loadMemberStatus());setPhase('app')}}
@@ -868,6 +871,15 @@ function App() {
   const [isPremiumGachaOpen, setIsPremiumGachaOpen] = useState(false)
   const [hasOpenModal, setHasOpenModal] = useState(false)
   const [showQrModal, setShowQrModal] = useState(false)
+  // Existing signed-in members also need a first setup entry; never enroll from a display-only member ID.
+  useEffect(()=>{
+    if(!ONE_TAP_STAGING || phase!=='app' || appLoading || activeTab!=='home' || showQrModal || welcomeCouponDialog || hasOpenModal || isPremiumGachaOpen || !customerAccessSession || !supportsPasskeys())return
+    let alive=true
+    void passkeyStatus().then(status=>{
+      if(alive && getCustomerSession()===customerAccessSession && !status.registered && getStoredValue<string|null>(PASSKEY_SETUP_PROMPT_KEY,null)!==status.user_id)setPasskeyOffer(true)
+    }).catch(()=>{})
+    return()=>{alive=false}
+  },[phase,appLoading,activeTab,showQrModal,welcomeCouponDialog,hasOpenModal,isPremiumGachaOpen,customerAccessSession])
   // navHighlight drives the bottom nav visual indicator independently from activeTab
   const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
@@ -1328,7 +1340,7 @@ function App() {
         </>
       )}
 
-      {passkeyOffer&&!welcomeCouponDialog&&!appLoading&&<PasskeyEnrollmentOffer onClose={()=>setPasskeyOffer(false)}/>}
+      {passkeyOffer&&!welcomeCouponDialog&&!appLoading&&<PasskeyEnrollmentOffer onClose={()=>{const memberId=getStoredValue<string|null>(USER_ID_KEY,null);if(memberId)setStoredValue(PASSKEY_SETUP_PROMPT_KEY,memberId);setPasskeyOffer(false)}}/>}
       {/* Loading screen — topmost, covers everything during initial load */}
       <AnimatePresence>
         {appLoading && <GinjiroLoadingScreen key="loading" />}
