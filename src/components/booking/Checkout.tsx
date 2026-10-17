@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { rpcErrorMessage } from '../../utils/staffSession'
 import { yen } from '../../utils/bookingApi'
+import { premiumFor } from '../../utils/bookingCoupons'
 import { idempotencyKey } from '../../utils/ginpayApi'
 import type { ClientCandidate, CustomerApi } from '../../utils/customerApi'
 import {
@@ -58,13 +59,24 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       setCtx(c)
       if (!c.reservation && clientId && c.client) setClient(c.client)
       if (initialTicketIds?.length) {
-        // 違う種類は一緒に使えないので、最初に選ばれた券と同じ種類だけ
         const usable = c.tickets.filter(t => !t.blocked && initialTicketIds.includes(t.id))
-        setTicketIds(usable.filter(t => t.type === usable[0]?.type).map(t => t.id))
+        // メンテナンスクーポンはほかの券と一緒に使えないので、混ざっていたらメンテナンスクーポンだけ
+        setTicketIds((usable.some(t => t.type === 'coupon') ? usable.filter(t => t.type === 'coupon').slice(0, 1) : usable).map(t => t.id))
       }
       if (c.reservation) {
-        setStylistId(c.reservation.staff_id)
-        setLines(c.reservation.items.map(i => ({ key: ++keySeq, source: 'reservation', ref_id: i.menu_code, name: i.name, category: 'menu', unit_price: i.price ?? 0, quantity: 1, discount: 0 })))
+        const r = c.reservation
+        setStylistId(r.staff_id)
+        // プレミアムクーポン（GINJIRO CLASSICS など）の対象メニューは、ふつうの料金で入れて、使える時間なら会員価格との差を値引きにする
+        // （店舗端末の「お会計」・JOHNNY の確認画面と同じ金額になる）
+        const premiums = r.items.map(i => (i.menu_code ? premiumFor(i.menu_code, r.starts_at) : null))
+        setLines(r.items.map((i, n) => ({ key: ++keySeq, source: 'reservation', ref_id: i.menu_code, name: i.name, category: 'menu', unit_price: premiums[n]?.normalPrice ?? i.price ?? 0, quantity: 1, discount: 0 })))
+        const applied = premiums.filter(p => p?.eligible) as NonNullable<(typeof premiums)[number]>[]
+        if (applied.length) {
+          setManual({
+            amount: String(applied.reduce((a, p) => a + p.normalPrice - p.memberPrice, 0)),
+            label: `${[...new Set(applied.map(p => p.def.title))].join('・')}（会員価格）`,
+          })
+        }
       }
     }).catch(err => { if (alive) setError(rpcErrorMessage(err, '会計の準備ができませんでした。')) })
     return () => { alive = false }
@@ -105,9 +117,10 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     setAdding(false)
   }
   function toggleTicket(id: string, type: string) {
-    // 違う種類は一緒に使えない（同じ種類は複数枚可）
+    // 割引券・漢トク券は何枚でも種類をまたいでも使える。メンテナンスクーポンだけはほかの券と一緒に使えない
     setTicketIds(ids => ids.includes(id) ? ids.filter(x => x !== id)
-      : [...ids.filter(x => tickets.find(t => t.id === x)?.type === type), id])
+      : type === 'coupon' ? [id]
+      : [...ids.filter(x => tickets.find(t => t.id === x)?.type !== 'coupon'), id])
   }
 
   async function confirm() {
