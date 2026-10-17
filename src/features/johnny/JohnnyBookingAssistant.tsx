@@ -195,8 +195,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       api.reservations().catch(() => [] as CustomerReservation[]),
       api.contact().catch(() => null),
       api.lastVisit().catch(() => null),
+      api.recentVisits().catch(() => []),
     ])
-      .then(([opts, list, contact, lastVisit]) => {
+      .then(([opts, list, contact, lastVisit, visits]) => {
         if (!alive) return
         setOptions(opts)
         setMyReservations(list)
@@ -206,7 +207,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         // 連絡先（本名・電話番号）が未登録なら、日時の前に1回だけ聞く。仕組みが無い環境（null）では聞かない
         if (contact && !contact.registered) { setStep({ k: 'contact', name: contact.name }); return }
         // 2回目以降のお客様は「おかえりなさい」から
-        const w = buildWelcome(lastVisit, list, opts.menus)
+        const w = buildWelcome(lastVisit, list, opts.menus, Date.now(), visits)
         if (w) {
           turnsRef.current = [{ role: 'assistant', text: `おかえりなさい！${welcomeText(w).lines.join('')}ご予約はどうしますか？` }]
           setStep({ k: 'welcome', w })

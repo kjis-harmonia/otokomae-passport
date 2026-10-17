@@ -7,6 +7,7 @@ import type { MenuOption } from './menuMatcher'
 import type { Slot } from './slotPlanner'
 import { consultStylist, type ConsultReply } from './consult'
 import type { DayOverview } from './dayAdvisor'
+import type { VisitRecord } from './welcome'
 import { askAgent, askAgentVoice, type AgentAnswer, type AgentShown, type AgentTurn, type VoiceAnswer } from './agentClient'
 
 export interface BookingSettings { slot_minutes: number; booking_window_days: number; min_lead_minutes: number; hold_minutes: number }
@@ -42,6 +43,8 @@ export interface BookingAssistantApi {
   reservations(): Promise<CustomerReservation[]>
   /** 最後に来店した日（QR の来店登録、YYYY-MM-DD）。無ければ null */
   lastVisit(): Promise<string | null>
+  /** 最近の来店（最大5回、メニューつき）。仕組みが無い環境では空 */
+  recentVisits(): Promise<VisitRecord[]>
   cancel(reservationId: string): Promise<CustomerReservation>
   /** 予約の AI。使えないときは null（呼び出し側が決まった規則の JOHNNY に切り替える） */
   agent(message: string, history: readonly AgentTurn[], shown?: AgentShown): Promise<AgentAnswer | null>
@@ -66,6 +69,7 @@ export const customerBookingApi: BookingAssistantApi = {
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),
+  recentVisits: async () => (await callCustomerRpc<VisitRecord[] | null>('customer_recent_visits')) ?? [],
   lastVisit: async () => { const d = await callCustomerRpc<string | null>('customer_get_last_visit'); return d ? String(d).slice(0, 10) : null },
   agent: (message, history, shown) => askAgent(message, history, shown),
   agentVoice: (audio, history, shown, transcribeOnly) => askAgentVoice(audio, history, shown, transcribeOnly),
@@ -153,6 +157,7 @@ export const demoBookingApi: BookingAssistantApi = {
   async release() { /* nothing */ },
   async reservations() { await wait(200); return [...demoStore] },
   // デモ：13日前に来店（明日までメンテナンスカットが使える）
+  async recentVisits() { await wait(150); return [] },
   async lastVisit() { await wait(150); return new Date(Date.now() + 9 * 3600000 - 13 * 86400000).toISOString().slice(0, 10) },
   async cancel(id) {
     await wait(300)
