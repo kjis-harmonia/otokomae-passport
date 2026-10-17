@@ -28,6 +28,7 @@ import {
   loadMemberStatus,
   saveMemberStatus,
   getStoredValue,
+  setStoredValue,
   removeStoredValue,
   MEMBER_STATUS_KEY,
   ONBOARDING_DONE_KEY,
