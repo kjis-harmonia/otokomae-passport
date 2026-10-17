@@ -120,7 +120,7 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   invalid_items: 'メニュー・商品の内容を確認してください（単価0円以上・数量1〜99・値引きは小計まで）。',
   invalid_discount: '値引きの金額と理由を入力してください。',
   invalid_tickets: '使えないクーポンが含まれています（使用済み・期限切れ・他の方の券）。',
-  mixed_types: '種類の違うクーポンは一緒に使えません。',
+  mixed_types: 'メンテナンスクーポンは、ほかの券と一緒に使えません。',
   transfer_pending: '譲渡中のクーポンは使えません。',
   welcome_weekend: 'Welcomeクーポンは平日のみ使えます。',
   daily_rule: '本日はすでに別の割引を利用済みです。',
