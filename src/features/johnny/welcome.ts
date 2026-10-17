@@ -11,6 +11,8 @@ import type { MenuOption } from './menuMatcher'
 export interface VisitRecord { visit_date: string; menu_code: string | null; menu_name: string | null }
 
 export const MAINTENANCE_DAYS = 14
+/** 来店の記録でのメンテナンスカット（アプリのメニューには無い。予約はホットペッパーのクーポン） */
+export const MAINTENANCE_MENU: MenuOption = { code: 'maintenance', name: 'メンテナンスカット', duration_min: 30, price: null }
 const DONE: CustomerReservation['status'][] = ['completed', 'checked_in', 'in_service', 'awaiting_payment', 'confirmed']
 
 export interface Welcome {
@@ -39,7 +41,7 @@ export function buildWelcome(lastVisit: string | null, reservations: readonly Cu
   const last = dates[dates.length - 1]
   if (!last) return null
   const days = dayDiff(last, today)
-  const menuOf = (code: string | null) => (code ? menus.find(m => m.code === code) ?? null : null)
+  const menuOf = (code: string | null) => (code === 'maintenance' ? MAINTENANCE_MENU : code ? menus.find(m => m.code === code) ?? null : null)
   const count = new Map<string, number>()
   history.forEach(([, c]) => { if (menuOf(c)) count.set(c!, (count.get(c!) ?? 0) + 1) })
   const order = [...count.keys()].sort((a, b) => (count.get(b)! - count.get(a)!) || history.findIndex(h => h[1] === a) - history.findIndex(h => h[1] === b))
@@ -47,7 +49,7 @@ export function buildWelcome(lastVisit: string | null, reservations: readonly Cu
     days,
     lastMenu: menuOf(byDay.get(last) ?? null),
     maintenanceLeft: days <= MAINTENANCE_DAYS ? MAINTENANCE_DAYS - days : null,
-    usual: order.map(menuOf).filter((m): m is MenuOption => !!m).slice(0, 2),
+    usual: order.map(menuOf).filter((m): m is MenuOption => !!m && !(m.code === 'maintenance' && days <= MAINTENANCE_DAYS)).slice(0, 2),
   }
 }
 

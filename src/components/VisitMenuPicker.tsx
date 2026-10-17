@@ -12,7 +12,8 @@ export interface VisitInfo {
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
-const COMMON = ['cut-regular', 'cut-skin-fade', 'perm-punch', 'perm-nurepan']
+/** 'maintenance' はメンテナンスカット（アプリのメニューには無い。ホットペッパーのクーポン） */
+const COMMON = ['maintenance', 'cut-regular', 'cut-skin-fade', 'perm-punch', 'perm-nurepan']
 
 export function VisitMenuPicker({ userId, info, staffName }: { userId: string; info: VisitInfo; staffName: string }) {
   const [current, setCurrent] = useState<{ code: string; name: string; source: 'reservation' | 'staff' } | null>(
@@ -45,9 +46,9 @@ export function VisitMenuPicker({ userId, info, staffName }: { userId: string; i
   }
 
   // 候補：最近のメニュー（重複なし）→ よく出るメニュー
-  const nameOf = (code: string) => menus?.find(m => m.code === code)?.name ?? info.recent.find(v => v.menu_code === code)?.menu_name ?? null
+  const nameOf = (code: string) => (code === 'maintenance' ? 'メンテナンスカット' : menus?.find(m => m.code === code)?.name ?? info.recent.find(v => v.menu_code === code)?.menu_name ?? null)
   const recentCodes = [...new Set(info.recent.map(v => v.menu_code).filter((c): c is string => !!c && c !== 'hotpepper'))]
-  const quick = [...new Set([...recentCodes, ...COMMON])].filter(c => nameOf(c)).slice(0, 6)
+  const quick = [...new Set(['maintenance', ...recentCodes, ...COMMON])].filter(c => nameOf(c)).slice(0, 6)
 
   const chip = (code: string, label: string) => (
     <button key={code} type="button" disabled={!!saving} onClick={() => save(code)} style={{

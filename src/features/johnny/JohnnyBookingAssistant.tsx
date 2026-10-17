@@ -817,7 +817,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
                 {step.w.maintenanceLeft != null && (
                   <Row href={MAINTENANCE_CUT_URL} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
                 )}
-                {step.w.usual.map(m => (
+                {step.w.usual.map(m => m.code === 'maintenance' ? (
+                  <Row key={m.code} href={MAINTENANCE_CUT_URL} title="メンテナンスカットで予約" detail="ホットペッパー" note="いつもの" />
+                ) : (
                   <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={`${m.duration_min}分・${yen(m)}`} note="いつもの" />
                 ))}
                 <Row onClick={() => setStep({ k: 'askWhen' })} title="日時を伝えて予約する" muted />
