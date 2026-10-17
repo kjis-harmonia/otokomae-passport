@@ -1,6 +1,6 @@
 {
-  "name": "銀二郎 男前パスポート",
-  "short_name": "男前パス",
+  "name": "二代目銀二郎",
+  "short_name": "二代目銀二郎",
   "description": "銀二郎の会員アプリ「男前パスポート」",
   "start_url": "/",
   "display": "standalone",
@@ -10,10 +10,22 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/assets/app-icon.png",
-      "sizes": "any",
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
