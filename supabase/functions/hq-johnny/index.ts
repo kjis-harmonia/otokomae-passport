@@ -57,7 +57,7 @@ const SCREENS: Record<string, string> = {
 const TOOLS = [
   { type: 'function', function: { name: 'shop_overview', description: 'お店の予約（日時・メニュー・担当・状態・料金）、休みの日、お知らせの数。お客様の名前は出ない。期間は31日まで', parameters: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['from', 'to'] } } },
   { type: 'function', function: { name: 'list_messages', description: 'BOS（オーナーの慶一郎さん）との伝言の箱（新しい順）。to_shop＝慶一郎さんから本部へ、to_owner＝本部から慶一郎さんへ。kind=request は返事待ちの「確認して」', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'send_to_owner', description: 'BOS（オーナーの慶一郎さん）へ伝言を送る。「伝えといて」「慶一郎さんに言っといて」と頼まれたときだけ使う。要点を短く、いつ・何を・どうしてほしいか', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらいの見出し' }, body: { type: 'string', description: '伝言の中身（テイテイの言葉をもとに、わかりやすく整える。勝手に内容を足さない）' }, urgent: { type: 'boolean' }, kind: { type: 'string', enum: ['note', 'request'], description: 'request＝慶一郎さんの OK/返事がほしいとき' } }, required: ['title', 'body', 'urgent', 'kind'] } } },
+  { type: 'function', function: { name: 'send_to_owner', description: 'BOS（オーナーの慶一郎さん）へ伝言を送る。「伝えといて」と頼まれたとき、またはテイテイさんとの話で何かが決まったとき（報告）に使う。要点を短く、いつ・何を・どうしてほしいか', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらいの見出し' }, body: { type: 'string', description: '伝言の中身（テイテイの言葉をもとに、わかりやすく整える。勝手に内容を足さない）' }, urgent: { type: 'boolean' }, kind: { type: 'string', enum: ['note', 'request'], description: 'request＝BOS の OK/返事がほしいとき' }, report: { type: 'boolean', description: 'true＝話で決まったことの報告（見出しに【報告】が付く）' } }, required: ['title', 'body', 'urgent', 'kind', 'report'] } } },
   { type: 'function', function: { name: 'open_screen', description: '本部の画面を開いて見せる。「今日の予約見せて」「予約表出して」「売上見せて」「在庫は？」など、画面を見たいと言われたときに使う', parameters: { type: 'object', properties: { screen: { type: 'string', enum: Object.keys(SCREENS), description: Object.entries(SCREENS).map(([k, v]) => `${k}=${v}`).join(' / ') } }, required: ['screen'] } } },
   { type: 'function', function: { name: 'answer_owner', description: 'BOS からの伝言に答える。テイテイが OK / NG / 返事を言ったときだけ使う（勝手に答えない）', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected', 'answered', 'seen'] }, reply: { type: 'string' } }, required: ['id', 'status', 'reply'] } } },
 ]
@@ -77,7 +77,13 @@ const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部に�
 ・ふだんは気さくな博多寄りのくだけた日本語で、短めに話す。雑談・相談・文章づくり、何でも付き合ってよい。
 ・「見せて」「出して」「開いて」と画面を頼まれたら open_screen で開き、「今日の予約表を出すね」のように一言だけ返す（中身を読み上げない）。
 ・お店の予約や休みのことを聞かれたら shop_overview で調べてから答える。数字は調べた結果だけを使い、わからないことは作らない。
-・「BOS に伝えて」「ケイに伝えて」「慶一郎さんに伝えて」「オーナーに言っといて」と頼まれたら send_to_owner で伝言を送り、送った中身を短く伝える。頼まれていないのに送らない。
+・「BOS に伝えて」「ケイに伝えて」「慶一郎さんに伝えて」「オーナーに言っといて」と頼まれたら send_to_owner で伝言を送り、送った中身を短く伝える。
+・BOS への報告：テイテイさんとの話で、お店のことが決まったら（新メニュー・料金・クーポン・ホットペッパーの掲載・営業時間や休み・シフト・イベント・仕入れなど）、頼まれなくても send_to_owner で BOS に報告する。そして返事の最後に必ず「〇〇の件、BOS へ報告しとくね」と一言そえる。
+  ・まだ決まっていない相談や雑談は報告しない。迷ったら「BOS に報告しとこうか？」と聞く。
+  ・報告のときは report を true にする（見出しに【報告】が付く）。
+  ・中身は次の形で短く：決まったこと／いつから／やること（ホットペッパーやアプリへの登録・準備など。誰がやるか決まっていれば名前も）／BOS に決めてほしいこと。
+  ・BOS の OK が必要なこと（料金・お金がかかること・掲載内容の最終確認など）がある時は kind を request にする。それ以外は note。
+  ・同じ件を二度送らない。
 ・話の最初や「伝言ある？」と聞かれたら list_messages でBOSからの伝言（to_shop で status が open/seen）を確かめ、あれば先に伝える。kind=request は OK か NG か返事をもらう。
 ・テイテイが OK / NG / 返事を言ったら answer_owner で答える（どの伝言かわからなければ聞き返す）。
 ・返事は声でも読み上げるので、長くても4〜5文。
@@ -128,8 +134,16 @@ Deno.serve(async (req) => {
   const runTool = async (name: string, args: Record<string, unknown>): Promise<unknown> => {
     switch (name) {
       case 'shop_overview': return await rpc('hq_johnny_overview', { p_hq: hq, p_from: args.from, p_to: args.to })
-      case 'list_messages': return await rpc('hq_messages_list', { p_hq: hq, p_limit: 30 })
-      case 'send_to_owner': changed = true; return await rpc('hq_message_send', { p_hq: hq, p_title: args.title, p_body: args.body, p_urgent: !!args.urgent, p_kind: args.kind === 'request' ? 'request' : 'note' })
+      case 'list_messages': {
+        // 向きを取り違えないよう、だれからだれへを日本語で付ける
+        const list = await rpc<{ direction: string; status: string }[]>('hq_messages_list', { p_hq: hq, p_limit: 30 })
+        return list.map(m => ({ ...m, from_to: m.direction === 'to_shop' ? 'BOS からテイテイさんへ（返事が必要なら答える）' : 'テイテイさんから BOS へ（送ったもの。BOS からの伝言ではない）' }))
+      }
+      case 'send_to_owner': {
+        changed = true
+        const title = String(args.title ?? '').replace(/^【報告】/, '')
+        return await rpc('hq_message_send', { p_hq: hq, p_title: args.report ? `【報告】${title}` : title, p_body: args.body, p_urgent: !!args.urgent, p_kind: args.kind === 'request' ? 'request' : 'note' })
+      }
       case 'open_screen': if (typeof args.screen === 'string' && args.screen in SCREENS) { open = args.screen; return { ok: true, opened: SCREENS[args.screen] } } return { error: 'unknown_screen' }
       case 'answer_owner': changed = true; return await rpc('hq_message_answer', { p_hq: hq, p_id: args.id, p_status: args.status, p_reply: args.reply || null })
       default: return { error: 'unknown_tool' }
