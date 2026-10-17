@@ -1,3 +1,5 @@
+import {useStoreAccess,useStoreRequest} from '../features/customerAccess/storeAccess'
+import {StoreRequestNotice} from '../features/customerAccess/StoreVerification'
 import { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { getUserId } from '../utils/userId'
@@ -47,6 +49,8 @@ function fmtLastVisit(dateStr: string): string {
 }
 
 export function PassportCard() {
+  const storeAccess=useStoreAccess()
+  const storeRequest=useStoreRequest(storeAccess.mode!=='verified'&&storeAccess.mode!=='error')
   const memberStatus = loadMemberStatus()
   const userId = getUserId()
 
@@ -96,6 +100,7 @@ export function PassportCard() {
 
   const qrPayload = JSON.stringify({
     type: 'ginjiro-member',
+    a: storeRequest.request?.id,
     userId,   // 完全 ID を必ず保持
     name: memberName,
     reservation: toCurrentReservationQrPayload(currentReservation),
@@ -401,7 +406,7 @@ export function PassportCard() {
         </div>
       </div>
 
-      <div style={{ marginTop: 16 }}><CustomerAccessSettings /></div>
+      <StoreRequestNotice mode={storeAccess.mode} error={storeRequest.error} onRefresh={storeRequest.refresh}/><div style={{ marginTop: 16 }}><CustomerAccessSettings /></div>
 
       {/* ── JOHNNY のお知らせ・ホーム画面に追加 ── */}
       <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>

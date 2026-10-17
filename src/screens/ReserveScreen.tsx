@@ -1,3 +1,4 @@
+import {useStoreAccess} from '../features/customerAccess/storeAccess'
 import {ONE_TAP_STAGING} from '../features/customerAccess/passkeys'
 import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
 import {useCustomerAccessSession} from '../features/customerAccess/useCustomerAccessSession'
@@ -25,8 +26,28 @@ const HOTPEPPER_MENUS: { label: string; url: string }[] = [
 
 export function ReserveScreen(props:{onShowQr?:()=>void}){
   const session=useCustomerAccessSession()
-  if(ONE_TAP_STAGING&&!session)return <section className="customer-access" style={{padding:'48px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="予約の会員認証"><h1>会員情報で予約へ</h1><p>登録済みのFace IDなどで、そのままJohnnyへ進めます。</p><PasskeyLoginButton label="本人確認して予約へ" onSignedIn={()=>{}}/></section>
+  const access=useStoreAccess()
+  if(ONE_TAP_STAGING&&access.mode!=='verified')return <StoreBookingGate session={session} access={access} onShowQr={props.onShowQr}/>
   return <ReservationContent key={ONE_TAP_STAGING?session:'legacy'} {...props}/>
+}
+
+function StoreBookingGate({session,access,onShowQr}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void}){
+  return <section className="customer-access" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="Johnnyの来店認証">
+    <h1>Johnnyは、来店時の確認から</h1>
+    <p>初回だけ、店頭で会員QRを見せてください。本人確認後に、Johnnyで予約できます。</p>
+    {!session&&<PasskeyLoginButton onSignedIn={()=>{}}/>}
+    {access.mode==='checking'?<p role="status">会員情報を確認しています…</p>:onShowQr&&<button type="button" className="access-primary" onClick={onShowQr}>会員QRを表示する</button>}
+    {access.mode==='error'&&<>
+      <p role="alert" className="access-error">確認できませんでした。通信を確認してお試しください。</p>
+      <button type="button" className="access-text" onClick={access.refresh}>もう一度確認</button>
+    </>}
+    <p className="access-hint">確認済みの方は、次回からFace IDなどでログインできます。</p>
+    <a href={SHOP_PHONE_TEL} className="access-text">電話で予約する（{SHOP_PHONE_DISPLAY}）</a>
+    <details style={{marginTop:24}}>
+      <summary style={{minHeight:44,cursor:'pointer'}}>HOT PEPPER Beautyで予約</summary>
+      {HOTPEPPER_MENUS.map(menu=><a key={menu.label} href={menu.url} target="_blank" rel="noopener noreferrer" style={{display:'block',padding:'12px 0',color:'#ccc',borderBottom:'1px solid #333'}}>{menu.label}</a>)}
+    </details>
+  </section>
 }
 function ReservationContent({ onShowQr }: { onShowQr?: () => void }) {
   const [assistantOpen, setAssistantOpen] = useState(true)
