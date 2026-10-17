@@ -27,6 +27,16 @@ const MIGRATION_ORDER = [
   '20261005000000_checkout.sql',
   '20261006000000_service_master.sql',
   '20261007000000_client_visit_model.sql',
+  '20261015000000_sb_reservation_board.sql',
+  '20261015000100_sb_capacity_setting.sql',
+  '20261015000200_customer_contact.sql',
+  '20261015000300_sb_hotpepper_mail_notices.sql',
+  '20261015000400_sb_hotpepper_no_coupon.sql',
+  '20261015000500_sb_hotpepper_note.sql',
+  '20261016091916_ticket_issue_idempotency.sql',
+  '20261016095032_ticket_issue_require_request_id.sql',
+  '20261016234902_unified_booking_flow.sql',
+  '20261017030847_customer_shortcuts.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
