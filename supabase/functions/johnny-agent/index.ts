@@ -89,6 +89,14 @@ function tools(session: string, staff: StaffInfo[]): AgentTools {
   }
 }
 
+/** 来店の記録（新しい順・最大5回）でいちばん多いメニュー（同じ回数なら新しい方） */
+function usualMenu(visits: { menu_code: string | null }[], menus: MenuInfo[]): string | null {
+  const codes = visits.slice(0, 5).map(v => v.menu_code).filter((c): c is string => !!c && menus.some(m => m.code === c))
+  const count = new Map<string, number>()
+  codes.forEach(c => count.set(c, (count.get(c) ?? 0) + 1))
+  return [...count.keys()].sort((a, b) => (count.get(b)! - count.get(a)!) || codes.indexOf(a) - codes.indexOf(b))[0] ?? null
+}
+
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 const isoOk = (v: unknown): v is string => typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v))
 
@@ -148,9 +156,10 @@ Deno.serve(async (req) => {
   try {
     // セッションの確認と、予約できるメニュー・スタッフを一度に
     // 「いつもの」用に、これまでの予約も同時に読む（いちばん新しい過去の予約のメニュー）
-    const [opts, past] = await Promise.all([
+    const [opts, past, visits] = await Promise.all([
       rpc<{ menus: MenuInfo[]; staff: StaffInfo[] }>('customer_booking_options', session),
       rpc<CustomerReservation[]>('customer_list_reservations', session).catch(() => [] as CustomerReservation[]),
+      rpc<{ menu_code: string | null }[] | null>('customer_recent_visits', session).catch(() => null),
     ])
     const t = tools(session, opts.staff)
     let heard: string | undefined
@@ -165,7 +174,7 @@ Deno.serve(async (req) => {
       now: new Date().toISOString(),
       menus: opts.menus,
       staff: opts.staff,
-      lastMenuCode: last?.items[0]?.menu_code ?? null,
+      lastMenuCode: usualMenu(visits ?? [], opts.menus) ?? last?.items[0]?.menu_code ?? null,
       shown: cleanShown(body.shown, opts.menus, opts.staff),
     }
     try {

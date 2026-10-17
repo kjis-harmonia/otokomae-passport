@@ -1,10 +1,14 @@
 // 2回目以降のお客様への最初のひとこと（「おかえりなさい！前回のパンチパーマから13日。明日までメンテナンスカットが使えます」）。
-//   最後の来店日：QR で来店登録した日（customer_get_last_visit）と、過去の予約の日の新しい方
-//   前回のメニュー：その日の予約のメニュー（分かるときだけ）
-//   いつものメニュー：過去の予約（最大5回）でいちばん多いもの（同じ回数なら新しい方）
+//   来店の履歴：来店の記録（QR の来店登録ごと・メニューつき、customer_recent_visits）＋記録の無い日の過去の予約。新しい方から5回
+//   最後の来店日：QR で来店登録した日（customer_get_last_visit）と、履歴のいちばん新しい日の新しい方
+//   前回のメニュー：その日のメニュー（分かるときだけ）
+//   いつものメニュー：履歴（最大5回）でいちばん多いもの（同じ回数なら新しい方）
 //   メンテナンスカット：前回来店日から14日以内（来店日を DAY 14 として毎日 0:00 に減る）
 import type { CustomerReservation } from './bookingAssistantApi'
 import type { MenuOption } from './menuMatcher'
+
+/** 来店の記録（customer_recent_visits） */
+export interface VisitRecord { visit_date: string; menu_code: string | null; menu_name: string | null }
 
 export const MAINTENANCE_DAYS = 14
 const DONE: CustomerReservation['status'][] = ['completed', 'checked_in', 'in_service', 'awaiting_payment', 'confirmed']
@@ -22,24 +26,26 @@ export interface Welcome {
 const jstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10)
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000)
 
-export function buildWelcome(lastVisit: string | null, reservations: readonly CustomerReservation[], menus: readonly MenuOption[], now = Date.now()): Welcome | null {
+export function buildWelcome(lastVisit: string | null, reservations: readonly CustomerReservation[], menus: readonly MenuOption[], now = Date.now(), visits: readonly VisitRecord[] = []): Welcome | null {
   const today = new Date(now + 9 * 3600000).toISOString().slice(0, 10)
-  const past = reservations
+  // 履歴：日ごとに1つ（来店の記録を優先、記録の無い日は予約）、新しい順に5回
+  const byDay = new Map<string, string | null>()
+  visits.forEach(v => { const d = v.visit_date.slice(0, 10); if (d <= today && (!byDay.has(d) || (v.menu_code && !byDay.get(d)))) byDay.set(d, v.menu_code) })
+  reservations
     .filter(r => DONE.includes(r.status) && Date.parse(r.starts_at) <= now && r.items[0])
-    .sort((a, b) => b.starts_at.localeCompare(a.starts_at))
-    .slice(0, 5)
-  const dates = [lastVisit?.slice(0, 10), past[0] ? jstDay(past[0].starts_at) : undefined].filter((d): d is string => !!d && d <= today).sort()
+    .forEach(r => { const d = jstDay(r.starts_at); if (!byDay.get(d)) byDay.set(d, r.items[0].menu_code) })
+  const history = [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
+  const dates = [lastVisit?.slice(0, 10), history[0]?.[0]].filter((d): d is string => !!d && d <= today).sort()
   const last = dates[dates.length - 1]
   if (!last) return null
   const days = dayDiff(last, today)
-  const menuOf = (code: string) => menus.find(m => m.code === code) ?? null
-  const lastRes = past.find(r => jstDay(r.starts_at) === last)
+  const menuOf = (code: string | null) => (code ? menus.find(m => m.code === code) ?? null : null)
   const count = new Map<string, number>()
-  past.forEach(r => count.set(r.items[0].menu_code, (count.get(r.items[0].menu_code) ?? 0) + 1))
-  const order = [...count.keys()].sort((a, b) => (count.get(b)! - count.get(a)!) || past.findIndex(r => r.items[0].menu_code === a) - past.findIndex(r => r.items[0].menu_code === b))
+  history.forEach(([, c]) => { if (menuOf(c)) count.set(c!, (count.get(c!) ?? 0) + 1) })
+  const order = [...count.keys()].sort((a, b) => (count.get(b)! - count.get(a)!) || history.findIndex(h => h[1] === a) - history.findIndex(h => h[1] === b))
   return {
     days,
-    lastMenu: lastRes ? menuOf(lastRes.items[0].menu_code) : null,
+    lastMenu: menuOf(byDay.get(last) ?? null),
     maintenanceLeft: days <= MAINTENANCE_DAYS ? MAINTENANCE_DAYS - days : null,
     usual: order.map(menuOf).filter((m): m is MenuOption => !!m).slice(0, 2),
   }

@@ -15,6 +15,7 @@ import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 import { normalizeCurrentReservation, isReservationForDate, type CurrentReservation } from '../utils/currentReservation'
 import { PREMIUM_COUPONS } from '../data/wallet'
+import { VisitMenuPicker, type VisitInfo } from '../components/VisitMenuPicker'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -83,10 +84,13 @@ async function fetchLastVisitDate(userId: string): Promise<string | null> {
   return (await getCustomerContextForStaff(userId)).last_visit_date
 }
 
-/** 来店チェックイン（来店日＝本日JST）。staff_check_in RPC。失敗時は例外。 */
-export async function checkInVisit(userId: string): Promise<string> {
-  const r = await callStaffRpc<{ visit_date: string }>('staff_check_in', { p_user_id: userId })
-  return String(r.visit_date).slice(0, 10)
+/** 来店チェックイン（来店日＝本日JST）。staff_check_in RPC。今日のメニュー（予約から分かれば）と最近の来店も返る。失敗時は例外。 */
+export async function checkInVisit(userId: string): Promise<{ date: string; info: VisitInfo }> {
+  const r = await callStaffRpc<{ visit_date: string } & Partial<VisitInfo>>('staff_check_in', { p_user_id: userId })
+  return {
+    date: String(r.visit_date).slice(0, 10),
+    info: { menu_code: r.menu_code ?? null, menu_name: r.menu_name ?? null, menu_source: r.menu_source ?? null, recent: Array.isArray(r.recent) ? r.recent : [] },
+  }
 }
 
 export interface MaintenanceCouponPreview {
@@ -409,6 +413,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   // Checkin
   const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
+  const [visitInfo, setVisitInfo]         = useState<VisitInfo | null>(null)
 
   // 既存会員のアプリ紐付けコード（6桁・10分有効・1回限り）
   const [bindCode, setBindCode]             = useState<{ code: string; expiresAt: string } | null>(null)
@@ -455,6 +460,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   function handleReset() {
     setPhase('scan')
+    setVisitInfo(null)
     setScannedData(null)
     setPrevLastVisitDate(undefined)
     setParseError(null)
@@ -597,8 +603,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     // 会員QRの読み取り＝来店登録（14日サイクルを本日からリセット）
     setCheckInStatus('loading')
     try {
-      const visitDate = await checkInVisit(passportData.userId)
-      setCheckInDate(visitDate)
+      const visit = await checkInVisit(passportData.userId)
+      setCheckInDate(visit.date)
+      setVisitInfo(visit.info)
       setCheckInStatus('done')
     } catch (err) {
       setCheckInStatus('idle')
@@ -764,7 +771,9 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     if (!scannedData || checkInStatus === 'loading') return
     setCheckInStatus('loading')
     try {
-      setCheckInDate(await checkInVisit(scannedData.userId))
+      const visit = await checkInVisit(scannedData.userId)
+      setCheckInDate(visit.date)
+      setVisitInfo(visit.info)
       setCheckInStatus('done')
       setUseError(null)
       playSuccessSound()
@@ -1228,6 +1237,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     <span style={{ fontWeight: 700, color: '#F2E6C8', letterSpacing: '0.12em' }}>{fmtVisitDate(checkInDate)}</span><br />
                     として記録しました。
                   </p>
+                  {visitInfo && <VisitMenuPicker key={scannedData.userId} userId={scannedData.userId} info={visitInfo} staffName={staffId} />}
                   {/* 次にやること */}
                   <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(201,162,74,0.28)' }}>
                     <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#C9A24A', marginBottom: 8 }}>NEXT STEP</p>
