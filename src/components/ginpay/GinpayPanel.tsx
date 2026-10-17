@@ -13,11 +13,13 @@ import { rpcErrorMessage } from '../../utils/staffSession'
 import { C, SANS, inputStyle, linkStyle } from '../booking/ledgerTheme'
 import { Field, PrimaryButton, SecondaryButton } from '../booking/ledgerUi'
 
-export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = true }: {
+export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = true, startCharging = false }: {
   clientId: string
   api: GinpayClientApi
   ensureActor: () => boolean
   showAccountDetail?: boolean
+  /** 開いた時点でチャージの段階選びを出す（銀Payチャージ画面） */
+  startCharging?: boolean
 }) {
   const [ledger, setLedger] = useState<GinpayLedger | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +46,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
   }, [api, clientId])
 
   useEffect(() => { void load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { if (startCharging) void openCharge() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tier = useMemo(() => tiers?.find(t => t.cash === cash) ?? null, [tiers, cash])
   const canCharge = !!api.chargeTier

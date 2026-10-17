@@ -3,11 +3,12 @@ import { AdminScreen } from './AdminScreen'
 import { StaffInventoryScreen } from './StaffInventoryScreen'
 import { StaffReservationsScreen } from './StaffReservationsScreen'
 import { StaffClientsScreen } from './StaffClientsScreen'
+import { StaffGinpayScreen } from './StaffGinpayScreen'
 import type { PendingChangeSummary, StaffInventoryHandle } from './StaffInventoryScreen'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
-type StaffMode = 'menu' | 'shop' | 'reservations' | 'clients' | 'inventory' | 'recovery'
+type StaffMode = 'menu' | 'shop' | 'ginpay' | 'reservations' | 'clients' | 'inventory' | 'recovery'
 
 /**
  * /staff を開いた直後の分岐画面 + 戻るナビゲーション。
@@ -73,6 +74,23 @@ export function StaffHome() {
             </p>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
               QR読み込み・来店更新・割引券発行
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode('ginpay')}
+            style={{
+              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(201,162,74,0.5)', cursor: 'pointer',
+            }}
+          >
+            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
+              銀Pay チャージ
+            </p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
+              会員QR・名前で探して現金チャージ
             </p>
           </button>
 
@@ -149,7 +167,7 @@ export function StaffHome() {
   }
 
   // 予約台帳は一日中表示する明るい画面なので、戻るバーも明るく揃える
-  const light = mode === 'reservations' || mode === 'clients'
+  const light = mode === 'reservations' || mode === 'clients' || mode === 'ginpay'
 
   return (
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: light ? '#FFFFFF' : '#080302' }}>
@@ -182,6 +200,8 @@ export function StaffHome() {
             ? <StaffReservationsScreen />
             : mode === 'clients'
             ? <StaffClientsScreen />
+            : mode === 'ginpay'
+            ? <StaffGinpayScreen />
             : mode === 'recovery'
               ? <AdminScreen key="staff-recovery" mode="recovery" />
               : <StaffInventoryScreen ref={inventoryRef} />}
