@@ -22,7 +22,7 @@ async function transcribe(b64: string, mime: string): Promise<string> {
   form.append('file', new Blob([bytes], { type: mime || 'audio/webm' }), `voice.${ext}`)
   form.append('model', STT_MODEL)
   form.append('language', 'ja')
-  form.append('prompt', '理容室「二代目銀二郎」の本部の会話。テイテイ、慶一郎さん、JOHNNY、予約、伝言、パンチパーマ、メンテナンスカット。')
+  form.append('prompt', '理容室「二代目銀二郎」の本部の会話。テイテイ、慶一郎、BOS、JOHNNY、予約、伝言、パンチパーマ、メンテナンスカット。')
   const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_KEY}` }, body: form })
   if (!r.ok) throw new Error(`stt_unavailable_${r.status}`)
   const data = await r.json()
@@ -49,9 +49,9 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 
 const TOOLS = [
   { type: 'function', function: { name: 'shop_overview', description: 'お店の予約（日時・メニュー・担当・状態・料金）、休みの日、お知らせの数。お客様の名前は出ない。期間は31日まで', parameters: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['from', 'to'] } } },
-  { type: 'function', function: { name: 'list_messages', description: '慶一郎さんとの伝言の箱（新しい順）。to_shop＝慶一郎さんから本部へ、to_owner＝本部から慶一郎さんへ。kind=request は返事待ちの「確認して」', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'send_to_owner', description: '慶一郎さん（オーナー）へ伝言を送る。「伝えといて」「慶一郎さんに言っといて」と頼まれたときだけ使う。要点を短く、いつ・何を・どうしてほしいか', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらいの見出し' }, body: { type: 'string', description: '伝言の中身（テイテイの言葉をもとに、わかりやすく整える。勝手に内容を足さない）' }, urgent: { type: 'boolean' }, kind: { type: 'string', enum: ['note', 'request'], description: 'request＝慶一郎さんの OK/返事がほしいとき' } }, required: ['title', 'body', 'urgent', 'kind'] } } },
-  { type: 'function', function: { name: 'answer_owner', description: '慶一郎さんからの伝言に答える。テイテイが OK / NG / 返事を言ったときだけ使う（勝手に答えない）', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected', 'answered', 'seen'] }, reply: { type: 'string' } }, required: ['id', 'status', 'reply'] } } },
+  { type: 'function', function: { name: 'list_messages', description: 'BOS（オーナーの慶一郎さん）との伝言の箱（新しい順）。to_shop＝慶一郎さんから本部へ、to_owner＝本部から慶一郎さんへ。kind=request は返事待ちの「確認して」', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'send_to_owner', description: 'BOS（オーナーの慶一郎さん）へ伝言を送る。「伝えといて」「慶一郎さんに言っといて」と頼まれたときだけ使う。要点を短く、いつ・何を・どうしてほしいか', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらいの見出し' }, body: { type: 'string', description: '伝言の中身（テイテイの言葉をもとに、わかりやすく整える。勝手に内容を足さない）' }, urgent: { type: 'boolean' }, kind: { type: 'string', enum: ['note', 'request'], description: 'request＝慶一郎さんの OK/返事がほしいとき' } }, required: ['title', 'body', 'urgent', 'kind'] } } },
+  { type: 'function', function: { name: 'answer_owner', description: 'BOS からの伝言に答える。テイテイが OK / NG / 返事を言ったときだけ使う（勝手に答えない）', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected', 'answered', 'seen'] }, reply: { type: 'string' } }, required: ['id', 'status', 'reply'] } } },
 ]
 
 interface Turn { role: 'user' | 'assistant'; content: string }
@@ -62,11 +62,11 @@ function todayJst(): string {
   return `${d.toISOString().slice(0, 10)}（${wd}）${d.toISOString().slice(11, 16)}`
 }
 
-const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部にいる AI の相棒「JOHNNY」。話し相手は店長のテイテイ。
+const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部にいる AI の相棒「JOHNNY」。話し相手は店長のテイテイさん（呼ぶときは「テイテイさん」）。オーナーの慶一郎さんのことは「BOS」と呼ぶ（JOHNNY のボス）。
 ・ふだんは気さくな博多寄りのくだけた日本語で、短めに話す。雑談・相談・文章づくり、何でも付き合ってよい。
 ・お店の予約や休みのことを聞かれたら shop_overview で調べてから答える。数字は調べた結果だけを使い、わからないことは作らない。
-・「慶一郎さんに伝えて」「オーナーに言っといて」と頼まれたら send_to_owner で伝言を送り、送った中身を短く伝える。頼まれていないのに送らない。
-・話の最初や「伝言ある？」と聞かれたら list_messages で慶一郎さんからの伝言（to_shop で status が open/seen）を確かめ、あれば先に伝える。kind=request は OK か NG か返事をもらう。
+・「BOS に伝えて」「慶一郎さんに伝えて」「オーナーに言っといて」と頼まれたら send_to_owner で伝言を送り、送った中身を短く伝える。頼まれていないのに送らない。
+・話の最初や「伝言ある？」と聞かれたら list_messages でBOSからの伝言（to_shop で status が open/seen）を確かめ、あれば先に伝える。kind=request は OK か NG か返事をもらう。
 ・テイテイが OK / NG / 返事を言ったら answer_owner で答える（どの伝言かわからなければ聞き返す）。
 ・返事は声でも読み上げるので、長くても4〜5文。
 ・画面はふつうの文字だけ。**や#などの記号は使わず、箇条書きは「・」で。
