@@ -229,3 +229,11 @@ dialog::backdrop { background:#22223033; backdrop-filter:blur(3px); }
 .hq-app.hq-app-sb .hq-screen { flex:1; min-width:0; min-height:0; zoom:1; }
 .hq-sb-frame { display:block; width:100%; height:100%; border:0; background:#f2f3f2; }
 .hq-sb-preview { padding:24px; color:var(--hq-sub); }
+
+/* どの画面からでも JOHNNY を呼べる光る球のボタン */
+.hq-johnny-fab { position:fixed; right:18px; bottom:calc(env(safe-area-inset-bottom) + 18px); z-index:40; display:inline-flex; align-items:center; gap:10px; padding:8px 16px 8px 8px; border-radius:999px; background:radial-gradient(circle at 30% 30%, #0d2340, #03070f 75%); border:1px solid rgba(95,212,255,.45); color:#cfefff; font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.24em; text-decoration:none; box-shadow:0 10px 30px -8px rgba(20,90,200,.7), 0 0 24px rgba(95,212,255,.25); }
+.hq-johnny-fab-core { position:relative; width:30px; height:30px; border-radius:50%; background:radial-gradient(circle, #fff 0 12%, #9fe6ff 22%, #2a8cff 52%, rgba(20,60,140,.2) 72%, transparent 74%); animation:hq-johnny-breathe 4.2s ease-in-out infinite; }
+.hq-johnny-fab-core::after { content:""; position:absolute; inset:-5px; border-radius:50%; border:1px solid rgba(95,212,255,.55); animation:hq-johnny-ring 4.2s ease-in-out infinite; }
+@keyframes hq-johnny-breathe { 0%,100% { transform:scale(.9); filter:brightness(.9); } 50% { transform:scale(1.05); filter:brightness(1.25); } }
+@keyframes hq-johnny-ring { 0%,100% { transform:scale(1); opacity:.8; } 50% { transform:scale(1.25); opacity:.15; } }
+@media (prefers-reduced-motion: reduce) { .hq-johnny-fab-core, .hq-johnny-fab-core::after { animation:none; } }
