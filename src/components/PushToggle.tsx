@@ -11,7 +11,8 @@ export function PushToggle({ tone }: { tone: 'gold' | 'mono' }) {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => { void pushState().then(setState) }, [])
+  // 調べるのに失敗しても（古い端末など）、ボタンは出す
+  useEffect(() => { pushState().then(setState, () => setState('off')) }, [])
   if (!state || state === 'unsupported') return null
   if (tone === 'mono' && state === 'on') return null
 
