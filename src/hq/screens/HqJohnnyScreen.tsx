@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, History, Keyboard, Mic, Send, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { JohnnyStage, type StageMode } from '../components/JohnnyStage'
 import { stageLayout } from '../components/stageLayout'
-import { answerMessage, askJohnny, listMessages, STATUS_LABEL, type ChatTurn, type HqMessage } from '../hqJohnnyStore'
+import { answerMessage, askJohnny, closeTask, listMessages, listTasks, STATUS_LABEL, type ChatTurn, type HqMessage, type HqTask } from '../hqJohnnyStore'
 import { recordUtterance, speak, unlockAudio, voiceLevel } from '../hqVoice'
 import { HQ_TABS } from '../hqMockData'
 import './hqJohnny.css'
@@ -55,6 +55,7 @@ function useClock() {
 
 export function HqJohnnyScreen() {
   const [messages, setMessages] = useState<HqMessage[] | null>(null)
+  const [tasks, setTasks] = useState<HqTask[]>([])
   const [turns, setTurns] = useState<ChatTurn[]>(loadChat)
   const [mode, setMode] = useState<StageMode>('idle')
   const [heard, setHeard] = useState('')
@@ -68,7 +69,7 @@ export function HqJohnnyScreen() {
   const now = useClock()
   const textTop = useTextTop()
 
-  const reload = useCallback(() => { listMessages().then(setMessages, () => {}) }, [])
+  const reload = useCallback(() => { listMessages().then(setMessages, () => {}); listTasks().then(setTasks, () => {}) }, [])
   useEffect(() => {
     reload()
     const t = window.setInterval(reload, 30_000)
@@ -83,6 +84,7 @@ export function HqJohnnyScreen() {
 
   const inbox = (messages ?? []).filter(m => m.direction === 'to_shop')
   const waiting = inbox.filter(m => m.status === 'open' || m.status === 'seen')
+  const soon = tasks.filter(t => t.days_left !== null && t.days_left <= 2)
 
   const respond = useCallback(async (input: string | { b64: string; mime: string }, signal: AbortSignal) => {
     setMode('thinking')
@@ -179,7 +181,7 @@ export function HqJohnnyScreen() {
         ) : (
           <>
             <h2 className="hqj-title">{greeting(now.hour)}</h2>
-            <p className="hqj-sub">{waiting.length ? `BOS から伝言が${waiting.length}件あるよ。` : 'マイクを押して、何でも話しかけてね。'}</p>
+            <p className="hqj-sub">{waiting.length ? `BOS から伝言が${waiting.length}件あるよ。` : soon.length ? `期限が近いやることが${soon.length}件あるよ（${soon[0].title}）。` : tasks.length ? `やることが${tasks.length}件あるよ。右上の履歴から見れるよ。` : 'マイクを押して、何でも話しかけてね。'}</p>
           </>
         ))}
         {error && <p role="alert" className="hqj-error">{error}</p>}
@@ -218,6 +220,20 @@ export function HqJohnnyScreen() {
             <button type="button" className="hqj-icon-btn" onClick={() => setHistoryOpen(false)} aria-label="閉じる"><X size={20} /></button>
           </div>
           <div className="hqj-drawer-body">
+            <h4>やること</h4>
+            {!tasks.length && <p className="hqj-muted">いまは、やることはありません。</p>}
+            <div style={{ display: 'grid', gap: 10 }}>
+              {tasks.map(t => (
+                <div key={t.id} className={'hqj-item' + (t.days_left !== null && t.days_left < 0 ? ' is-urgent' : '')}>
+                  <div className="hqj-item-head">
+                    <strong>{t.title}</strong>
+                    <span className="hqj-time">{t.assignee}{t.due_date ? `・${t.due_date.slice(5).replace('-', '/')}まで` : ''}{t.days_left !== null && t.days_left < 0 ? '（過ぎてる）' : t.days_left === 0 ? '（今日）' : ''}</span>
+                  </div>
+                  {t.detail && <p className="hqj-item-body" style={{ color: 'var(--hqj-fg-2)' }}>{t.detail}</p>}
+                  <button type="button" className="hqj-btn hqj-btn-primary" style={{ marginTop: 8 }} onClick={() => void closeTask(t.id).then(reload)}>終わった（BOS に知らせる）</button>
+                </div>
+              ))}
+            </div>
             <h4>会話</h4>
             {!turns.length && <p className="hqj-muted">まだ会話はありません。</p>}
             <div className="hqj-chat">
