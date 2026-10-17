@@ -24,6 +24,7 @@ import { JohnnyRider, type OrbState } from './JohnnyRider'
 import { planCompanion } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { takeAiTurn } from './aiQuota'
+import { PushToggle } from '../../components/PushToggle'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
 import { TICKET_TYPE_LABELS } from '../../data/ticket'
@@ -956,6 +957,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
             )}
 
             {step.k === 'done' && <ReservationSummary r={step.reservation} />}
+            {step.k === 'done' && <PushToggle tone="mono" />}
             {step.k === 'done' && step.companion && <ReservationSummary r={step.companion} companion />}
 
             {(step.k === 'confirmCancel' || step.k === 'cancelling' || step.k === 'cancelled') && <ReservationSummary r={step.reservation} />}

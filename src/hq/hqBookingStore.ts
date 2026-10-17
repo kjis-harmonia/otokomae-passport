@@ -131,6 +131,11 @@ export const getBookingMasters = () => callHqRpc<BookingMasters>('hq_booking_mas
 export const updateBookingSettings = (p: Partial<BookingSettings>) => callHqRpc<BookingSettings>('hq_update_booking_settings', { p })
 /** お客様アプリからの予約を始める・止める */
 export const setAppBooking = (enabled: boolean) => callHqRpc<BookingSettings>('hq_set_app_booking', { p_enabled: enabled })
+
+/** JOHNNY の先回りのお知らせ（オン・オフ、1日に送る人数の上限）。subscribers：受け取っている人、sent_7d：この7日に送った数 */
+export interface NotifySettings { enabled: boolean; daily_cap: number; subscribers: number; sent_7d: number }
+export const getNotify = () => callHqRpc<NotifySettings>('hq_get_notify', {})
+export const setNotify = (enabled: boolean, dailyCap: number) => callHqRpc<NotifySettings>('hq_set_notify', { p_enabled: enabled, p_daily_cap: dailyCap })
 export const upsertStaffMember = (p: Partial<StaffMember>) => callHqRpc<StaffMember>('hq_upsert_staff_member', { p })
 export const setBookingCapacity = (staffId: string, capacity: number) =>
   callHqRpc<{ ok: true }>('hq_set_booking_capacity', { p_staff_id: staffId, p_capacity: capacity })
