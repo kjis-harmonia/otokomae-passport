@@ -91,6 +91,12 @@ export interface SalesDay {
   count: number
   total: number
   voided: number
+  /** 確定した会計の支払方法ごと（DB が古いと無い） */
+  by_method?: { method: string; count: number; total: number }[]
+  /** 銀Pay：会計で払われた額（うち特典分）と、その日の店頭チャージ（受け取った現金・付けた特典） */
+  ginpay?: { paid: number; paid_bonus: number; charge_cash: number; charge_bonus: number; charge_count: number }
+  /** その日にレジに入った現金（現金の会計＋店頭チャージの現金） */
+  cash_in?: number
   rows: { id: string; status: 'completed' | 'voided'; completed_at: string; customer_name: string | null; stylist_name: string | null; payment_method: string | null; total: number; items: string | null; has_reservation: boolean }[]
 }
 
