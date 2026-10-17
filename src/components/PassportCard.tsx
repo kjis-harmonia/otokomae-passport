@@ -4,6 +4,7 @@ import { getUserId } from '../utils/userId'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
+import { couponPlanForQr } from '../utils/bookingCoupons'
 import {
   CURRENT_RESERVATION_CHANGED_EVENT,
   loadCurrentReservation,
@@ -65,6 +66,14 @@ export function PassportCard() {
     getCustomerByUserId(userId).then(d => setCustomerData(d ?? null))
   }, [userId])
 
+  // JOHNNY の予約で選んだ券が変わったら QR を作り直す
+  const [, setCouponTick] = useState(0)
+  useEffect(() => {
+    const bump = () => setCouponTick(n => n + 1)
+    window.addEventListener('ginjiro:coupon-plan-changed', bump)
+    return () => window.removeEventListener('ginjiro:coupon-plan-changed', bump)
+  }, [])
+
   useEffect(() => {
     const refreshReservation = () => setCurrentReservation(loadCurrentReservation())
     window.addEventListener(CURRENT_RESERVATION_CHANGED_EVENT, refreshReservation)
@@ -87,6 +96,7 @@ export function PassportCard() {
     userId,   // 完全 ID を必ず保持
     name: memberName,
     reservation: toCurrentReservationQrPayload(currentReservation),
+    t: couponPlanForQr(),   // JOHNNY の予約で選んだ券（予約の日だけ）
   })
 
   return (
