@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { CalendarDays, ChevronLeft, ChevronRight, LifeBuoy, Package, ScanLine, Users, Wallet } from 'lucide-react'
 import { AdminScreen } from './AdminScreen'
 import { StaffInventoryScreen } from './StaffInventoryScreen'
 import { StaffReservationsScreen } from './StaffReservationsScreen'
 import { StaffClientsScreen } from './StaffClientsScreen'
 import { StaffGinpayScreen } from './StaffGinpayScreen'
 import type { PendingChangeSummary, StaffInventoryHandle } from './StaffInventoryScreen'
+import './staffTerminal.css'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -13,6 +15,7 @@ type StaffMode = 'menu' | 'shop' | 'ginpay' | 'reservations' | 'clients' | 'inve
 /**
  * /staff を開いた直後の分岐画面 + 戻るナビゲーション。
  * 店舗端末は日常業務用のQR読み取り、在庫管理は店販管理、会員復旧は必要時だけ使う導線。
+ * メニューは iOS の設定アプリのような一覧（毎日の業務／管理の2つにまとめる）。
  */
 export function StaffHome() {
   const [mode, setMode] = useState<StaffMode>('menu')
@@ -43,124 +46,23 @@ export function StaffHome() {
 
   if (mode === 'menu') {
     return (
-      <div style={{
-        minHeight: '100dvh',
-        background: 'linear-gradient(180deg, #080302 0%, #0A0403 60%, #090304 100%)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: '0 24px',
-      }}>
-        <p style={{ fontSize: 10, letterSpacing: '0.32em', color: '#e5e5e5', marginBottom: 6 }}>
-          STAFF TERMINAL
-        </p>
-        <h1 style={{
-          fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8',
-          letterSpacing: '0.1em', marginBottom: 48,
-        }}>
-          銀二郎端末
-        </h1>
+      <div className="st-app">
+        <div className="st-menu">
+          <header className="st-head"><h1><span className="st-wordmark">銀二郎</span><span className="st-mark">端末</span></h1></header>
 
-        <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <button
-            type="button"
-            onClick={() => setMode('shop')}
-            style={{
-              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-              border: '1px solid rgba(201,162,74,0.5)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#ffffff', letterSpacing: '0.06em', marginBottom: 6 }}>
-              店舗端末
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
-              QR読み込み・来店更新・割引券発行
-            </p>
-          </button>
+          <h2 className="st-group-title">毎日の業務</h2>
+          <div className="st-group">
+            <MenuRow icon={<ScanLine size={20} />} gold title="店舗端末" sub="会員QR・来店・割引券" onClick={() => setMode('shop')} />
+            <MenuRow icon={<Wallet size={20} />} title="銀Pay チャージ" sub="現金を受け取ってチャージ" onClick={() => setMode('ginpay')} />
+            <MenuRow icon={<CalendarDays size={20} />} title="予約" sub="予約台帳・電話予約" onClick={() => setMode('reservations')} />
+            <MenuRow icon={<Users size={20} />} title="顧客" sub="顧客一覧・顧客台帳" onClick={() => setMode('clients')} />
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setMode('ginpay')}
-            style={{
-              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(201,162,74,0.5)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
-              銀Pay チャージ
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-              会員QR・名前で探して現金チャージ
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMode('reservations')}
-            style={{
-              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.22)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
-              予約
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-              予約台帳・電話予約の登録
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMode('clients')}
-            style={{
-              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.22)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
-              顧客
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-              顧客一覧・顧客台帳
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMode('inventory')}
-            style={{
-              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(201,162,74,0.4)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#C9A24A', letterSpacing: '0.06em', marginBottom: 6 }}>
-              在庫管理
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-              店販・在庫・発注確認
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMode('recovery')}
-            style={{
-              width: '100%', padding: '20px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'rgba(255,255,255,0.025)',
-              border: '1px solid rgba(201,162,74,0.24)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
-              会員復旧
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.52)' }}>
-              機種変更・データ移管
-            </p>
-          </button>
+          <h2 className="st-group-title">管理</h2>
+          <div className="st-group">
+            <MenuRow icon={<Package size={20} />} title="在庫管理" sub="店販・在庫・発注" onClick={() => setMode('inventory')} />
+            <MenuRow icon={<LifeBuoy size={20} />} title="会員復旧" sub="機種変更・データ移管" onClick={() => setMode('recovery')} />
+          </div>
         </div>
       </div>
     )
@@ -170,7 +72,10 @@ export function StaffHome() {
   const light = mode === 'reservations' || mode === 'clients' || mode === 'ginpay'
 
   return (
-    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: light ? '#FFFFFF' : '#080302' }}>
+    <div className={mode === 'ginpay' ? 'st-app' : undefined} style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: mode === 'ginpay' ? undefined : light ? '#FFFFFF' : '#080302' }}>
+      {light ? (
+        <div className="st-app st-bar"><button type="button" className="st-back" onClick={handleBackClick}><ChevronLeft size={24} />メニュー</button></div>
+      ) : (
       <div style={{
         position: 'sticky', top: 0, zIndex: 650,
         background: light ? '#FFFFFF' : '#000000', borderBottom: light ? '1px solid #E7E7E3' : '1px solid rgba(201,162,74,0.2)',
@@ -192,6 +97,7 @@ export function StaffHome() {
           ← 戻る
         </button>
       </div>
+      )}
 
       <div style={{ flex: '1 1 auto' }}>
         {mode === 'shop'
@@ -247,5 +153,15 @@ export function StaffHome() {
         </div>
       )}
     </div>
+  )
+}
+
+function MenuRow({ icon, title, sub, gold, onClick }: { icon: ReactNode; title: string; sub: string; gold?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="st-row" onClick={onClick}>
+      <span className={gold ? 'st-tile st-tile-gold' : 'st-tile'}>{icon}</span>
+      <span className="st-row-main"><strong>{title}</strong><small>{sub}</small></span>
+      <ChevronRight size={20} />
+    </button>
   )
 }
