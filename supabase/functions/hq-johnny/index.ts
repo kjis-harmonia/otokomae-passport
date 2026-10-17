@@ -58,6 +58,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'shop_overview', description: 'お店の予約（日時・メニュー・担当・状態・料金）、休みの日、お知らせの数。お客様の名前は出ない。期間は31日まで', parameters: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['from', 'to'] } } },
   { type: 'function', function: { name: 'list_messages', description: 'BOS（オーナーの慶一郎さん）との伝言の箱（新しい順）。to_shop＝慶一郎さんから本部へ、to_owner＝本部から慶一郎さんへ。kind=request は返事待ちの「確認して」', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'send_to_owner', description: 'BOS（オーナーの慶一郎さん）へ伝言を送る。「伝えといて」と頼まれたとき、またはテイテイさんとの話で何かが決まったとき（報告）に使う。要点を短く、いつ・何を・どうしてほしいか', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらいの見出し' }, body: { type: 'string', description: '伝言の中身（テイテイの言葉をもとに、わかりやすく整える。勝手に内容を足さない）' }, urgent: { type: 'boolean' }, kind: { type: 'string', enum: ['note', 'request'], description: 'request＝BOS の OK/返事がほしいとき' }, report: { type: 'boolean', description: 'true＝話で決まったことの報告（見出しに【報告】が付く）' } }, required: ['title', 'body', 'urgent', 'kind', 'report'] } } },
+  { type: 'function', function: { name: 'add_task', description: '本部の「やること」に登録する。決まったことに作業（ホットペッパーやアプリへの登録・準備・連絡など）があるときに使う。誰が・いつまでに を入れる', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらい。例：ホットペッパーに新メニュー登録' }, detail: { type: 'string', description: '中身（名前・料金・文面など）' }, assignee: { type: 'string', description: 'やる人。テイテイ / BOS など。わからなければテイテイ' }, due: { type: 'string', description: '期限 YYYY-MM-DD。開始日があれば、その前日までに' }, source_message_id: { type: 'string', description: 'もとになった報告の伝言 id（send_to_owner の結果の id）' } }, required: ['title', 'assignee'] } } },
+  { type: 'function', function: { name: 'list_tasks', description: '本部の「やること」（開いているもの。days_left＝期限まで何日。マイナスは過ぎている）', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'complete_task', description: '「やること」を終わり（done）またはやめた（cancelled）にする。終わったら BOS へ【完了】の伝言が自動で届く。テイテイさんが「終わった」「登録した」と言ったときに使う', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['done', 'cancelled'] }, note: { type: 'string', description: 'ひとこと（任意）' } }, required: ['id', 'status'] } } },
   { type: 'function', function: { name: 'open_screen', description: '本部の画面を開いて見せる。「今日の予約見せて」「予約表出して」「売上見せて」「在庫は？」など、画面を見たいと言われたときに使う', parameters: { type: 'object', properties: { screen: { type: 'string', enum: Object.keys(SCREENS), description: Object.entries(SCREENS).map(([k, v]) => `${k}=${v}`).join(' / ') } }, required: ['screen'] } } },
   { type: 'function', function: { name: 'answer_owner', description: 'BOS からの伝言に答える。テイテイが OK / NG / 返事を言ったときだけ使う（勝手に答えない）', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected', 'answered', 'seen'] }, reply: { type: 'string' } }, required: ['id', 'status', 'reply'] } } },
 ]
@@ -84,6 +87,10 @@ const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部に�
   ・中身は次の形で短く：決まったこと／いつから／やること（ホットペッパーやアプリへの登録・準備など。誰がやるか決まっていれば名前も）／BOS に決めてほしいこと。
   ・BOS の OK が必要なこと（料金・お金がかかること・掲載内容の最終確認など）がある時は kind を request にする。それ以外は note。
   ・同じ件を二度送らない。
+・やること：決まったことに作業があれば、報告のあと add_task で「誰が・いつまでに」を登録する（source_message_id に報告の id）。登録したら「〇〇は△日までにテイテイさんのやることに入れとくね」と言う。
+・先回り：話の最初（あいさつ・「何かある？」など）には list_messages と list_tasks を確かめ、BOS からの伝言、BOS の返事（approved / rejected）、期限が近い（2日以内）・過ぎたやることを先に短く伝える。
+・BOS の OK（approved）が来た報告は、そのことを伝える同じ返事の中で、次の一手まで出す（聞かずに作って見せる）。例：新メニューならホットペッパー用の紹介文の下書き（名前・料金・所要時間・50〜100字の紹介文）を作って見せる。NG（rejected）なら BOS の返事を伝えて、どうするか聞く。
+・テイテイさんが「終わった」「登録した」と言ったら complete_task で終わりにし、「BOS に完了を知らせといたよ」と言う。complete_task が BOS へ【完了】を自動で送るので、send_to_owner で同じことを送らない。
 ・話の最初や「伝言ある？」と聞かれたら list_messages でBOSからの伝言（to_shop で status が open/seen）を確かめ、あれば先に伝える。kind=request は OK か NG か返事をもらう。
 ・テイテイが OK / NG / 返事を言ったら answer_owner で答える（どの伝言かわからなければ聞き返す）。
 ・返事は声でも読み上げるので、長くても4〜5文。
@@ -144,6 +151,9 @@ Deno.serve(async (req) => {
         const title = String(args.title ?? '').replace(/^【報告】/, '')
         return await rpc('hq_message_send', { p_hq: hq, p_title: args.report ? `【報告】${title}` : title, p_body: args.body, p_urgent: !!args.urgent, p_kind: args.kind === 'request' ? 'request' : 'note' })
       }
+      case 'add_task': changed = true; return await rpc('hq_task_add', { p_hq: hq, p_title: args.title, p_detail: args.detail ?? null, p_assignee: args.assignee ?? 'テイテイ', p_due: typeof args.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.due) ? args.due : null, p_source_message_id: typeof args.source_message_id === 'string' && /^[0-9a-f-]{36}$/.test(args.source_message_id) ? args.source_message_id : null })
+      case 'list_tasks': return await rpc('hq_tasks_list', { p_hq: hq, p_include_done: false })
+      case 'complete_task': changed = true; return await rpc('hq_task_close', { p_hq: hq, p_id: args.id, p_status: args.status === 'cancelled' ? 'cancelled' : 'done', p_note: args.note ?? null })
       case 'open_screen': if (typeof args.screen === 'string' && args.screen in SCREENS) { open = args.screen; return { ok: true, opened: SCREENS[args.screen] } } return { error: 'unknown_screen' }
       case 'answer_owner': changed = true; return await rpc('hq_message_answer', { p_hq: hq, p_id: args.id, p_status: args.status, p_reply: args.reply || null })
       default: return { error: 'unknown_tool' }

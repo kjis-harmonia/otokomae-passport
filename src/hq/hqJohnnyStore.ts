@@ -37,4 +37,10 @@ export async function askJohnny(input: string | { b64: string; mime: string }, h
   return { heard: data.heard, reply: data.reply, changed: !!data.changed, open: typeof data.open === 'string' ? data.open : undefined }
 }
 
+/** 本部の「やること」（days_left＝期限まで何日。マイナスは過ぎている） */
+export interface HqTask { id: string; title: string; detail: string | null; assignee: string; due_date: string | null; status: 'open' | 'done' | 'cancelled'; days_left: number | null }
+export const listTasks = () => callHqRpc<HqTask[]>('hq_tasks_list', { p_include_done: false })
+/** 終わり（BOS へ【完了】が自動で届く） */
+export const closeTask = (id: string, status: 'done' | 'cancelled' = 'done') => callHqRpc<HqTask | { error: string }>('hq_task_close', { p_id: id, p_status: status, p_note: null })
+
 export const STATUS_LABEL: Record<HqMessage['status'], string> = { open: '未読', seen: '見た', approved: 'OK', rejected: 'NG', answered: '返事あり' }
