@@ -24,6 +24,7 @@ import { JohnnyRider, type OrbState } from './JohnnyRider'
 import { planCompanion } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
+import { BGM_PAUSE_EVENT, BGM_RESUME_EVENT } from '../../hooks/useBgm'
 
 // ── 見た目（黒・白・グレーだけ） ─────────────────────────────────
 
@@ -183,6 +184,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   const ask = useCallback((text: string, listenAfter = true) => {
     speak(text, () => { if (listenAfter && voice.listen !== 'unsupported' && voice.listen !== 'denied') startListening() })
   }, [speak, startListening, voice.listen])
+
+  // 話しているあいだは銀二郎の BGM を止める（閉じたら元に戻す）
+  useEffect(() => {
+    window.dispatchEvent(new Event(BGM_PAUSE_EVENT))
+    return () => { window.dispatchEvent(new Event(BGM_RESUME_EVENT)) }
+  }, [])
 
   // ── 読み込み（引き継ぎのあと・再試行で読み直す） ──
   const [loadKey, setLoadKey] = useState(0)

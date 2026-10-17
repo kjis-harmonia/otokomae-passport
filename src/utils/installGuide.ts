@@ -32,6 +32,16 @@ export function detect(): InstallKind {
   return null
 }
 
+/** LINE のアプリ内ブラウザで開いたら、自動で Safari（外部ブラウザ）で開き直す（?openExternalBrowser=1 は LINE の決まり）。
+ *  一度付けて開き直しても LINE のままなら、それ以上は繰り返さない */
+export function openInSafariIfLine(): void {
+  if (typeof window === 'undefined' || !/Line\//i.test(navigator.userAgent)) return
+  const u = new URL(window.location.href)
+  if (u.searchParams.has('openExternalBrowser')) return
+  u.searchParams.set('openExternalBrowser', '1')
+  window.location.replace(u.toString())
+}
+
 /** マイページに「ホーム画面に追加」を出すか（ホーム画面から開いていない、案内できる端末） */
 export function canShowInstallGuide(): boolean {
   return detect() !== null

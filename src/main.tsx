@@ -8,6 +8,7 @@ import { CMSApp } from './cms/CMSApp.tsx'
 import { StaffPinGate } from './screens/StaffPinGate.tsx'
 import { seedInitialStyles } from './utils/styleStorage'
 import { setDataAuthMode } from './utils/dataAuthMode'
+import { openInSafariIfLine } from './utils/installGuide'
 
 seedInitialStyles()
 
@@ -79,6 +80,8 @@ const isStaff = detectStaff()
 const isCMS   = !isStaff && detectCMS()
 // 店舗端末は staff_* RPC、お客様アプリは公開読み取り／顧客セッションでデータを扱う
 setDataAuthMode(isStaff ? 'staff' : 'customer')
+// お客様アプリを LINE の中で開いたら、Safari で開き直す（ホーム画面に追加できるように）
+if (!isStaff && !isCMS) openInSafariIfLine()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
