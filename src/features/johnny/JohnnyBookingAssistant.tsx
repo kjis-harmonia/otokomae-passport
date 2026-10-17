@@ -23,6 +23,7 @@ import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvis
 import { JohnnyRider, type OrbState } from './JohnnyRider'
 import { planCompanion } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
+import { takeAiTurn } from './aiQuota'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
 import { TICKET_TYPE_LABELS } from '../../data/ticket'
@@ -495,7 +496,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     stopListening()
     setStep({ k: 'searching', label: '考えています' })
     const history = turnsRef.current
-    const a = await api.agent(text, history, shownFor(s))
+    // 1日の上限を超えたら、その日は決まった規則の JOHNNY
+    const a = takeAiTurn() ? await api.agent(text, history, shownFor(s)) : null
     const next = a ? await stepFromAgent(a) : null
     if (!a || !next) {
       aiOnRef.current = false
@@ -645,7 +647,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     const s = stepRef.current
     const partyStep = s.k === 'companionMenu' || s.k === 'confirmParty'
     if (!AI_STEPS.has(s.k) && !partyStep) return
-    const transcribeOnly = !aiOnRef.current || partyStep || s.k === 'confirm' || s.k === 'confirmCancel'
+    let transcribeOnly = !aiOnRef.current || partyStep || s.k === 'confirm' || s.k === 'confirmCancel'
+    if (!transcribeOnly && !takeAiTurn()) { aiOnRef.current = false; transcribeOnly = true }
     setVoiceNote(null)
     setHeard('')
     setStep({ k: 'searching', label: transcribeOnly ? '聞き取っています' : '考えています' })
