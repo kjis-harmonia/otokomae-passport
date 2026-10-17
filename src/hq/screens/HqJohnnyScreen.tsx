@@ -6,6 +6,7 @@ import { JohnnyStage, type StageMode } from '../components/JohnnyStage'
 import { stageLayout } from '../components/stageLayout'
 import { answerMessage, askJohnny, listMessages, STATUS_LABEL, type ChatTurn, type HqMessage } from '../hqJohnnyStore'
 import { recordUtterance, speak, unlockAudio, voiceLevel } from '../hqVoice'
+import { HQ_TABS } from '../hqMockData'
 import './hqJohnny.css'
 
 const CHAT_KEY = 'ginjiro_hq_johnny_chat'
@@ -98,7 +99,10 @@ export function HqJohnnyScreen() {
       setMode('speaking')
       await speak(r.reply, signal)
     }
-    if (!signal.aborted) setMode('idle')
+    if (signal.aborted) return
+    setMode('idle')
+    // 執事：頼まれた画面を開く（この端末で使える画面だけ）
+    if (r.open && HQ_TABS.some(t => t.id === r.open)) window.location.hash = r.open
   }, [turns, voiceOn, reload])
 
   const stop = () => { abort.current?.abort(); abort.current = null; setMode('idle') }

@@ -39,7 +39,7 @@ const DESCRIPTIONS: Record<HqTab, string> = {
 }
 
 function currentTab(): HqTab {
-  return HQ_TABS.find(t => t.id === window.location.hash.slice(1))?.id ?? 'dashboard'
+  return HQ_TABS.find(t => t.id === window.location.hash.slice(1))?.id ?? 'johnny'
 }
 
 export function HeadquartersApp() {
@@ -112,6 +112,7 @@ export function HeadquartersApp() {
       <main className="hq-content" id="hq-content" tabIndex={-1}>{!isSb && <div className="hq-page-heading"><div><h1>{label}</h1><p>{DESCRIPTIONS[tab]}</p></div><button className="hq-button hq-button-quiet" onClick={() => setRefreshKey(n => n + 1)}>再読み込み</button></div>}<Suspense fallback={<div className="hq-loading" role="status">データを読み込んでいます…</div>}><div key={tab + '-' + refreshKey} className="hq-screen">{screen()}</div></Suspense>{!isSb && <footer className="hq-content-footer"><span>GINJIRO HEADQUARTERS</span><span>日本標準時（JST）</span></footer>}</main>
     </div>
     <dialog ref={mobileDialog} className="hq-mobile-drawer" onClose={() => setMenuOpen(false)} onClick={event => { if (event.target === event.currentTarget) setMenuOpen(false) }}><div className="hq-mobile-drawer-inner"><button className="hq-icon-button hq-drawer-close" onClick={() => setMenuOpen(false)} aria-label="本部メニューを閉じる"><X size={20} /></button>{navigation()}</div></dialog>
+    {tab !== 'johnny' && <a className="hq-johnny-fab" href="#johnny" aria-label="JOHNNY を呼ぶ"><span className="hq-johnny-fab-core" aria-hidden="true" /><span className="hq-johnny-fab-label">JOHNNY</span></a>}
     <HqCommandMenu open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={navigate} />
     <dialog ref={helpDialog} className="hq-help-dialog" onClose={() => setHelpOpen(false)}><button className="hq-icon-button hq-dialog-close" onClick={() => setHelpOpen(false)} aria-label="使い方を閉じる"><X size={19} /></button><span className="hq-eyebrow">銀二郎本部</span><h2>必要な情報に、すぐ。</h2><p>「概況」で店舗のいまを確認し、各項目から詳しい情報へ進めます。</p><ul><li>売上は確定した会計だけを集計します。</li><li>期間と日付を切り替えて振り返れます。</li><li>検索ボタン、または ⌘ / Ctrl + K でページを探せます。</li></ul><button className="hq-button hq-button-primary" onClick={() => { setHelpOpen(false); navigate('dashboard') }}>概況をみる<ArrowUpRight size={15} /></button></dialog>
   </div>
