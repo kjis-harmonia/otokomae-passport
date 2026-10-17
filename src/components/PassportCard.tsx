@@ -5,6 +5,8 @@ import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/
 import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
 import { couponPlanForQr } from '../utils/bookingCoupons'
+import { PushToggle } from './PushToggle'
+import { canShowInstallGuide, SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 import {
   CURRENT_RESERVATION_CHANGED_EVENT,
   loadCurrentReservation,
@@ -396,6 +398,28 @@ export function PassportCard() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* ── JOHNNY のお知らせ・ホーム画面に追加 ── */}
+      <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+        <PushToggle tone="gold" />
+        {canShowInstallGuide() && (
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(SHOW_INSTALL_GUIDE_EVENT))}
+            style={{
+              width: '100%', padding: '15px 18px', borderRadius: 14, textAlign: 'left', cursor: 'pointer',
+              background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(201,162,74,0.28)', color: '#F2E6C8',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            }}
+          >
+            <span>
+              <span style={{ display: 'block', fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.04em' }}>ホーム画面に追加する</span>
+              <span style={{ display: 'block', fontSize: 12, color: 'rgba(242,230,200,0.5)', marginTop: 4 }}>アプリのように、ワンタップで開けます</span>
+            </span>
+            <span aria-hidden="true" style={{ color: '#C9A24A', fontSize: 18 }}>›</span>
+          </button>
+        )}
       </div>
 
       {/* ── Recovery Code（会員復旧コード） ── */}

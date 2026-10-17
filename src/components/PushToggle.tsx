@@ -7,13 +7,16 @@ import { SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
 /** tone：gold＝マイページ（黒と金）、mono＝JOHNNY の画面（白黒） */
-export function PushToggle({ tone }: { tone: 'gold' | 'mono' }) {
+export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWhenOn?: boolean }) {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => { void pushState().then(setState) }, [])
-  if (!state || state === 'unsupported') return null
-  if (tone === 'mono' && state === 'on') return null
+  // 調べるのに失敗しても（古い端末など）、ボタンは出す
+  useEffect(() => { pushState().then(setState, () => setState('off')) }, [])
+  if (!state) return null
+  // 受け取れない端末：QR の画面では理由を出す（ホームでは出さない）
+  if (state === 'unsupported') return tone === 'gold' && !hideWhenOn ? <Unsupported /> : null
+  if ((tone === 'mono' || hideWhenOn) && state === 'on') return null
 
   const act = async () => {
     setBusy(true); setError(null)
@@ -46,6 +49,29 @@ export function PushToggle({ tone }: { tone: 'gold' | 'mono' }) {
         {state !== 'denied' && <span aria-hidden="true" style={{ color: gold ? '#C9A24A' : 'rgba(235,235,245,0.6)', fontSize: 18 }}>{state === 'on' ? '✓' : '›'}</span>}
       </button>
       {error && <p role="alert" style={{ margin: '8px 4px 0', fontSize: 12, color: '#E06060' }}>{error}</p>}
+    </div>
+  )
+}
+
+/** 受け取れない端末：理由を出す（iPhone の版・ホーム画面のアプリとして開いているか など） */
+function Unsupported() {
+  const n = navigator as Navigator & { standalone?: boolean }
+  const ios = (n.userAgent.match(/OS (\d+)_(\d+)/) ?? []).slice(1, 3).join('.')
+  const home = n.standalone === true || !!window.matchMedia?.('(display-mode: standalone)').matches
+  const flags = [
+    `通知:${'Notification' in window ? 'あり' : 'なし'}`,
+    `プッシュ:${'PushManager' in window ? 'あり' : 'なし'}`,
+    `SW:${'serviceWorker' in navigator ? 'あり' : 'なし'}`,
+    `ホーム画面:${home ? 'はい' : 'いいえ'}`,
+    ios ? `iOS ${ios}` : '',
+  ].filter(Boolean).join('・')
+  return (
+    <div style={{ padding: '15px 18px', borderRadius: 14, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(201,162,74,0.28)', color: '#F2E6C8' }}>
+      <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700 }}>JOHNNY のお知らせ</p>
+      <p style={{ fontSize: 12, marginTop: 4, color: 'rgba(242,230,200,0.6)', lineHeight: 1.6 }}>
+        このスマホでは、まだお知らせを受け取れません。iPhone は iOS 16.4 以降で、ホーム画面に追加したアプリから開くと受け取れます。
+      </p>
+      <p style={{ fontSize: 11, marginTop: 6, color: 'rgba(242,230,200,0.35)' }}>{flags}</p>
     </div>
   )
 }

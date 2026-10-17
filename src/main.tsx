@@ -68,9 +68,12 @@ function detectStaff(): boolean {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // SW 登録失敗は非致命的 — 通知機能がグレースフルデグラデーション
-    })
+    navigator.serviceWorker.register('/sw.js')
+      // 開くたびに新しい sw.js があるか確かめる（古いままだと JOHNNY のお知らせが表示されない）
+      .then(reg => reg.update())
+      .catch(() => {
+        // SW 登録失敗は非致命的 — 通知機能がグレースフルデグラデーション
+      })
   })
 }
 
