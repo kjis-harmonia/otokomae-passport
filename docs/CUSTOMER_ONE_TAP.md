@@ -61,3 +61,11 @@ supabase/tests/preflight_customer_passkeys.sql は使い捨てDBかStagingで実
 - rollback後のテスト会員・パスキーは0件。履歴26本（同時作業のcheckout_ticket_mixを含む）、予約受付設定trueを維持。本番への接続・変更なし。
 - 実WebAuthn署名とSQLの検証は成功済み。実iPhoneのFace ID認証・iCloud同期を実施済みとは扱わない。
 - Advisorの新規4テーブルのRLS有効・policyなしは外部拒否の設計どおり。既存の検索パス警告・public拡張・既存RPCの警告はこの変更で変更していない。参考: https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable
+
+## 会員証QR画面の設定入口修正
+
+- かんたんログインをMyPageだけでなくPassportCardに追加し、利用者が実際に開く会員証QR画面から直接設定できるようにした。長い内容はモーダル全体でスクロールできる。
+- 未設定の人がサインイン用OS画面へ進まないよう、ログインボタンは設定済みパスキー向けと明記。初回設定は会員証が表示される既存端末から行う。
+- 390x844のローカル画面で、登録直後の案内を閉じる→会員証QR→かんたんログイン設定→設定済みまで成功。実SDK/SQL/署名を使用し、OS認証器のみ使い捨てソフトウェアで代用。実iPhone確認ではない。
+- Stagingが後続の3014fc2の公開で認証機能を含まない版へ戻っていたことを確認。既存PR #2のstaging取り込みが継続反映に必要。
+- 今回はDB/Edge Functionの変更なし。

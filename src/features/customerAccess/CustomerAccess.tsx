@@ -4,7 +4,7 @@ import {useCustomerAccessSession} from './useCustomerAccessSession'
 import {enrollPasskey,loginPasskey,passkeyMessage,passkeyStatus,resumeSavedMember,revokePasskeys,ONE_TAP_STAGING,supportsPasskeys,type PasskeyStatus} from './passkeys'
 import './customerAccess.css'
 
-export function PasskeyLoginButton({onSignedIn,label='会員情報で続ける',disabled=false,onBusyChange}:{onSignedIn?:()=>void;label?:string;disabled?:boolean;onBusyChange?:(busy:boolean)=>void}){
+export function PasskeyLoginButton({onSignedIn,label='設定済みのパスキーでログイン',disabled=false,onBusyChange}:{onSignedIn?:()=>void;label?:string;disabled?:boolean;onBusyChange?:(busy:boolean)=>void}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('')
   if(!ONE_TAP_STAGING)return null
   return <div className="customer-access">
@@ -13,7 +13,7 @@ export function PasskeyLoginButton({onSignedIn,label='会員情報で続ける',
       setBusy(true);onBusyChange?.(true);setError('')
       void loginPasskey().then(()=>{if(onSignedIn)onSignedIn();else window.location.reload()}).catch(e=>setError(passkeyMessage(e))).finally(()=>{setBusy(false);onBusyChange?.(false)})
     }}>{busy?'本人確認しています…':label}</button>
-    <p className="access-hint">設定済みのFace ID・指紋認証などでログイン</p>
+    <p className="access-hint">初回は、会員証が表示されるアプリの「かんたんログイン」から設定してください。</p>
     {error&&<p role="alert" className="access-error">{error}</p>}
   </div>
 }

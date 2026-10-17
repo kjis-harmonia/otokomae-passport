@@ -248,7 +248,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   }
 
   if(ONE_TAP_STAGING)return <main className="customer-access access-welcome">
-    <header><p className="access-brand">銀二郎</p><h1>銀二郎へようこそ</h1><p>会員の方は、入力せずにログインできます。</p></header>
+    <header><p className="access-brand">銀二郎</p><h1>銀二郎へようこそ</h1><p>かんたんログインを設定済みの方は、入力せずにログインできます。</p></header>
     <PasskeyLoginButton disabled={submitting||authBusy} onBusyChange={setAuthBusy} onSignedIn={()=>onDone(loadMemberStatus())}/>
     <form onSubmit={event=>{event.preventDefault();void handleFinish()}}>
       <h2>はじめての登録</h2>
