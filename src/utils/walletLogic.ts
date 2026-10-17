@@ -407,13 +407,13 @@ export function filterCards(cards: WalletCard[], filter: WalletFilter): WalletCa
 
 /**
  * usedType（当日すでに使用済みの割引種別。未使用なら null）に対して attemptedType が使えるか。
- *   - 異なる種別の併用は不可（1日どれか1種類）
- *   - メンテナンスクーポン(coupon)は1日1回
- *   - 漢トク券・割引券は同種なら1日に何枚でも可
+ *   - 割引券・漢トク券は何枚でも、種類をまたいでも使える（2026-10-17 お店の決定）
+ *   - メンテナンスクーポン(coupon)は1日1回で、その日はほかの券と一緒に使えない
  * 表示用。最終判定は店舗端末での使用確定時にサーバーが行う。
  */
 export function canUseDiscountTypeToday(usedType: string | null, attemptedType: string): boolean {
   if (usedType === null) return true
-  if (usedType !== attemptedType) return false
-  return attemptedType !== 'coupon'
+  if (usedType === 'coupon') return false   // メンテナンスクーポンを使った日は、ほかの券は使えない
+  if (attemptedType === 'coupon') return false // ほかの券を使った日は、メンテナンスクーポンは使えない（1日1回）
+  return true                                // 割引券・漢トク券は何枚でも、種類をまたいでも使える
 }

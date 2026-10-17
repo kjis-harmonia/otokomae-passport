@@ -283,7 +283,42 @@ function describeOverview(o: DayOverview, ctx: AgentContext) {
   return { date: o.date, open: true, hours: o.hours, groups, no_slots: none }
 }
 
+/** 「2つ目」「3番目」「最初の」「最後の」→ 候補の何番目か（0 から）。無ければ null */
+function pickIndexOf(utterance: string, count: number): number | null {
+  if (count === 0) return null
+  const t = utterance.normalize('NFKC')
+  if (/最後|いちばん遅|一番遅/.test(t)) return count - 1
+  if (/最初|いちばん早|一番早|一個目|1個目|一つ目|1つ目|1番目|一番目/.test(t)) return 0
+  const m = t.match(/([1-9]|[二三四五六])(?:つ目|個目|番目)/)
+  if (!m) return null
+  const n = '一二三四五六'.indexOf(m[1]) >= 0 ? '一二三四五六'.indexOf(m[1]) + 1 : Number(m[1])
+  return n >= 1 && n <= count ? n - 1 : null
+}
+
+/** 予約に関わる言葉（これが入っていれば雑談ではない） */
+const BOOKING_WORDS = /\d|[一二三四五六七八九十]+時|日|曜|時|今|明日|あした|あす|あさって|週|予約|キャンセル|取り消|変更|ずら|空|メニュー|カット|かっと|パーマ|ぱーま|カラー|白髪|フェード|剃|そり|シャンプー|眉|パンチ|ぱんち|アイパー|濡れ|ぬれ|ギンパラ|ツイスト|メッシュ|ブリーチ|坊主|丸刈り|刈|髪|テイテイ|ていてい|銀二郎|ぎんじろう|いくら|料金|値段|円|何分|営業|休み|はい|いいえ|うん|お願い|いつ|息子|娘|子供|子ども|連れ|人|名|メンテ|いつもの|前回|クーポン|割引|券|電話|場所|駐車|でも|どっち|どちら|おまかせ|お任せ/
+
+/**
+ * 予約と関係ない短い雑談（あいさつ・お礼・天気・JOHNNY のこと・笑い）には、AI を使わずに決まった返事をする（AI の料金がかからない）。
+ * 予約の言葉が少しでも入っていれば null（AI が読む）
+ */
+export function smallTalkReply(utterance: string): string | null {
+  const t = utterance.normalize('NFKC').trim()
+  if (!t || t.length > 30 || BOOKING_WORDS.test(t)) return null
+  if (/ありがと|サンキュー|助かり|助かった|感謝/.test(t)) return 'こちらこそ、ありがとうございます！ほかにご予約のご希望はありますか？'
+  if (/天気|晴れ|雨|暑い|寒い|雪|台風|涼し/.test(t)) return 'ほんとですね！せっかくなので、ご来店の日時はお決まりですか？'
+  if (/こんにちは|こんばんは|おはよう|もしもし|どうも|やあ|ハロー|hello|^hi\b|よろしく/i.test(t)) return 'こんにちは、JOHNNY です！ご希望の日時やメニューをお聞かせください。'
+  if (/(あなた|あんた|お前|おまえ|君|きみ).*(誰|だれ|何者)|AI|ロボット|何者|人間なの/.test(t)) return '銀二郎のご予約係、JOHNNY です。ご希望の日時やメニューをお聞かせください。'
+  if (/^(笑|w+|ww|草|ははは|あはは|へへ|ふふ)|笑$/.test(t)) return 'ありがとうございます！ご予約のご希望はありますか？'
+  if (/ばか|バカ|アホ|うるさい|黙れ|きらい|嫌い/.test(t)) return '失礼しました。ご予約のお手伝いができればうれしいです。ご希望の日時をお聞かせください。'
+  if (/元気|調子|げんき/.test(t)) return 'おかげさまで元気です！ご来店のご希望はありますか？'
+  return null
+}
+
 export async function runAgent(ctx: AgentContext, history: Turn[], utterance: string, tools: AgentTools, llm: LlmConfig): Promise<AgentReply> {
+  // 雑談は AI に聞かない（確認画面・候補が出ているときは、言い直しかもしれないので AI に任せる）
+  const small = !ctx.shown ? smallTalkReply(utterance) : null
+  if (small) return { say: small, ui: { type: 'none' }, tool_calls: 0 }
   const fetchImpl = llm.fetchImpl ?? fetch
   const seenTimes = new Map<string, Set<string>>() // menu_code → 道具が返した時刻
   const remember = (code: string, times: string[]) => { const s = seenTimes.get(code) ?? new Set<string>(); times.forEach(t => s.add(t)); seenTimes.set(code, s) }
@@ -378,7 +413,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
       let args: Record<string, unknown> = {}
       try { args = JSON.parse(call.function.arguments || '{}') } catch { /* 空のまま */ }
       if (call.function.name === 'respond') {
-        const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, declined: !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects === 0, 2 - rejects++)
+        const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, declined: !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), pickIndex: pickIndexOf(utterance, ctx.shown?.times?.length ?? 0), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects === 0, 2 - rejects++)
         if (checked.ok) return { say: checked.say, ui: checked.ui, tool_calls: toolCalls }
         // 道具に無い時刻・予約を出そうとした：理由を返して、もう一度考えさせる
         if (DEBUG) console.error(`[reject] ${checked.error} :: ${JSON.stringify(args.ui)}`)
@@ -415,7 +450,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
 
 type Checked = { ok: true; say: string; ui: AgentUi } | { ok: false; error: string }
 
-interface Heard { menu: string | null; said: boolean; staffId: string | null; time: string | null; aboutReservation: boolean; cancel: boolean; declined: boolean; dates: string[]; picking: boolean }
+interface Heard { pickIndex: number | null; menu: string | null; said: boolean; staffId: string | null; time: string | null; aboutReservation: boolean; cancel: boolean; declined: boolean; dates: string[]; picking: boolean }
 
 function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: Map<string, Set<string>>, reservations: Reservation[] | null, overviews: Map<string, DayOverview>, heard: Heard, strict: boolean, rejectsLeft = 0): Checked {
   const mentioned = heard.menu
@@ -443,6 +478,11 @@ function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: M
     const same = reservations!.filter(r => r.menu_code === u.menu_code)
     const target = reservations!.length === 1 ? reservations![0] : same.length === 1 ? same[0] : null
     if (target) { u.type = 'confirm_change'; u.reservation_id = target.id; if (typeof u.staff_id !== 'string') u.staff_id = target.staff_id ?? null }
+  }
+  // 画面の候補の何番目かを言った（「2つ目」「最後の」）：その候補にする
+  if (u.type === 'confirm_booking' && ctx.shown?.times?.length && ctx.shown.menu_code && heard.pickIndex != null && !heard.time) {
+    const hit = ctx.shown.times[heard.pickIndex]
+    if (hit) { u.starts_at = hit; u.menu_code = ctx.shown.menu_code; if (typeof u.staff_id !== 'string') u.staff_id = ctx.shown.staff_id ?? null }
   }
   // 画面の候補にある時刻を言った（「13時のやつ」）：その候補の時刻にする
   if (u.type === 'confirm_booking' && ctx.shown?.times?.length && ctx.shown.menu_code && heard.time && heard.dates.length === 0) {

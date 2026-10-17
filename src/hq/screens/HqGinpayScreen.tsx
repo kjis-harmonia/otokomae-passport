@@ -56,6 +56,9 @@ export function HqGinpayScreen() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
             <Stat label="総残高" value={yen(reconcile.total_cached_balance)} />
             <Stat label="台帳合計" value={yen(reconcile.total_ledger_balance)} />
+            {/* 総残高の内訳：お客様から預かっている現金の残り（未使用残高）と、チャージ特典の残り */}
+            <Stat label="うち預かり現金" value={yen(reconcile.total_cash_balance ?? reconcile.total_ledger_balance)} />
+            <Stat label="うち特典" value={yen(reconcile.total_bonus_balance ?? 0)} />
             <Stat label="状態" value={reconcile.consistent ? '一致' : '不一致'} danger={!reconcile.consistent} />
           </div>
         )}
@@ -103,6 +106,7 @@ export function HqGinpayScreen() {
                   <span>{GINPAY_TYPE_LABEL[r.type]}</span>
                   <span style={{ fontFamily: HQ_MONO, color: r.amount < 0 ? HQ_COLORS.textPrimary : HQ_COLORS.textSecondary }}>
                     {r.amount > 0 ? '+' : ''}{yen(r.amount)}
+                    {!!r.bonus_amount && <small style={{ display: 'block', fontSize: 11, color: HQ_COLORS.textSecondary }}>うち特典 {yen(Math.abs(r.bonus_amount))}</small>}
                   </span>
                   <span>{r.operator_name ?? r.operator_type}</span>
                   <span>{shortId(r.original_transaction_id)}</span>

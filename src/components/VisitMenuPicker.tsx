@@ -9,6 +9,9 @@ export interface VisitInfo {
   menu_name: string | null
   menu_source: 'reservation' | 'staff' | null
   recent: { visit_date: string; menu_code: string | null; menu_name: string | null }[]
+  /** その日の予約の開始時刻と料金（予約があるとき） */
+  reservation_starts_at?: string | null
+  reservation_price?: number | null
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -52,8 +55,8 @@ export function VisitMenuPicker({ userId, info, staffName }: { userId: string; i
 
   const chip = (code: string, label: string) => (
     <button key={code} type="button" disabled={!!saving} onClick={() => save(code)} style={{
-      padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(201,162,74,0.45)',
-      background: current?.code === code ? 'rgba(201,162,74,0.22)' : 'rgba(0,0,0,0.3)', color: '#F2E6C8',
+      padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(151,115,43,0.45)',
+      background: current?.code === code ? 'rgba(151,115,43,0.22)' : '#f3f1ed', color: '#1c1f1d',
       fontFamily: SERIF, fontSize: 14, cursor: saving ? 'default' : 'pointer', opacity: saving && saving !== code ? 0.5 : 1,
     }}>
       {saving === code ? '記録中…' : label}
@@ -61,22 +64,22 @@ export function VisitMenuPicker({ userId, info, staffName }: { userId: string; i
   )
 
   return (
-    <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(201,162,74,0.28)' }}>
-      <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#C9A24A', marginBottom: 8 }}>今日のメニュー</p>
+    <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: '#f8f7f4', border: '1px solid rgba(151,115,43,0.28)' }}>
+      <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>今日のメニュー</p>
       {current && !editing ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#F2E6C8' }}>{current.name}</p>
-            <p style={{ fontSize: 11, color: '#bdbdbd', marginTop: 2 }}>{current.source === 'reservation' ? '予約から自動で記録しました' : '記録しました'}</p>
+            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#1c1f1d' }}>{current.name}</p>
+            <p style={{ fontSize: 11, color: '#6b716d', marginTop: 2 }}>{current.source === 'reservation' ? '予約から自動で記録しました' : '記録しました'}</p>
           </div>
           <button type="button" onClick={() => setEditing(true)} style={{
-            padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(201,162,74,0.45)', background: 'transparent',
-            color: '#C9A24A', fontSize: 13, cursor: 'pointer',
+            padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(151,115,43,0.45)', background: 'transparent',
+            color: '#97732b', fontSize: 13, cursor: 'pointer',
           }}>変える</button>
         </div>
       ) : (
         <>
-          <p style={{ fontFamily: SERIF, fontSize: 13, color: '#F2E6C8', marginBottom: 10 }}>今日のメニューを1つ選んでください</p>
+          <p style={{ fontFamily: SERIF, fontSize: 13, color: '#1c1f1d', marginBottom: 10 }}>今日のメニューを1つ選んでください</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {quick.map(c => chip(c, nameOf(c) ?? c))}
           </div>
@@ -86,16 +89,16 @@ export function VisitMenuPicker({ userId, info, staffName }: { userId: string; i
               disabled={!!saving}
               onChange={e => { if (e.target.value) void save(e.target.value) }}
               aria-label="ほかのメニュー"
-              style={{ marginTop: 10, width: '100%', padding: '11px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.4)', color: '#F2E6C8', border: '1px solid rgba(201,162,74,0.35)', fontSize: 14 }}
+              style={{ marginTop: 10, width: '100%', padding: '11px 12px', borderRadius: 12, background: '#f8f7f4', color: '#1c1f1d', border: '1px solid rgba(151,115,43,0.35)', fontSize: 14 }}
             >
               <option value="">ほかのメニュー…</option>
               {menus.map(m => <option key={m.code} value={m.code}>{m.name}</option>)}
             </select>
           )}
-          {current && <button type="button" onClick={() => setEditing(false)} style={{ marginTop: 10, background: 'none', border: 'none', color: '#bdbdbd', fontSize: 12, cursor: 'pointer' }}>変えない（{current.name}のまま）</button>}
+          {current && <button type="button" onClick={() => setEditing(false)} style={{ marginTop: 10, background: 'none', border: 'none', color: '#6b716d', fontSize: 12, cursor: 'pointer' }}>変えない（{current.name}のまま）</button>}
         </>
       )}
-      {error && <p style={{ fontSize: 12, color: '#E06060', marginTop: 8 }}>{error}</p>}
+      {error && <p style={{ fontSize: 12, color: '#b23a3a', marginTop: 8 }}>{error}</p>}
     </div>
   )
 }

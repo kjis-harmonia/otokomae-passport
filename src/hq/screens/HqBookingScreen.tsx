@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { HQ_COLORS, HQ_SANS } from '../hqTheme'
 import { getJapanDateString, addDaysToDateString } from '../../utils/dateUtils'
 import {
-  getBookingMasters, updateBookingSettings, setAppBooking, upsertStaffMember, setBookingCapacity, getSchedule, setShiftTemplate, setDaySchedule,
+  getBookingMasters, updateBookingSettings, setAppBooking, getNotify, setNotify, type NotifySettings, upsertStaffMember, setBookingCapacity, getSchedule, setShiftTemplate, setDaySchedule,
   setBusinessHours, createTimeBlock, deleteTimeBlock, setClosure, deleteClosure, hqBookingErrorMessage, jstIso, BLOCK_KIND_LABEL,
   type BookingMasters, type Schedule, type BlockKind, type StaffMember, type BusinessHour, type DaySchedule,
 } from '../hqBookingStore'
@@ -514,6 +514,7 @@ function SettingsTab({ masters, onSaved }: { masters: BookingMasters; onSaved: (
       {msg && <p style={{ fontSize: 14, color: msg === '保存しました。' ? T.sub : T.danger }}>{msg}</p>}
       <PrimaryButton disabled={busy} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</PrimaryButton>
       <AppBookingSwitch enabled={s.app_booking_enabled} onSaved={onSaved} />
+      <NotifySwitch />
     </div>
   )
 }
@@ -541,6 +542,37 @@ function AppBookingSwitch({ enabled, onSaved }: { enabled: boolean; onSaved: () 
           <TextButton onClick={() => { setConfirming(false); setError(null) }}>やめる</TextButton>
         </div>
       </> : <div><TextButton onClick={() => setConfirming(true)}>{enabled ? '受付を止める…' : '受付を始める…'}</TextButton></div>}
+      {error && <p style={{ color: T.danger, fontSize: 14, margin: 0 }}>{error}</p>}
+    </div>
+  )
+}
+
+/** JOHNNY の先回りのお知らせ。毎日11時に、メンテナンスカットの期限が近いお客様へ（1人週1回まで・予約がある人には送らない） */
+function NotifySwitch() {
+  const [n, setN] = useState<NotifySettings | null>(null)
+  const [cap, setCap] = useState('5')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { getNotify().then(v => { setN(v); setCap(String(v.daily_cap)) }).catch(() => setError('読み込めませんでした（お知らせの仕組みが未設定かもしれません）')) }, [])
+  async function apply(enabled: boolean) {
+    const c = Math.max(0, Math.min(100, Number(cap) || 0))
+    setBusy(true); setError(null)
+    try { const v = await setNotify(enabled, c); setN(v); setCap(String(v.daily_cap)) }
+    catch (err) { setError(hqBookingErrorMessage(err)) }
+    finally { setBusy(false) }
+  }
+  return (
+    <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.line}`, display: 'grid', gap: 10 }}>
+      <p style={{ fontSize: 15, color: T.text, margin: 0 }}>JOHNNY のお知らせ：{n ? (n.enabled ? '送信中' : '停止中') : '—'}</p>
+      <p style={{ fontSize: 13, color: T.sub, margin: 0, lineHeight: 1.6 }}>
+        毎日11時に、メンテナンスカットの期限が近い（あと1〜3日）お客様へ、アプリにお知らせを送ります。1人に週1回まで、これからの予約がある人には送りません。
+        {n && ` 受け取っている人：${n.subscribers}人／この7日に送った数：${n.sent_7d}件`}
+      </p>
+      <Input label="1日に送る人数の上限" type="number" value={cap} onChange={setCap} />
+      <div style={{ display: 'flex', gap: 10 }}>
+        <PrimaryButton disabled={busy || !n} onClick={() => void apply(true)}>{busy ? '保存中…' : n?.enabled ? '上限を保存' : '送信を始める'}</PrimaryButton>
+        {n?.enabled && <TextButton onClick={() => void apply(false)}>送信を止める</TextButton>}
+      </div>
       {error && <p style={{ color: T.danger, fontSize: 14, margin: 0 }}>{error}</p>}
     </div>
   )

@@ -1,0 +1,150 @@
+/* 銀二郎端末（メニュー・銀Payチャージ）：SB と同じく、うすいグレーの地に白い面を置く iOS 風の画面 */
+
+.st-app {
+  --st-page: #f2f3f2;
+  --st-bg: #fff;
+  --st-ink: #1c1f1d;
+  --st-muted: #6b716d;
+  --st-faint: #9aa09c;
+  --st-line: #e3e6e4;
+  --st-press: #e8eae8;
+  --st-gold: #97732b;
+  --st-red: #b23a3a;
+  --st-radius: 16px;
+  --st-shadow: 0 1px 2px rgba(20, 28, 24, 0.04), 0 6px 20px rgba(20, 28, 24, 0.05);
+  --st-serif: "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", YuMincho, "Noto Serif JP", serif;
+
+  min-height: 100dvh;
+  background: var(--st-page);
+  color: var(--st-ink);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+.st-app *, .st-app *::before, .st-app *::after { box-sizing: border-box; }
+/* 文字色はボタンの種類ごとに決める（ここで inherit にすると .st-primary の白が負ける） */
+.st-app button, .st-app input { font: inherit; }
+.st-app input { color: var(--st-ink); }
+.st-app button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; cursor: pointer; }
+.st-app :focus-visible { outline: 3px solid #26628b; outline-offset: 2px; }
+.st-app svg.lucide { stroke-width: 2.2; }
+
+/* ── メニュー ── */
+.st-menu { max-width: 560px; margin: 0 auto; padding: max(28px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom)); }
+.st-head { padding: 24px 4px 20px; }
+.st-head h1 { margin: 0; display: flex; align-items: baseline; gap: 10px; }
+.st-wordmark { font-family: var(--st-serif); font-size: 30px; font-weight: 600; letter-spacing: 0.06em; line-height: 1.1; }
+.st-mark { font-family: var(--st-serif); color: var(--st-gold); font-size: 14px; font-weight: 600; letter-spacing: 0.12em; }
+.st-group-title { margin: 22px 16px 8px; font-size: 13px; font-weight: 600; color: var(--st-muted); }
+.st-group { border-radius: var(--st-radius); background: var(--st-bg); box-shadow: var(--st-shadow); overflow: hidden; }
+.st-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 68px; padding: 12px 14px 12px 16px;
+  background: transparent; border: 0; text-align: left; position: relative; color: var(--st-ink);
+  transition: background-color .15s ease;
+}
+.st-row:active { background: var(--st-press); }
+/* 行の区切り線はアイコンの右から（iOS の一覧と同じ） */
+.st-row + .st-row::before { content: ''; position: absolute; top: 0; left: 66px; right: 0; height: 1px; background: var(--st-line); }
+.st-tile { flex: none; width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--st-ink); color: #fff; }
+.st-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.st-row-main strong { font-size: 17px; font-weight: 600; }
+.st-row-main small { font-size: 13px; color: var(--st-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-row > .lucide-chevron-right { flex: none; color: #c4c8c5; }
+
+/* ── 戻るバー（明るい画面）。予約・顧客の画面にも付くので、バー自身が .st-app を持つ ── */
+.st-bar {
+  min-height: 52px;
+  position: sticky; top: 0; z-index: 650;
+  display: flex; align-items: center; padding: 4px 8px;
+  padding-top: max(4px, env(safe-area-inset-top));
+  background: rgba(242, 243, 242, 0.8);
+  -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+}
+.st-back {
+  display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 10px 0 4px;
+  background: transparent; border: 0; border-radius: 12px; color: var(--st-ink); font-size: 17px; font-weight: 500;
+}
+.st-back:active { background: var(--st-press); }
+
+/* ── 銀Payチャージ ── */
+.st-page { max-width: 560px; margin: 0 auto; padding: 12px 16px 48px; }
+.st-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 4px 16px; }
+.st-title-row h1 { margin: 0; font-family: var(--st-serif); font-size: 28px; font-weight: 700; letter-spacing: 0.04em; }
+.st-link { min-height: 44px; padding: 0 4px; background: transparent; border: 0; color: var(--st-muted); font-size: 14px; }
+.st-link strong { color: var(--st-ink); font-weight: 600; }
+.st-primary {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 56px; padding: 0 20px;
+  border: 0; border-radius: 16px; color: #fff; font-size: 17px; font-weight: 600;
+  background: linear-gradient(180deg, #343936 0%, #1c1f1d 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 6px 16px rgba(28, 31, 29, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1);
+}
+.st-primary:active { transform: scale(.97); }
+.st-secondary {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; margin-top: 10px;
+  border: 0; border-radius: 14px; background: var(--st-bg); color: var(--st-ink); font-size: 16px; font-weight: 600; box-shadow: var(--st-shadow);
+}
+.st-camera { position: relative; overflow: hidden; border-radius: 20px; background: #000; aspect-ratio: 1 / 1; }
+.st-camera > div { position: absolute; inset: 0; }
+.st-camera video { width: 100% !important; height: 100% !important; object-fit: cover; }
+.st-or { display: flex; align-items: center; gap: 12px; margin: 22px 4px 12px; color: var(--st-faint); font-size: 13px; }
+.st-or::before, .st-or::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--st-line); }
+.st-search { position: relative; display: block; }
+.st-search > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--st-faint); pointer-events: none; }
+.st-search input {
+  width: 100%; min-height: 48px; padding: 0 14px 0 40px; border: 0; border-radius: 14px;
+  background: rgba(118, 128, 122, 0.12); font-size: 17px; outline: none;
+}
+.st-search input::placeholder { color: var(--st-faint); }
+.st-results { margin-top: 12px; }
+.st-results .st-row { min-height: 60px; }
+.st-results .st-row + .st-row::before { left: 16px; }
+.st-empty { margin: 16px 4px; color: var(--st-muted); font-size: 15px; }
+.st-error { margin: 14px 4px 0; color: var(--st-red); font-size: 14px; line-height: 1.6; }
+.st-customer { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: var(--st-radius); background: var(--st-bg); box-shadow: var(--st-shadow); }
+.st-avatar { flex: none; width: 48px; height: 48px; border-radius: 24px; display: inline-flex; align-items: center; justify-content: center; background: var(--st-page); font-size: 19px; font-weight: 700; color: var(--st-muted); }
+.st-customer-main { flex: 1 1 auto; min-width: 0; }
+.st-customer-main strong { display: block; font-size: 20px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-customer-main small { font-size: 13px; color: var(--st-muted); }
+.st-panel { margin-top: 14px; padding: 4px 16px 12px; border-radius: var(--st-radius); background: var(--st-bg); box-shadow: var(--st-shadow); }
+
+@media (prefers-reduced-motion: reduce) { .st-app * { transition: none !important; } }
+
+/* ── メニュー（ホーム）：あたたかい白・明朝の見出し・1行ずつの白い札 ── */
+.st-app:has(.st-home) { background: #f6f5f2; }
+.st-home { position: relative; padding-top: max(20px, env(safe-area-inset-top)); }
+/* 右上：大理石の上のハサミと櫛。左と下は地の色へ溶かす */
+.st-home::before {
+  content: ''; position: absolute; top: 0; right: -16px; width: min(62%, 340px); aspect-ratio: 461 / 270; z-index: 0; pointer-events: none;
+  background: url('/images/staff/terminal-tools.jpg') right top / cover no-repeat;
+  -webkit-mask-image: linear-gradient(to left, #000 45%, transparent), linear-gradient(to bottom, #000 55%, transparent);
+  -webkit-mask-composite: source-in; mask-image: linear-gradient(to left, #000 45%, transparent), linear-gradient(to bottom, #000 55%, transparent); mask-composite: intersect;
+}
+.st-home > * { position: relative; z-index: 1; }
+.st-home .st-head { padding: 34px 8px 18px; }
+.st-home .st-wordmark { font-size: 50px; font-weight: 700; letter-spacing: 0.04em; line-height: 1.05; }
+.st-home .st-mark { font-size: 24px; font-weight: 700; letter-spacing: 0.06em; }
+.st-latin { display: flex; align-items: center; gap: 22px; margin: 14px 0 0; font-size: 12px; letter-spacing: 0.62em; color: var(--st-muted); }
+.st-latin i { display: inline-block; width: 56px; height: 1px; background: var(--st-gold); }
+.st-section { display: flex; align-items: center; gap: 12px; margin: 22px 8px 12px; }
+.st-section span { display: flex; align-items: center; gap: 12px; font-family: var(--st-serif); font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
+.st-section span::before { content: ''; width: 4px; height: 22px; border-radius: 2px; background: linear-gradient(180deg, #b08a3e, #8d6a25); }
+.st-section small { margin-left: auto; font-size: 10px; font-weight: 500; letter-spacing: 0.32em; color: var(--st-muted); }
+/* 札をのせる台と、1行ずつの白い札 */
+.st-tray { display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 24px; background: rgba(255, 255, 255, 0.55); box-shadow: 0 1px 2px rgba(20, 28, 24, 0.03), 0 10px 30px rgba(20, 28, 24, 0.05); }
+.st-home .st-row { min-height: 88px; gap: 18px; padding: 14px 16px; border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgba(20, 28, 24, 0.04), 0 4px 14px rgba(20, 28, 24, 0.04); transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .15s ease; }
+.st-home .st-row:active { transform: scale(.98); background: #fbfaf8; }
+.st-home .st-row + .st-row::before { display: none; }
+.st-home .st-tile { width: 60px; height: 60px; border-radius: 16px; }
+.st-tile-gold { background: linear-gradient(160deg, #c39a4b 0%, #a37b2e 55%, #8a6624 100%); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+.st-tile-dark { background: linear-gradient(160deg, #3a3e3b 0%, #1c1f1d 100%); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.st-tile-light { background: #f3f1ed; color: var(--st-ink); }
+.st-home .st-row-main { gap: 4px; }
+.st-home .st-row-main strong { font-family: var(--st-serif); font-size: 21px; font-weight: 700; letter-spacing: 0.03em; }
+.st-home .st-row-main small { font-size: 14px; letter-spacing: 0.04em; }
+.st-home .st-row > .lucide-chevron-right { color: var(--st-gold); }
+@media (max-width: 400px) {
+  .st-home .st-row { gap: 14px; padding: 12px 14px; }
+  .st-home .st-tile { width: 56px; height: 56px; }
+}
