@@ -40,6 +40,8 @@ export interface BookingAssistantApi {
   confirm(holdId: string, note?: string | null): Promise<CustomerReservation>
   release(holdId: string): Promise<void>
   reservations(): Promise<CustomerReservation[]>
+  /** 最後に来店した日（QR の来店登録、YYYY-MM-DD）。無ければ null */
+  lastVisit(): Promise<string | null>
   cancel(reservationId: string): Promise<CustomerReservation>
   /** 予約の AI。使えないときは null（呼び出し側が決まった規則の JOHNNY に切り替える） */
   agent(message: string, history: readonly AgentTurn[], shown?: AgentShown): Promise<AgentAnswer | null>
@@ -64,6 +66,7 @@ export const customerBookingApi: BookingAssistantApi = {
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),
+  lastVisit: async () => { const d = await callCustomerRpc<string | null>('customer_get_last_visit'); return d ? String(d).slice(0, 10) : null },
   agent: (message, history, shown) => askAgent(message, history, shown),
   agentVoice: (audio, history, shown, transcribeOnly) => askAgentVoice(audio, history, shown, transcribeOnly),
   serverVoice: true,
@@ -149,6 +152,8 @@ export const demoBookingApi: BookingAssistantApi = {
   },
   async release() { /* nothing */ },
   async reservations() { await wait(200); return [...demoStore] },
+  // デモ：13日前に来店（明日までメンテナンスカットが使える）
+  async lastVisit() { await wait(150); return new Date(Date.now() + 9 * 3600000 - 13 * 86400000).toISOString().slice(0, 10) },
   async cancel(id) {
     await wait(300)
     const r = demoStore.find(x => x.id === id)
