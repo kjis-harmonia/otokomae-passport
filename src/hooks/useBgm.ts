@@ -4,6 +4,10 @@ const BGM_KEY = 'ginjiro_bgm_on'
 const BGM_TRACK_KEY = 'ginjiro_bgm_track'
 const BGM_AUDIO_REGISTRY_KEY = '__ginjiroBgmAudioRegistry'
 
+/** BGM を一時的に止める・戻す（JOHNNY と話すあいだなど）。BGM のオン・オフの設定は変えない */
+export const BGM_PAUSE_EVENT = 'ginjiro:bgm-pause'
+export const BGM_RESUME_EVENT = 'ginjiro:bgm-resume'
+
 export const DEFAULT_BGM_TRACK_ID = 'night-rendezvous'
 export const DEFAULT_BGM_TRACK_SRC = '/assets/audio/銀二郎ナイト・ランデブー　CATS&STAR×TeiTei.mp4'
 
@@ -96,6 +100,8 @@ export function useBgm() {
   const [currentTrack, setCurrentTrack] = useState<BgmTrack>(getInitialTrack)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const isOnRef = useRef(isOn)
+  /** 一時停止中（JOHNNY と話している）。このあいだは自動で鳴らし直さない */
+  const pausedForRef = useRef(false)
 
   function setPlayingIfCurrent(audio: HTMLAudioElement, playing: boolean) {
     if (audioRef.current !== audio) return
@@ -103,7 +109,7 @@ export function useBgm() {
   }
 
   function replayIfCurrentAudio(audio: HTMLAudioElement, reset = false) {
-    if (!isOnRef.current || audioRef.current !== audio) return
+    if (!isOnRef.current || pausedForRef.current || audioRef.current !== audio) return
 
     try {
       if (reset) audio.currentTime = 0
@@ -218,7 +224,7 @@ export function useBgm() {
 
   useEffect(() => {
     function resumeVisibleAudio() {
-      if (document.visibilityState !== 'visible' || !isOnRef.current || !audioRef.current) return
+      if (document.visibilityState !== 'visible' || !isOnRef.current || pausedForRef.current || !audioRef.current) return
       if (audioRef.current.paused || audioRef.current.ended) {
         replayIfCurrentAudio(audioRef.current, audioRef.current.ended)
       }
@@ -230,6 +236,24 @@ export function useBgm() {
     return () => {
       document.removeEventListener('visibilitychange', resumeVisibleAudio)
       window.removeEventListener('pageshow', resumeVisibleAudio)
+    }
+  }, [])
+
+  useEffect(() => {
+    const pause = () => {
+      pausedForRef.current = true
+      audioRef.current?.pause()
+    }
+    const resume = () => {
+      if (!pausedForRef.current) return
+      pausedForRef.current = false
+      if (isOnRef.current && audioRef.current) void audioRef.current.play().catch(() => {})
+    }
+    window.addEventListener(BGM_PAUSE_EVENT, pause)
+    window.addEventListener(BGM_RESUME_EVENT, resume)
+    return () => {
+      window.removeEventListener(BGM_PAUSE_EVENT, pause)
+      window.removeEventListener(BGM_RESUME_EVENT, resume)
     }
   }, [])
 
