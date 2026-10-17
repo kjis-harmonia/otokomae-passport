@@ -6,6 +6,7 @@ import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customer
 import type { CustomerRow } from '../utils/customerStore'
 import { couponPlanForQr } from '../utils/bookingCoupons'
 import { PushToggle } from './PushToggle'
+import { CustomerAccessSettings } from '../features/customerAccess/CustomerAccess'
 import { canShowInstallGuide, SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 import {
   CURRENT_RESERVATION_CHANGED_EVENT,
@@ -399,6 +400,8 @@ export function PassportCard() {
           </div>
         </div>
       </div>
+
+      <div style={{ marginTop: 16 }}><CustomerAccessSettings /></div>
 
       {/* ── JOHNNY のお知らせ・ホーム画面に追加 ── */}
       <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>

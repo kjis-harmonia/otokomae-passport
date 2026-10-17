@@ -1,0 +1,6 @@
+# These endpoints verify their own customer session / WebAuthn proof.
+# Existing johnny-agent remains unchanged.
+[functions.customer-shortcuts]
+verify_jwt = false
+[functions.customer-passkeys]
+verify_jwt = false

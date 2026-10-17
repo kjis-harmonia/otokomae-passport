@@ -1,3 +1,5 @@
+import {ONE_TAP_STAGING,resumeSavedMember,supportsPasskeys} from './features/customerAccess/passkeys'
+import {PasskeyEnrollmentOffer} from './features/customerAccess/CustomerAccess'
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import { getCustomerSession, clearCustomerSession } from './utils/customerSession'
@@ -48,7 +50,7 @@ type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function isShopUnlocked(): boolean {
-  return localStorage.getItem(SHOP_AUTH_KEY) === '1'
+  return ONE_TAP_STAGING || localStorage.getItem(SHOP_AUTH_KEY) === '1'
 }
 
 function isLocalPreviewHost(hostname: string): boolean {
@@ -810,8 +812,9 @@ function App() {
   })
 
   // ── Loading state: min time + critical image preload ──────────────────────────
-  const [minTimeDone, setMinTimeDone] = useState(false)
-  const [imgReady,    setImgReady]    = useState(false)
+  const quickBooking=ONE_TAP_STAGING && new URLSearchParams(location.search).get('tab')==='reserve'
+  const [minTimeDone, setMinTimeDone] = useState(quickBooking)
+  const [imgReady,    setImgReady]    = useState(quickBooking)
   const appLoading = !minTimeDone || !imgReady
 
   useEffect(() => {
@@ -851,6 +854,14 @@ function App() {
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
+  const [passkeyOffer,setPasskeyOffer]=useState(false)
+  useEffect(()=>{
+    if(!ONE_TAP_STAGING)return
+    const changed=()=>{if(getCustomerSession()&&getStoredValue<boolean>(ONBOARDING_DONE_KEY,false)){setMemberStatus(loadMemberStatus());setPhase('app')}}
+    window.addEventListener('ginjiro:customer-session-changed',changed)
+    if(phase==='onboarding'&&getCustomerSession())void resumeSavedMember().catch(()=>{})
+    return()=>window.removeEventListener('ginjiro:customer-session-changed',changed)
+  },[phase])
   const [welcomeCouponDialog, setWelcomeCouponDialog] = useState<{ name: string; ticket: TicketRow | null } | null>(null)
   const [ticketInitialFilter, setTicketInitialFilter] = useState<WalletFilter>('cut')
   const [ticketRefreshKey, setTicketRefreshKey] = useState(0)
@@ -861,6 +872,7 @@ function App() {
   const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
+    if (ONE_TAP_STAGING && requestedTab==='reserve')return 'shop'
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
     if (requestedTab === 'diagnosis') return 'shop'
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
@@ -940,6 +952,7 @@ function App() {
     saveMemberStatus(nextStatus)
     setMemberStatus(nextStatus)
     setPhase('app')
+    if(ONE_TAP_STAGING && payload && supportsPasskeys())setPasskeyOffer(true)
     if (payload?.welcomeCouponIssued && payload.ticket) {
       setWelcomeCouponDialog({ name: nextStatus.memberName, ticket: payload.ticket })
     }
@@ -989,7 +1002,7 @@ function App() {
   const [showMusicGuide, setShowMusicGuide] = useState(false)
 
   useEffect(() => {
-    if (phase !== 'app') return
+    if (phase !== 'app' || ONE_TAP_STAGING) return
     if (welcomeCouponDialog) return
     // ホーム画面でのみ案内する（「クーポンを見る」でWalletへ直行したときにクーポンを隠さない）
     if (activeTab !== 'home') return
@@ -1151,7 +1164,7 @@ function App() {
           </AnimatePresence>
 
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。音楽の案内・クーポンのあと） */}
-          <InstallGuide autoAllowed={activeTab === 'home' && !showMusicGuide && !welcomeCouponDialog && !showQrModal} />
+          <InstallGuide autoAllowed={activeTab === 'home' && !passkeyOffer && !showMusicGuide && !welcomeCouponDialog && !showQrModal} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (
@@ -1315,6 +1328,7 @@ function App() {
         </>
       )}
 
+      {passkeyOffer&&!welcomeCouponDialog&&!appLoading&&<PasskeyEnrollmentOffer onClose={()=>setPasskeyOffer(false)}/>}
       {/* Loading screen — topmost, covers everything during initial load */}
       <AnimatePresence>
         {appLoading && <GinjiroLoadingScreen key="loading" />}
