@@ -20,6 +20,7 @@ import {
   requestNotificationPermission,
   triggerMaintenanceNotification,
 } from '../utils/pushNotification'
+import { turnOnPush } from '../utils/webPush'
 import { getUserId } from '../utils/userId'
 import { getStoredValue } from '../utils/storage'
 
@@ -394,6 +395,8 @@ function MaintenanceScheduleSection() {
   async function handleRequestPermission() {
     const perm = await requestNotificationPermission()
     setNotifPerm(perm)
+    // 許可されたら、アプリを閉じていても届く JOHNNY のお知らせにも登録する
+    if (perm === 'granted') void turnOnPush().catch(() => {})
     if (perm === 'granted' && lastVisitDate) triggerMaintenanceNotification(lastVisitDate)
   }
 

@@ -18,6 +18,7 @@ import {
 } from '../utils/ticketStore'
 import { isInStoreModeActive } from '../utils/inStoreMode'
 import { canShowInstallGuide, SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
+import { PushToggle } from '../components/PushToggle'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -805,6 +806,11 @@ export function MyPageScreen({ memberStatus }: Props) {
             </button>
           </div>
         )}
+
+        {/* ── JOHNNY のお知らせ ── */}
+        <div style={{ margin: '16px 16px 0' }}>
+          <PushToggle tone="gold" />
+        </div>
 
         {/* ── 復旧コード ── */}
         <div style={{ margin: '28px 16px 0' }}>

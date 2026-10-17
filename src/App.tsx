@@ -38,6 +38,7 @@ import { getUserId, MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
 import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
 import { InstallGuide } from './components/InstallGuide'
+import { refreshPushIfGranted } from './utils/webPush'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
@@ -980,6 +981,9 @@ function App() {
 
   const bgm = useBgm()
   const [showBgmMenu, setShowBgmMenu] = useState(false)
+
+  // JOHNNY のお知らせ：許可済みなら受け取り先をサーバーに入れ直す（変わることがある）
+  useEffect(() => { if (phase === 'app') void refreshPushIfGranted() }, [phase])
 
   // ── Music guide — show once after first home screen mount ─────────────────────
   const [showMusicGuide, setShowMusicGuide] = useState(false)
