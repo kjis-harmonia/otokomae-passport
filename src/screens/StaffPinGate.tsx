@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { StaffHome } from './StaffHome'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
+import { Delete } from 'lucide-react'
 import { getStaffToken, staffLogin, verifyStaffSession, clearStaffSession, STAFF_AUTH_REQUIRED_EVENT, STAFF_PIN_LENGTH } from '../utils/staffSession'
 
-const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+import './staffTerminal.css'
 // 旧版はPINの正誤をフロントで判定し、このキーに '1' を保存していた（現在は使用しない）
 const LEGACY_PIN_AUTH_KEY = 'ginjiro_staff_pin_auth'
 
@@ -16,13 +17,6 @@ const ERROR_TEXT = {
   network:        '通信できません。電波を確認してください',
 } as const
 type PinError = keyof typeof ERROR_TEXT
-
-const PIN_CSS = `
-@keyframes gjPinShine {
-  from { transform: translate(-50%,-50%) rotate(0deg); }
-  to   { transform: translate(-50%,-50%) rotate(360deg); }
-}
-`
 
 /** children を渡すと、認証後にその画面を出す（SB など）。渡さなければ従来どおり店舗端末（StaffHome） */
 export function StaffPinGate({ children }: { children?: ReactNode } = {}) {
@@ -92,206 +86,55 @@ export function StaffPinGate({ children }: { children?: ReactNode } = {}) {
 
   if (authed) return children ?? <StaffHome />
 
+  // iPhone のパスコード画面のように：あたたかい白・明朝の店名・6つの点・丸いキー（端末メニューと同じ見た目）
   return (
     <AnimatePresence mode="wait">
       <motion.div
         key="pin-gate"
+        className="st-app st-pin"
         initial={{ opacity: 0 }}
         animate={{ opacity: success ? 0 : 1 }}
         transition={{ duration: success ? 0.4 : 0.3 }}
-        style={{
-          minHeight: '100dvh',
-          background: 'linear-gradient(180deg, #080302 0%, #0B0403 55%, #090304 100%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0 28px',
-          userSelect: 'none',
-        }}
       >
-        <style>{PIN_CSS}</style>
-
         {isStaging() && <StgBadge />}
 
-        {/* Top accent line */}
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, height: 2,
-          background: 'linear-gradient(90deg, transparent 0%, rgba(139,26,26,0.6) 20%, rgba(201,162,74,0.9) 50%, rgba(139,26,26,0.6) 80%, transparent 100%)',
-        }} />
+        <motion.header className="st-pin-head" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05, duration: 0.4 }}>
+          <h1><span className="st-wordmark">銀二郎</span><span className="st-mark">端末</span></h1>
+          <p className="st-latin"><i aria-hidden="true" />GINJIRO</p>
+        </motion.header>
 
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.44 }}
-          style={{ textAlign: 'center', marginBottom: 52 }}
-        >
-          {/* Decorative ring */}
-          <div style={{ position: 'relative', width: 72, height: 72, margin: '0 auto 20px' }}>
-            <div style={{
-              position: 'absolute', inset: 0, borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(107,15,18,0.42) 0%, transparent 68%)',
-            }} />
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-              style={{
-                position: 'absolute', inset: 0, borderRadius: '50%',
-                background: 'conic-gradient(from 0deg, rgba(201,162,74,0.05), rgba(201,162,74,0.50), rgba(255,248,210,0.80), rgba(201,162,74,0.50), rgba(201,162,74,0.05))',
-              }}
-            />
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%,-50%)',
-              width: 56, height: 56, borderRadius: '50%',
-              background: '#0B0403',
-            }} />
-          </div>
+        <p className="st-pin-prompt" aria-live="polite">
+          {error && errorKind ? <span className="st-pin-error">{ERROR_TEXT[errorKind]}</span> : success ? 'ようこそ' : checking ? '確認しています…' : 'スタッフPINを入力'}
+        </p>
 
-          <p style={{
-            fontSize: 9, letterSpacing: '0.34em',
-            color: '#e5e5e5',
-            marginBottom: 6,
-          }}>
-            STAFF TERMINAL
-          </p>
-          <h1 style={{
-            fontFamily: SERIF,
-            fontSize: 22, fontWeight: 700,
-            color: '#F2E6C8', letterSpacing: '0.10em',
-            marginBottom: 4,
-          }}>
-            銀二郎端末
-          </h1>
-          <p style={{
-            fontSize: 8, letterSpacing: '0.24em',
-            color: '#e5e5e5',
-          }}>
-            OTOKOMAE PASSPORT SCANNER
-          </p>
-        </motion.div>
-
-        {/* PIN dots */}
         <motion.div
           key={shakeKey}
+          className="st-pin-dots"
+          role="img"
+          aria-label={`${pin.length}桁入力済み`}
           animate={error ? { x: [-10, 10, -8, 8, -5, 5, -3, 3, 0] } : {}}
           transition={{ duration: 0.55 }}
-          style={{ display: 'flex', gap: 14, marginBottom: 48 }}
         >
           {Array.from({ length: STAFF_PIN_LENGTH }, (_, i) => i).map((i) => (
-            <motion.div
-              key={i}
-              animate={{
-                background: i < pin.length
-                  ? error ? '#E06060' : '#C9A24A'
-                  : success ? '#80E060' : 'rgba(201,162,74,0.14)',
-                boxShadow: i < pin.length && !error
-                  ? '0 0 12px rgba(201,162,74,0.55)'
-                  : 'none',
-              }}
-              transition={{ duration: 0.15 }}
-              style={{
-                width: 14, height: 14, borderRadius: '50%',
-                border: `1.5px solid ${
-                  i < pin.length
-                    ? error ? 'rgba(224,96,96,0.7)' : 'rgba(201,162,74,0.7)'
-                    : 'rgba(201,162,74,0.22)'
-                }`,
-              }}
-            />
+            <span key={i} className={i < pin.length ? (error ? 'is-error' : success ? 'is-ok' : 'is-on') : undefined} />
           ))}
         </motion.div>
 
-        {/* Error text */}
-        <AnimatePresence>
-          {error && (
-            <motion.p
-              key="err"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              style={{
-                fontSize: 12, color: '#E06060',
-                letterSpacing: '0.10em',
-                marginBottom: 20,
-                textAlign: 'center',
-                fontFamily: SERIF,
-              }}
-            >
-              {errorKind ? ERROR_TEXT[errorKind] : ''}
-            </motion.p>
-          )}
-        </AnimatePresence>
-
-        {/* Numpad */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.42 }}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 10,
-            width: '100%',
-            maxWidth: 270,
-          }}
-        >
+        <motion.div className="st-pin-pad" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12, duration: 0.4 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
             <NumKey key={n} label={String(n)} onPress={() => handleDigit(String(n))} />
           ))}
-
-          {/* Empty */}
-          <div />
-
-          {/* 0 */}
+          <span />
           <NumKey label="0" onPress={() => handleDigit('0')} />
-
-          {/* Backspace */}
-          <motion.button
-            type="button"
-            onClick={handleBack}
-            whileTap={{ scale: 0.93, opacity: 0.7 }}
-            style={{
-              padding: '18px 0', borderRadius: 14,
-              background: 'transparent',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: '#e5e5e5',
-              fontSize: 20, cursor: 'pointer',
-              WebkitTapHighlightColor: 'transparent',
-            }}
-          >
-            ⌫
-          </motion.button>
+          <button type="button" className="st-pin-del" onClick={handleBack} aria-label="1文字消す" disabled={!pin.length}>
+            <Delete size={26} />
+          </button>
         </motion.div>
-
-        {/* Bottom accent */}
-        <div style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0, height: 1,
-          background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.18), transparent)',
-        }} />
       </motion.div>
     </AnimatePresence>
   )
 }
 
 function NumKey({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onPress}
-      whileTap={{ scale: 0.92, background: 'rgba(201,162,74,0.20)' }}
-      style={{
-        padding: '18px 0', borderRadius: 14,
-        background: 'rgba(201,162,74,0.06)',
-        border: '1px solid rgba(201,162,74,0.18)',
-        color: '#F2E6C8',
-        fontFamily: SERIF, fontSize: 22, fontWeight: 700,
-        cursor: 'pointer',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      {label}
-    </motion.button>
-  )
+  return <button type="button" className="st-pin-key" onClick={onPress}>{label}</button>
 }

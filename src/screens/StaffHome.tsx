@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { ChevronLeft, ChevronRight, Database, Package, ScanLine } from 'lucide-react'
 import { AdminScreen } from './AdminScreen'
 import { StaffInventoryScreen } from './StaffInventoryScreen'
 import type { PendingChangeSummary, StaffInventoryHandle } from './StaffInventoryScreen'
+import './staffTerminal.css'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -10,6 +12,7 @@ type StaffMode = 'menu' | 'shop' | 'inventory' | 'recovery'
 /**
  * /staff を開いた直後の分岐画面 + 戻るナビゲーション。
  * 店舗端末は日常業務用のQR読み取り、在庫管理は店販管理、会員復旧は必要時だけ使う導線。
+ * メニューは iOS の設定アプリのような一覧（毎日の業務／管理の2つにまとめる）。
  */
 export function StaffHome() {
   const [mode, setMode] = useState<StaffMode>('menu')
@@ -40,125 +43,59 @@ export function StaffHome() {
 
   if (mode === 'menu') {
     return (
-      <div style={{
-        minHeight: '100dvh',
-        background: 'linear-gradient(180deg, #080302 0%, #0A0403 60%, #090304 100%)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: '0 24px',
-      }}>
-        <p style={{ fontSize: 10, letterSpacing: '0.32em', color: '#e5e5e5', marginBottom: 6 }}>
-          STAFF TERMINAL
-        </p>
-        <h1 style={{
-          fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#F2E6C8',
-          letterSpacing: '0.1em', marginBottom: 48,
-        }}>
-          銀二郎端末
-        </h1>
+      <div className="st-app">
+        <div className="st-menu st-home">
+          <header className="st-head">
+            <h1><span className="st-wordmark">銀二郎</span><span className="st-mark">端末</span></h1>
+            <p className="st-latin"><i aria-hidden="true" />GINJIRO</p>
+          </header>
 
-        <div style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <button
-            type="button"
-            onClick={() => setMode('shop')}
-            style={{
-              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-              border: '1px solid rgba(201,162,74,0.5)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#ffffff', letterSpacing: '0.06em', marginBottom: 6 }}>
-              店舗端末
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
-              QR読み込み・来店更新・割引券発行
-            </p>
-          </button>
+          <h2 className="st-section"><span>毎日の業務</span><small>DAILY WORK</small></h2>
+          <div className="st-tray">
+            <MenuRow icon={<ScanLine size={30} />} tone="gold" title="店舗端末" sub="会員QR・来店・割引券" onClick={() => setMode('shop')} />
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setMode('inventory')}
-            style={{
-              width: '100%', padding: '26px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(201,162,74,0.4)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 800, color: '#C9A24A', letterSpacing: '0.06em', marginBottom: 6 }}>
-              在庫管理
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-              店販・在庫・発注確認
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMode('recovery')}
-            style={{
-              width: '100%', padding: '20px 20px', borderRadius: 18, textAlign: 'left',
-              background: 'rgba(255,255,255,0.025)',
-              border: '1px solid rgba(201,162,74,0.24)', cursor: 'pointer',
-            }}
-          >
-            <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 800, color: '#F2E6C8', letterSpacing: '0.06em', marginBottom: 6 }}>
-              会員復旧
-            </p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.52)' }}>
-              機種変更・データ移管
-            </p>
-          </button>
+          <h2 className="st-section"><span>管理</span><small>MANAGEMENT</small></h2>
+          <div className="st-tray">
+            <MenuRow icon={<Package size={30} />} title="在庫管理" sub="店販・在庫・発注" onClick={() => setMode('inventory')} />
+            <MenuRow icon={<Database size={30} />} title="会員復旧" sub="機種変更・データ移管" onClick={() => setMode('recovery')} />
+          </div>
         </div>
       </div>
     )
   }
 
+  // どの画面もメニューと同じあたたかい白
   return (
-    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: '#080302' }}>
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 650,
-        background: '#000000', borderBottom: '1px solid rgba(201,162,74,0.2)',
-        padding: '10px 16px', flexShrink: 0,
-      }}>
-        <button
-          type="button"
-          onClick={handleBackClick}
-          style={{
-            padding: '8px 16px', borderRadius: 10,
-            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.16)',
-            color: '#e5e5e5', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.06em',
-            cursor: 'pointer',
-          }}
-        >
-          ← 戻る
-        </button>
-      </div>
+    <div className="st-app" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: '#f6f5f2' }}>
+      <div className="st-app st-bar"><button type="button" className="st-back" onClick={handleBackClick}><ChevronLeft size={24} />メニュー</button></div>
 
       <div style={{ flex: '1 1 auto' }}>
         {mode === 'shop'
           ? <AdminScreen key="staff-issue" mode="issue" />
           : mode === 'recovery'
-            ? <AdminScreen key="staff-recovery" mode="recovery" />
-            : <StaffInventoryScreen ref={inventoryRef} />}
+              ? <AdminScreen key="staff-recovery" mode="recovery" />
+              : <StaffInventoryScreen ref={inventoryRef} />}
       </div>
 
       {pendingSummary && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.85)',
+          position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(28,31,29,0.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
-          <div style={{ width: '100%', maxWidth: 360, borderRadius: 16, background: '#0A0A0A', border: '1px solid rgba(201,162,74,0.3)', padding: 20 }}>
-            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#ffffff', marginBottom: 6 }}>
+          <div style={{ width: '100%', maxWidth: 360, borderRadius: 16, background: '#ffffff', border: '1px solid rgba(151,115,43,0.3)', padding: 20 }}>
+            <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#1c1f1d', marginBottom: 6 }}>
               未確定の在庫変更があります。
             </p>
-            <p style={{ fontSize: 13, color: '#e5e5e5', marginBottom: 14 }}>
+            <p style={{ fontSize: 13, color: '#1c1f1d', marginBottom: 14 }}>
               変更内容を確定して戻りますか？
             </p>
             <div style={{
-              borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 10, background: '#ffffff', border: '1px solid #e6e3dd',
               padding: '10px 12px', marginBottom: 18,
             }}>
               {pendingSummary.map((c) => (
-                <p key={c.productId} style={{ fontSize: 13, color: '#C9A24A', margin: '2px 0' }}>
+                <p key={c.productId} style={{ fontSize: 13, color: '#97732b', margin: '2px 0' }}>
                   ・{c.name} {c.delta > 0 ? '+' : ''}{c.delta}
                 </p>
               ))}
@@ -166,13 +103,13 @@ export function StaffHome() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button" onClick={handleDiscardAndBack} disabled={confirmingBack}
-                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.14)', color: '#e5e5e5', fontFamily: SERIF, fontSize: 14, cursor: 'pointer' }}
+                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: '#ffffff', border: '1px solid #e6e3dd', color: '#1c1f1d', fontFamily: SERIF, fontSize: 14, cursor: 'pointer' }}
               >
                 いいえ
               </button>
               <button
                 type="button" onClick={() => void handleConfirmAndBack()} disabled={confirmingBack}
-                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(201,162,74,0.18)', border: '1px solid #C9A24A', color: '#C9A24A', fontFamily: SERIF, fontSize: 14, fontWeight: 700, cursor: confirmingBack ? 'default' : 'pointer' }}
+                style={{ flex: 1, padding: '13px 0', borderRadius: 12, background: 'rgba(151,115,43,0.18)', border: '1px solid #97732b', color: '#97732b', fontFamily: SERIF, fontSize: 14, fontWeight: 700, cursor: confirmingBack ? 'default' : 'pointer' }}
               >
                 {confirmingBack ? '保存中…' : 'はい'}
               </button>
@@ -181,5 +118,15 @@ export function StaffHome() {
         </div>
       )}
     </div>
+  )
+}
+
+function MenuRow({ icon, title, sub, tone = 'light', onClick }: { icon: ReactNode; title: string; sub: string; tone?: 'gold' | 'dark' | 'light'; onClick: () => void }) {
+  return (
+    <button type="button" className="st-row" onClick={onClick}>
+      <span className={`st-tile st-tile-${tone}`}>{icon}</span>
+      <span className="st-row-main"><strong>{title}</strong><small>{sub}</small></span>
+      <ChevronRight size={24} />
+    </button>
   )
 }

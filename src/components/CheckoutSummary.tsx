@@ -15,7 +15,7 @@ export function CheckoutSummary({ info, selected }: { info: VisitInfo; selected:
     return (
       <div style={box}>
         <p style={eyebrow}>お会計</p>
-        <p style={{ fontFamily: SERIF, fontSize: 13, color: '#F2E6C8' }}>メンテナンスカットのため、割引券・クーポンは使えません。</p>
+        <p style={{ fontFamily: SERIF, fontSize: 13, color: '#1c1f1d' }}>メンテナンスカットのため、割引券・クーポンは使えません。</p>
       </div>
     )
   }
@@ -23,7 +23,7 @@ export function CheckoutSummary({ info, selected }: { info: VisitInfo; selected:
   if (!price) return null
   const p = price.premium
   const row = (label: string, value: string, key?: string) => (
-    <div key={key ?? label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14, color: '#e5e5e5', marginTop: 6 }}>
+    <div key={key ?? label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14, color: '#1c1f1d', marginTop: 6 }}>
       <span>{label}</span><span>{value}</span>
     </div>
   )
@@ -32,16 +32,16 @@ export function CheckoutSummary({ info, selected }: { info: VisitInfo; selected:
       <p style={eyebrow}>お会計（予約から）</p>
       {row(`料金（${info.menu_name ?? 'ご予約のメニュー'}）`, yen(price.normal ?? price.base))}
       {p && price.normal != null && row(p.def.title, `−${yen(price.normal - price.base)}`)}
-      {p && !p.eligible && <p style={{ fontSize: 11, color: '#bdbdbd', marginTop: 4 }}>{p.def.title} は土日祝 17:00〜19:00 開始のみ（この予約は対象外）</p>}
+      {p && !p.eligible && <p style={{ fontSize: 11, color: '#6b716d', marginTop: 4 }}>{p.def.title} は土日祝 17:00〜19:00 開始のみ（この予約は対象外）</p>}
       {selected.map(t => row(TICKET_TYPE_LABELS[t.type], `−${yen(t.amount)}`, t.id))}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(201,162,74,0.25)' }}>
-        <span style={{ fontFamily: SERIF, fontSize: 14, color: '#F2E6C8' }}>お会計</span>
-        <span style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#F2E6C8' }}>{yen(price.total)}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(151,115,43,0.25)' }}>
+        <span style={{ fontFamily: SERIF, fontSize: 14, color: '#1c1f1d' }}>お会計</span>
+        <span style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#1c1f1d' }}>{yen(price.total)}</span>
       </div>
-      {selected.length > 0 && <p style={{ fontSize: 11, color: '#bdbdbd', marginTop: 6 }}>券は下の「使用する」で使用済みにしてください</p>}
+      {selected.length > 0 && <p style={{ fontSize: 11, color: '#6b716d', marginTop: 6 }}>券は下の「使用する」で使用済みにしてください</p>}
     </div>
   )
 }
 
-const box = { marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left' as const, background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(201,162,74,0.28)' }
-const eyebrow = { fontSize: 9, letterSpacing: '0.26em', color: '#C9A24A', marginBottom: 8 }
+const box = { marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left' as const, background: '#f8f7f4', border: '1px solid rgba(151,115,43,0.28)' }
+const eyebrow = { fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }
