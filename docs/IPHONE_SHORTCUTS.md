@@ -1,7 +1,9 @@
 # iPhoneから銀二郎を使う（Staging試作）
 
 初回だけ、Stagingの銀二郎PWAのマイページ下部「ホーム画面から予約・メンテナンス」を開く。
-ページで連携キーを発行し、記載した手順でiPhoneのショートカットを2つ作る。Macは不要。
+マイページ内のダイアログで連携キーを発行し、記載した手順でiPhoneのショートカットを2つ作る。Macは不要。
+
+ブラウザーに会員情報がない初回Staging検証では、設定ページの「検証用会員を作成して連携」を明示的に選ぶ。本番の会員情報・履歴・チケットとは別。新しい検証用会員に限り、テスト用電話番号09000000000を設定する。既存会員がある場合は登録や連絡先の書き換えを行わない。
 
 - メンテナンス確認：最終来店から14日以内の優待の残日数と、次回予約を読み上げる。
 - Johnnyで予約：iPhoneの音声入力で文字にし、既存johnny-agentに会話を渡す。DBの仮確保で日時・担当・メニュー・料金を確認し、メニューで「この内容で予約する」を選ぶと確定。
@@ -57,3 +59,14 @@ Node.js 24以降：`node scripts/customer-shortcuts.test.mjs`（外部通信な�
 - [Supabase：Edge Functionの認証](https://supabase.com/docs/guides/functions/auth-headers)
 - [Advisor：SECURITY DEFINERの公開](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)
 - [Advisor：関数のsearch_path](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable)
+
+## 初回連携の案内修正（2026-10-17）
+
+- PWA内の入口を同一オリジンのiframeダイアログへ変更。別ブラウザーの会員保存領域に移動しない。
+- 初回Staging検証用の明示的な登録フォームを追加。連絡先設定に失敗した場合は同じ会員で再試行し、重複登録を避ける。登録のみレスポンスを受け取れず失われた場合の完全な冪等性までは既存APIで保証できない。
+- 追加12項目の回帰テスト成功。ローカルの実PostgreSQL・実連携API・ブラウザーで初回登録からキー発行まで成功。顧客1・連携端末1・連絡先1。閉じた後の会員認識と再表示時の既存会員保持も確認。外部AI呼び出し0回。
+- TypeScriptとViteビルド成功。追加したsetup・testMember・ShortcutSetupDialogのlintは0件。
+- 並行更新された共有Staging d6f673ea503d1250f404537ea2ae1451e9268377を配信元として保持し、フロントの入口と連携画面のみ重ねる。新しいDB migrationやEdge Functionの変更は不要。
+- iPhone実機の音声操作は引き続きユーザーによる確認が必要。
+
+追加テスト：`node scripts/shortcut-test-member.test.mjs`（外部通信なし）。
