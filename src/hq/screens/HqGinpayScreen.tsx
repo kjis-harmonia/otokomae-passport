@@ -47,7 +47,7 @@ export function HqGinpayScreen() {
   }, [type])
 
   return (
-    <div style={{ display: 'grid', gap: 16, fontFamily: HQ_SANS }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 16, fontFamily: HQ_SANS }}>
       <HqPanel title="GINPay 整合性" code="RECONCILE">
         {error && <p style={{ color: HQ_COLORS.redHi, fontSize: 13 }}>{error}</p>}
         {!reconcile ? (

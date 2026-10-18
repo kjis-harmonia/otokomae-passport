@@ -237,3 +237,24 @@ dialog::backdrop { background:#22223033; backdrop-filter:blur(3px); }
 @keyframes hq-johnny-breathe { 0%,100% { transform:scale(.9); filter:brightness(.9); } 50% { transform:scale(1.05); filter:brightness(1.25); } }
 @keyframes hq-johnny-ring { 0%,100% { transform:scale(1); opacity:.8; } 50% { transform:scale(1.25); opacity:.15; } }
 @media (prefers-reduced-motion: reduce) { .hq-johnny-fab-core, .hq-johnny-fab-core::after { animation:none; } }
+/* スマホ：球のボタンは丸だけにして、下の中身に重ならないよう余白をとる */
+@media (max-width: 700px) {
+  .hq-johnny-fab { padding: 7px; right: 14px; bottom: calc(env(safe-area-inset-bottom) + 14px); }
+  .hq-johnny-fab-label { display: none; }
+  .hq-content { padding-bottom: calc(env(safe-area-inset-bottom) + 76px); }
+}
+/* 広い表は画面の中で横にすべらせる（ページ全体が横にはみ出さないように） */
+.hq-screen { min-width:0; overflow-x:auto; }
+/* タブレット縦（iPad など）：メニューは ☰ から開いて、中身を画面いっぱいに */
+@media(max-width:1023px) {
+  .hq-sidebar { display:none; } .hq-menu-toggle { display:inline-flex; }
+  .hq-mobile-drawer { padding:0; border:0; max-width:none; width:100%; max-height:none; height:100dvh; margin:0; background:transparent; overflow:visible; }
+  .hq-mobile-drawer[open] { display:block; } .hq-mobile-drawer-inner { position:relative; display:flex; flex-direction:column; background:#fbfbfc; width:min(300px,86vw); height:100%; padding:30px 16px 20px; } .hq-drawer-close { position:absolute; right:10px; top:10px; } .hq-mobile-drawer .hq-brand { padding-bottom:25px; } .hq-mobile-drawer .hq-nav-item { min-height:44px; font-size:14px; } .hq-mobile-drawer .hq-nav-group>p { font-size:11px; }
+}
+/* スマホ：小さすぎる文字（8〜10px）を読める大きさにそろえる */
+@media(max-width:760px) {
+  .hq-button, .hq-delta, .hq-metric-foot, .hq-chart-details, .hq-data-table th, .hq-data-table td, .hq-member-table th, .hq-member-table td,
+  .hq-mobile-member-date, .hq-content-footer, .hq-update-status, .hq-preview-banner, .hq-page-heading p, .hq-chart-caption, .hq-command-foot { font-size:11px !important; }
+}
+/* タブレット：右下の JOHNNY の球が、いちばん下の中身に重ならないように */
+@media(max-width:1023px) { .hq-content { padding-bottom:calc(env(safe-area-inset-bottom) + 84px); } }
