@@ -1,6 +1,6 @@
 # 来店時の本人確認とJohnny（Staging）
 
-現在は実装・ローカル検証済み、Staging未反映。migration適用の確認リクエストが期限切れとなったため停止した。読み取りで履歴・新規表がないことと、予約設定がtrueのままであることを確認済み。Edge Functionの更新とStagingへのマージはまだ行っていない。
+2026-10-18、Stagingへmigration `20261018040349_customer_store_access` を適用し、rollback検証と権限確認に成功。`booking_settings.app_booking_enabled` はtrueのまま。`johnny-agent` v13へ認証チェックを追加し、JWT必須設定を維持した。AI本体・モデル・プロンプトは変更していない。Web差分はPR #4で管理する。本番には適用しない。
 
 通常の会員QRに、5分だけ有効な確認リクエストIDを追加する。QRに本人のセッションや復帰用の秘密値を含めない。
 店舗端末はQRから読み取った名前で既存会員を更新せず、登録済みの会員情報をスタッフ認証で取得する。スタッフが来店本人を確認し「本人を確認してJohnnyを有効にする」を押して初めて認証済みになる。
@@ -43,3 +43,5 @@ OpenAIのモデル・プロンプト・予約AI本体 `agent.ts` は変更しな
 `supabase/tests/preflight_customer_store_access.sql` は使い捨てDBまたはStaging用で、最後にrollbackする。
 追加の使い捨てPostgreSQL検証では、6予約APIの拒否、スタッフ認証、会員不一致、秘密値不一致、既存IDとチケットの保持、リトライ、期限切れ、非公開エンジンの実行禁止、旧方式のID変更を確認する。
 スマホ幅での顧客→店舗→Face ID案内の操作確認と、実機でのカメラ・Face ID確認は区別して記録する。
+
+Advisor上では私有表のRLSポリシーなし（直接利用を禁止する設計）と公開SECURITY DEFINER RPCの警告が残る。各入口はスタッフセッション・顧客セッション・端末の秘密値を用途に応じて検査し、一般ロールが私有表や元の予約関数を直接利用できないことを確認済み。参照: https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable
