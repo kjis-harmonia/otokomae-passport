@@ -4,12 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, History, Keyboard, Mic, Send, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { JohnnyStage, type StageMode } from '../components/JohnnyStage'
 import { stageLayout } from '../components/stageLayout'
-import { answerMessage, askJohnny, closeTask, listMessages, listTasks, STATUS_LABEL, type ChatTurn, type HqMessage, type HqTask } from '../hqJohnnyStore'
+import { answerMessage, askJohnny, closeTask, johnnyBriefing, listMessages, listTasks, STATUS_LABEL, type ChatTurn, type HqMessage, type HqTask } from '../hqJohnnyStore'
 import { recordUtterance, speak, unlockAudio, voiceLevel } from '../hqVoice'
 import { HQ_TABS } from '../hqMockData'
 import './hqJohnny.css'
 
 const CHAT_KEY = 'ginjiro_hq_johnny_chat'
+const BRIEF_KEY = 'ginjiro_hq_johnny_brief'
+/** あいさつは3時間に1回（開くたびに話しかけると、うるさい） */
+function briefDue(): boolean {
+  try { return Date.now() - Number(localStorage.getItem(BRIEF_KEY) ?? 0) > 3 * 3600_000 } catch { return true }
+}
 const VOICE_KEY = 'ginjiro_hq_johnny_voice'
 function loadChat(): ChatTurn[] {
   try { const raw = localStorage.getItem(CHAT_KEY); return raw ? (JSON.parse(raw) as ChatTurn[]).slice(-60) : [] } catch { return [] }
@@ -57,7 +62,8 @@ export function HqJohnnyScreen() {
   const [messages, setMessages] = useState<HqMessage[] | null>(null)
   const [tasks, setTasks] = useState<HqTask[]>([])
   const [turns, setTurns] = useState<ChatTurn[]>(loadChat)
-  const [mode, setMode] = useState<StageMode>('idle')
+  const [briefing] = useState(briefDue)
+  const [mode, setMode] = useState<StageMode>(briefing ? 'thinking' : 'idle')
   const [heard, setHeard] = useState('')
   const [reply, setReply] = useState('')
   const [error, setError] = useState('')
@@ -75,6 +81,19 @@ export function HqJohnnyScreen() {
     const t = window.setInterval(reload, 30_000)
     return () => window.clearInterval(t)
   }, [reload])
+  // 開いたら JOHNNY から話しかける（今日の様子）。声は、画面に触れたあと「聞く」で
+  useEffect(() => {
+    if (!briefing) return
+    let alive = true
+    johnnyBriefing().then(text => {
+      if (!alive) return
+      try { localStorage.setItem(BRIEF_KEY, String(Date.now())) } catch { /* 次に開いたときにもう一度 */ }
+      setReply(text)
+      setTurns(prev => { const next = [...prev, { role: 'assistant' as const, content: text }]; saveChat(next); return next })
+    }, () => {}).finally(() => { if (alive) setMode(m => (m === 'thinking' ? 'idle' : m)) })
+    return () => { alive = false }
+  }, [briefing])
+
   // 画面いっぱいの間は、下の本部の画面を動かさない
   useEffect(() => {
     const prev = document.body.style.overflow
@@ -106,6 +125,16 @@ export function HqJohnnyScreen() {
     // 執事：頼まれた画面を開く（この端末で使える画面だけ）
     if (r.open && HQ_TABS.some(t => t.id === r.open)) window.location.hash = r.open
   }, [turns, voiceOn, reload])
+
+  const replay = async () => {
+    unlockAudio()
+    abort.current?.abort()
+    const ac = new AbortController()
+    abort.current = ac
+    setMode('speaking')
+    await speak(reply, ac.signal)
+    if (!ac.signal.aborted) setMode('idle')
+  }
 
   const stop = () => { abort.current?.abort(); abort.current = null; setMode('idle') }
 
@@ -177,6 +206,7 @@ export function HqJohnnyScreen() {
           <>
             {heard && <p className="hqj-heard">「{heard}」</p>}
             <p className="hqj-reply">{reply}</p>
+            {voiceOn && mode === 'idle' && <button type="button" className="hqj-btn" style={{ marginTop: 10 }} onClick={() => void replay()}><Volume2 size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />聞く</button>}
           </>
         ) : (
           <>
