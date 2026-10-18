@@ -8,7 +8,7 @@
  * install/activate は即時に反映させるため skipWaiting + clients.claim を使用。
  */
 
-const SW_VERSION = '2026-10-18b'
+const SW_VERSION = '2026-10-18c'
 // 確かめ用の記録（アプリの QR 画面に出す）：この SW の版と、最後にお知らせを受け取った時刻
 const note = (key, value) => caches.open('ginjiro-diag').then((c) => c.put(key, new Response(String(value)))).catch(() => {})
 
@@ -31,7 +31,11 @@ self.addEventListener('push', (event) => {
       tag: data.tag || 'ginjiro-johnny',
       renotify: true,
       data: { url: data.url || '/?tab=reserve&johnny=1' },
-    }),
+    })
+      // 確かめ：iPhone が通知を作ったか（表示中の数）と、失敗したならその理由
+      .then(() => self.registration.getNotifications())
+      .then((list) => note('/diag/shown', list.length + '件'))
+      .catch((e) => note('/diag/shown', 'エラー ' + String(e && e.message || e).slice(0, 60))),
   ]))
 })
 
