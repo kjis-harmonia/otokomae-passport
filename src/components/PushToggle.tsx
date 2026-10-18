@@ -65,7 +65,7 @@ function Diag() {
   }
   return (
     <div style={{ margin: '8px 4px 0', fontSize: 11, color: 'rgba(242,230,200,0.4)', lineHeight: 1.6 }}>
-      {info && <span>版 {info.version}・SW {info.active}・最後の受信 {info.lastPush}</span>}
+      {info && <span>版 {info.version}・SW {info.active}・最後の受信 {info.lastPush}・表示 {info.shown}</span>}
       <button type="button" onClick={() => void test()} style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 8, border: '1px solid rgba(201,162,74,0.3)', background: 'transparent', color: 'rgba(242,230,200,0.6)', fontSize: 11 }}>表示テスト</button>
       {msg && <span style={{ marginLeft: 6 }}>{msg}</span>}
     </div>
