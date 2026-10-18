@@ -43,4 +43,13 @@ export const listTasks = () => callHqRpc<HqTask[]>('hq_tasks_list', { p_include_
 /** 終わり（BOS へ【完了】が自動で届く） */
 export const closeTask = (id: string, status: 'done' | 'cancelled' = 'done') => callHqRpc<HqTask | { error: string }>('hq_task_close', { p_id: id, p_status: status, p_note: null })
 
+/** 朝のあいさつ：JOHNNY から今日の様子を話す */
+export async function johnnyBriefing(): Promise<string> {
+  const hq = getHqToken()
+  if (!hq) throw new Error('hq_auth_required')
+  const { data, error } = await supabase.functions.invoke<{ reply?: string; error?: string }>('hq-johnny', { body: { hq, briefing: true } })
+  if (error || !data?.reply) throw new Error(data?.error ?? 'johnny_failed')
+  return data.reply
+}
+
 export const STATUS_LABEL: Record<HqMessage['status'], string> = { open: '未読', seen: '見た', approved: 'OK', rejected: 'NG', answered: '返事あり' }
