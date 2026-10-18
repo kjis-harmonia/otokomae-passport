@@ -1,3 +1,5 @@
+import {ONE_TAP_STAGING} from '../features/customerAccess/passkeys'
+import {StaffStoreApproval} from '../features/customerAccess/StoreVerification'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { getStoredValue, setStoredValue } from '../utils/storage'
@@ -157,6 +159,7 @@ export interface PassportQRData {
   reservation?: CurrentReservation | null
   /** JOHNNY の予約で選んだ券（予約の日の会員 QR） */
   ticketIds?: string[]
+  storeRequestId?: string
 }
 
 export interface TicketUseQRData {
@@ -230,6 +233,7 @@ export function parseQR(text: string): AnyQRData | null {
         userId: d.userId,
         name: d.name || '名前未設定',
         reservation: normalizeCurrentReservation(d.reservation),
+        storeRequestId: typeof d.a==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(d.a)?d.a:undefined,
         ticketIds: Array.isArray(d.t) ? (d.t as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 30) : undefined,
       }
     }
@@ -601,7 +605,11 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     // 登録に失敗した状態では発行・使用に進ませない。
     let ctx
     try {
-      ctx = await registerCustomerWithContext(passportData.userId, passportData.name)
+      ctx = passportData.storeRequestId && ONE_TAP_STAGING ? await getCustomerContextForStaff(passportData.userId) : await registerCustomerWithContext(passportData.userId, passportData.name)
+      if(passportData.storeRequestId && ONE_TAP_STAGING){
+        if(!ctx.customer)throw new Error('会員情報を確認できませんでした。')
+        setScannedData({...passportData,name:ctx.customer.name})
+      }
     } catch (err) {
       setScannedData(null)
       setPhase('scan')
@@ -1206,7 +1214,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             )}
 
             {/* ── アプリ紐付けコード（既存会員の移行・端末のセッション再発行） ── */}
-            <div style={{ marginBottom: 14, borderRadius: 16, padding: '14px 16px', background: 'rgba(151,115,43,0.05)', border: '1px solid rgba(151,115,43,0.22)' }}>
+            <div style={{ display: scannedData.storeRequestId ? 'none' : undefined, marginBottom: 14, borderRadius: 16, padding: '14px 16px', background: 'rgba(151,115,43,0.05)', border: '1px solid rgba(151,115,43,0.22)' }}>
               {bindCode ? (
                 <div style={{ textAlign: 'center' }}>
                   <p style={{ fontSize: 13, color: '#1c1f1d', marginBottom: 6 }}>お客様のアプリに入力してもらってください</p>
@@ -1233,6 +1241,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               {bindCodeError && <p style={{ fontSize: 13, color: '#b23a3a', marginTop: 8 }}>{bindCodeError}</p>}
             </div>
 
+            {scannedData.storeRequestId&&<StaffStoreApproval key={scannedData.storeRequestId} requestId={scannedData.storeRequestId} userId={scannedData.userId} memberName={scannedData.name} staffName={staffId}/>}
             {/* ── 来店チェックイン ── */}
             <div style={{ marginBottom: 14 }}>
               {checkInStatus === 'done' && checkInDate ? (

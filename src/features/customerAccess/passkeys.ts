@@ -23,7 +23,8 @@ async function request<T>(action:string,input:Record<string,unknown>={}):Promise
   }
   return result as T
 }
-function adoptMember(member:MemberIdentity){
+export function adoptMember(member:MemberIdentity){
+  requireStorage()
   if(typeof member.user_id!=='string'||typeof member.name!=='string'||typeof member.session!=='string'||member.session.length<32)throw Error('会員情報を確認できませんでした。')
   const previous=getStoredValue<string|null>(USER_ID_KEY,null)
   // User-owned server data stays unchanged. Do not carry another member's local display cache.

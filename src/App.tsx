@@ -1,3 +1,4 @@
+import {useStoreAccess} from './features/customerAccess/storeAccess'
 import {ONE_TAP_STAGING,resumeSavedMember,supportsPasskeys,passkeyStatus} from './features/customerAccess/passkeys'
 import {PasskeyEnrollmentOffer} from './features/customerAccess/CustomerAccess'
 import {useCustomerAccessSession} from './features/customerAccess/useCustomerAccessSession'
@@ -858,6 +859,8 @@ function App() {
   })
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
   const [passkeyOffer,setPasskeyOffer]=useState(false)
+  const [afterStoreSetup,setAfterStoreSetup]=useState(false)
+  const storeAccess=useStoreAccess()
   const customerAccessSession=useCustomerAccessSession()
   useEffect(()=>{
     if(!ONE_TAP_STAGING)return
@@ -874,13 +877,24 @@ function App() {
   const [showQrModal, setShowQrModal] = useState(false)
   // Existing signed-in members also need a first setup entry; never enroll from a display-only member ID.
   useEffect(()=>{
-    if(!ONE_TAP_STAGING || phase!=='app' || appLoading || activeTab!=='home' || showQrModal || welcomeCouponDialog || hasOpenModal || isPremiumGachaOpen || !customerAccessSession || !supportsPasskeys())return
+    if(!ONE_TAP_STAGING || storeAccess.mode!=='verified' || phase!=='app' || appLoading || activeTab!=='home' || showQrModal || welcomeCouponDialog || hasOpenModal || isPremiumGachaOpen || !customerAccessSession || !supportsPasskeys())return
     let alive=true
     void passkeyStatus().then(status=>{
       if(alive && getCustomerSession()===customerAccessSession && !status.registered && getStoredValue<string|null>(PASSKEY_SETUP_PROMPT_KEY,null)!==status.user_id)setPasskeyOffer(true)
     }).catch(()=>{})
     return()=>{alive=false}
-  },[phase,appLoading,activeTab,showQrModal,welcomeCouponDialog,hasOpenModal,isPremiumGachaOpen,customerAccessSession])
+  },[phase,appLoading,activeTab,showQrModal,welcomeCouponDialog,hasOpenModal,isPremiumGachaOpen,customerAccessSession,storeAccess.mode])
+  useEffect(()=>{
+    const verified=()=>{
+      setShowQrModal(false);setMemberStatus(loadMemberStatus());setPhase('app')
+      void passkeyStatus().then(status=>{
+        if(!status.registered&&supportsPasskeys()){setActiveTab('home');setNavHighlight('home');setAfterStoreSetup(true);setPasskeyOffer(true)}
+        else {setActiveTab('reserve');setNavHighlight('reserve')}
+      }).catch(()=>{setActiveTab('reserve');setNavHighlight('reserve')})
+    }
+    window.addEventListener('ginjiro:store-verified',verified)
+    return()=>window.removeEventListener('ginjiro:store-verified',verified)
+  },[])
   // navHighlight drives the bottom nav visual indicator independently from activeTab
   const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
@@ -965,7 +979,7 @@ function App() {
     saveMemberStatus(nextStatus)
     setMemberStatus(nextStatus)
     setPhase('app')
-    if(ONE_TAP_STAGING && payload && supportsPasskeys())setPasskeyOffer(true)
+    // Face ID is offered after the first store verification, not on self-registration.
     if (payload?.welcomeCouponIssued && payload.ticket) {
       setWelcomeCouponDialog({ name: nextStatus.memberName, ticket: payload.ticket })
     }
@@ -1341,7 +1355,7 @@ function App() {
         </>
       )}
 
-      {passkeyOffer&&!welcomeCouponDialog&&!appLoading&&<PasskeyEnrollmentOffer onClose={()=>{const memberId=getStoredValue<string|null>(USER_ID_KEY,null);if(memberId)setStoredValue(PASSKEY_SETUP_PROMPT_KEY,memberId);setPasskeyOffer(false)}}/>}
+      {passkeyOffer&&!welcomeCouponDialog&&!appLoading&&<PasskeyEnrollmentOffer onClose={()=>{const memberId=getStoredValue<string|null>(USER_ID_KEY,null);if(memberId)setStoredValue(PASSKEY_SETUP_PROMPT_KEY,memberId);setPasskeyOffer(false);if(afterStoreSetup){setAfterStoreSetup(false);setActiveTab('reserve');setNavHighlight('reserve')}}}/>}
       {/* Loading screen — topmost, covers everything during initial load */}
       <AnimatePresence>
         {appLoading && <GinjiroLoadingScreen key="loading" />}
