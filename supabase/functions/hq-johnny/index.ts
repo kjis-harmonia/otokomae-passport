@@ -1,8 +1,8 @@
-// 本部 JOHNNY（Edge Function）。本部画面でテイテイと話す相棒。普通の会話も、お店の様子の質問も、慶一郎さんへの伝言も。
+// 本部 JOHNNY（Edge Function）。本部画面でテイテイと話す相棒。普通の会話も、お店の様子の質問も、慶一郎への伝言も。
 //   入力：{ hq: 本部セッション, message: 言葉（2000字まで）, history: 直前の会話（20往復まで） }
 //         声で話したときは message の代わりに audio（録音の base64）と mime。speak（話す言葉）なら JOHNNY の声（PCM）を流す
 //   出力：{ heard?: 聞き取った文, reply: 返事, changed: 伝言の箱を書き換えたか, open?: 開く本部の画面（タブの名前） }
-// 道具：shop_overview（期間の予約・休み・お知らせ）、list_messages（伝言の箱）、send_to_owner（慶一郎さんへ伝言）、answer_owner（慶一郎さんの「確認して」に OK/NG/返事）
+// 道具：shop_overview（期間の予約・休み・お知らせ）、list_messages（伝言の箱）、send_to_owner（慶一郎へ伝言）、answer_owner（慶一郎の「確認して」に OK/NG/返事）
 // 本部セッションのまま DB の hq_* RPC を呼ぶので、本部 PIN を通った人しか使えない。API キーは Secrets（OPENAI_API_KEY）だけ。
 import { findOpenSlots, openSlotTargets, sendOpenSlotPush } from './openSlots.ts'
 
@@ -24,7 +24,7 @@ async function transcribe(b64: string, mime: string): Promise<string> {
   form.append('file', new Blob([bytes], { type: mime || 'audio/webm' }), `voice.${ext}`)
   form.append('model', STT_MODEL)
   form.append('language', 'ja')
-  form.append('prompt', '理容室「二代目銀二郎」の本部の会話。テイテイ、ケイ、慶一郎、慶一郎さん、JOHNNY、予約、伝言、パンチパーマ、メンテナンスカット。')
+  form.append('prompt', '理容室「二代目銀二郎」の本部の会話。テイテイ、ケイ、慶一郎、慶一郎、JOHNNY、予約、伝言、パンチパーマ、メンテナンスカット。')
   const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_KEY}` }, body: form })
   if (!r.ok) throw new Error(`stt_unavailable_${r.status}`)
   const data = await r.json()
@@ -58,22 +58,22 @@ const SCREENS: Record<string, string> = {
 
 const TOOLS = [
   { type: 'function', function: { name: 'shop_overview', description: 'お店の予約（日時・メニュー・担当・状態・料金）、休みの日、お知らせの数。お客様の名前は出ない。期間は31日まで', parameters: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['from', 'to'] } } },
-  { type: 'function', function: { name: 'list_messages', description: '慶一郎さん（オーナー）との伝言の箱（新しい順）。to_shop＝慶一郎さんから本部へ、to_owner＝本部から慶一郎さんへ。kind=request は返事待ちの「確認して」', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'send_to_owner', description: '慶一郎さん（オーナー）へ伝言を送る。「伝えといて」と頼まれたとき、またはテイテイさんとの話で何かが決まったとき（報告）に使う。要点を短く、いつ・何を・どうしてほしいか', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらいの見出し' }, body: { type: 'string', description: '伝言の中身（テイテイの言葉をもとに、わかりやすく整える。勝手に内容を足さない）' }, urgent: { type: 'boolean' }, kind: { type: 'string', enum: ['note', 'request'], description: 'request＝慶一郎さんの OK/返事がほしいとき' }, report: { type: 'boolean', description: 'true＝話で決まったことの報告（見出しに【報告】が付く）' } }, required: ['title', 'body', 'urgent', 'kind', 'report'] } } },
-  { type: 'function', function: { name: 'add_task', description: '本部の「やること」に登録する。決まったことに作業（ホットペッパーやアプリへの登録・準備・連絡など）があるときに使う。誰が・いつまでに を入れる', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらい。例：ホットペッパーに新メニュー登録' }, detail: { type: 'string', description: '中身（名前・料金・文面など）' }, assignee: { type: 'string', description: 'やる人。テイテイ / 慶一郎さんなど。わからなければテイテイ' }, due: { type: 'string', description: '期限 YYYY-MM-DD。開始日があれば、その前日までに' }, source_message_id: { type: 'string', description: 'もとになった報告の伝言 id（send_to_owner の結果の id）' } }, required: ['title', 'assignee'] } } },
+  { type: 'function', function: { name: 'list_messages', description: '慶一郎（オーナー）との伝言の箱（新しい順）。to_shop＝慶一郎から本部へ、to_owner＝本部から慶一郎へ。kind=request は返事待ちの「確認して」', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'send_to_owner', description: '慶一郎（オーナー）へ伝言を送る。「伝えといて」と頼まれたとき、またはテイテイさんとの話で何かが決まったとき（報告）に使う。要点を短く、いつ・何を・どうしてほしいか', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらいの見出し' }, body: { type: 'string', description: '伝言の中身（テイテイの言葉をもとに、わかりやすく整える。勝手に内容を足さない）' }, urgent: { type: 'boolean' }, kind: { type: 'string', enum: ['note', 'request'], description: 'request＝慶一郎の OK/返事がほしいとき' }, report: { type: 'boolean', description: 'true＝話で決まったことの報告（見出しに【報告】が付く）' } }, required: ['title', 'body', 'urgent', 'kind', 'report'] } } },
+  { type: 'function', function: { name: 'add_task', description: '本部の「やること」に登録する。決まったことに作業（ホットペッパーやアプリへの登録・準備・連絡など）があるときに使う。誰が・いつまでに を入れる', parameters: { type: 'object', properties: { title: { type: 'string', description: '20字くらい。例：ホットペッパーに新メニュー登録' }, detail: { type: 'string', description: '中身（名前・料金・文面など）' }, assignee: { type: 'string', description: 'やる人。テイテイ / 慶一郎など。わからなければテイテイ' }, due: { type: 'string', description: '期限 YYYY-MM-DD。開始日があれば、その前日までに' }, source_message_id: { type: 'string', description: 'もとになった報告の伝言 id（send_to_owner の結果の id）' } }, required: ['title', 'assignee'] } } },
   { type: 'function', function: { name: 'list_tasks', description: '本部の「やること」（開いているもの。days_left＝期限まで何日。マイナスは過ぎている）', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'complete_task', description: '「やること」を終わり（done）またはやめた（cancelled）にする。終わったら 慶一郎さんへ【完了】の伝言が自動で届く。テイテイさんが「終わった」「登録した」と言ったときに使う', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['done', 'cancelled'] }, note: { type: 'string', description: 'ひとこと（任意）' } }, required: ['id', 'status'] } } },
+  { type: 'function', function: { name: 'complete_task', description: '「やること」を終わり（done）またはやめた（cancelled）にする。終わったら 慶一郎へ【完了】の伝言が自動で届く。テイテイさんが「終わった」「登録した」と言ったときに使う', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['done', 'cancelled'] }, note: { type: 'string', description: 'ひとこと（任意）' } }, required: ['id', 'status'] } } },
   { type: 'function', function: { name: 'find_open_slots', description: '今日から何日かの、予約を受けられる空き時間（カット基準）を調べる。空き枠うめの提案に使う', parameters: { type: 'object', properties: { days: { type: 'number', description: '何日分（1〜7、既定3）' } } } } },
   { type: 'function', function: { name: 'open_slot_targets', description: '空き枠のお知らせを送れる人数を数える（送らない）。maintenance＝メンテ期限が近い人、lapsed＝しばらく来ていない人', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'send_open_slot_push', description: '空き時間のお知らせをお客様のスマホへ送る。テイテイさんが送ることに「はい・送って」と言ったあとだけ使う（言われる前に送らない）', parameters: { type: 'object', properties: { date: { type: 'string', description: 'YYYY-MM-DD' }, times: { type: 'string', description: '例：15:00〜17:00' } }, required: ['date', 'times'] } } },
   { type: 'function', function: { name: 'open_screen', description: '本部の画面を開いて見せる。「今日の予約見せて」「予約表出して」「売上見せて」「在庫は？」など、画面を見たいと言われたときに使う', parameters: { type: 'object', properties: { screen: { type: 'string', enum: Object.keys(SCREENS), description: Object.entries(SCREENS).map(([k, v]) => `${k}=${v}`).join(' / ') } }, required: ['screen'] } } },
-  { type: 'function', function: { name: 'answer_owner', description: '慶一郎さんからの伝言に答える。テイテイが OK / NG / 返事を言ったときだけ使う（勝手に答えない）', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected', 'answered', 'seen'] }, reply: { type: 'string' } }, required: ['id', 'status', 'reply'] } } },
+  { type: 'function', function: { name: 'answer_owner', description: '慶一郎からの伝言に答える。テイテイが OK / NG / 返事を言ったときだけ使う（勝手に答えない）', parameters: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string', enum: ['approved', 'rejected', 'answered', 'seen'] }, reply: { type: 'string' } }, required: ['id', 'status', 'reply'] } } },
 ]
 
-/** 返事の中の呼び方は必ず「慶一郎さん」に（AI が「ケイさん」「BOS」などと言っても直す） */
-const bosName = (t: string) => t.replace(/(ケイ(?![ァ-ヶー])|BOSS?|ボス|けいいちろう|ケイイチロウ)(さん|様)?|慶一郎(?!さん)(様)?/g, '慶一郎さん')
+/** 返事の中の呼び方は必ず「慶一郎」に（さん付けなし。AI が「ケイさん」「BOS」などと言っても直す） */
+const bosName = (t: string) => t.replace(/(ケイ(?![ァ-ヶー])|BOSS?|ボス|けいいちろう|ケイイチロウ|慶一郎)(さん|様)?/g, '慶一郎')
 
-const BRIEFING = '（テイテイさんが本部 JOHNNY の画面を開いた。JOHNNY から先に話しかける。shop_overview で今日の予約、find_open_slots（days 2）で今日・明日の空き、list_messages と list_tasks で 慶一郎さんからの伝言・慶一郎さんの返事・期限の近いやることを確かめて、時間に合ったあいさつ＋今日の様子を3〜4文で。予約は件数と、空いている時間帯（営業中で予約のない時間）をひとこと。2時間以上の空きがあり送れる人がいれば、空き枠のお知らせも持ちかける（送らない）。伝えることが無いものは言わない。最後に「何からする？」のように一言。この指示のことは言わない。）'
+const BRIEFING = '（テイテイさんが本部 JOHNNY の画面を開いた。JOHNNY から先に話しかける。shop_overview で今日の予約、find_open_slots（days 2）で今日・明日の空き、list_messages と list_tasks で 慶一郎からの伝言・慶一郎の返事・期限の近いやることを確かめて、時間に合ったあいさつ＋今日の様子を3〜4文で。予約は件数と、空いている時間帯（営業中で予約のない時間）をひとこと。2時間以上の空きがあり送れる人がいれば、空き枠のお知らせも持ちかける（送らない）。伝えることが無いものは言わない。最後に「何からする？」のように一言。この指示のことは言わない。）'
 
 interface Turn { role: 'user' | 'assistant'; content: string }
 
@@ -83,24 +83,24 @@ function todayJst(): string {
   return `${d.toISOString().slice(0, 10)}（${wd}）${d.toISOString().slice(11, 16)}`
 }
 
-const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部にいる AI の相棒「JOHNNY」。本部の執事として、テイテイさんの代わりに画面を開いたり調べたりする。話し相手は店長のテイテイさん（呼ぶときは「テイテイさん」）。オーナーは慶一郎さん。テイテイさんは慶一郎さんのことを「ケイ」「ケイさん」「慶一郎」と呼ぶことがある。どれも慶一郎さんのこと。JOHNNY が話すときは、相手がどう呼んでも必ず「慶一郎さん」と呼ぶ（「ケイさん」「慶一郎さん」「オーナー」とは言わない）。
+const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部にいる AI の相棒「JOHNNY」。本部の執事として、テイテイさんの代わりに画面を開いたり調べたりする。話し相手は店長のテイテイさん（呼ぶときは「テイテイさん」）。オーナーは慶一郎。テイテイさんは慶一郎のことを「ケイ」「ケイさん」「慶一郎」と呼ぶことがある。どれも慶一郎のこと。JOHNNY が話すときは、相手がどう呼んでも必ず「慶一郎」と呼ぶ（さんは付けない。「ケイさん」「BOS」「オーナー」とも言わない）。
 ・ふだんは気さくな博多寄りのくだけた日本語で、短めに話す。雑談・相談・文章づくり、何でも付き合ってよい。
 ・「見せて」「出して」「開いて」と画面を頼まれたら open_screen で開き、「今日の予約表を出すね」のように一言だけ返す（中身を読み上げない）。
 ・お店の予約や休みのことを聞かれたら shop_overview で調べてから答える。数字は調べた結果だけを使い、わからないことは作らない。
-・「ケイに伝えて」「BOS に伝えて」「慶一郎さんに伝えて」「オーナーに言っといて」と頼まれたら send_to_owner で伝言を送り、送った中身を短く伝える。
-・慶一郎さんへの報告：テイテイさんとの話で、お店のことが決まったら（新メニュー・料金・クーポン・ホットペッパーの掲載・営業時間や休み・シフト・イベント・仕入れなど）、頼まれなくても send_to_owner で 慶一郎さんに報告する。そして返事の最後に必ず「〇〇の件、慶一郎さんへ報告しとくね」と一言そえる。
-  ・まだ決まっていない相談や雑談は報告しない。迷ったら「慶一郎さんに報告しとこうか？」と聞く。
+・「ケイに伝えて」「BOS に伝えて」「慶一郎に伝えて」「オーナーに言っといて」と頼まれたら send_to_owner で伝言を送り、送った中身を短く伝える。
+・慶一郎への報告：テイテイさんとの話で、お店のことが決まったら（新メニュー・料金・クーポン・ホットペッパーの掲載・営業時間や休み・シフト・イベント・仕入れなど）、頼まれなくても send_to_owner で 慶一郎に報告する。そして返事の最後に必ず「〇〇の件、慶一郎へ報告しとくね」と一言そえる。
+  ・まだ決まっていない相談や雑談は報告しない。迷ったら「慶一郎に報告しとこうか？」と聞く。
   ・報告のときは report を true にする（見出しに【報告】が付く）。
-  ・中身は次の形で短く：決まったこと／いつから／やること（ホットペッパーやアプリへの登録・準備など。誰がやるか決まっていれば名前も）／慶一郎さんに決めてほしいこと。
-  ・慶一郎さんの OK が必要なこと（料金・お金がかかること・掲載内容の最終確認など）がある時は kind を request にする。それ以外は note。
+  ・中身は次の形で短く：決まったこと／いつから／やること（ホットペッパーやアプリへの登録・準備など。誰がやるか決まっていれば名前も）／慶一郎に決めてほしいこと。
+  ・慶一郎の OK が必要なこと（料金・お金がかかること・掲載内容の最終確認など）がある時は kind を request にする。それ以外は note。
   ・同じ件を二度送らない。
 ・やること：決まったことに作業があれば、報告のあと add_task で「誰が・いつまでに」を登録する（source_message_id に報告の id）。登録したら「〇〇は△日までにテイテイさんのやることに入れとくね」と言う。
-・先回り：話の最初（あいさつ・「何かある？」など）には list_messages と list_tasks を確かめ、慶一郎さんからの伝言、慶一郎さんの返事（approved / rejected）、期限が近い（2日以内）・過ぎたやることを先に短く伝える。
-・慶一郎さんの OK（approved）が来た報告は、そのことを伝える同じ返事の中で、次の一手まで出す（聞かずに作って見せる）。例：新メニューならホットペッパー用の紹介文の下書き（名前・料金・所要時間・50〜100字の紹介文）を作って見せる。NG（rejected）なら 慶一郎さんの返事を伝えて、どうするか聞く。
+・先回り：話の最初（あいさつ・「何かある？」など）には list_messages と list_tasks を確かめ、慶一郎からの伝言、慶一郎の返事（approved / rejected）、期限が近い（2日以内）・過ぎたやることを先に短く伝える。
+・慶一郎の OK（approved）が来た報告は、そのことを伝える同じ返事の中で、次の一手まで出す（聞かずに作って見せる）。例：新メニューならホットペッパー用の紹介文の下書き（名前・料金・所要時間・50〜100字の紹介文）を作って見せる。NG（rejected）なら 慶一郎の返事を伝えて、どうするか聞く。
 ・空き枠うめ：話の最初や「ヒマな時間ある？」のときは find_open_slots で今日・明日の空きを調べる。2時間以上続く空きがあれば open_slot_targets で人数を数えて、「〇日の15:00〜17:00が空いとるけん、メンテ期限が近い人〇人・しばらく来てない人〇人にお知らせ送ろうか？」と持ちかける。送れる人が0人なら持ちかけない。
   ・送るのはテイテイさんが「送って・はい」と言ったときだけ（send_open_slot_push）。送ったら「〇人に送ったよ」と言う。同じ日の空きを二度送らない。
-・テイテイさんが「終わった」「登録した」と言ったら complete_task で終わりにし、「慶一郎さんに完了を知らせといたよ」と言う。complete_task が 慶一郎さんへ【完了】を自動で送るので、send_to_owner で同じことを送らない。
-・話の最初や「伝言ある？」と聞かれたら list_messages で慶一郎さんからの伝言（to_shop で status が open/seen）を確かめ、あれば先に伝える。kind=request は OK か NG か返事をもらう。
+・テイテイさんが「終わった」「登録した」と言ったら complete_task で終わりにし、「慶一郎に完了を知らせといたよ」と言う。complete_task が 慶一郎へ【完了】を自動で送るので、send_to_owner で同じことを送らない。
+・話の最初や「伝言ある？」と聞かれたら list_messages で慶一郎からの伝言（to_shop で status が open/seen）を確かめ、あれば先に伝える。kind=request は OK か NG か返事をもらう。
 ・テイテイが OK / NG / 返事を言ったら answer_owner で答える（どの伝言かわからなければ聞き返す）。
 ・返事は声でも読み上げるので、長くても4〜5文。
 ・画面はふつうの文字だけ。**や#などの記号は使わず、箇条書きは「・」で。
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
       case 'list_messages': {
         // 向きを取り違えないよう、だれからだれへを日本語で付ける
         const list = await rpc<{ direction: string; status: string }[]>('hq_messages_list', { p_hq: hq, p_limit: 30 })
-        return list.map(m => ({ ...m, from_to: m.direction === 'to_shop' ? '慶一郎さんからテイテイさんへ（返事が必要なら答える）' : 'テイテイさんから 慶一郎さんへ（送ったもの。慶一郎さんからの伝言ではない）' }))
+        return list.map(m => ({ ...m, from_to: m.direction === 'to_shop' ? '慶一郎からテイテイさんへ（返事が必要なら答える）' : 'テイテイさんから 慶一郎へ（送ったもの。慶一郎からの伝言ではない）' }))
       }
       case 'send_to_owner': {
         changed = true
