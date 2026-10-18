@@ -42,7 +42,7 @@ function fmtLastVisit(dateStr: string): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
-  return `${y} / ${m} / ${day}`
+  return `${y}.${m}.${day}`
 }
 
 export function PassportCard() {
@@ -287,7 +287,8 @@ export function PassportCard() {
                   </p>
                   <p style={{
                     fontFamily: SERIF,
-                    fontSize: 'clamp(20px, 5.2vw, 24px)',
+                    // 細いスマホでも右が切れないよう、点区切りで小さめに（344px 幅でも収まる）
+                    fontSize: 'clamp(16px, 4.6vw, 24px)',
                     fontWeight: 700,
                     color: lastVisitDate ? '#f5f5f7' : 'rgba(242,230,200,0.16)',
                     letterSpacing: '0.04em',
@@ -297,7 +298,7 @@ export function PassportCard() {
                       ? '0 1px 0 rgba(0,0,0,0.98), 0 2px 10px rgba(0,0,0,0.88)'
                       : 'none',
                   }}>
-                    {lastVisitFmt ?? 'YYYY / MM / DD'}
+                    {lastVisitFmt ?? 'YYYY.MM.DD'}
                   </p>
                 </div>
               </div>
@@ -439,7 +440,7 @@ export function PassportCard() {
             <p style={{ fontSize: 10, color: 'rgba(242,230,200,0.38)', letterSpacing: '0.06em', marginBottom: 10, lineHeight: 1.7 }}>
               端末変更・データ削除時はスタッフに<br />こちらのコードをお伝えください
             </p>
-            <p style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#C9A24A', letterSpacing: '0.22em', textAlign: 'center', marginBottom: 8 }}>
+            <p style={{ fontFamily: SERIF, fontSize: 'clamp(19px, 6vw, 26px)', fontWeight: 700, color: '#C9A24A', letterSpacing: '0.16em', textAlign: 'center', marginBottom: 8, whiteSpace: 'nowrap' }}>
               {customerData.recovery_code}
             </p>
             <p style={{ fontSize: 9, color: 'rgba(242,230,200,0.22)', textAlign: 'center', letterSpacing: '0.1em' }}>
