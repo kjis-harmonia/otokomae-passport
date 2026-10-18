@@ -13,7 +13,7 @@ export function PasskeyLoginButton({onSignedIn,label='Face IDなどでログイ�
       setBusy(true);onBusyChange?.(true);setError('')
       void loginPasskey().then(()=>{if(onSignedIn)onSignedIn();else window.location.reload()}).catch(e=>setError(passkeyMessage(e))).finally(()=>{setBusy(false);onBusyChange?.(false)})
     }}>{busy?'本人確認しています…':label}</button>
-    <p className="access-hint">設定済みの方専用です。初回はホーム画面の銀二郎appで「Face IDなどを設定」を押してください。</p>
+    <p className="access-hint">設定済みの方はこちら。初回は、会員証が表示される銀二郎appのQRを店頭で見せてください。スタッフの本人確認後にFace IDなどを設定できます。再登録は不要です。</p>
     {error&&<p role="alert" className="access-error">{error}</p>}
   </div>
 }
