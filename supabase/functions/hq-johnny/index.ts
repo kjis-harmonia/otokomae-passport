@@ -134,16 +134,16 @@ Deno.serve(async (req) => {
   if (!hq) return json(401, { error: 'hq_auth_required' })
   const authed = rpc('hq_get_notify', { p_hq: hq }).then(() => true, () => false)
 
-  // JOHNNY の声：本部セッションを確かめながら音声を作り、届いた分から流す（PCM 16bit・24kHz・モノラル）
+  // JOHNNY の声：本部セッションを確かめてから音声を作り、届いた分から流す（PCM 16bit・24kHz・モノラル）
+  //   有料の音声 API は、認証が通ったあとにだけ呼ぶ（無効なセッションでは発注しない）
   const speakText = typeof body.speak === 'string' ? body.speak.trim().slice(0, 800) : ''
   if (speakText) {
-    const speech = fetch('https://api.openai.com/v1/audio/speech', {
+    if (!(await authed)) return json(401, { error: 'hq_auth_required' })
+    const r = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: TTS_MODEL, voice: TTS_VOICE, input: speakText, instructions: TTS_STYLE, response_format: 'pcm' }),
     })
-    if (!(await authed)) { speech.then(x => x.body?.cancel()).catch(() => {}); return json(401, { error: 'hq_auth_required' }) }
-    const r = await speech
     if (!r.ok || !r.body) return json(502, { error: 'tts_unavailable' })
     return new Response(r.body, { status: 200, headers: { ...CORS, 'Content-Type': 'audio/pcm', 'Cache-Control': 'no-store' } })
   }
