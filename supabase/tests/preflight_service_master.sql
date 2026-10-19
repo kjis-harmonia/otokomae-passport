@@ -15,9 +15,10 @@ begin
   select count(*) into v_offers from public.service_offers;
   if v_offers <> 23 then raise exception 'expected 23 offers, got %', v_offers; end if;
 
-  -- 予約可は確定したものだけ（現時点ではギンパラカーリー1件）
+  -- 予約可にするかは本部（お店）が決める（10/06 時点はギンパラカーリーだけ、その後お店が順に予約可にした）。
+  -- ここでは件数を決め打ちせず、予約可のものに所要時間・担当があること（下）と、ギンパラカーリーが予約可であることだけ確かめる
   select string_agg(code, ',' order by code) into v_bookable from public.service_menus where booking_enabled;
-  if v_bookable is distinct from 'perm-ginpara-curly' then raise exception 'expected only perm-ginpara-curly to be bookable, got %', v_bookable; end if;
+  if v_bookable is null or position('perm-ginpara-curly' in v_bookable) = 0 then raise exception 'expected perm-ginpara-curly to be bookable, got %', v_bookable; end if;
 
   select * into m from public.service_menus where code = 'perm-ginpara-curly';
   select string_agg(s.display_name, ',' order by s.display_name) into v_staff
@@ -33,10 +34,12 @@ begin
     raise exception 'bookable service without duration or staff';
   end if;
 
-  -- 参考所要時間は記録だけ（予約可にしない・所要時間に入れない）
-  if (select count(*) from public.service_menus where reference_duration_min is not null) <> 9
-     or exists (select 1 from public.service_menus where reference_duration_min is not null and (booking_enabled or duration_min is not null)) then
-    raise exception 'reference durations must be recorded on 9 services and never enable booking';
+  -- 参考所要時間は記録として 9 件に残す。予約可にするのは、お店が本部で所要時間を確定してから（予約可なら所要時間があることは上で確かめている）
+  if (select count(*) from public.service_menus where reference_duration_min is not null) <> 9 then
+    raise exception 'reference durations must be recorded on 9 services';
+  end if;
+  if exists (select 1 from public.service_menus where reference_duration_min is not null and booking_enabled and duration_min is null) then
+    raise exception 'reference duration must not be used as the booking duration';
   end if;
 
   -- 旧会計の「カット ¥3,300」は統合しない。曖昧なものも統合しない

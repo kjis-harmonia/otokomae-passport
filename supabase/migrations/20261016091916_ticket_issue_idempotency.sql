@@ -1,5 +1,5 @@
 -- Staging first. Each request is committed together with its tickets and receipt.
-create table app_private.ticket_issue_requests (
+create table if not exists app_private.ticket_issue_requests (
   request_id uuid primary key,
   payload jsonb not null,
   response jsonb,
@@ -8,7 +8,7 @@ create table app_private.ticket_issue_requests (
 alter table app_private.ticket_issue_requests enable row level security;
 revoke all on app_private.ticket_issue_requests from public, anon, authenticated;
 
-create function public.staff_issue_tickets_once(
+create or replace function public.staff_issue_tickets_once(
   p_staff text, p_request_id uuid, p_user_id text, p_type text,
   p_amount integer, p_quantity integer, p_staff_name text, p_customer_name text
 )

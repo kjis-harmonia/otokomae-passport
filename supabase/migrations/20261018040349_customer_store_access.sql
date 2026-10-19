@@ -1,18 +1,18 @@
 -- Staging rollout only. Store verification is independent from self-declared visit history or passkey possession.
-create table app_private.customer_store_verifications (
+create table if not exists app_private.customer_store_verifications (
   customer_id uuid primary key references public.customers(id) on delete cascade,
   verified_at timestamptz not null default now(), verified_by text not null,
   staff_session_hash text not null
 );
-create table app_private.customer_store_requests (
+create table if not exists app_private.customer_store_requests (
   id uuid primary key default gen_random_uuid(), proof_hash text not null,
   customer_id uuid references public.customers(id) on delete cascade, original_user_id text not null,
   state text not null default 'pending' check(state in ('pending','approved','claimed')),
   expires_at timestamptz not null default now()+interval '5 minutes',
   approved_by text, staff_session_hash text, response_ciphertext bytea
 );
-create index customer_store_requests_expiry_idx on app_private.customer_store_requests(expires_at);
-create table app_private.customer_store_limits (
+create index if not exists customer_store_requests_expiry_idx on app_private.customer_store_requests(expires_at);
+create table if not exists app_private.customer_store_limits (
   subject text not null, bucket timestamptz not null, hits integer not null default 1, primary key(subject,bucket)
 );
 alter table app_private.customer_store_verifications enable row level security;
@@ -20,7 +20,7 @@ alter table app_private.customer_store_requests enable row level security;
 alter table app_private.customer_store_limits enable row level security;
 revoke all on app_private.customer_store_verifications,app_private.customer_store_requests,app_private.customer_store_limits from public,anon,authenticated;
 
-create function app_private.require_store_verified(p_session text)
+create or replace function app_private.require_store_verified(p_session text)
 returns text language plpgsql security definer set search_path='' as $$
 declare uid text;
 begin
@@ -33,7 +33,7 @@ end;
 $$;
 revoke all on function app_private.require_store_verified(text) from public,anon,authenticated;
 
-create function public.customer_store_access_status(p_session text)
+create or replace function public.customer_store_access_status(p_session text)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare uid text;
 begin
@@ -44,7 +44,7 @@ $$;
 revoke all on function public.customer_store_access_status(text) from public;
 grant execute on function public.customer_store_access_status(text) to anon,authenticated,service_role;
 
-create function public.customer_store_access_start(p_user_id text,p_session text default null)
+create or replace function public.customer_store_access_start(p_user_id text,p_session text default null)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare uid text; cid uuid; proof text; request_id uuid; n integer;
 begin
@@ -70,7 +70,7 @@ $$;
 revoke all on function public.customer_store_access_start(text,text) from public;
 grant execute on function public.customer_store_access_start(text,text) to anon,authenticated,service_role;
 
-create function public.staff_approve_store_access(p_staff text,p_request_id uuid,p_user_id text,p_staff_name text)
+create or replace function public.staff_approve_store_access(p_staff text,p_request_id uuid,p_user_id text,p_staff_name text)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare r app_private.customer_store_requests; c public.customers;
 begin
@@ -89,7 +89,7 @@ $$;
 revoke all on function public.staff_approve_store_access(text,uuid,text,text) from public;
 grant execute on function public.staff_approve_store_access(text,uuid,text,text) to anon,authenticated,service_role;
 
-create function public.customer_store_access_claim(p_request_id uuid,p_proof text)
+create or replace function public.customer_store_access_claim(p_request_id uuid,p_proof text)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare r app_private.customer_store_requests; c public.customers; token text; answer jsonb;
 begin
@@ -125,6 +125,9 @@ begin
     where n.nspname='public' and p.proname in ('customer_booking_options','customer_available_slots','customer_next_slots','customer_day_overview','customer_create_hold','customer_confirm_reservation') order by p.proname loop
     original_name:='store_original_'||f.proname;
     guarded:=guarded+1;
+    -- もう一度流したとき：すでに入口（来店確認つき）なら何もしない。元の処理に戻っていたら、古い控えを消して包み直す
+    continue when (select prosrc from pg_proc where oid=f.oid) like '%require_store_verified%';
+    execute format('drop function if exists app_private.%I(%s)',original_name,pg_get_function_identity_arguments(f.oid));
     args:=pg_get_function_arguments(f.oid); result_type:=pg_get_function_result(f.oid);
     if result_type not in ('json','jsonb') then raise exception 'unexpected booking result: %',f.proname; end if;
     select string_agg('$'||i,',' order by i) into call_args from generate_series(1,f.pronargs) i;
@@ -141,7 +144,7 @@ $migration$;
 
 -- Never infer verification from customers.has_visited_before (self-declared) or a locally displayed ID.
 -- Identity moves performed by legacy recovery must not carry a store approval to a different identity.
-create function app_private.store_verification_on_member_move()
+create or replace function app_private.store_verification_on_member_move()
 returns trigger language plpgsql security definer set search_path='' as $$
 begin
   if new.user_id is distinct from old.user_id then
@@ -152,4 +155,5 @@ begin
 end;
 $$;
 revoke all on function app_private.store_verification_on_member_move() from public,anon,authenticated;
+drop trigger if exists store_verification_on_member_move on public.customers;
 create trigger store_verification_on_member_move before update of user_id on public.customers for each row execute function app_private.store_verification_on_member_move();

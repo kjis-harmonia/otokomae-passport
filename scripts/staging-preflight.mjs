@@ -59,6 +59,7 @@ const MIGRATION_ORDER = [
   '20261019000100_menu_price_rules.sql',
   '20261019000200_checkout_safety.sql',
   '20261019000300_finalize_sale_ticket_alias.sql',
+  '20261019000400_app_private_helper_grants.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [

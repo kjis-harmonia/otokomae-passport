@@ -1,9 +1,9 @@
 -- Customer passkeys. Staging rollout only; existing customer sessions stay valid.
-create table app_private.customer_passkey_identities (
+create table if not exists app_private.customer_passkey_identities (
   user_id text primary key references public.customers(user_id) on update cascade on delete cascade,
   handle text not null unique default encode(extensions.gen_random_bytes(32),'hex')
 );
-create table app_private.customer_passkeys (
+create table if not exists app_private.customer_passkeys (
   credential_id text primary key check(length(credential_id) between 16 and 2048),
   user_id text not null references app_private.customer_passkey_identities(user_id) on update cascade on delete cascade,
   public_key text not null check(length(public_key) between 16 and 8192),
@@ -13,8 +13,8 @@ create table app_private.customer_passkeys (
   last_used_at timestamptz,
   revoked_at timestamptz
 );
-create index customer_passkeys_user_idx on app_private.customer_passkeys(user_id) where revoked_at is null;
-create table app_private.customer_passkey_challenges (
+create index if not exists customer_passkeys_user_idx on app_private.customer_passkeys(user_id) where revoked_at is null;
+create table if not exists app_private.customer_passkey_challenges (
   id uuid primary key,
   kind text not null check(kind in ('register','login')),
   challenge text not null check(length(challenge) between 32 and 128),
@@ -22,14 +22,14 @@ create table app_private.customer_passkey_challenges (
   session_hash text,
   expires_at timestamptz not null default now()+interval '3 minutes'
 );
-create index customer_passkey_challenges_expiry_idx on app_private.customer_passkey_challenges(expires_at);
-create table app_private.customer_passkey_limits (
+create index if not exists customer_passkey_challenges_expiry_idx on app_private.customer_passkey_challenges(expires_at);
+create table if not exists app_private.customer_passkey_limits (
   subject text not null,
   bucket timestamptz not null,
   hits integer not null default 1,
   primary key(subject,bucket)
 );
-create index customer_passkey_limits_expiry_idx on app_private.customer_passkey_limits(bucket);
+create index if not exists customer_passkey_limits_expiry_idx on app_private.customer_passkey_limits(bucket);
 alter table app_private.customer_passkey_identities enable row level security;
 alter table app_private.customer_passkeys enable row level security;
 alter table app_private.customer_passkey_challenges enable row level security;
@@ -38,7 +38,7 @@ revoke all on app_private.customer_passkey_identities, app_private.customer_pass
 
 -- Legacy staff-assisted recovery changes a customer's user_id. Do not block it,
 -- and do not let an authenticator from the former identity sign back in afterward.
-create function app_private.customer_passkeys_on_member_move()
+create or replace function app_private.customer_passkeys_on_member_move()
 returns trigger language plpgsql security definer set search_path='' as $$
 begin
   update app_private.customer_passkeys set revoked_at=now() where user_id in (old.user_id,new.user_id) and revoked_at is null;
@@ -48,10 +48,11 @@ begin
 end;
 $$;
 revoke all on function app_private.customer_passkeys_on_member_move() from public,anon,authenticated;
+drop trigger if exists customer_passkeys_member_move on public.customers;
 create trigger customer_passkeys_member_move before update of user_id on public.customers
 for each row when(old.user_id is distinct from new.user_id) execute function app_private.customer_passkeys_on_member_move();
 
-create function app_private.customer_passkey_service(p_action text,p_input jsonb)
+create or replace function app_private.customer_passkey_service(p_action text,p_input jsonb)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare
   uid text; member_name text; ch app_private.customer_passkey_challenges;
@@ -125,7 +126,7 @@ $$;
 revoke all on function app_private.customer_passkey_service(text,jsonb) from public,anon,authenticated;
 grant usage on schema app_private to service_role;
 grant execute on function app_private.customer_passkey_service(text,jsonb) to service_role;
-create function public.customer_passkey_service(p_action text,p_input jsonb)
+create or replace function public.customer_passkey_service(p_action text,p_input jsonb)
 returns jsonb language sql security invoker set search_path='' as $$
   select app_private.customer_passkey_service(p_action,p_input)
 $$;

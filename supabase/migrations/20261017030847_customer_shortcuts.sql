@@ -1,5 +1,5 @@
 -- Scoped iPhone Shortcuts credentials. Existing customer sessions and Johnny stay unchanged.
-create table app_private.shortcut_devices (
+create table if not exists app_private.shortcut_devices (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
   parent_session_hash text not null references app_private.customer_sessions(token_hash) on delete cascade,
@@ -11,8 +11,8 @@ create table app_private.shortcut_devices (
   request_window timestamptz not null default now(),
   request_count integer not null default 0
 );
-create index shortcut_devices_owner_idx on app_private.shortcut_devices(user_id);
-create table app_private.shortcut_proposals (
+create index if not exists shortcut_devices_owner_idx on app_private.shortcut_devices(user_id);
+create table if not exists app_private.shortcut_proposals (
   id uuid primary key default gen_random_uuid(),
   device_id uuid not null references app_private.shortcut_devices(id) on delete cascade,
   hold_id uuid not null references public.booking_holds(id) on delete cascade,
@@ -22,12 +22,12 @@ create table app_private.shortcut_proposals (
   discarded_at timestamptz,
   created_at timestamptz not null default now()
 );
-create index shortcut_proposals_device_idx on app_private.shortcut_proposals(device_id);
+create index if not exists shortcut_proposals_device_idx on app_private.shortcut_proposals(device_id);
 alter table app_private.shortcut_devices enable row level security;
 alter table app_private.shortcut_proposals enable row level security;
 revoke all on app_private.shortcut_devices,app_private.shortcut_proposals from public,anon,authenticated;
 
-create function app_private.shortcut_device(p_token text) returns app_private.shortcut_devices
+create or replace function app_private.shortcut_device(p_token text) returns app_private.shortcut_devices
 language plpgsql set search_path=pg_catalog,public,extensions,pg_temp as $$
 declare d app_private.shortcut_devices;
 begin
@@ -42,7 +42,7 @@ begin
 end $$;
 
 -- Called only by the bridge, after encrypting the original session with its server-side key.
-create function public.shortcut_pair_device(p_session text,p_token text,p_ciphertext text) returns jsonb
+create or replace function public.shortcut_pair_device(p_session text,p_token text,p_ciphertext text) returns jsonb
 language plpgsql security definer set search_path=pg_catalog,public,extensions,pg_temp as $$
 declare uid text:=app_private.session_user_id(p_session); device uuid;
 begin
@@ -58,7 +58,7 @@ begin
   return jsonb_build_object('device_id',device,'expires_at',now()+interval '30 days');
 end $$;
 
-create function public.customer_revoke_shortcut_devices(p_session text) returns jsonb
+create or replace function public.customer_revoke_shortcut_devices(p_session text) returns jsonb
 language plpgsql security definer set search_path=pg_catalog,public,extensions,pg_temp as $$
 declare uid text:=app_private.session_user_id(p_session); n integer;
 begin
@@ -70,7 +70,7 @@ begin
   return jsonb_build_object('ok',true,'revoked',n);
 end $$;
 
-create function public.shortcut_auth_device(p_token text) returns jsonb
+create or replace function public.shortcut_auth_device(p_token text) returns jsonb
 language plpgsql security definer set search_path=pg_catalog,public,extensions,pg_temp as $$
 declare d app_private.shortcut_devices:=app_private.shortcut_device(p_token); v_day date; next_booking jsonb;
 begin
@@ -87,7 +87,7 @@ begin
     'days_remaining',case when v_day is not null then 14-(app_private.today_jst()-v_day) end,'next_booking',next_booking);
 end $$;
 
-create function public.shortcut_prepare_booking(p_token text,p_session text,p_starts_at timestamptz,p_menu_code text,p_staff_id uuid default null)
+create or replace function public.shortcut_prepare_booking(p_token text,p_session text,p_starts_at timestamptz,p_menu_code text,p_staff_id uuid default null)
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public,extensions,pg_temp as $$
 declare d app_private.shortcut_devices:=app_private.shortcut_device(p_token); h public.booking_holds;
   uid text:=app_private.session_user_id(p_session); c public.customers; held jsonb; plan jsonb; quote jsonb; proposal uuid;
@@ -106,7 +106,7 @@ begin
   return jsonb_build_object('proposal_id',proposal,'quote',quote);
 end $$;
 
-create function public.shortcut_confirm_booking(p_token text,p_session text,p_proposal_id uuid) returns jsonb
+create or replace function public.shortcut_confirm_booking(p_token text,p_session text,p_proposal_id uuid) returns jsonb
 language plpgsql security definer set search_path=pg_catalog,public,extensions,pg_temp as $$
 declare d app_private.shortcut_devices:=app_private.shortcut_device(p_token); p app_private.shortcut_proposals;
   uid text:=app_private.session_user_id(p_session); h public.booking_holds; plan jsonb; v_result jsonb;
