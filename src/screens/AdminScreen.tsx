@@ -20,6 +20,7 @@ import { PREMIUM_COUPONS } from '../data/wallet'
 import { VisitMenuPicker, type VisitInfo } from '../components/VisitMenuPicker'
 import { CheckoutSummary } from '../components/CheckoutSummary'
 import { MemberCheckout } from '../components/MemberCheckout'
+import { resolveMemberQr } from '../utils/memberQrIdentity'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -601,15 +602,14 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setSelectNotice(null)
     setScannedData(passportData)
     setPhase('loading')
-    // 会員登録（初回登録・名前更新）＋来店日・チケット・当日利用状況をサーバーから一括取得。
+    // 既存会員はサーバーの氏名を正本にする。古いQRから登録済みの名前を更新しない。
     // 登録に失敗した状態では発行・使用に進ませない。
     let ctx
     try {
-      ctx = passportData.storeRequestId && ONE_TAP_STAGING ? await getCustomerContextForStaff(passportData.userId) : await registerCustomerWithContext(passportData.userId, passportData.name)
-      if(passportData.storeRequestId && ONE_TAP_STAGING){
-        if(!ctx.customer)throw new Error('会員情報を確認できませんでした。')
-        setScannedData({...passportData,name:ctx.customer.name})
-      }
+      ctx = await resolveMemberQr(passportData.userId, passportData.name, !!passportData.storeRequestId && ONE_TAP_STAGING, {
+        lookup: getCustomerContextForStaff, register: registerCustomerWithContext,
+      })
+      setScannedData({ ...passportData, name: ctx.customer!.name })
     } catch (err) {
       setScannedData(null)
       setPhase('scan')
@@ -710,7 +710,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   }
 
   function openUseConfirm() {
-    if (selectedTickets.length === 0 || !staffId.trim()) return
+    if (isStaging() || selectedTickets.length === 0 || !staffId.trim()) return
     setUseError(null)
     setShowUseConfirm(true)
   }
@@ -721,7 +721,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   }
 
   const handleConfirmUse = async () => {
-    if (useConfirmLoading || selectedTickets.length === 0 || !scannedData || !staffId.trim()) return
+    if (isStaging() || useConfirmLoading || selectedTickets.length === 0 || !scannedData || !staffId.trim()) return
     setUseConfirmLoading(true)
     setUseError(null)
     const ticketIds  = selectedTickets.map(t => t.id)
@@ -1289,7 +1289,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>NEXT STEP</p>
                     {[
                       '来店チェックインは完了しています',
-                      '割引券の使用・発行がある場合は下で処理してください',
+                      isStaging() ? '割引券を選んで「お会計に進む」を押してください。券は会計確定時に使用されます' : '割引券の使用・発行がある場合は下で処理してください',
                       'すべて完了したら「来店完了」を押してください',
                     ].map((text, i) => (
                       <p key={text} style={{ display: 'flex', gap: 10, fontFamily: SERIF, fontSize: 13, color: '#1c1f1d', lineHeight: 1.6, marginTop: i === 0 ? 0 : 6 }}>
@@ -1445,7 +1445,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   {selectNotice && (
                     <p style={{ fontSize: 11, color: '#a86b00', lineHeight: 1.6 }}>{selectNotice}</p>
                   )}
-                  <button
+                  {!isStaging() && <button
                     onClick={openUseConfirm}
                     disabled={selectedTickets.length === 0 || !staffId.trim()}
                     style={{
@@ -1461,7 +1461,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     {selectedTickets.length === 0
                       ? '使用する割引券を選択してください'
                       : `選択した${selectedTickets.length}枚を使用確定${selectedTotal > 0 ? `（合計 ¥${selectedTotal.toLocaleString()}）` : ''}`}
-                  </button>
+                  </button>}
                 </div>
               )}
             </div>

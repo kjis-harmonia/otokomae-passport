@@ -103,9 +103,12 @@ export interface SalesDay {
 export type CheckoutResult<T> = T | { error: string }
 
 export interface CheckoutApi {
+  backend: string
+  operator(): string
   context(reservationId: string | null, clientId: string | null): Promise<CheckoutContext>
   catalog(): Promise<Catalog>
-  finalize(input: SaleInput): Promise<CheckoutResult<Sale>>
+  lookup(idempotencyKey: string): Promise<Sale | null>
+  finalize(input: SaleInput, operator?: string): Promise<CheckoutResult<Sale>>
 }
 export interface SalesApi {
   day(date: string): Promise<SalesDay>
@@ -175,9 +178,12 @@ async function asResult<T>(fn: () => Promise<T>): Promise<CheckoutResult<T>> {
 /** 店舗端末用。会計の記録に残る操作者名を都度渡す */
 export function createStaffCheckoutApi(actor: () => string): CheckoutApi {
   return {
+    backend: import.meta.env.VITE_SUPABASE_URL ?? '',
+    operator: actor,
     context: (reservationId, clientId) => callStaffRpc<CheckoutContext>('staff_checkout_context', { p_reservation_id: reservationId, p_client_id: clientId }),
     catalog: () => callStaffRpc<Catalog>('staff_checkout_catalog'),
-    finalize: input => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', { p: input, p_staff_name: actor() })),
+    lookup: key => callStaffRpc<Sale | null>('staff_checkout_result', { p_idempotency_key: key }),
+    finalize: (input, operator) => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', { p: input, p_staff_name: operator ?? actor() })),
   }
 }
 

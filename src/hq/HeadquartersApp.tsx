@@ -73,7 +73,7 @@ export function HeadquartersApp() {
 
   function navigation() {
     return <>
-      <a className="hq-brand" href="#dashboard" onClick={() => navigate('dashboard')} aria-label="銀二郎本部の概況へ"><span className="hq-brand-mark" aria-hidden="true">銀</span><span>銀二郎<span className="hq-brand-sub">本部</span></span></a>
+      <a className="hq-brand" href="#dashboard" onClick={() => navigate('dashboard')} aria-label="銀二郎本部の概況へ"><img className="hq-brand-mark" src="/icons/headquarters-192.png" alt="" width={40} height={40} /><span>銀二郎<span className="hq-brand-sub">本部</span></span></a>
       <div className="hq-workspace"><Store size={17} strokeWidth={1.7} /><span>銀二郎<span>店舗ワークスペース</span></span><span className="hq-workspace-dot" title="接続店舗" /></div>
       <nav className="hq-nav" aria-label="本部メニュー">{GROUPS.map(group => <div className="hq-nav-group" key={group.label}><p>{group.label}</p>{group.tabs.filter(hqTabEnabled).map(id => {
         const item = HQ_TABS.find(t => t.id === id)!

@@ -14,7 +14,7 @@ button svg { flex-shrink:0; }
 .hq-app { min-height:100dvh; display:flex; background:var(--hq-bg); color:var(--hq-text); font-size:14px; line-height:1.5; }
 .hq-sidebar { width:234px; height:100dvh; position:sticky; top:0; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid var(--hq-line); background:#fbfbfc; padding:30px 16px 16px; }
 .hq-brand { display:flex; align-items:center; gap:11px; text-decoration:none; padding:0 12px 26px; font-size:21px; font-weight:650; letter-spacing:-.6px; }
-.hq-brand-mark { display:grid; place-items:center; width:36px; height:38px; color:white; background:#242426; border-radius:10px; font-size:23px; font-family:"Hiragino Mincho ProN","Yu Mincho",serif; font-weight:500; }
+.hq-brand-mark { display:block; width:40px; height:40px; flex-shrink:0; object-fit:contain; }
 .hq-brand-sub { color:#76767e; margin-left:8px; font-size:14px; font-weight:450; letter-spacing:0; }
 .hq-workspace { display:flex; align-items:center; gap:10px; margin:0 4px 24px; padding:13px 12px; border:1px solid #e3e3e8; border-radius:10px; background:#fff; }
 .hq-workspace>span:nth-child(2) { flex:1; font-size:13px; font-weight:600; }
@@ -178,7 +178,7 @@ dialog::backdrop { background:#22223033; backdrop-filter:blur(3px); }
 .hq-store-directory-actions { display:flex; gap:10px; border-top:1px solid var(--hq-line); padding-top:18px; }
 .hq-login { min-height:100dvh; display:grid; place-items:center; padding:30px 20px; background:#f5f5f7; }
 .hq-login-panel { width:100%; max-width:390px; text-align:center; padding:43px 35px 30px; background:#fff; border:1px solid #e8e8ed; border-radius:20px; }
-.hq-login-panel .hq-brand-mark { margin:0 auto 20px; width:46px; height:48px; font-size:29px; border-radius:13px; }
+.hq-login-panel .hq-brand-mark { margin:0 auto 20px; width:80px; height:80px; }
 .hq-login-panel h1 { font-size:24px; font-weight:600; letter-spacing:-.6px; margin:0 0 10px; }
 .hq-login-panel>p { margin:0; font-size:12px; line-height:1.8; color:#85858e; }
 .hq-pin-dots { display:flex; justify-content:center; gap:14px; margin:30px 0 14px; }
