@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { rpcErrorMessage } from '../../utils/staffSession'
 import { yen } from '../../utils/bookingApi'
-import { premiumFor } from '../../utils/bookingCoupons'
+import { reservationSaleLines } from '../../utils/checkoutPricing'
 import { idempotencyKey } from '../../utils/ginpayApi'
 import { checkoutAttemptSnapshot, subscribeCheckoutAttempt, readCheckoutAttempt, sameCheckout, settleCheckout, startNextCheckout, withCheckoutLock, type CheckoutAttempt } from '../../utils/checkoutAttempt'
 import type { ClientCandidate, CustomerApi } from '../../utils/customerApi'
@@ -74,7 +74,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       if (saved?.result && !sameCheckout(saved, reservationId, clientId)) saved = null
     } catch { return }
     const resume = saved && sameCheckout(saved, reservationId, clientId) ? saved : null
-    api.context(resume?.input.reservation_id ?? reservationId, resume ? resume.input.client_id ?? null : reservationId ? null : clientId).then(c => {
+    api.context(resume?.input.reservation_id ?? reservationId, resume ? resume.input.client_id ?? null : reservationId ? null : clientId).then(async c => {
+      const codes = c.reservation?.items.flatMap(item => item.menu_code ? [item.menu_code] : []) ?? []
+      const quoted = c.reservation && !resume ? reservationSaleLines(c.reservation.items, codes.length ? await api.quote(codes, c.reservation.starts_at) : null) : null
       if (!alive) return
       setCtx(c)
       if (!c.reservation && clientId && c.client) setClient(c.client)
@@ -86,17 +88,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       if (c.reservation) {
         const r = c.reservation
         setStylistId(r.staff_id)
-        // プレミアムクーポン（GINJIRO CLASSICS など）の対象メニューは、ふつうの料金で入れて、使える時間なら会員価格との差を値引きにする
-        // （店舗端末の「お会計」・JOHNNY の確認画面と同じ金額になる）
-        const premiums = r.items.map(i => (i.menu_code ? premiumFor(i.menu_code, r.starts_at) : null))
-        setLines(r.items.map((i, n) => ({ key: ++keySeq, source: 'reservation', ref_id: i.menu_code, name: i.name, category: 'menu', unit_price: premiums[n]?.normalPrice ?? i.price ?? 0, quantity: 1, discount: 0 })))
-        const applied = premiums.filter(p => p?.eligible) as NonNullable<(typeof premiums)[number]>[]
-        if (applied.length) {
-          setManual({
-            amount: String(applied.reduce((a, p) => a + p.normalPrice - p.memberPrice, 0)),
-            label: `${[...new Set(applied.map(p => p.def.title))].join('・')}（会員価格）`,
-          })
-        }
+        if (quoted) setLines(quoted.map(item => ({ ...item, key: ++keySeq })))
       }
     }).catch(err => { if (alive) setError(rpcErrorMessage(err, '会計の準備ができませんでした。')) })
     return () => { alive = false }
@@ -256,7 +248,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     )}
                   </div>
                 ))}
-                {adding ? <ItemPicker api={api} onPick={addItem} onClose={() => setAdding(false)} />
+                {adding ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
                   : <button type="button" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button>}
               </div>
 
@@ -378,11 +370,16 @@ function ClientPicker({ customers, onPick }: { customers: CustomerApi; onPick: (
 }
 
 /** メニュー・商品の追加（予約メニュー・会計メニュー／オプション・店販・手入力） */
-function ItemPicker({ api, onPick, onClose }: { api: CheckoutApi; onPick: (src: SaleLine['source'], item: CatalogItem) => void; onClose: () => void }) {
+function ItemPicker({ api, startsAt, onPick, onClose }: { api: CheckoutApi; startsAt: string | null; onPick: (src: SaleLine['source'], item: CatalogItem) => void; onClose: () => void }) {
   const [cat, setCat] = useState<Catalog | null>(null)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [manual, setManual] = useState({ name: '', price: '', category: 'menu' as CatalogItem['category'] })
-  useEffect(() => { api.catalog().then(setCat).catch(() => setCat({ service_menus: [], menus: [], products: [] })) }, [api])
+  useEffect(() => {
+    let alive = true
+    api.catalog(startsAt).then(value => { if (alive) setCat(value) }).catch(() => { if (alive) setCatalogError('メニューの料金を確認できませんでした。閉じてもう一度お試しください。') })
+    return () => { alive = false }
+  }, [api, startsAt])
   const match = (i: CatalogItem) => !q.trim() || i.name.includes(q.trim())
   // 正規サービスはカテゴリ（カット・カラー・パーマ・オプション・セット…）ごと、その後に旧会計メニューと店販
   const serviceGroups = cat ? [...new Set(cat.service_menus.map(i => i.group ?? 'メニュー'))] : []
@@ -397,7 +394,7 @@ function ItemPicker({ api, onPick, onClose }: { api: CheckoutApi; onPick: (src: 
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="メニュー・商品を探す" aria-label="メニュー・商品を探す" style={inputStyle} autoComplete="off" />
         <button type="button" onClick={onClose} style={{ ...linkStyle, flexShrink: 0 }}>閉じる</button>
       </div>
-      {!cat ? <p style={{ fontSize: 14, color: C.sub, marginTop: 8 }}>読み込み中…</p> : groups.map(([label, src, items]) => items.length === 0 ? null : (
+      {!cat ? <p role={catalogError ? 'alert' : undefined} style={{ fontSize: 14, color: catalogError ? C.danger : C.sub, marginTop: 8 }}>{catalogError ?? '読み込み中…'}</p> : groups.map(([label, src, items]) => items.length === 0 ? null : (
         <div key={label} style={{ marginTop: 10 }}>
           <p style={{ fontSize: 12, color: C.mute }}>{label}</p>
           {items.map(i => (

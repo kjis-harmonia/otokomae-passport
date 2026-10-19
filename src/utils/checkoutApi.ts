@@ -3,6 +3,7 @@
 import { callStaffRpc } from './staffSession'
 import { callHqRpc } from '../hq/hqSession'
 import type { Reservation } from './bookingApi'
+import { priceServiceCatalog } from './checkoutPricing'
 
 export type ItemCategory = 'menu' | 'option' | 'retail'
 export type ItemSource = 'reservation' | 'service_menu' | 'accounting_item' | 'product' | 'manual'
@@ -32,9 +33,21 @@ export interface CheckoutContext {
   tax: { mode: 'inclusive' | 'exclusive' | null; rate: number | null }
 }
 /** 会計で選べる品目。正規サービスは kind（service|option|set）と group（カット・カラーなどのカテゴリ）、price_from（「〜」付き価格）を持つ */
-export interface CatalogItem { id: string; name: string; category: ItemCategory; price: number; kind?: 'service' | 'option' | 'set'; group?: string | null; price_from?: boolean }
+export interface CatalogItem { id: string; name: string; category: ItemCategory; price: number; normal_price?: number | null; kind?: 'service' | 'option' | 'set'; group?: string | null; price_from?: boolean }
 /** service_menus = 正規サービスマスター、menus = 正規サービスにつながっていない旧会計メニュー、products = 店販 */
 export interface Catalog { service_menus: CatalogItem[]; menus: CatalogItem[]; products: CatalogItem[] }
+
+export interface PriceQuoteItem {
+  code: string
+  name: string
+  charge: number
+  normal_price: number | null
+  member_price: number | null
+  member_label: string | null
+  eligible: boolean | null
+  price_from: boolean
+}
+export interface PriceQuote { starts_at: string; items: PriceQuoteItem[]; total: number; normal_total: number }
 
 export interface SaleLine {
   source: ItemSource
@@ -54,7 +67,7 @@ export interface SaleInput {
   manual_discount?: { amount: number; label: string }
   payment_method: PaymentMethod
   expected_total: number
-  /** 会計画面ごとの一意キー。同じキーの再送は同じ会計を返す（二重タップで二重会計・二重決済しない） */
+  /** 初回送信前に端末へ保存する取引キー。再読み込み後も同じキーで照合する。 */
   idempotency_key: string
   /** GINPay 払いで支払う口座 */
   ginpay_account_id?: string
@@ -106,7 +119,8 @@ export interface CheckoutApi {
   backend: string
   operator(): string
   context(reservationId: string | null, clientId: string | null): Promise<CheckoutContext>
-  catalog(): Promise<Catalog>
+  catalog(startsAt?: string | null): Promise<Catalog>
+  quote(menuCodes: string[], startsAt: string | null): Promise<PriceQuote>
   lookup(idempotencyKey: string): Promise<Sale | null>
   finalize(input: SaleInput, operator?: string): Promise<CheckoutResult<Sale>>
 }
@@ -177,11 +191,16 @@ async function asResult<T>(fn: () => Promise<T>): Promise<CheckoutResult<T>> {
 
 /** 店舗端末用。会計の記録に残る操作者名を都度渡す */
 export function createStaffCheckoutApi(actor: () => string): CheckoutApi {
+  const quote = (codes: string[], startsAt: string | null) => callStaffRpc<PriceQuote>('staff_price_quote', { p_menu_codes: codes, p_starts_at: startsAt })
   return {
     backend: import.meta.env.VITE_SUPABASE_URL ?? '',
     operator: actor,
     context: (reservationId, clientId) => callStaffRpc<CheckoutContext>('staff_checkout_context', { p_reservation_id: reservationId, p_client_id: clientId }),
-    catalog: () => callStaffRpc<Catalog>('staff_checkout_catalog'),
+    catalog: async (startsAt = null) => {
+      const catalog = await callStaffRpc<Catalog>('staff_checkout_catalog')
+      return { ...catalog, service_menus: await priceServiceCatalog(catalog.service_menus, quote, startsAt) }
+    },
+    quote,
     lookup: key => callStaffRpc<Sale | null>('staff_checkout_result', { p_idempotency_key: key }),
     finalize: (input, operator) => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', { p: input, p_staff_name: operator ?? actor() })),
   }
