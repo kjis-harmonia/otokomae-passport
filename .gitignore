@@ -33,3 +33,4 @@ supabase/functions/.env
 .qa/
 supabase/.temp/
 supabase/rollout/out_accounting/
+supabase/rollout/out_release/

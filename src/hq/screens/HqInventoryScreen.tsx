@@ -96,6 +96,8 @@ export function HqInventoryScreen() {
       })
   }, [])
 
+  // 最初に一度だけ在庫を取りに行く（外部データとの同期）
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 読み込み中の表示に切り替えてから取得するため
   useEffect(() => { load() }, [load])
 
   // 店舗端末・本部からの在庫変更を定期的に反映する
