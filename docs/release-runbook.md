@@ -48,33 +48,15 @@ select (app_private.ginpay_reconcile_json())->>'consistent';  -- true
 select count(*) from public.customers;                        -- 当てる前と同じ
 ```
 
-## 2. 本番のキャンセル待ちの毎分ジョブ（DB のあと）
+## 2〜3. 環境変数・関数・cron（⑤が正本）
 
-秘密の値はファイルに書かない。今ある `johnny-notify-daily` の中身を写して作る（`!` で渡す）：
+[人が1本ずつ貼る⑤のコマンド一覧](production-platform-commands.md)を使う。旧い「既存ジョブを消して即開始するSQL」は使わない。
 
-```sql
-do $$
-declare c text;
-begin
-  select command into c from cron.job where jobname = 'johnny-notify-daily';
-  if c is null then raise exception 'no daily job'; end if;
-  c := regexp_replace(c, 'body\s*:=\s*''[^'']*''::jsonb', 'body := ''{"waitlist":true}''::jsonb');
-  if position('waitlist' in c) = 0 then raise exception 'body not replaced'; end if;
-  perform cron.unschedule(jobid) from cron.job where jobname = 'johnny-waitlist-minutely';
-  perform cron.schedule('johnny-waitlist-minutely', '* * * * *', c);
-end $$;
-```
+DB01〜20の成功（15番の来店確認を含む）→ソース・Secrets・Vercel本番対象を確認→johnny-notify→johnny-agent→hq-johnny→customer-passkeys→johnny-style-adviceを1本ずつ確認→両フラグON→毎分ジョブを停止状態で作成、の順。新Web・閉鎖B・古いアプリの実機確認のあとで、人が毎分ジョブを開始する。
 
-**必ず 3. の johnny-notify デプロイを先に**（古い johnny-notify は waitlist を知らない）。
+本部の「お知らせOFF」はキャンセル待ちの毎分処理を止めない。⑤の準備SQLはactive=falseでcommitし、公開前の仮押さえ・送信を防ぐ。「送信を始める」を自動でONにする工程はない。
 
-## 3. 本番の関数をデプロイ（DB のあと）
-
-```
-npx -y supabase@2.121.0 functions deploy johnny-notify --use-api --project-ref ufyzynpmkxytnhebombq
-npx -y supabase@2.121.0 functions deploy johnny-agent  --use-api --project-ref ufyzynpmkxytnhebombq
-npx -y supabase@2.121.0 functions deploy hq-johnny     --use-api --project-ref ufyzynpmkxytnhebombq
-```
-Codex 担当の関数（customer-passkeys など）も、staging と本番の版を比べて必要なら同様に。
+公開前にテイテイさんたちのStaging練習（会員QR→チェックイン→会計→券選択→確定）も完了させる。本番スタッフには券の単独使用ボタンがなくなることを共有する。
 
 ## 4. 画面（公開用release → main）
 

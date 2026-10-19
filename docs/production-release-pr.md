@@ -49,13 +49,13 @@ preflightは--database-urlを上記の専用DBに明示し--skip-buildで実行�
 
 ## merge前・営業再開前の条件
 
-1. ②の実iPhone確認と、⑤の環境変数・関数・cronの手順、⑥の当日時刻表、⑦の公開後確認リストを完成させる。
+1. ⑤の[環境変数・関数・cronの手順](production-platform-commands.md)は作成済み。②の実iPhone確認とスタッフのStaging会計練習、⑥の当日時刻表、⑦の公開後確認リストを完成させる。
 2. 休業中に人が③のDB手順を1本ずつ実行する。30人の人数・照合値が変われば停止。
 3. DB成功後に関数・本番フラグを人が設定する。⑤で固定したソースと対象projectを確認する。
 4. レビュー後にこのrelease→mainのPRを取り込み、新画面を公開する。mainへ直接pushしない。
 5. 新画面と引継ぎを実機で確認したあと、営業再開前にpost_web_security_lockdown.sql（閉鎖B）を人が実行する。
 6. 閉鎖B直後に、古いアプリのお客様がどう見えるかと店頭引継ぎを確認する。旧アプリへ戻すだけでは、閉鎖B後の旧入口は戻らない。再登録で代用しない。
 
-⑥では「新画面公開・実機確認 → 閉鎖B → 古いアプリの見え方と引継ぎ確認 → 営業再開」を独立した段にする。
+⑥では「停止中cronの準備 → 新画面公開・実機確認 → 閉鎖B → 古いアプリの見え方と引継ぎ確認 → 毎分cronの明示開始 → 営業再開」を独立した段にする。
 
 参照：[Viteの環境変数の優先順位](https://vite.dev/guide/env-and-mode)、[Supabase Edgeの環境変数](https://supabase.com/docs/guides/functions/secrets)。
