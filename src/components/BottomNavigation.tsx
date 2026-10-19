@@ -1,3 +1,4 @@
+import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
 import type React from 'react'
 import type { NavTab } from '../data/brand'
 
@@ -12,7 +13,7 @@ const TAB_LABELS: Partial<Record<NavTab, string>> = {
   home:      'ホーム',
   tickets:   'チケット',
   styles:    'スタイル',
-  shop:      'SHOP',
+  shop:      CUSTOMER_ACCESS_ENABLED?'予約':'SHOP',
 }
 
 const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'

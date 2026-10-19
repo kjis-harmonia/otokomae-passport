@@ -38,6 +38,25 @@ function message(d: Due): { title: string; body: string } {
   return { title: '銀二郎 JOHNNY', body: `メンテナンスカットは${left}です。${usual}` }
 }
 
+interface WaitOffer {
+  user_id: string
+  hold_id: string
+  date: string
+  time: string
+  menu_names: string | null
+  subs: { endpoint: string; p256dh: string; auth: string }[] | null
+}
+
+/** 今日・明日・10/22（木） */
+function dayLabel(ymd: string): string {
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+  const tomorrow = new Date(Date.now() + 33 * 3600_000).toISOString().slice(0, 10)
+  if (ymd === today) return '本日'
+  if (ymd === tomorrow) return '明日'
+  const d = new Date(`${ymd}T00:00:00Z`)
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${'日月火水木金土'[d.getUTCDay()]}）`
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method_not_allowed', { status: 405 })
   if (!SECRET || req.headers.get('x-notify-secret') !== SECRET) return new Response('forbidden', { status: 403 })
@@ -57,6 +76,26 @@ Deno.serve(async (req) => {
     const results = await Promise.all((subs ?? []).map(s => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 600 })
       .then(() => 'ok', (e: unknown) => String((e as { statusCode?: number }).statusCode ?? 'error'))))
     return new Response(JSON.stringify({ test: true, subs: results.length, results }), { headers: { 'Content-Type': 'application/json' } })
+  }
+
+  // キャンセル待ち（毎分）：{ "waitlist": true } のときは、空いた枠を押さえた人へ「確定して」のお知らせ
+  if ((body as { waitlist?: unknown }).waitlist === true) {
+    const offers = await rpc<WaitOffer[]>('waitlist_offers_for_sender', { p_secret: SECRET })
+    const sent: { user: string; delivered: number }[] = []
+    for (const o of offers ?? []) {
+      const title = '銀二郎 JOHNNY'
+      const text = `キャンセルが出ました！${dayLabel(o.date)}${o.time}〜（${o.menu_names}）を10分間お取りしています。押して予約を確定してください。`
+      const payload = JSON.stringify({ title, body: text, url: `/?tab=reserve&johnny=1&hold=${o.hold_id}`, tag: `johnny-waitlist-${o.hold_id}` })
+      let delivered = 0
+      const gone: string[] = []
+      for (const s of o.subs ?? []) {
+        try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 600, urgency: 'high' }); delivered++ }
+        catch (e) { const code = (e as { statusCode?: number }).statusCode; if (code === 404 || code === 410) gone.push(s.endpoint) }
+      }
+      await rpc('waitlist_record_for_sender', { p_secret: SECRET, p_user_id: o.user_id, p_title: title, p_body: text, p_delivered: delivered, p_gone: gone }).catch(() => {})
+      sent.push({ user: o.user_id.slice(0, 8), delivered })
+    }
+    return new Response(JSON.stringify({ waitlist: true, offers: sent.length, sent }), { headers: { 'Content-Type': 'application/json' } })
   }
 
   const due = await rpc<Due[]>('notify_due_for_sender', { p_secret: SECRET })

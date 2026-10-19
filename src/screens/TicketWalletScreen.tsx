@@ -9,6 +9,7 @@ import { fetchLastVisitDateStrict, fetchTodayUsedType } from '../utils/customerS
 import { RpcError } from '../utils/staffSession'
 import { callCustomerRpc } from '../utils/customerSession'
 import { PreviousTicketsPrompt } from '../components/PreviousTicketsBind'
+import { CustomerGinpayCard } from '../components/ginpay/CustomerGinpayCard'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getLastVisit } from '../utils/visitHistory'
 import { getMaintenanceVisit } from '../utils/maintenanceSchedule'
@@ -331,7 +332,7 @@ export function TicketWalletScreen({
     })
   }
 
-  function handlePremiumCallClick(card: PremiumCard) {
+  const handlePremiumCallClick = useCallback((card: PremiumCard) => {
     if (!premium.isOpenNow) return
     setDetailId(null)
     const current = pendingPremiumCallRef.current
@@ -341,7 +342,7 @@ export function TicketWalletScreen({
       // Android Chrome / LINE内ブラウザ / PCなど、tel起動後にページが隠れない環境向けの保険。
       timer: window.setTimeout(showPendingPremiumReservation, 1500),
     }
-  }
+  }, [premium.isOpenNow, showPendingPremiumReservation])
 
   function handleCutSpecialCallClick(coupon: CutSpecialCoupon) {
     setDetailId(null)
@@ -583,6 +584,8 @@ export function TicketWalletScreen({
 
         {/* 以前のチケットの引き継ぎ：常設表示はせず、必要なときだけ小さなモーダルで案内 */}
         <PreviousTicketsPrompt onBound={() => { refreshTickets(); refreshVisit(); void refreshTodayUsed() }} />
+
+        <CustomerGinpayCard />
 
         {/* Filter chips（選択枠がスライド） */}
         <LayoutGroup id="wallet-chips">

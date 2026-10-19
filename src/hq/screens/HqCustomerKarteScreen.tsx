@@ -54,10 +54,13 @@ export function HqCustomerKarteScreen() {
       })
   }, [])
 
+  // 選んだ顧客が変わったら、読み込み中に切り替えてから取りに行く（外部データとの同期）
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- 選択の解除・切り替え時に表示を戻すため */
     if (!selectedUserId) { setDetailState({ phase: 'idle' }); return }
     let cancelled = false
     setDetailState({ phase: 'loading' })
+    /* eslint-enable react-hooks/set-state-in-effect */
     getCustomerKarteDetail(selectedUserId)
       .then((detail) => {
         if (cancelled) return

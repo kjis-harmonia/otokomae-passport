@@ -1,22 +1,33 @@
+import { pendingIssuance, prepareIssuance, resolveIssuance, withIssuanceLock, type PendingIssuance } from '../utils/ticketIssuance'
+import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
+import {StaffStoreApproval} from '../features/customerAccess/StoreVerification'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
-import { issueTickets, getTicketsForStaff, redeemTickets } from '../utils/ticketStore'
+import { getTicketsForStaff, redeemTickets } from '../utils/ticketStore'
 import {
   registerCustomerWithContext, searchCustomersByName, recoverMember,
   getCustomerContextForStaff, issueBindCode,
 } from '../utils/customerStore'
-import { callStaffRpc, rpcErrorMessage, RpcError } from '../utils/staffSession'
+import { rpcErrorMessage, RpcError } from '../utils/staffSession'
 import type { CustomerRow } from '../utils/customerStore'
 import { isWelcomeCouponBlockedToday, WELCOME_COUPON_WEEKEND_MESSAGE } from '../utils/welcomeCoupon'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
-import { normalizeCurrentReservation, isReservationForDate, type CurrentReservation } from '../utils/currentReservation'
-import { PREMIUM_COUPONS } from '../data/wallet'
+import { isReservationForDate } from '../utils/currentReservation'
 import { VisitMenuPicker, type VisitInfo } from '../components/VisitMenuPicker'
 import { CheckoutSummary } from '../components/CheckoutSummary'
+import { MemberCheckout } from '../components/MemberCheckout'
+import { resolveMemberQr } from '../utils/memberQrIdentity'
+import {
+  canUseDiscountType, playSuccessSound, playWarningSound, checkInVisit,
+  previewMaintenanceCoupon, redeemMaintenanceCoupon, isLegacyMaintenanceQr,
+  LEGACY_MAINTENANCE_QR_MESSAGE, isQrPayloadExpired, parseQR,
+  type PassportQRData, type TicketUseQRData, type MaintenanceCouponQRData,
+  type PremiumCouponQRData, type MaintenanceCouponPreview,
+} from '../utils/staffScanner'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
@@ -32,51 +43,11 @@ const TICKET_TABS: { type: TicketType; label: string; autoTitle: string }[] = [
 
 // ── 当日の割引利用状況 ────────────────────────────────────────────────────────
 
-/**
- * usedType（当日すでに使用済みの割引種別。未使用ならnull）に対して、
- * attemptedType（これから使おうとしている割引種別）が使用可能か判定する。
- */
-export function canUseDiscountType(usedType: string | null, attemptedType: string): boolean {
-  if (usedType === null) return true
-  if (usedType === 'coupon') return false   // メンテナンスクーポンを使った日は、ほかの券は使えない
-  if (attemptedType === 'coupon') return false // ほかの券を使った日は、メンテナンスクーポンは使えない（1日1回）
-  return true                                // 割引券・漢トク券は何枚でも、種類をまたいでも使える
-}
 
 const DISCOUNT_TYPE_LABEL: Record<string, string> = {
   otoku: '漢トク券',
   discount: '割引券',
   coupon: 'メンテナンスクーポン',
-}
-
-// ── Sound ─────────────────────────────────────────────────────────────────────
-
-export function playSuccessSound() {
-  try {
-    const ctx = new AudioContext()
-    const osc = ctx.createOscillator(); const gain = ctx.createGain()
-    osc.connect(gain); gain.connect(ctx.destination)
-    osc.type = 'sine'; osc.frequency.value = 880
-    gain.gain.setValueAtTime(0.35, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5)
-    setTimeout(() => ctx.close(), 700)
-  } catch { /* AudioContext unavailable */ }
-}
-
-function playWarningSound() {
-  try {
-    const ctx = new AudioContext()
-    ;[0, 0.22, 0.44].forEach(offset => {
-      const osc = ctx.createOscillator(); const gain = ctx.createGain()
-      osc.connect(gain); gain.connect(ctx.destination)
-      osc.type = 'square'; osc.frequency.value = 440
-      gain.gain.setValueAtTime(0.25, ctx.currentTime + offset)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.16)
-      osc.start(ctx.currentTime + offset); osc.stop(ctx.currentTime + offset + 0.16)
-    })
-    setTimeout(() => ctx.close(), 900)
-  } catch { /* AudioContext unavailable */ }
 }
 
 // ── 来店日 / メンテナンスクーポン（サーバー RPC） ───────────────────────────────
@@ -85,47 +56,6 @@ function playWarningSound() {
 async function fetchLastVisitDate(userId: string): Promise<string | null> {
   return (await getCustomerContextForStaff(userId)).last_visit_date
 }
-
-/** 来店チェックイン（来店日＝本日JST）。staff_check_in RPC。今日のメニュー（予約から分かれば）と最近の来店も返る。失敗時は例外。 */
-export async function checkInVisit(userId: string): Promise<{ date: string; info: VisitInfo }> {
-  const r = await callStaffRpc<{ visit_date: string } & Partial<VisitInfo>>('staff_check_in', { p_user_id: userId })
-  return {
-    date: String(r.visit_date).slice(0, 10),
-    info: { menu_code: r.menu_code ?? null, menu_name: r.menu_name ?? null, menu_source: r.menu_source ?? null, recent: Array.isArray(r.recent) ? r.recent : [],
-      reservation_starts_at: r.reservation_starts_at ?? null, reservation_price: typeof r.reservation_price === 'number' ? r.reservation_price : null },
-  }
-}
-
-export interface MaintenanceCouponPreview {
-  valid:          boolean
-  reason:         string | null
-  user_id:        string
-  customer_name:  string | null
-  days_remaining: number | null
-  qr_expires_at:  string
-  menu:           { name: string; stylist: string; normal_price: number; member_price: number }
-}
-
-/** メンテナンスクーポンQRの確認（消費しない）。通信失敗は例外。 */
-export async function previewMaintenanceCoupon(token: string): Promise<MaintenanceCouponPreview> {
-  return callStaffRpc<MaintenanceCouponPreview>('staff_preview_maintenance_coupon', { p_token: token })
-}
-
-/**
- * メンテナンスクーポンの使用確定（サーバー側で 5分有効・未使用・14日以内・当日ルールを再検証し、
- * トークン消費・使用ログ・来店日更新を1トランザクションで行う）。失敗時は RpcError。
- */
-export async function redeemMaintenanceCoupon(token: string, staffName: string): Promise<{ user_id: string; customer_name: string | null }> {
-  return callStaffRpc('staff_redeem_maintenance_coupon', { p_token: token, p_staff_name: staffName })
-}
-
-/** 旧形式（userId のみ・トークン無し）のクーポンQR */
-export function isLegacyMaintenanceQr(d: MaintenanceCouponQRData): boolean {
-  return !d.token
-}
-
-export const LEGACY_MAINTENANCE_QR_MESSAGE =
-  '旧形式のクーポンQRです。お客様にアプリを最新にしてクーポンQRを再表示してもらってください。'
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -145,95 +75,6 @@ function fmtVisitDate(iso: string): string {
 function fmtCreatedAt(iso: string): string {
   const d = new Date(iso)
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
-}
-
-// ── QR payload ────────────────────────────────────────────────────────────────
-
-export interface PassportQRData {
-  type: string
-  userId: string
-  name: string
-  reservation?: CurrentReservation | null
-  /** JOHNNY の予約で選んだ券（予約の日の会員 QR） */
-  ticketIds?: string[]
-}
-
-export interface TicketUseQRData {
-  type: 'ginjiro-ticket-use'
-  userId: string
-  selectedTicketId: string
-  issuedAt: string
-  expiresAt: string
-}
-
-export interface MaintenanceCouponQRData {
-  type: 'ginjiro-maintenance-coupon'
-  /** v2: サーバー発行の使い捨てトークン（5分有効） */
-  v?: number
-  token?: string
-  /** 旧形式（v1）のみ。v2 では含まれない */
-  userId?: string
-  name?: string
-}
-
-export interface PremiumCouponQRData {
-  type: 'ginjiro-premium-coupon'
-  userId: string
-  name: string
-  couponId: string
-  category: 'classic' | 'special' | 'ginpara'
-  title: string
-  menuLabel: string
-  normalPrice?: number | null
-  memberPrice: number
-  issuedAt?: string
-  expiresAt?: string
-}
-
-export type AnyQRData = PassportQRData | TicketUseQRData | MaintenanceCouponQRData | PremiumCouponQRData
-
-export function isQrPayloadExpired(expiresAt?: string): boolean {
-  if (!expiresAt) return false
-  const expiry = new Date(expiresAt)
-  if (Number.isNaN(expiry.getTime())) return true
-  return new Date() > expiry
-}
-
-export function parseQR(text: string): AnyQRData | null {
-  try {
-    const d = JSON.parse(text)
-    if (d.type === 'ginjiro-ticket-use' && d.userId && d.selectedTicketId) return d as TicketUseQRData
-    if (d.type === 'ginjiro-maintenance-coupon' && (d.token || d.userId)) return d as MaintenanceCouponQRData
-    if (d.type === 'ginjiro-premium-coupon' && d.userId && d.couponId) {
-      // QR からは会員・クーポンID・期限だけを使い、メニュー名・価格は店舗側のマスタから復元する（QR内の価格は使わない）
-      const def = PREMIUM_COUPONS.find(c => c.id === d.couponId)
-      const price = def?.prices[0]
-      if (!def || !price || (def.category !== 'classic' && def.category !== 'special' && def.category !== 'ginpara')) return null
-      return {
-        type: 'ginjiro-premium-coupon',
-        userId: String(d.userId),
-        name: typeof d.name === 'string' && d.name ? d.name : '名前未設定',
-        couponId: def.id,
-        category: def.category,
-        title: def.title,
-        menuLabel: price.label ?? def.subtitle ?? def.title,
-        normalPrice: price.normalPrice ?? null,
-        memberPrice: price.memberPrice,
-        issuedAt: typeof d.issuedAt === 'string' ? d.issuedAt : undefined,
-        expiresAt: typeof d.expiresAt === 'string' ? d.expiresAt : undefined,
-      }
-    }
-    if ((d.type === 'ginjiro-member' || d.type === 'otokomae-passport') && d.userId) {
-      return {
-        type: d.type,
-        userId: d.userId,
-        name: d.name || '名前未設定',
-        reservation: normalizeCurrentReservation(d.reservation),
-        ticketIds: Array.isArray(d.t) ? (d.t as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 30) : undefined,
-      }
-    }
-    return null
-  } catch { return null }
 }
 
 // ── Phase ─────────────────────────────────────────────────────────────────────
@@ -296,7 +137,7 @@ export function QrCameraScanner({
   const stop = useCallback(() => {
     const s = claimScanner(); if (!s) return
     setActiveState(false); void haltScanner(s)
-  }, [setActiveState]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setActiveState])
 
   const start = useCallback(async () => {
     if (scannerRef.current) return
@@ -319,9 +160,9 @@ export function QrCameraScanner({
       const s = claimScanner(); if (s) void haltScanner(s)
       onCameraError('カメラにアクセスできません。手動入力をご利用ください。')
     }
-  }, [onScan, onCameraError, elId, setActiveState]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [onScan, onCameraError, elId, setActiveState])
 
-  useEffect(() => () => { const s = claimScanner(); if (s) void haltScanner(s) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { const s = claimScanner(); if (s) void haltScanner(s) }, [])
 
   const showBox = placeholder ? true : active
 
@@ -383,7 +224,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [otokuAmountInput, setOtokuAmountInput]       = useState('')
   const [quantity, setQuantity]             = useState(1)
   const [issueLoading, setIssueLoading]     = useState(false)
-  const [issueError, setIssueError]         = useState<string | null>(null)
+  const [initialIssueRecovery] = useState(() => {
+    try { return { request: pendingIssuance(), error: null as string | null } }
+    catch (error) { return { request: null, error: error instanceof Error ? error.message : '確認待ちの発行情報を読み込めません。' } }
+  })
+  const [issueError, setIssueError]         = useState<string | null>(initialIssueRecovery.error)
+  const [pendingIssue, setPendingIssue] = useState<PendingIssuance | null>(initialIssueRecovery.request)
+  const issueBusy = useRef(false)
 
   // Confirmation modal
   const [showConfirm, setShowConfirm] = useState(false)
@@ -460,7 +307,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const isFirstVisit  = prevLastVisitDate === null
   const elapsedDays   = prevLastVisitDate ? daysSince(prevLastVisitDate) : null
   const isEligible    = !isFirstVisit && prevLastVisitDate !== undefined && elapsedDays !== null && elapsedDays <= 14
-  const canIssue      = staffId.trim() !== '' && !issueLoading && effectiveAmount > 0
+  const canIssue      = staffId.trim() !== '' && !issueLoading && !pendingIssue && !initialIssueRecovery.error && effectiveAmount > 0
   const activeTickets = userTickets.filter(t =>
     !t.used && !t.pending_transfer && (!t.expires_at || new Date(t.expires_at) > new Date()),
   )
@@ -596,11 +443,14 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setSelectNotice(null)
     setScannedData(passportData)
     setPhase('loading')
-    // 会員登録（初回登録・名前更新）＋来店日・チケット・当日利用状況をサーバーから一括取得。
+    // 既存会員はサーバーの氏名を正本にする。古いQRから登録済みの名前を更新しない。
     // 登録に失敗した状態では発行・使用に進ませない。
     let ctx
     try {
-      ctx = await registerCustomerWithContext(passportData.userId, passportData.name)
+      ctx = await resolveMemberQr(passportData.userId, passportData.name, !!passportData.storeRequestId && CUSTOMER_ACCESS_ENABLED, {
+        lookup: getCustomerContextForStaff, register: registerCustomerWithContext,
+      })
+      setScannedData({ ...passportData, name: ctx.customer!.name })
     } catch (err) {
       setScannedData(null)
       setPhase('scan')
@@ -648,34 +498,41 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setShowConfirm(true)
   }
 
-  // Called from confirm modal — does the actual issue + log
-  const handleIssueTicket = async () => {
-    if (!scannedData || !staffId.trim() || effectiveAmount <= 0) return
+  // Persist before sending. A retry uses the same request ID and original operator/payload.
+  const handleIssueTicket = async (retry = false) => {
+    if (issueBusy.current || initialIssueRecovery.error) return
+    issueBusy.current = true
     setShowConfirm(false)
     setIssueLoading(true)
     setIssueError(null)
     try {
-      // 一括発行（サーバー側で全件成功 or 全件失敗。発行ログも同じトランザクションで記録）
-      const issued = await issueTickets({
-        userId:       scannedData.userId,
-        type:         ticketTab === 'otoku' ? 'otoku' : 'discount',
-        amount:       effectiveAmount,
-        quantity,
-        staffName:    staffId,
-        customerName: scannedData.name,
+      await withIssuanceLock(async () => {
+        let request = pendingIssuance()
+        if (retry) {
+          if (!request) throw new RpcError('pending_issue_missing', '確認待ちの発行がありません。画面を開き直してください。')
+        } else {
+          if (request) throw new RpcError('pending_issue_exists', '確認待ちの発行があります。先に同じ発行を確認してください。')
+          if (!scannedData || !staffId.trim() || effectiveAmount <= 0) return
+          request = prepareIssuance({ userId: scannedData.userId, type: ticketTab === 'otoku' ? 'otoku' : 'discount',
+            amount: effectiveAmount, quantity, staffName: staffId, customerName: scannedData.name })
+        }
+        setPendingIssue(request)
+        const issued = await resolveIssuance(request)
+        setPendingIssue(null)
+        if (scannedData?.userId === request.userId) setUserTickets(prev => [...issued, ...prev.filter(t => !issued.some(i => i.id === t.id))])
+        playSuccessSound()
+        setSuccessInfo({ name: request.customerName, label: request.type === 'otoku' ? '漢トク券' : '割引券', amount: request.amount, qty: request.quantity })
+        setShowSuccess(true)
+        setDiscountAmountInput('')
+        setOtokuAmountInput('')
+        setQuantity(1)
+        setTimeout(() => setShowSuccess(false), 1800)
       })
-      setUserTickets(prev => [...issued, ...prev])
-
-      playSuccessSound()
-      setSuccessInfo({ name: scannedData.name, label: currentTab.autoTitle, amount: effectiveAmount, qty: quantity })
-      setShowSuccess(true)
-      setDiscountAmountInput('')
-      setOtokuAmountInput('')
-      setQuantity(1)
-      setTimeout(() => setShowSuccess(false), 1800)
     } catch (err) {
-      setIssueError(`発行に失敗しました。1枚も発行されていません。${rpcErrorMessage(err, '通信環境を確認して再度お試しください。')}`)
+      try { setPendingIssue(pendingIssuance()) } catch { /* Preserve the original error; never create a replacement request. */ }
+      setIssueError(rpcErrorMessage(err, '発行結果を確認できません。新しく発行せず、同じ発行を確認・再試行してください。'))
     } finally {
+      issueBusy.current = false
       setIssueLoading(false)
     }
   }
@@ -701,7 +558,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   }
 
   function openUseConfirm() {
-    if (selectedTickets.length === 0 || !staffId.trim()) return
+    if (isStaging() || selectedTickets.length === 0 || !staffId.trim()) return
     setUseError(null)
     setShowUseConfirm(true)
   }
@@ -712,7 +569,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   }
 
   const handleConfirmUse = async () => {
-    if (useConfirmLoading || selectedTickets.length === 0 || !scannedData || !staffId.trim()) return
+    if (isStaging() || useConfirmLoading || selectedTickets.length === 0 || !scannedData || !staffId.trim()) return
     setUseConfirmLoading(true)
     setUseError(null)
     const ticketIds  = selectedTickets.map(t => t.id)
@@ -997,6 +854,16 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box',
       }}>
 
+        {mainTab === 'issue' && (pendingIssue || initialIssueRecovery.error) && (
+          <section role="status" style={{ padding: 18, marginBottom: 20, border: '1px solid rgba(154,116,48,0.45)', borderRadius: 14, background: '#FBF6EA', color: '#2A211B', lineHeight: 1.7 }}>
+            <strong>チケット発行の確認</strong>
+            {pendingIssue && <p>{pendingIssue.customerName}様 · {pendingIssue.amount.toLocaleString()}円 × {pendingIssue.quantity}枚</p>}
+            <p>{issueError || initialIssueRecovery.error || '確認待ちの発行があります。同じ発行を確認してから次へ進んでください。'}</p>
+            {pendingIssue && <button type="button" disabled={issueLoading} onClick={() => { void handleIssueTicket(true) }} style={{ marginTop: 12, minHeight: 48, padding: '10px 18px', borderRadius: 10, background: '#2A211B', color: '#FBF6EA' }}>
+              {issueLoading ? '確認中…' : '同じ発行を確認・再試行'}
+            </button>}
+          </section>
+        )}
         {/* ===== SCAN ===== */}
         {mainTab === 'issue' && phase === 'scan' && (
           <div>
@@ -1205,7 +1072,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             )}
 
             {/* ── アプリ紐付けコード（既存会員の移行・端末のセッション再発行） ── */}
-            <div style={{ marginBottom: 14, borderRadius: 16, padding: '14px 16px', background: 'rgba(151,115,43,0.05)', border: '1px solid rgba(151,115,43,0.22)' }}>
+            <div style={{ display: scannedData.storeRequestId ? 'none' : undefined, marginBottom: 14, borderRadius: 16, padding: '14px 16px', background: 'rgba(151,115,43,0.05)', border: '1px solid rgba(151,115,43,0.22)' }}>
               {bindCode ? (
                 <div style={{ textAlign: 'center' }}>
                   <p style={{ fontSize: 13, color: '#1c1f1d', marginBottom: 6 }}>お客様のアプリに入力してもらってください</p>
@@ -1232,6 +1099,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               {bindCodeError && <p style={{ fontSize: 13, color: '#b23a3a', marginTop: 8 }}>{bindCodeError}</p>}
             </div>
 
+            {scannedData.storeRequestId&&<StaffStoreApproval key={scannedData.storeRequestId} requestId={scannedData.storeRequestId} userId={scannedData.userId} memberName={scannedData.name} staffName={staffId}/>}
             {/* ── 来店チェックイン ── */}
             <div style={{ marginBottom: 14 }}>
               {checkInStatus === 'done' && checkInDate ? (
@@ -1260,12 +1128,26 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   </p>
                   {visitInfo && <VisitMenuPicker key={scannedData.userId} userId={scannedData.userId} info={visitInfo} staffName={staffId} />}
                   {visitInfo && <CheckoutSummary info={visitInfo} selected={selectedTickets} />}
+                  {/* お会計（銀Pay・現金ほか）は会計の仕組みがある Staging だけ。券は会計の中で使用済みになる */}
+                  {isStaging() && (
+                    <MemberCheckout
+                      key={scannedData.userId}
+                      userId={scannedData.userId}
+                      staffName={staffId}
+                      ticketIds={selectedTicketIds}
+                      onPaid={() => {
+                        setSelectedTicketIds([])
+                        playSuccessSound()
+                        getTicketsForStaff(scannedData.userId).then(setUserTickets).catch(() => {})
+                      }}
+                    />
+                  )}
                   {/* 次にやること */}
                   <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: '#f8f7f4', border: '1px solid rgba(151,115,43,0.28)' }}>
                     <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>NEXT STEP</p>
                     {[
                       '来店チェックインは完了しています',
-                      '割引券の使用・発行がある場合は下で処理してください',
+                      isStaging() ? '割引券を選んで「お会計に進む」を押してください。券は会計確定時に使用されます' : '割引券の使用・発行がある場合は下で処理してください',
                       'すべて完了したら「来店完了」を押してください',
                     ].map((text, i) => (
                       <p key={text} style={{ display: 'flex', gap: 10, fontFamily: SERIF, fontSize: 13, color: '#1c1f1d', lineHeight: 1.6, marginTop: i === 0 ? 0 : 6 }}>
@@ -1421,7 +1303,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   {selectNotice && (
                     <p style={{ fontSize: 11, color: '#a86b00', lineHeight: 1.6 }}>{selectNotice}</p>
                   )}
-                  <button
+                  {!isStaging() && <button
                     onClick={openUseConfirm}
                     disabled={selectedTickets.length === 0 || !staffId.trim()}
                     style={{
@@ -1437,7 +1319,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     {selectedTickets.length === 0
                       ? '使用する割引券を選択してください'
                       : `選択した${selectedTickets.length}枚を使用確定${selectedTotal > 0 ? `（合計 ¥${selectedTotal.toLocaleString()}）` : ''}`}
-                  </button>
+                  </button>}
                 </div>
               )}
             </div>

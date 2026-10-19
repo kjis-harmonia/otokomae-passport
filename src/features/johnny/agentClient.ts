@@ -14,6 +14,7 @@ export type AgentUi =
   | { type: 'confirm_cancel'; reservation_id: string }
   | { type: 'confirm_change'; reservation_id: string; menu_code: string; staff_id: string | null; starts_at: string }
   | { type: 'reservations'; ids: string[] }
+  | { type: 'waitlist'; menu_code: string; staff_id: string | null; date: string; from: string; to: string }
 
 export interface AgentTurn { role: 'user' | 'assistant'; text: string }
 export interface AgentShown {
@@ -54,6 +55,9 @@ function readUi(raw: unknown): AgentUi | null {
       const ids = Array.isArray(u.ids) ? u.ids.filter(isStr) : []
       return ids.length ? { type: 'reservations', ids } : null
     }
+    case 'waitlist':
+      return isStr(u.menu_code) && isStr(u.date) && isStr(u.from) && isStr(u.to)
+        ? { type: 'waitlist', menu_code: u.menu_code, staff_id: strOrNull(u.staff_id), date: u.date, from: u.from, to: u.to } : null
     default: return null
   }
 }

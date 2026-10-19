@@ -13,7 +13,7 @@ import type { TicketRow, TicketType } from '../data/ticket'
 import { removeStoredValue } from './storage'
 import { supabase } from '../lib/supabase'
 import { callRpc, callStaffRpc, isMissingRpc, RpcError } from './staffSession'
-import { callCustomerRpc, hasCustomerSession, readAsCustomer, saveCustomerSession } from './customerSession'
+import { callCustomerRpc, readAsCustomer, saveCustomerSession } from './customerSession'
 
 const ACTIVE_TICKET_KEY = 'ginjiro_active_ticket'
 
@@ -147,8 +147,9 @@ export interface IssueTicketsInput {
 }
 
 /** チケット一括発行。全件成功で発行済みチケットを返し、1枚でも失敗すれば何も発行されない。 */
-export async function issueTickets(input: IssueTicketsInput): Promise<TicketRow[]> {
-  const r = await callStaffRpc<{ tickets: TicketRow[] }>('staff_issue_tickets', {
+export async function issueTickets(input: IssueTicketsInput & { requestId: string }): Promise<TicketRow[]> {
+  const r = await callStaffRpc<{ tickets: TicketRow[] }>('staff_issue_tickets_once', {
+    p_request_id: input.requestId,
     p_user_id:       input.userId,
     p_type:          input.type,
     p_amount:        input.amount,
@@ -156,7 +157,12 @@ export async function issueTickets(input: IssueTicketsInput): Promise<TicketRow[
     p_staff_name:    input.staffName,
     p_customer_name: input.customerName,
   })
-  return r.tickets ?? []
+  if (!r || !Array.isArray(r.tickets) || r.tickets.length !== input.quantity ||
+      new Set(r.tickets.map(t => t.id)).size !== input.quantity ||
+      r.tickets.some(t => !t.id || t.user_id !== input.userId || t.type !== input.type || t.amount !== input.amount)) {
+    throw new RpcError('invalid_issue_receipt', '発行結果を確認できません。同じ発行を再確認してください。')
+  }
+  return r.tickets
 }
 
 export interface UseTicketsInput {
@@ -219,13 +225,11 @@ export async function getTicketByTransferToken(token: string): Promise<TicketRow
 
 /**
  * 譲渡受け取り確定。受け取る人も顧客セッションで特定する（customer_claim_transfer・1トランザクション）。
- * 移行期間に限り、セッションの無い既存会員は旧 RPC（claim_ticket_transfer）で受け取る。
+ * 未連携の会員は引き継ぎが必要。表示用の会員IDを本人確認として使わない。
  */
-export async function acceptTransfer(token: string, toUserId: string): Promise<TicketRow> {
+export async function acceptTransfer(token: string): Promise<TicketRow> {
   try {
-    const r = hasCustomerSession()
-      ? await callCustomerRpc<{ ticket?: TicketRow }>('customer_claim_transfer', { p_token: token })
-      : await callRpc<{ ticket?: TicketRow }>('claim_ticket_transfer', { p_token: token, p_to_user_id: toUserId })
+    const r = await callCustomerRpc<{ ticket?: TicketRow }>('customer_claim_transfer', { p_token: token })
     if (!r.ticket) throw new Error('トークンが無効または期限切れです')
     return r.ticket
   } catch (err) {

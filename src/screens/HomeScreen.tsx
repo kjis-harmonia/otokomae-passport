@@ -1,3 +1,4 @@
+import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
 import { useState, useEffect, useRef } from 'react'
 import type { CSSProperties, TouchEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -378,16 +379,16 @@ function MaintenanceScheduleSection() {
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(getNotificationPermission)
 
   // 最終来店日をサーバー（get_my_last_visit RPC）から取得。通信できない場合のみ端末内の旧データで表示
-  async function fetchVisit() {
-    try {
-      setLastVisitDate(await fetchLastVisitDateStrict(userId))
-      return
-    } catch { /* 通信失敗 → 端末内の旧データ */ }
-    const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
-    setLastVisitDate(local[userId] ?? null)
-  }
-
-  useEffect(() => { void fetchVisit() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let alive = true
+    void fetchLastVisitDateStrict(userId).then(date => {
+      if (alive) setLastVisitDate(date)
+    }).catch(() => {
+      const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
+      if (alive) setLastVisitDate(local[userId] ?? null)
+    })
+    return () => { alive = false }
+  }, [userId])
 
   useEffect(() => {
     if (lastVisitDate) triggerMaintenanceNotification(lastVisitDate)
@@ -737,6 +738,7 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
     <div className="ginjiro-luxury-bg ginjiro-luxury-bg--home">
       <div className="relative z-10">
         <HeroSlider slides={heroSlides} onPick={setSelectedStyle} />
+        {CUSTOMER_ACCESS_ENABLED&&<div className="customer-access" style={{margin:'20px 20px 0'}}><button type="button" className="access-primary" onClick={()=>onTabChange('reserve')}>Johnnyで予約</button></div>}
 
         <div className="space-y-10 pt-5 pb-16">
 
