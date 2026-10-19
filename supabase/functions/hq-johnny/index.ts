@@ -66,8 +66,8 @@ const TOOLS = [
   { type: 'function', function: { name: 'find_open_slots', description: '今日から何日かの、予約を受けられる空き時間（カット基準）を調べる。空き枠うめの提案に使う', parameters: { type: 'object', properties: { days: { type: 'number', description: '何日分（1〜7、既定3）' } } } } },
   { type: 'function', function: { name: 'open_slot_targets', description: '空き枠のお知らせを送れる人数を数える（送らない）。maintenance＝メンテ期限が近い人、lapsed＝しばらく来ていない人', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'send_open_slot_push', description: '空き時間のお知らせをお客様のスマホへ送る。テイテイさんが送ることに「はい・送って」と言ったあとだけ使う（言われる前に送らない）', parameters: { type: 'object', properties: { date: { type: 'string', description: 'YYYY-MM-DD' }, times: { type: 'string', description: '例：15:00〜17:00' } }, required: ['date', 'times'] } } },
-  { type: 'function', function: { name: 'list_menu_prices', description: 'メニューと今の料金（code・名前・種類・料金・予約できるか・予定している料金の変更）。料金の話のときは最初に使って、どのメニューか確かめる', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'schedule_price_change', description: 'メニューの料金を、決めた日からアプリ（AI 予約）と会計に反映する。今日以前の日付ならすぐ反映。テイテイさんが中身（メニュー・料金・いつから）に「はい」と言ったあとだけ使う', parameters: { type: 'object', properties: { code: { type: 'string', description: 'list_menu_prices の code' }, new_price: { type: 'number', description: '税込の新しい料金（円）' }, starts_on: { type: 'string', description: 'YYYY-MM-DD' }, note: { type: 'string' } }, required: ['code', 'new_price', 'starts_on'] } } },
+  { type: 'function', function: { name: 'list_menu_prices', description: 'メニューと今の料金（code・名前・種類・price＝会員価格（プレミアムでなければふつうの料金）・normal_price＝通常価格（プレミアム対象だけ）・member_label・予約できるか・予定している料金の変更）。プレミアム対象は平日終日・土日祝17〜19時開始が会員価格、それ以外は通常価格。料金の話のときは最初に使って、どのメニューか確かめる', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'schedule_price_change', description: 'メニューの料金を、決めた日からアプリ（AI 予約）と会計に反映する。今日以前の日付ならすぐ反映。テイテイさんが中身（メニュー・料金・いつから）に「はい」と言ったあとだけ使う', parameters: { type: 'object', properties: { code: { type: 'string', description: 'list_menu_prices の code' }, new_price: { type: 'number', description: '税込の新しい料金（円）。プレミアム対象（normal_price がある）メニューは会員価格' }, new_normal_price: { type: 'number', description: 'プレミアム対象メニューで通常価格も変えるとき（円）。変えないなら省く' }, starts_on: { type: 'string', description: 'YYYY-MM-DD' }, note: { type: 'string' } }, required: ['code', 'new_price', 'starts_on'] } } },
   { type: 'function', function: { name: 'list_price_changes', description: '予定している・最近反映した料金の変更', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'cancel_price_change', description: 'まだ反映していない料金の変更をやめる', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
   { type: 'function', function: { name: 'open_screen', description: '本部の画面を開いて見せる。「今日の予約見せて」「予約表出して」「売上見せて」「在庫は？」など、画面を見たいと言われたときに使う', parameters: { type: 'object', properties: { screen: { type: 'string', enum: Object.keys(SCREENS), description: Object.entries(SCREENS).map(([k, v]) => `${k}=${v}`).join(' / ') } }, required: ['screen'] } } },
@@ -95,7 +95,7 @@ const SYSTEM = () => `あなたは理容室「二代目銀二郎」の本部に�
 ・「ケイに伝えて」「BOS に伝えて」「慶一郎に伝えて」「オーナーに言っといて」と頼まれたら send_to_owner で伝言を送り、送った中身を短く伝える。
 ・料金を変える話は、アプリの料金を正しくすることが目的。慶一郎の OK は待たずに、JOHNNY が反映まで進める：
   1) list_menu_prices でどのメニューか確かめる。「カット」のようにいくつも当てはまる時は「通常カット・スキンフェード…どれ？」と聞く。
-  2) いくらに・いつからが無ければ聞く。そのメニューを含むセット（例：通常カット＆カラー）があれば「セットも変える？」と一緒に聞く。
+  2) いくらに・いつからが無ければ聞く。プレミアム対象（normal_price がある）メニューは「通常価格と会員価格のどっち？両方？」も確かめる。そのメニューを含むセット（例：通常カット＆カラー）があれば「セットも変える？」と一緒に聞く。
   3) 今日から切り替える時（すぐ反映される時）や、聞き取りがあやしい時は、中身を一度読み上げて確かめる（例：「通常カットを4,000円→3,500円、今日から。よか？」）。明日以降の日付で、テイテイさんが全部はっきり言った時は確かめずに進めてよい（あとから変更・取り消しできる）。
   4) 進めるなら schedule_price_change（セットも変えるなら、それぞれ）。そして send_to_owner（report: true、kind: note）で慶一郎に知らせる（「11/1からアプリも3,500円に切り替わる予定」）。
   5) ホットペッパーなどアプリの外の料金表示は JOHNNY には変えられないので、add_task でテイテイさんのやることに入れる（期限は開始日の前日）。
@@ -134,16 +134,16 @@ Deno.serve(async (req) => {
   if (!hq) return json(401, { error: 'hq_auth_required' })
   const authed = rpc('hq_get_notify', { p_hq: hq }).then(() => true, () => false)
 
-  // JOHNNY の声：本部セッションを確かめながら音声を作り、届いた分から流す（PCM 16bit・24kHz・モノラル）
+  // JOHNNY の声：本部セッションを確かめてから音声を作り、届いた分から流す（PCM 16bit・24kHz・モノラル）
+  //   有料の音声 API は、認証が通ったあとにだけ呼ぶ（無効なセッションでは発注しない）
   const speakText = typeof body.speak === 'string' ? body.speak.trim().slice(0, 800) : ''
   if (speakText) {
-    const speech = fetch('https://api.openai.com/v1/audio/speech', {
+    if (!(await authed)) return json(401, { error: 'hq_auth_required' })
+    const r = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: TTS_MODEL, voice: TTS_VOICE, input: speakText, instructions: TTS_STYLE, response_format: 'pcm' }),
     })
-    if (!(await authed)) { speech.then(x => x.body?.cancel()).catch(() => {}); return json(401, { error: 'hq_auth_required' }) }
-    const r = await speech
     if (!r.ok || !r.body) return json(502, { error: 'tts_unavailable' })
     return new Response(r.body, { status: 200, headers: { ...CORS, 'Content-Type': 'audio/pcm', 'Cache-Control': 'no-store' } })
   }
@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
       case 'open_slot_targets': return await openSlotTargets(rpc, hq)
       case 'send_open_slot_push': changed = true; return await sendOpenSlotPush(rpc, hq, String(args.date ?? ''), String(args.times ?? ''))
       case 'list_menu_prices': return await rpc('hq_menu_prices', { p_hq: hq })
-      case 'schedule_price_change': changed = true; return await rpc('hq_schedule_price_change', { p_hq: hq, p_code: args.code, p_new_price: Math.round(Number(args.new_price)), p_starts_on: args.starts_on, p_note: args.note ?? null })
+      case 'schedule_price_change': changed = true; return await rpc('hq_schedule_price_change', { p_hq: hq, p_code: args.code, p_new_price: Math.round(Number(args.new_price)), p_starts_on: args.starts_on, p_note: args.note ?? null, p_new_normal_price: args.new_normal_price == null ? null : Math.round(Number(args.new_normal_price)) })
       case 'list_price_changes': return await rpc('hq_price_changes_list', { p_hq: hq })
       case 'cancel_price_change': changed = true; return await rpc('hq_cancel_price_change', { p_hq: hq, p_id: args.id })
       case 'open_screen': if (typeof args.screen === 'string' && args.screen in SCREENS) { open = args.screen; return { ok: true, opened: SCREENS[args.screen] } } return { error: 'unknown_screen' }
