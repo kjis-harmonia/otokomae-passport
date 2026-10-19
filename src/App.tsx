@@ -39,7 +39,7 @@ import { HERO_SLIDE_IMAGES } from './data/styleImages'
 import type { TicketRow } from './data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from './data/ticket'
 import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
-import { getUserId, MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
+import { MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
 import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
 import { InstallGuide } from './components/InstallGuide'
@@ -451,12 +451,11 @@ function ShopPasswordGate({
   const [error, setError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
 
-  useEffect(() => {
-    if (!open) {
-      setPasscode('')
-      setError(null)
-    }
-  }, [open])
+  function closeGate() {
+    setPasscode('')
+    setError(null)
+    onClose()
+  }
 
   // パスコードはサーバー側（verify_shop_passcode RPC）で照合する。フロントは正解を持たない。
   async function submit() {
@@ -469,6 +468,8 @@ function ShopPasswordGate({
       const r = data as { ok?: boolean; error?: string }
       if (r?.ok) {
         localStorage.setItem(SHOP_AUTH_KEY, '1')
+        setPasscode('')
+        setError(null)
         onUnlock()
         return
       }
@@ -578,7 +579,7 @@ function ShopPasswordGate({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, marginTop: 18 }}>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={closeGate}
                 style={{
                   height: 48,
                   borderRadius: 999,
@@ -848,7 +849,8 @@ function App() {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
     return done ? 'app' : 'onboarding'
   })
-  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+  const [showBgmMenu, setShowBgmMenu] = useState(false)
+  const [activeTab, setActiveTabState] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
@@ -857,6 +859,10 @@ function App() {
     const valid: NavTab[] = ['home', 'styles', 'shop', 'diagnosis', 'tryon', 'reserve', 'mypage', 'tickets']
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
+  const setActiveTab = useCallback((tab: NavTab) => {
+    setActiveTabState(tab)
+    if (tab !== 'home') setShowBgmMenu(false)
+  }, [])
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
   const [passkeyOffer,setPasskeyOffer]=useState(false)
   const [afterStoreSetup,setAfterStoreSetup]=useState(false)
@@ -875,6 +881,16 @@ function App() {
   const [isPremiumGachaOpen, setIsPremiumGachaOpen] = useState(false)
   const [hasOpenModal, setHasOpenModal] = useState(false)
   const [showQrModal, setShowQrModal] = useState(false)
+  // navHighlight drives the bottom nav visual indicator independently from activeTab
+  const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab')
+    const requestedTab = tab
+    if (ONE_TAP_STAGING && requestedTab==='reserve')return 'shop'
+    if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
+    if (requestedTab === 'diagnosis') return 'shop'
+    const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
+    return navTabs.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
+  })
   // Existing signed-in members also need a first setup entry; never enroll from a display-only member ID.
   useEffect(()=>{
     if(!ONE_TAP_STAGING || storeAccess.mode!=='verified' || phase!=='app' || appLoading || activeTab!=='home' || showQrModal || welcomeCouponDialog || hasOpenModal || isPremiumGachaOpen || !customerAccessSession || !supportsPasskeys())return
@@ -894,17 +910,7 @@ function App() {
     }
     window.addEventListener('ginjiro:store-verified',verified)
     return()=>window.removeEventListener('ginjiro:store-verified',verified)
-  },[])
-  // navHighlight drives the bottom nav visual indicator independently from activeTab
-  const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
-    const tab = new URLSearchParams(window.location.search).get('tab')
-    const requestedTab = tab
-    if (ONE_TAP_STAGING && requestedTab==='reserve')return 'shop'
-    if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
-    if (requestedTab === 'diagnosis') return 'shop'
-    const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
-    return navTabs.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
-  })
+  },[setActiveTab])
 
   // ── Transfer acceptance overlay ───────────────────────────────────────────────
   const [transferToken, setTransferToken]   = useState<string | null>(() => {
@@ -921,25 +927,25 @@ function App() {
 
   useEffect(() => {
     if (!transferToken) return
-    setTransferLoading(true)
-    setTransferTicket(null)
+    let alive = true
     getTicketByTransferToken(transferToken)
       .then(t => {
-        setTransferTicket(t)
+        if (alive) setTransferTicket(t)
       })
       .catch(err => {
         console.error('[App] getTicketByTransferToken error:', err)
-        setTransferTicket(null)
+        if (alive) setTransferTicket(null)
       })
-      .finally(() => setTransferLoading(false))
+      .finally(() => { if (alive) setTransferLoading(false) })
     window.history.replaceState({}, '', window.location.pathname)
-  }, [transferToken]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { alive = false }
+  }, [transferToken])
 
   async function handleAcceptTransfer() {
     if (!transferToken || !transferTicket) return
     setTransferPhase('accepting')
     try {
-      const ticket = await acceptTransfer(transferToken, getUserId())
+      const ticket = await acceptTransfer(transferToken)
       setAcceptedTicket(ticket)
       setTransferPhase('done')
     } catch (e) {
@@ -1002,14 +1008,14 @@ function App() {
     // 下タブの SHOP は予約の画面を開く（タブの表示は SHOP のまま）
     setActiveTab(nextTab === 'shop' ? 'reserve' : nextTab)
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
-  }, [shopUnlocked])
+  }, [shopUnlocked, setActiveTab])
 
   const handleShopUnlock = useCallback(() => {
     setShopUnlocked(true)
     setShowShopPasswordGate(false)
     setNavHighlight('shop')
     setActiveTab('reserve')
-  }, [])
+  }, [setActiveTab])
 
   const handleGachaComplete = useCallback(() => {
     // 結果の表示はガチャ演出側で行う
@@ -1020,7 +1026,6 @@ function App() {
   }, [])
 
   const bgm = useBgm()
-  const [showBgmMenu, setShowBgmMenu] = useState(false)
 
   // JOHNNY のお知らせ：許可済みなら受け取り先をサーバーに入れ直す（変わることがある）
   useEffect(() => { if (phase === 'app') void refreshPushIfGranted() }, [phase])
@@ -1037,10 +1042,6 @@ function App() {
     const t = setTimeout(() => setShowMusicGuide(true), 700)
     return () => clearTimeout(t)
   }, [phase, welcomeCouponDialog, activeTab])
-
-  useEffect(() => {
-    if (activeTab !== 'home') setShowBgmMenu(false)
-  }, [activeTab])
 
   function dismissMusicGuide() {
     localStorage.setItem(MUSIC_GUIDE_KEY, 'true')

@@ -1,10 +1,15 @@
-type Json = Record<string, any>
+type Json = Record<string, unknown>
+interface PasskeyVerification {
+  verified:boolean
+  registrationInfo?:{credential:{id:string;publicKey:Uint8Array;counter:number;transports?:string[]}}
+  authenticationInfo?:{newCounter:number}
+}
 export interface PasskeyConfig {base:string;serviceKey:string;origin:string;rpID:string}
 export interface WebAuthnServer {
-  generateRegistrationOptions(input:Json):Promise<Json>
-  generateAuthenticationOptions(input:Json):Promise<Json>
-  verifyRegistrationResponse(input:Json):Promise<Json>
-  verifyAuthenticationResponse(input:Json):Promise<Json>
+  generateRegistrationOptions(input:Json):Promise<{challenge:string}>
+  generateAuthenticationOptions(input:Json):Promise<{challenge:string}>
+  verifyRegistrationResponse(input:Json):Promise<PasskeyVerification>
+  verifyAuthenticationResponse(input:Json):Promise<PasskeyVerification>
 }
 const STAGING='https://kfufxzmucjljjouzpumi.supabase.co'
 const b64=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','')
@@ -13,11 +18,11 @@ const text=(value:unknown,max:number)=>typeof value==='string'&&value.length<=ma
 export function createPasskeyHandler(config:PasskeyConfig,webauthn:WebAuthnServer,fetcher:typeof fetch=fetch){
   const cors={'Access-Control-Allow-Origin':config.origin,'Access-Control-Allow-Headers':'content-type, apikey, authorization','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}
   const reply=(value:Json,status=200)=>Response.json(value,{status,headers:cors})
-  async function rpc(action:string,input:Json){
+  async function rpc<T=Json>(action:string,input:Json):Promise<T>{
     const response=await fetcher(config.base+'/rest/v1/rpc/customer_passkey_service',{method:'POST',headers:{'Content-Type':'application/json',apikey:config.serviceKey,Authorization:'Bearer '+config.serviceKey},body:JSON.stringify({p_action:action,p_input:input}),signal:AbortSignal.timeout(15000)})
     const value=await response.json()
     if(!response.ok)throw Error(typeof value.message==='string'?value.message:'service_unavailable')
-    return value as Json
+    return value as T
   }
   return async(request:Request):Promise<Response>=>{
     if(config.base!==STAGING||!config.serviceKey)return reply({error:'unavailable',message:'この機能はStagingで準備中です。'},503)
@@ -37,7 +42,7 @@ export function createPasskeyHandler(config:PasskeyConfig,webauthn:WebAuthnServe
       const session=text(body.session,256)
       if(body.action==='status')return reply(await rpc('status',{session}))
       if(body.action==='register_options'){
-        const member=await rpc('register_context',{session})
+        const member=await rpc<{handle:string;name:string}>('register_context',{session})
         const options=await webauthn.generateRegistrationOptions({rpName:'銀二郎',rpID:config.rpID,userID:new TextEncoder().encode(member.handle),userName:member.name,userDisplayName:member.name,attestationType:'none',supportedAlgorithmIDs:[-7,-257],authenticatorSelection:{residentKey:'required',userVerification:'required',authenticatorAttachment:'platform'},timeout:60000})
         const id=crypto.randomUUID()
         await rpc('put_challenge',{id,kind:'register',challenge:options.challenge,session})
@@ -53,7 +58,7 @@ export function createPasskeyHandler(config:PasskeyConfig,webauthn:WebAuthnServe
         const id=text(body.id,36)
         if(!/^[0-9a-f-]{36}$/.test(id)||!body.response||typeof body.response!=='object')return reply({error:'invalid_request'},400)
         const kind=body.action==='register_verify'?'register':'login'
-        const challenge=await rpc('consume_challenge',{id,kind,session})
+        const challenge=await rpc<{challenge:string}>('consume_challenge',{id,kind,session})
         const shared={response:body.response,expectedChallenge:challenge.challenge,expectedOrigin:config.origin,expectedRPID:config.rpID,requireUserVerification:true}
         if(kind==='register'){
           const verification=await webauthn.verifyRegistrationResponse(shared)
@@ -62,8 +67,9 @@ export function createPasskeyHandler(config:PasskeyConfig,webauthn:WebAuthnServe
           await rpc('finish_register',{session,credential_id:credential.id,public_key:b64(credential.publicKey),counter:credential.counter,transports:credential.transports??[]})
           return reply({ok:true})
         }
-        const credential=await rpc('credential',{credential_id:text(body.response.id,2048)})
-        const handle=body.response.response?.userHandle
+        const assertion=body.response as {id?:unknown;response?:{userHandle?:unknown}}
+        const credential=await rpc<{handle:string;credential_id:string;public_key:string;counter:number;transports:string[]}>('credential',{credential_id:text(assertion.id,2048)})
+        const handle=assertion.response?.userHandle
         if(handle!==b64(new TextEncoder().encode(credential.handle)))throw Error('passkey_auth_failed')
         const verification=await webauthn.verifyAuthenticationResponse({...shared,credential:{id:credential.credential_id,publicKey:bytes(credential.public_key),counter:Number(credential.counter),transports:credential.transports}})
         if(!verification.verified||!verification.authenticationInfo)throw Error('passkey_auth_failed')

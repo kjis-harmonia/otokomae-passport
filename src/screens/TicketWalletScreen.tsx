@@ -332,7 +332,7 @@ export function TicketWalletScreen({
     })
   }
 
-  function handlePremiumCallClick(card: PremiumCard) {
+  const handlePremiumCallClick = useCallback((card: PremiumCard) => {
     if (!premium.isOpenNow) return
     setDetailId(null)
     const current = pendingPremiumCallRef.current
@@ -342,7 +342,7 @@ export function TicketWalletScreen({
       // Android Chrome / LINE内ブラウザ / PCなど、tel起動後にページが隠れない環境向けの保険。
       timer: window.setTimeout(showPendingPremiumReservation, 1500),
     }
-  }
+  }, [premium.isOpenNow, showPendingPremiumReservation])
 
   function handleCutSpecialCallClick(coupon: CutSpecialCoupon) {
     setDetailId(null)

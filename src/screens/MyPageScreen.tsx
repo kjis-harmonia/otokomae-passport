@@ -112,6 +112,11 @@ interface Props {
 }
 
 export function MyPageScreen({ memberStatus }: Props) {
+  const userId = getUserId()
+  return <MyPageContent key={userId} memberStatus={memberStatus} userId={userId} />
+}
+
+function MyPageContent({ memberStatus, userId }: { memberStatus: MemberStatus; userId: string }) {
   const [showMemberQr, setShowMemberQr]         = useState(false)
   const [tickets, setTickets]                   = useState<TicketRow[]>([])
   const [ticketsLoading, setTicketsLoading]     = useState(true)
@@ -137,16 +142,12 @@ export function MyPageScreen({ memberStatus }: Props) {
   // Recovery code (Phase2)
   const [customerData, setCustomerData]         = useState<CustomerRow | null | undefined>(undefined)
 
-  const userId = getUserId()
-
   // ── Data fetching ───────────────────────────────────────────────────────────
 
-  const fetchTickets = useCallback(async () => {
-    setTicketsLoading(true)
-    try { setTickets(await getUserTickets(userId)) }
-    catch { setTickets([]) }
-    finally { setTicketsLoading(false) }
-  }, [userId])
+  const fetchTickets = useCallback(() => getUserTickets(userId)
+    .then(setTickets)
+    .catch(() => setTickets([]))
+    .finally(() => setTicketsLoading(false)), [userId])
 
   useEffect(() => { void fetchTickets() }, [fetchTickets])
   useEffect(() => {
@@ -840,7 +841,7 @@ export function MyPageScreen({ memberStatus }: Props) {
 
         {/* ── 以前のチケットを引き継ぐ（顧客セッションの無い既存会員の端末のみ） ── */}
         <div style={{ margin: '14px 16px 0' }}>
-          <PreviousTicketsEntry onBound={() => { void fetchTickets() }} />
+          <PreviousTicketsEntry onBound={() => { setTicketsLoading(true); void fetchTickets() }} />
         </div>
 
         <div style={{margin:'24px 20px 0'}}><CustomerAccessSettings onRecovered={()=>window.location.reload()}/></div>

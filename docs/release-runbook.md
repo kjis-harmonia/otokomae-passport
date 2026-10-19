@@ -5,6 +5,8 @@ Claude は週の利用制限が近いため、ここから先は Codex が引き
 
 ## 0. いまの状態（10/19 時点）
 
+**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認UIの本番対応とスマートフォン幅での画面検証を先に完了する。
+
 - staging ブランチ：Claude 分はすべてコミット済み（キャンセル待ち・料金の正本化・本部 JOHNNY・SB・Lint の片づけ）。
 - Staging の DB：migration 44本すべて適用済み。毎分のキャンセル待ち（cron `johnny-waitlist-minutely`）稼働中。
 - 本番の DB：20261002〜20261018000300 の一部だけ。**未適用 20本**（下の 1.）。
@@ -44,11 +46,11 @@ bash supabase/rollout/build_accounting_rollout.sh release_prod_order.txt out_rel
 | 20 | app_private ヘルパー関数の PUBLIC 実行権を外す（セキュリティ） | Claude |
 
 注意：**15 を入れた瞬間から、来店確認の済んでいないお客様はアプリで予約できなくなる**。
-入れる前に、既存のお客様の来店確認をどう扱うか（店舗端末で承認するか、来店済みの人を一括で確認済みにするか）を慶一郎さんと決めること。
+慶一郎さんは、店の記録がある既存客30人の名簿を確認し「30人全員でOK」と承認済み。14番のあと、15番の前に **旧記録表の書き込み権限閉鎖 → 対象集合の再確認 → 30人のうち未承認の人だけ登録** を挟む。具体的なSQLと停止条件は [一括承認の手順](sql/production_store_verification_backfill.md) を参照する。自己申告の来店歴は使わず、対象の人数・会員IDが変わっていれば止める。
 
 確認（読み取りのみ）：
 ```sql
-select version from supabase_migrations.schema_migrations where version >= '20261004' order by 1;  -- 20本増えている
+select version from supabase_migrations.schema_migrations where version >= '20261004' order by 1;  -- 03は関数復元のみで履歴を増やさない。他19工程が未適用なら19件増加
 select (app_private.ginpay_reconcile_json())->>'consistent';  -- true
 select count(*) from public.customers;                        -- 当てる前と同じ
 ```

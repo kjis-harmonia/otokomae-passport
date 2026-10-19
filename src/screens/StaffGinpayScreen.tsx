@@ -5,7 +5,7 @@ import { GinpayPanel } from '../components/ginpay/GinpayPanel'
 import { ActorSheet } from '../components/booking/ActorSheet'
 import type { ClientListRow } from '../utils/customerApi'
 import { callStaffRpc, rpcErrorMessage } from '../utils/staffSession'
-import { parseQR } from './AdminScreen'
+import { parseQR } from '../utils/staffScanner'
 import { useStaffActor } from './staffActor'
 import './staffTerminal.css'
 
