@@ -28,6 +28,20 @@ export interface CustomerReservation {
 
 export interface Hold { hold_id: string; starts_at: string; ends_at: string; staff_name: string; total_price: number | null }
 
+/** キャンセル待ちで押さえた枠（お知らせから開いたとき） */
+export interface HoldOffer {
+  hold_id: string
+  starts_at: string
+  ends_at: string
+  expires_at: string
+  staff_name: string | null
+  menu_names: string | null
+  menu_codes: string[]
+  total_price: number | null
+  waitlist_id: string | null
+}
+export interface WaitlistJoin { entry: { id: string }; has_push: boolean }
+
 export interface BookingAssistantApi {
   options(): Promise<AssistantOptions>
   slots(date: string, menuCode: string): Promise<Slot[]>
@@ -50,6 +64,12 @@ export interface BookingAssistantApi {
   /** 最近の来店（最大5回、メニューつき）。仕組みが無い環境では空 */
   recentVisits(): Promise<VisitRecord[]>
   cancel(reservationId: string): Promise<CustomerReservation>
+  /** キャンセル待ちに入れる（埋まっている日・時間帯） */
+  joinWaitlist(date: string, from: string, to: string, menuCode: string, staffId: string | null): Promise<WaitlistJoin>
+  /** キャンセル待ちから外す（押さえている枠があれば手放す） */
+  leaveWaitlist(id: string): Promise<void>
+  /** お知らせで押さえた枠の中身。時間切れ・予約済みはエラー（hold_expired・already_booked） */
+  getHold(holdId: string): Promise<HoldOffer>
   /** 予約の AI。使えないときは null（呼び出し側が決まった規則の JOHNNY に切り替える） */
   agent(message: string, history: readonly AgentTurn[], shown?: AgentShown): Promise<AgentAnswer | null>
   /** 録音した声を送る（サーバーで文字にする）。使えないときは null。voice が false の環境（デモ）は端末の音声認識を使う */
@@ -74,6 +94,9 @@ export const customerBookingApi: BookingAssistantApi = {
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),
+  joinWaitlist: (date, from, to, menuCode, staffId) => callCustomerRpc<WaitlistJoin>('customer_join_waitlist', { p_date: date, p_from: from, p_to: to, p_menu_codes: [menuCode], p_staff_id: staffId }),
+  leaveWaitlist: async id => { await callCustomerRpc('customer_leave_waitlist', { p_id: id }) },
+  getHold: holdId => callCustomerRpc<HoldOffer>('customer_get_hold', { p_hold_id: holdId }),
   tickets: async () => (await callCustomerRpc<TicketRow[] | null>('customer_get_tickets')) ?? [],
   recentVisits: async () => (await callCustomerRpc<VisitRecord[] | null>('customer_recent_visits')) ?? [],
   lastVisit: async () => { const d = await callCustomerRpc<string | null>('customer_get_last_visit'); return d ? String(d).slice(0, 10) : null },
@@ -166,6 +189,9 @@ export const demoBookingApi: BookingAssistantApi = {
   async tickets() { await wait(100); return [] },
   async recentVisits() { await wait(150); return [] },
   async lastVisit() { await wait(150); return new Date(Date.now() + 9 * 3600000 - 13 * 86400000).toISOString().slice(0, 10) },
+  async joinWaitlist() { await wait(300); return { entry: { id: 'demo-waitlist' }, has_push: false } },
+  async leaveWaitlist() { await wait(200) },
+  async getHold() { await wait(200); throw new RpcError('hold_expired', 'hold_expired') },
   async cancel(id) {
     await wait(300)
     const r = demoStore.find(x => x.id === id)

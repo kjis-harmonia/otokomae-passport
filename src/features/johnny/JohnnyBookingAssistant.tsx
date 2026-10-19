@@ -11,7 +11,7 @@ import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
 import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { normalizePhone } from '../../utils/customerContact'
-import { bookingAssistantApi, type AssistantOptions, type CustomerReservation } from './bookingAssistantApi'
+import { bookingAssistantApi, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
 import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
@@ -72,6 +72,10 @@ type Step =
   | { k: 'cancelled'; reservation: CustomerReservation }
   | { k: 'unknown'; menu: MenuOption; slot: Slot }
   | { k: 'unavailable'; reason: 'booking_disabled' | 'auth' | 'network' }
+  /** キャンセル待ちのお知らせから開いた：押さえている枠を確定するか */
+  | { k: 'offer'; hold: HoldOffer; busy?: boolean }
+  /** お知らせの枠が、もう押さえられていない（時間切れ・予約済み） */
+  | { k: 'offerGone'; reason: 'expired' | 'booked' }
 
 interface PartyPrimary { menu: MenuOption; slot: Slot; staffId: string | null; req: VisitRequest }
 
@@ -93,6 +97,8 @@ type AiView =
   | { kind: 'reservations'; list: CustomerReservation[] }
   /** メンテナンスカット（ホットペッパーのクーポンで予約） */
   | { kind: 'maintenance' }
+  /** キャンセル待ちに入れるか */
+  | { kind: 'waitlist'; menu: MenuOption; staffId: string | null; date: string; from: string; to: string }
 
 interface Props {
   onClose: () => void
@@ -224,6 +230,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         setLastMenuCode(last?.items[0]?.menu_code ?? null)
         // 連絡先（本名・電話番号）が未登録なら、日時の前に1回だけ聞く。仕組みが無い環境（null）では聞かない
         if (contact && !contact.registered) { setStep({ k: 'contact', name: contact.name }); return }
+        // キャンセル待ちのお知らせから開いた（?hold=…）：押さえている枠を見せる
+        const holdId = takeHoldParam()
+        if (holdId) {
+          api.getHold(holdId).then(
+            hold => { if (alive) setStep({ k: 'offer', hold }) },
+            (err: unknown) => { if (alive) setStep({ k: 'offerGone', reason: err instanceof RpcError && err.code === 'already_booked' ? 'booked' : 'expired' }) })
+          return
+        }
         // 2回目以降のお客様は「おかえりなさい」から
         const w = buildWelcome(lastVisit, list, opts.menus, Date.now(), visits)
         if (w) {
@@ -238,6 +252,25 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       })
     return () => { alive = false }
   }, [api, loadKey])
+
+  // ── キャンセル待ちで押さえた枠：確定・見送り ──
+  const confirmOffer = useCallback(async (hold: HoldOffer) => {
+    setStep({ k: 'offer', hold, busy: true })
+    try {
+      const reservation = await api.confirm(hold.hold_id)
+      rememberReservation(reservation)
+      setMyReservations(list => [...list.filter(r => r.id !== reservation.id), reservation])
+      setStep({ k: 'done', reservation })
+    } catch (err) {
+      const code = err instanceof RpcError ? err.code : ''
+      setStep(code === 'hold_expired' || code === 'hold_not_found' ? { k: 'offerGone', reason: 'expired' } : { k: 'unavailable', reason: 'network' })
+    }
+  }, [api])
+  const declineOffer = useCallback(async (hold: HoldOffer) => {
+    if (hold.waitlist_id) await api.leaveWaitlist(hold.waitlist_id).catch(() => {})
+    else await api.release(hold.hold_id).catch(() => {})
+    setStep({ k: 'ai', say: '承知しました。キャンセル待ちを外しておきますね。', view: { kind: 'talk', handoff: false } })
+  }, [api])
 
   const menus = useMemo(() => {
     const list = options?.menus ?? []
@@ -482,6 +515,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       case 'confirm_cancel': {
         const reservation = await findReservation(ui.reservation_id)
         return reservation ? { k: 'confirmCancel', reservation, say: a.say } : null
+      }
+      case 'waitlist': {
+        const menu = menuOf(ui.menu_code)
+        return menu ? { k: 'ai', say: a.say, view: { kind: 'waitlist', menu, staffId: ui.staff_id, date: ui.date, from: ui.from, to: ui.to } } : null
       }
       case 'reservations': {
         const found = await Promise.all(ui.ids.map(findReservation))
@@ -780,6 +817,18 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         : step.changedFrom
           ? { title: 'ご予約を変更しました', sub: '当日は QR をご提示ください。', speech: 'ご予約を変更しました。当日はQRをご提示ください。' }
           : { title: 'ご予約が完了しました', sub: '当日は QR をご提示ください。', speech: 'ご予約が完了しました。当日はQRをご提示ください。' }
+      case 'offer': {
+        const v = formatVisit(step.hold.starts_at)
+        const menu = step.hold.menu_names ?? 'ご希望のメニュー'
+        return {
+          title: 'キャンセルが出ました！',
+          sub: `${v.relative ?? v.date} ${v.time}〜 ${menu}を、${formatVisit(step.hold.expires_at).time}までお取りしています。`,
+          speech: `キャンセルが出ました。${spokenVisit(step.hold.starts_at)}、${menu}をお取りしています。この時間でご予約しますか？`,
+        }
+      }
+      case 'offerGone': return step.reason === 'booked'
+        ? { title: 'このお時間は、もうご予約済みです', sub: '当日は QR をご提示ください。', speech: 'このお時間は、もうご予約済みです。' }
+        : { title: 'お取りしていた時間が過ぎました', sub: '次にお待ちの方へお回ししました。ほかの日時もお探しできます。', speech: 'お取りしていた時間が過ぎてしまいました。ほかの日時もお探しできますよ。' }
       case 'unknown': return { title: '予約の結果を確認できませんでした', sub: '通信が切れた可能性があります。予約が入っているか確認します。' }
       case 'unavailable': return step.reason === 'booking_disabled'
         ? { title: 'アプリからのご予約は準備中です', sub: 'お電話か HOT PEPPER Beauty でご予約ください。' }
@@ -924,6 +973,16 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
               </List>
             )}
 
+            {step.k === 'ai' && step.view.kind === 'waitlist' && (
+              <WaitlistCard api={api} view={step.view} />
+            )}
+
+            {step.k === 'offer' && (
+              <List>
+                <Row title={step.hold.menu_names ?? 'ご予約'} detail={`${formatVisit(step.hold.starts_at).date} ${formatVisit(step.hold.starts_at).time}〜${step.hold.staff_name ? '・' + step.hold.staff_name : ''}`} />
+              </List>
+            )}
+
             {step.k === 'ai' && step.view.kind === 'talk' && step.view.handoff && (
               <List>
                 <Row href={SHOP_PHONE_TEL} title="電話で問い合わせる" detail={SHOP_PHONE_DISPLAY} />
@@ -1035,6 +1094,18 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
           </>
         )}
         {step.k === 'cancelled' && <SecondaryButton onClick={onClose}>閉じる</SecondaryButton>}
+        {step.k === 'offer' && (
+          <>
+            <PrimaryButton onClick={() => void confirmOffer(step.hold)}>{step.busy ? '確定しています…' : 'この時間で予約する'}</PrimaryButton>
+            <SecondaryButton onClick={() => void declineOffer(step.hold)}>今回は見送る</SecondaryButton>
+          </>
+        )}
+        {step.k === 'offerGone' && (
+          <>
+            {step.reason === 'expired' && <PrimaryButton onClick={() => setStep({ k: 'askWhen' })}>ほかの日時を探す</PrimaryButton>}
+            <SecondaryButton onClick={onClose}>閉じる</SecondaryButton>
+          </>
+        )}
         {step.k === 'done' && (
           <>
             {onShowQr && <PrimaryButton onClick={() => { onClose(); onShowQr() }}>QR を表示</PrimaryButton>}
@@ -1138,6 +1209,59 @@ function MicButton({ listening, onClick }: { listening: boolean; onClick: () => 
 const buttonBase: CSSProperties = {
   height: 54, borderRadius: 14, border: 'none', fontSize: 17, fontWeight: 600, fontFamily: FONT, cursor: 'pointer',
   WebkitTapHighlightColor: 'transparent',
+}
+
+/** お知らせのリンクの ?hold=… を1回だけ読む（読んだら URL から消す） */
+function takeHoldParam(): string | null {
+  try {
+    const url = new URL(window.location.href)
+    const id = url.searchParams.get('hold')
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return null
+    url.searchParams.delete('hold')
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+    return id
+  } catch { return null }
+}
+
+/** キャンセル待ちに入れるカード（入れたら、お知らせを受け取っていない人には受け取りのボタン） */
+function WaitlistCard({ api, view }: { api: BookingAssistantApi; view: { menu: MenuOption; staffId: string | null; date: string; from: string; to: string } }) {
+  const [state, setState] = useState<'ask' | 'busy' | 'joined' | 'error'>('ask')
+  const [hasPush, setHasPush] = useState(true)
+  const [error, setError] = useState('')
+  const whole = view.from === '00:00' && view.to === '23:59'
+  const when = dayWord(view.date) + (whole ? '' : ' ' + view.from + '〜' + view.to)
+  const join = async () => {
+    setState('busy')
+    try {
+      const r = await api.joinWaitlist(view.date, view.from, view.to, view.menu.code, view.staffId)
+      setHasPush(r.has_push)
+      setState('joined')
+    } catch (err) {
+      const code = err instanceof RpcError ? err.code : ''
+      setError(code === 'waitlist_full' ? 'キャンセル待ちは3件までです。' : code === 'date_not_open' ? 'その日はまだ予約を受け付けていません。' : '登録できませんでした。もう一度お試しください。')
+      setState('error')
+    }
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <List>
+        <Row title={'キャンセル待ち：' + view.menu.name} detail={when} />
+      </List>
+      {state === 'ask' || state === 'busy' ? (
+        <PrimaryButton onClick={() => void join()}>{state === 'busy' ? '登録しています…' : 'キャンセル待ちに入れる'}</PrimaryButton>
+      ) : state === 'joined' ? (
+        <>
+          <p style={{ margin: 0, fontSize: 15, color: C.text, lineHeight: 1.6 }}>
+            キャンセル待ちに入れました。空きが出たら、先に入れた方から順に 10 分間お取りして、スマホにお知らせします。
+          </p>
+          {!hasPush && <p style={{ margin: 0, fontSize: 13, color: C.secondary }}>お知らせを受け取るには、下のボタンを押してください。</p>}
+          {!hasPush && <PushToggle tone="mono" />}
+        </>
+      ) : (
+        <p role="alert" style={{ margin: 0, fontSize: 14, color: C.danger }}>{error}</p>
+      )}
+    </div>
+  )
 }
 
 function PrimaryButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
