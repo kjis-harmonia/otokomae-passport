@@ -1,6 +1,6 @@
 # Codex会計・QR修正とClaudeへの接続事項
 
-土台：origin/staging 2f44054から開始し、Claudeの9a000bdまで取り込み済み。mainへ直接pushしない。
+土台：origin/staging 2f44054から開始し、Claudeの351b874まで取り込み済み。mainへ直接pushしない。
 
 CodexはCheckout/MemberCheckout/AdminScreen/customerSessionを担当し、migrations・rollout・AI・価格ロジックを編集しない。
 SQL案は `docs/sql/codex_checkout_safety.sql`。Claudeが `20261019000200_checkout_safety.sql` に組み込み、Stagingへ適用済み（addd2b1）。本番は未適用。
