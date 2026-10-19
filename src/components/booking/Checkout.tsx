@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { rpcErrorMessage } from '../../utils/staffSession'
 import { yen } from '../../utils/bookingApi'
-import { premiumFor } from '../../utils/bookingCoupons'
+import { reservationSaleLines } from '../../utils/checkoutPricing'
 import { idempotencyKey } from '../../utils/ginpayApi'
+import { checkoutAttemptSnapshot, subscribeCheckoutAttempt, readCheckoutAttempt, sameCheckout, settleCheckout, startNextCheckout, withCheckoutLock, type CheckoutAttempt } from '../../utils/checkoutAttempt'
 import type { ClientCandidate, CustomerApi } from '../../utils/customerApi'
 import {
   checkoutErrorMessage, saleTotals, TICKET_BLOCK_LABEL,
@@ -48,13 +49,34 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [ginpayAccountId, setGinpayAccountId] = useState<string | null>(null)
-  // 会計画面ごとの一意キー（二重タップ・再送で二重会計・二重決済しない）
-  const [saleKey] = useState(() => idempotencyKey('checkout'))
+  // 初回送信前に内容と一緒に保存し、再読み込み後も同じ取引キーで照合する。
+  const [saleKey, setSaleKey] = useState(() => idempotencyKey('checkout'))
+  const rawAttempt = useSyncExternalStore(subscribeCheckoutAttempt, checkoutAttemptSnapshot, () => '')
+  const { attempt, attemptError } = useMemo(() => {
+    try {
+      const saved = readCheckoutAttempt({ getItem: () => rawAttempt || null })
+      return { attempt: saved?.result && !sameCheckout(saved, reservationId, clientId) ? null : saved, attemptError: null }
+    } catch (err) { return { attempt: null, attemptError: err instanceof Error ? err.message : '前の会計記録を確認できません。' } }
+  }, [rawAttempt, reservationId, clientId])
+  const submitting = useRef(false)
+  const mounted = useRef(true)
+  const [reload, setReload] = useState(0)
+  const matchesAttempt = !!attempt && sameCheckout(attempt, reservationId, clientId)
+
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
   // 予約から：予約の顧客・担当・メニュー・予約時価格を引き継ぐ
   useEffect(() => {
     let alive = true
-    api.context(reservationId, reservationId ? null : clientId).then(c => {
+    let saved: CheckoutAttempt | null
+    try {
+      saved = readCheckoutAttempt()
+      if (saved?.result && !sameCheckout(saved, reservationId, clientId)) saved = null
+    } catch { return }
+    const resume = saved && sameCheckout(saved, reservationId, clientId) ? saved : null
+    api.context(resume?.input.reservation_id ?? reservationId, resume ? resume.input.client_id ?? null : reservationId ? null : clientId).then(async c => {
+      const codes = c.reservation?.items.flatMap(item => item.menu_code ? [item.menu_code] : []) ?? []
+      const quoted = c.reservation && !resume ? reservationSaleLines(c.reservation.items, codes.length ? await api.quote(codes, c.reservation.starts_at) : null) : null
       if (!alive) return
       setCtx(c)
       if (!c.reservation && clientId && c.client) setClient(c.client)
@@ -66,23 +88,20 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       if (c.reservation) {
         const r = c.reservation
         setStylistId(r.staff_id)
-        // プレミアムクーポン（GINJIRO CLASSICS など）の対象メニューは、ふつうの料金で入れて、使える時間なら会員価格との差を値引きにする
-        // （店舗端末の「お会計」・JOHNNY の確認画面と同じ金額になる）
-        const premiums = r.items.map(i => (i.menu_code ? premiumFor(i.menu_code, r.starts_at) : null))
-        setLines(r.items.map((i, n) => ({ key: ++keySeq, source: 'reservation', ref_id: i.menu_code, name: i.name, category: 'menu', unit_price: premiums[n]?.normalPrice ?? i.price ?? 0, quantity: 1, discount: 0 })))
-        const applied = premiums.filter(p => p?.eligible) as NonNullable<(typeof premiums)[number]>[]
-        if (applied.length) {
-          setManual({
-            amount: String(applied.reduce((a, p) => a + p.normalPrice - p.memberPrice, 0)),
-            label: `${[...new Set(applied.map(p => p.def.title))].join('・')}（会員価格）`,
-          })
-        }
+        if (quoted) setLines(quoted.map(item => ({ ...item, key: ++keySeq })))
       }
     }).catch(err => { if (alive) setError(rpcErrorMessage(err, '会計の準備ができませんでした。')) })
     return () => { alive = false }
     // 開いたときの顧客・券だけを使う（あとからの変更はこの画面の中で）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, reservationId])
+  }, [api, reservationId, clientId, reload])
+
+  useEffect(() => {
+    if (!busy) return
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [busy])
 
   // 予約なし：選んだ顧客（App 会員ならクーポン）を読み直す
   async function chooseClient(c: ClientCandidate | null) {
@@ -124,31 +143,60 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   }
 
   async function confirm() {
-    if (!ctx || !stylistId || !method || !ensureActor()) return
+    if (submitting.current || attemptError || !ensureActor()) return
+    if (attempt && !matchesAttempt) return
+    if (!attempt && (!canConfirm || !ctx || !stylistId || !method)) return
+    submitting.current = true
     setBusy(true); setError(null)
     try {
-      const res = await api.finalize({
-        reservation_id: ctx.reservation?.id, client_id: ctx.reservation ? undefined : client?.id,
-        stylist_id: stylistId, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
+      const proposed: CheckoutAttempt = attempt ?? { version: 1, backend: api.backend, customerLabel: clientInfo?.name ?? ctx?.reservation?.customer_name ?? '匿名', operator: api.operator(), createdAt: new Date().toISOString(), input: {
+        reservation_id: ctx?.reservation?.id, client_id: ctx?.reservation ? undefined : client?.id,
+        stylist_id: stylistId!, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
         manual_discount: manualAmount > 0 ? { amount: manualAmount, label: manual!.label.trim() } : undefined,
-        payment_method: method, expected_total: totals.total, idempotency_key: saleKey,
+        payment_method: method!, expected_total: totals.total, idempotency_key: saleKey,
         ginpay_account_id: method === 'ginpay' ? ginpayAccount?.id : undefined,
-      })
+      } }
+      const res = await withCheckoutLock(() => settleCheckout(api, proposed))
+      if (!mounted.current) return
       if ('error' in res) setError(checkoutErrorMessage(res.error))
+      else if (res.status === 'voided') setError('この会計は取り消されています。新しい会計を始める場合は、下のボタンを押してください。')
       else onDone(res)
-    } catch (err) { setError(rpcErrorMessage(err)) } finally { setBusy(false) }
+    } catch (err) {
+      if (!mounted.current) return
+      setError(err instanceof Error ? err.message : rpcErrorMessage(err))
+    } finally { submitting.current = false; if (mounted.current) setBusy(false) }
+  }
+
+  async function nextCheckout() {
+    if (!attempt?.result || submitting.current) return
+    try {
+      await startNextCheckout(attempt.input.idempotency_key)
+      setError(null); setSaleKey(idempotencyKey('checkout'))
+      setLines([]); setManual(null); setMethod(null); setTicketIds([]); setReload(n => n + 1)
+    } catch (err) { setError(err instanceof Error ? err.message : '前の会計を確認できません。') }
   }
 
   return (
     <div role="dialog" aria-modal="true" aria-label="会計" style={{ position: 'fixed', inset: 0, zIndex: 950, background: C.bg, color: C.text, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px', borderBottom: `1px solid ${C.line}` }}>
-        <button type="button" onClick={onClose} style={{ ...linkStyle, textDecoration: 'none', color: C.text, fontSize: 15 }}>‹ 戻る</button>
+        <button type="button" disabled={busy} onClick={() => { if (!submitting.current) onClose() }} style={{ ...linkStyle, textDecoration: 'none', color: C.text, fontSize: 15 }}>‹ 戻る</button>
         <span style={{ fontSize: 13, color: C.mute }}>{ctx?.reservation ? '会計' : '店頭会計'}</span>
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>
         <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 20px 24px' }}>
-          {!ctx ? <p style={{ fontSize: 14, color: error ? C.danger : C.sub }}>{error ?? '読み込み中…'}</p> : (
-            <>
+          {attemptError ? <p role="alert" style={{ color: C.danger }}>{attemptError}</p> : attempt ? (
+            <section aria-label="前の会計の確認">
+              <h1 style={{ fontSize: 22, fontWeight: 600 }}>{attempt.result ? '前回のお会計' : '会計の完了を確認'}</h1>
+              <p style={{ marginTop: 12, fontSize: 16 }}>{attempt.customerLabel}</p>
+              <p style={{ marginTop: 8, fontSize: 24, fontWeight: 600 }}>{yen(attempt.input.expected_total)}</p>
+              <p style={{ marginTop: 8, color: C.sub }}>{METHODS.find(m => m.id === attempt.input.payment_method)?.label}・担当 {attempt.operator}</p>
+              {attempt.input.items.map((item, index) => <p key={index} style={{ marginTop: 8, fontSize: 14 }}>{item.name} ×{item.quantity}</p>)}
+              <p style={{ marginTop: 20, fontSize: 14, lineHeight: 1.7 }}>{!matchesAttempt ? '別のお客様の会計が未確認です。そのお客様の会計を先に確認してください。' : attempt.result ? 'この会計の結果を確認できます。別の店頭会計を作る場合だけ「新しい会計を始める」を押してください。' : '前回と同じ内容で、会計の完了を確認します。金額や支払方法は変更されません。'}</p>
+              {attempt.result && !attempt.input.reservation_id && <button type="button" disabled={busy} onClick={() => void nextCheckout()} style={{ ...linkStyle, marginTop: 16 }}>新しい会計を始める</button>}
+              {error && <p role="alert" style={{ marginTop: 12, color: C.danger }}>{error}</p>}
+            </section>
+          ) : !ctx ? <p style={{ fontSize: 14, color: error ? C.danger : C.sub }}>{error ?? '読み込み中…'}</p> : (
+            <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
               {/* お客様・担当 */}
               {ctx.reservation || clientInfo || anonymous ? (
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
@@ -200,7 +248,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     )}
                   </div>
                 ))}
-                {adding ? <ItemPicker api={api} onPick={addItem} onClose={() => setAdding(false)} />
+                {adding ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
                   : <button type="button" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button>}
               </div>
 
@@ -279,14 +327,14 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 </div>
               )}
               {error && <p style={{ marginTop: 12, fontSize: 14, color: C.danger }}>{error}</p>}
-            </>
+            </fieldset>
           )}
         </div>
       </div>
-      {ctx && (
+      {(ctx || attempt) && !attemptError && (
         <div style={{ flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div style={{ maxWidth: 640, margin: '0 auto' }}>
-            <PrimaryButton onClick={() => void confirm()} disabled={!canConfirm}>{busy ? '確定中…' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
       )}
@@ -322,11 +370,16 @@ function ClientPicker({ customers, onPick }: { customers: CustomerApi; onPick: (
 }
 
 /** メニュー・商品の追加（予約メニュー・会計メニュー／オプション・店販・手入力） */
-function ItemPicker({ api, onPick, onClose }: { api: CheckoutApi; onPick: (src: SaleLine['source'], item: CatalogItem) => void; onClose: () => void }) {
+function ItemPicker({ api, startsAt, onPick, onClose }: { api: CheckoutApi; startsAt: string | null; onPick: (src: SaleLine['source'], item: CatalogItem) => void; onClose: () => void }) {
   const [cat, setCat] = useState<Catalog | null>(null)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [manual, setManual] = useState({ name: '', price: '', category: 'menu' as CatalogItem['category'] })
-  useEffect(() => { api.catalog().then(setCat).catch(() => setCat({ service_menus: [], menus: [], products: [] })) }, [api])
+  useEffect(() => {
+    let alive = true
+    api.catalog(startsAt).then(value => { if (alive) setCat(value) }).catch(() => { if (alive) setCatalogError('メニューの料金を確認できませんでした。閉じてもう一度お試しください。') })
+    return () => { alive = false }
+  }, [api, startsAt])
   const match = (i: CatalogItem) => !q.trim() || i.name.includes(q.trim())
   // 正規サービスはカテゴリ（カット・カラー・パーマ・オプション・セット…）ごと、その後に旧会計メニューと店販
   const serviceGroups = cat ? [...new Set(cat.service_menus.map(i => i.group ?? 'メニュー'))] : []
@@ -341,7 +394,7 @@ function ItemPicker({ api, onPick, onClose }: { api: CheckoutApi; onPick: (src: 
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="メニュー・商品を探す" aria-label="メニュー・商品を探す" style={inputStyle} autoComplete="off" />
         <button type="button" onClick={onClose} style={{ ...linkStyle, flexShrink: 0 }}>閉じる</button>
       </div>
-      {!cat ? <p style={{ fontSize: 14, color: C.sub, marginTop: 8 }}>読み込み中…</p> : groups.map(([label, src, items]) => items.length === 0 ? null : (
+      {!cat ? <p role={catalogError ? 'alert' : undefined} style={{ fontSize: 14, color: catalogError ? C.danger : C.sub, marginTop: 8 }}>{catalogError ?? '読み込み中…'}</p> : groups.map(([label, src, items]) => items.length === 0 ? null : (
         <div key={label} style={{ marginTop: 10 }}>
           <p style={{ fontSize: 12, color: C.mute }}>{label}</p>
           {items.map(i => (

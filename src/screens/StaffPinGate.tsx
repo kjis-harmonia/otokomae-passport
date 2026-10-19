@@ -19,7 +19,7 @@ const ERROR_TEXT = {
 type PinError = keyof typeof ERROR_TEXT
 
 /** children を渡すと、認証後にその画面を出す（SB など）。渡さなければ従来どおり店舗端末（StaffHome） */
-export function StaffPinGate({ children }: { children?: ReactNode } = {}) {
+export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode; app?: 'staff' | 'sb' } = {}) {
   // サーバー発行のスタッフセッション（14時間）を保持している間だけ端末画面を表示する
   const [authed, setAuthed] = useState(() => getStaffToken() !== null)
   const [pin, setPin] = useState('')
@@ -99,7 +99,7 @@ export function StaffPinGate({ children }: { children?: ReactNode } = {}) {
         {isStaging() && <StgBadge />}
 
         <motion.header className="st-pin-head" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05, duration: 0.4 }}>
-          <h1><span className="st-wordmark">銀二郎</span><span className="st-mark">端末</span></h1>
+          <h1><img src={`/icons/${app}-192.png`} alt="" width={56} height={56} style={{ objectFit: 'contain', alignSelf: 'center' }} /><span className="st-wordmark">銀二郎</span><span className="st-mark">{app === 'sb' ? 'SB' : '端末'}</span></h1>
           <p className="st-latin"><i aria-hidden="true" />GINJIRO</p>
         </motion.header>
 

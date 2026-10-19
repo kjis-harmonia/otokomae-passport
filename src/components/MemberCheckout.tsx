@@ -1,7 +1,7 @@
 // 店舗端末：会員QR → 来店チェックイン → そのままお会計（銀Pay・現金・カードほか）。Staging だけ。
 //   今日の予約があれば予約から会計（メニュー・担当・料金を引き継ぎ、確定で予約は完了）、無ければ顧客を選んだ店頭会計。
 //   会員QRでお客様が選んだ券は、会計の中で最初から選んでおく（確定のときに使用済みになる）。
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Checkout } from './booking/Checkout'
 import { createStaffCheckoutApi, PAYMENT_LABEL, type Sale } from '../utils/checkoutApi'
 import { createStaffCustomerApi } from '../utils/customerApi'
@@ -27,11 +27,14 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paid, setPaid] = useState<Sale | null>(null)
+  const opening = useRef(false)
   const [api] = useState(() => createStaffCheckoutApi(readActor))
   const [customers] = useState(() => createStaffCustomerApi(readActor))
 
   async function open() {
+    if (opening.current) return
     if (!staffName.trim()) { setError('上の「担当者」を選んでからお会計に進んでください。'); return }
+    opening.current = true
     setLoading(true); setError(null)
     try {
       const r = await callStaffRpc<{ client_id?: string; reservation_id?: string | null; error?: string }>('staff_client_for_member', { p_user_id: userId })
@@ -40,6 +43,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
     } catch (err) {
       setError(rpcErrorMessage(err))
     } finally {
+      opening.current = false
       setLoading(false)
     }
   }
