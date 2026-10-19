@@ -15,6 +15,16 @@ const KIND_LABEL: Record<ServiceKind, string> = { service: 'メニュー', optio
 /** 所要時間。未確定なら「未設定」、参考所要時間があれば併記（参考は予約には使わない） */
 const durationLabel = (m: ServiceMenu) => m.duration_min ? `${m.duration_min}分` : m.reference_duration_min ? `未設定（参考 ${m.reference_duration_min}分）` : '未設定'
 const yen = (m: { price: number | null; price_from?: boolean }) => m.price === null ? '—' : `¥${m.price.toLocaleString()}${m.price_from ? '〜' : ''}`
+/** 一覧の料金：通常価格があるメニュー（プレミアム対象）は「通常 ¥9,000」「会員 ¥8,000」の2行 */
+function PriceCell({ m }: { m: { price: number | null; normal_price?: number | null; price_from?: boolean } }) {
+  if (m.normal_price == null || m.price == null) return <>{yen(m)}</>
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.35 }}>
+      <span style={{ whiteSpace: 'nowrap', color: C.mute, fontSize: 12 }}>通常 ¥{m.normal_price.toLocaleString()}</span>
+      <span style={{ whiteSpace: 'nowrap' }}>会員 ¥{m.price.toLocaleString()}</span>
+    </span>
+  )
+}
 
 export function HqServiceMasterScreen() {
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true)
@@ -65,7 +75,7 @@ export function HqServiceMasterScreen() {
                       {wide ? (
                         <>
                           <span style={cell}>{m.name}</span>
-                          <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{yen(m)}</span>
+                          <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><PriceCell m={m} /></span>
                           <span style={{ color: m.duration_min ? C.text : C.mute }}>{durationLabel(m)}</span>
                           <span style={{ ...cell, color: m.staff.length ? C.text : C.mute }}>{m.staff.length ? m.staff.map(s => staffName(s.staff_id)).join('・') : '未設定'}</span>
                           <span>{m.booking_enabled ? '可' : <span style={{ color: C.mute }}>不可</span>}</span>
@@ -75,7 +85,7 @@ export function HqServiceMasterScreen() {
                         <>
                           <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                             <span style={cell}>{m.name}</span>
-                            <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{yen(m)}</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><PriceCell m={m} /></span>
                           </span>
                           <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: C.mute }}>
                             {[m.kind === 'service' ? null : KIND_LABEL[m.kind], m.duration_min ? `${m.duration_min}分` : `所要時間 ${durationLabel(m)}`,
@@ -140,6 +150,8 @@ function MenuEditor({ menu, masters, onClose, onSaved }: { menu: ServiceMenu | n
   const [category, setCategory] = useState(menu?.category ?? '')
   const [price, setPrice] = useState(menu?.price?.toString() ?? '')
   const [priceFrom, setPriceFrom] = useState(menu?.price_from ?? false)
+  // 通常価格（入れると、価格は会員価格になる：平日は終日・土日祝は 17〜19 時開始が会員価格）
+  const [normal, setNormal] = useState(menu?.normal_price?.toString() ?? '')
   const [duration, setDuration] = useState(menu?.duration_min?.toString() ?? '')
   const [buffer, setBuffer] = useState((menu?.buffer_after_min ?? 0).toString())
   const [active, setActive] = useState(menu?.is_active ?? true)
@@ -153,6 +165,7 @@ function MenuEditor({ menu, masters, onClose, onSaved }: { menu: ServiceMenu | n
   const num = (v: string) => (v.trim() === '' ? null : Number(v))
   const hasStaff = bookableStaff.some(s => s.id in assigned)
   // 予約を受け付けられない理由（DB でも同じ条件で拒否する）
+  const normalInvalid = num(normal) != null && num(price) != null && (num(normal) as number) <= (num(price) as number)
   const bookingBlocked = !active ? 'メニューが停止中です' : !num(duration) ? '所要時間を入力してください' : !hasStaff ? '担当スタッフを選んでください' : null
 
   async function save() {
@@ -160,7 +173,7 @@ function MenuEditor({ menu, masters, onClose, onSaved }: { menu: ServiceMenu | n
     try {
       await upsertMenu({
         ...(menu ? { id: menu.id } : { code: `menu-${Date.now().toString(36)}` }),
-        name: name.trim(), kind, category: category.trim() || null, price: num(price), price_from: priceFrom,
+        name: name.trim(), kind, category: category.trim() || null, price: num(price), normal_price: num(normal), price_from: priceFrom,
         duration_min: num(duration), buffer_after_min: num(buffer) ?? 0,
         is_active: active, checkout_enabled: checkout, booking_enabled: booking && !bookingBlocked,
         staff: Object.entries(assigned).map(([id, d]) => ({ staff_id: id, duration_override_min: num(d) })),
@@ -175,7 +188,7 @@ function MenuEditor({ menu, masters, onClose, onSaved }: { menu: ServiceMenu | n
 
   return (
     <Sheet title={menu ? menu.name : 'メニューを追加'} onClose={onClose}
-      footer={<PrimaryButton onClick={() => void save()} disabled={busy || name.trim() === ''}>{busy ? '保存中…' : '保存'}</PrimaryButton>}>
+      footer={<PrimaryButton onClick={() => void save()} disabled={busy || name.trim() === '' || normalInvalid}>{busy ? '保存中…' : '保存'}</PrimaryButton>}>
       <Field label="メニュー名"><input value={name} onChange={e => setName(e.target.value)} maxLength={80} style={inputStyle} /></Field>
       <Group label="区分">
         <ChipRow>
@@ -184,8 +197,12 @@ function MenuEditor({ menu, masters, onClose, onSaved }: { menu: ServiceMenu | n
       </Group>
       <div style={twoCols}>
         <Field label="カテゴリ"><input value={category} onChange={e => setCategory(e.target.value)} maxLength={20} placeholder="カット・カラーなど" style={inputStyle} /></Field>
-        <Field label="価格（税込・円）"><input value={price} onChange={e => setPrice(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={inputStyle} /></Field>
+        <Field label={num(normal) != null ? '会員価格（税込・円）' : '価格（税込・円）'}><input value={price} onChange={e => setPrice(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={inputStyle} /></Field>
       </div>
+      <Field label="通常価格（会員価格があるメニューだけ・税込・円）"><input value={normal} onChange={e => setNormal(e.target.value.replace(/\D/g, ''))} inputMode="numeric" placeholder="なし" style={inputStyle} /></Field>
+      <p style={{ fontSize: 12, color: normalInvalid ? '#b42318' : C.mute, marginTop: 4 }}>
+        {normalInvalid ? '通常価格は会員価格より高くしてください。' : '通常価格を入れると、平日は終日・土日祝は 17:00〜19:00 開始が会員価格、それ以外は通常価格になります（アプリ・JOHNNY・会計で同じ計算）。'}
+      </p>
       <label style={checkRow}><input type="checkbox" checked={priceFrom} onChange={e => setPriceFrom(e.target.checked)} style={box} />価格に「〜」を付ける</label>
       <div style={twoCols}>
         <Field label="所要時間（分）"><input value={duration} onChange={e => setDuration(e.target.value.replace(/\D/g, ''))} inputMode="numeric" style={inputStyle} /></Field>
