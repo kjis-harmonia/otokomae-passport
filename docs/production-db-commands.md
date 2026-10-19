@@ -477,7 +477,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 
 次へ：履歴39件（新規は19件、03は復元のみ）、既存data・予約設定不変、13表の書き込み閉鎖と旧RPC閉鎖を維持、承認30人・照合値一致、ginpay_consistent="true"。
 
-**ここで先行DB作業を止める。** ⑤の手順に従いjohnny-notify→johnny-agent→hq-johnny→customer-passkeysのデプロイと設定、キャンセル待ちcron、レビュー済みrelease PRの公開、実機確認へ進む。johnny-agentの新しい来店確認ガードはDB15番より前に本番へ出さない。⑤の具体的なコマンドは今回③の対象外。新しい画面と引継ぎが確認できたら次の閉鎖Bへ進み、閉鎖B後の再確認を終えるまで営業を再開しない。
+**ここで先行DB作業を止める。** [⑤の手順](production-platform-commands.md)に従い5関数のデプロイと設定、停止状態のキャンセル待ちcron、レビュー済みrelease PRの公開、実機確認へ進む。johnny-agentの新しい来店確認ガードはDB15番より前に本番へ出さない。当日の順番と中断時の扱いは[⑥の時刻表](release-day-timetable.md)を参照。新しい画面と引継ぎが確認できたら次の閉鎖Bへ進み、閉鎖B後の再確認を終えるまで営業を再開しない。
 
 ## 新しいWebを公開・確認した後：セキュリティ閉鎖B
 
@@ -494,7 +494,9 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_post_web_lockdown.sql"
 ```
 
-次へ：preflight_securityのDO検査にエラーがなく、履歴40件、data・予約設定・承認30人の照合値が先行20工程後と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
+新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB20完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜20は開始時との不変比較を維持する。承認30人の集合は増減しない。
+
+次へ：preflight_securityのDO検査にエラーがなく、履歴40件、data・予約設定・承認30人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
 
 閉鎖BのSQL・履歴の記録・読み取り確認もコピーでrollback試験済み。16私有表にanon/authenticatedの表・列権限がないこと、商品の最低在庫列は読めず公開表示列は読めること、承認30人の予約オプション取得を確認した。セキュリティ・来店確認・パスキー・会計・GINPayの5検査も閉鎖Bを含めて成功。実行後はアプリ・店舗端末・本部・SBの実機を再確認し、失敗時は営業再開を止める。読み取り権限を無条件に開き直さない。
 

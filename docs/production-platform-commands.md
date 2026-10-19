@@ -22,7 +22,7 @@
 ! & "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/assert-production-platform-source.ps1"
 ```
 
-次へ：SOURCE OK、release/20261020、clean。記録したcommitを⑤の最後まで使う。関数ツリー・JWT設定がレビュー済みと違う、未コミット変更、別ブランチなら停止する。
+次へ：SOURCE OK、release/20261020、リモート最新commitと一致、clean。確認器はoriginのURLを検査し、release参照だけをfetchしてHEADと比較する。fetchできなければ停止。記録したcommitを⑤の最後まで使う。関数ツリー・JWT設定がレビュー済みと違う、未コミット変更、別ブランチなら停止する。
 
 ```powershell
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/docs/sql/production_platform_ready.sql"
@@ -70,6 +70,8 @@
 
 ## C. 関数を1本ずつ（DB成功後、フラグ・cron開始前）
 
+⑥で補強：下の5コマンドは、毎回デプロイの直前にAと同じ確認器を呼ぶ。別ブランチ・ローカルが古い／先行・未コミット変更・不明なorigin・取得失敗・レビュー済みソース不一致なら、npxを一度も呼ばずに停止する。確認後の自動switch／pull／reset／stashや別版での再試行はしない。当日はこのフォルダーで他の作業をしない。ソース確認が成功してもDBの前提を満たした証明にはならないため、AのDB確認も省略しない。
+
 デプロイ前の一覧を保存する（関数名・version・JWTのみ。秘密なし）。
 
 ```powershell
@@ -81,7 +83,7 @@
 ### C-1. johnny-notify
 
 ```powershell
-! npx --yes supabase@2.121.0 functions deploy johnny-notify --use-api --project-ref ufyzynpmkxytnhebombq --workdir "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport"
+! & "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/deploy-reviewed-production-function.ps1" -Name johnny-notify
 ```
 
 ```powershell
@@ -98,7 +100,7 @@
 ### C-2. johnny-agent
 
 ```powershell
-! npx --yes supabase@2.121.0 functions deploy johnny-agent --use-api --project-ref ufyzynpmkxytnhebombq --workdir "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport"
+! & "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/deploy-reviewed-production-function.ps1" -Name johnny-agent
 ```
 
 ```powershell
@@ -115,7 +117,7 @@
 ### C-3. hq-johnny
 
 ```powershell
-! npx --yes supabase@2.121.0 functions deploy hq-johnny --use-api --project-ref ufyzynpmkxytnhebombq --workdir "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport"
+! & "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/deploy-reviewed-production-function.ps1" -Name hq-johnny
 ```
 
 ```powershell
@@ -132,7 +134,7 @@
 ### C-4. customer-passkeys
 
 ```powershell
-! npx --yes supabase@2.121.0 functions deploy customer-passkeys --use-api --project-ref ufyzynpmkxytnhebombq --workdir "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport"
+! & "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/deploy-reviewed-production-function.ps1" -Name customer-passkeys
 ```
 
 ```powershell
@@ -146,7 +148,7 @@ HTTP確認はDのフラグON後に実施する。OFFの503を避けるため、�
 ### C-5. johnny-style-advice
 
 ```powershell
-! npx --yes supabase@2.121.0 functions deploy johnny-style-advice --use-api --project-ref ufyzynpmkxytnhebombq --workdir "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport"
+! & "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/deploy-reviewed-production-function.ps1" -Name johnny-style-advice
 ```
 
 ```powershell
