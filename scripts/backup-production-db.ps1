@@ -1,6 +1,7 @@
-param([string]$ConnectionString, [string]$BackupRoot = 'C:/Users/user/Desktop/otokomae-backups/private')
+param([string]$ConnectionString, [string]$BackupRoot = 'C:/Users/user/Desktop/otokomae-backups')
 $ErrorActionPreference = 'Stop'
 $projectRef = 'ufyzynpmkxytnhebombq'
+if ([IO.Path]::GetFullPath($BackupRoot).TrimEnd([char]92,[char]47) -ne [IO.Path]::GetFullPath('C:/Users/user/Desktop/otokomae-backups')) { throw 'バックアップ先はDesktop/otokomae-backupsだけに限定しています。' }
 $pgBin = 'C:/Program Files/PostgreSQL/17/bin'
 if (-not (Test-Path -LiteralPath "$pgBin/pg_dump.exe")) { throw 'PostgreSQL 17 の pg_dump がありません。ここで止めてください。' }
 if (-not $ConnectionString) { $ConnectionString = Read-Host '本番 Connect の Session pooler URL（5432、パスワードを含めない）' }
@@ -13,7 +14,7 @@ $pooler = $uri.Host.EndsWith('.pooler.supabase.com') -and $userInfo -eq "postgre
 if (-not ($direct -or $pooler)) { throw '本番プロジェクトと一致しません。中止しました。' }
 if ($uri.Query -and $uri.Query -ne '?sslmode=require') { throw 'URL のクエリは sslmode=require だけにしてください。' }
 if (-not $uri.Query) { $ConnectionString += '?sslmode=require' }
-$backupDir = Join-Path $BackupRoot ('prod-before-release-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$backupDir = Join-Path $BackupRoot (Get-Date -Format 'yyyyMMdd-HHmmss')
 if (Test-Path -LiteralPath $backupDir) { throw '既存バックアップには上書きしません。' }
 New-Item -ItemType Directory -Path $backupDir | Out-Null
 $securePassword = Read-Host '本番DBのパスワード（表示されません）' -AsSecureString

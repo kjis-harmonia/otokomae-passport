@@ -21,8 +21,8 @@ for(const item of manifest.files){
 }
 const report={database:url.pathname.slice(1),remote_writes:0,passed:[],status:'RUNNING'}
 function sql(text,label){
- const p=spawnSync(pg,['-X','-w','--dbname',connection,'-A','-t','-v','ON_ERROR_STOP=1'],{input:text,encoding:'utf8',maxBuffer:32*1024*1024})
- writeFileSync(join(logs,label+'.log'),(p.stdout??'')+'\n'+(p.stderr??''))
+ const p=spawnSync(pg,['-X','-w','--dbname',connection,'-A','-t','-v','ON_ERROR_STOP=1','-v','VERBOSITY=sqlstate'],{input:text,encoding:'utf8',maxBuffer:32*1024*1024})
+ writeFileSync(join(logs,label+'.log'),JSON.stringify({exit_code:p.status,sqlstates:[...(p.stderr??'').matchAll(/ERROR:\s*([0-9A-Z]{5})\b/g)].map(m=>m[1]),raw_output_saved:false})+'\n')
  if(p.status!==0)throw new Error(label+' failed; stopped. Inspect private .qa log; no subsequent step was run.')
  return p.stdout.trim()
 }

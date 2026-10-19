@@ -22,6 +22,8 @@ const stats=readFileSync(join(root,'supabase/tests/preflight_baseline_snapshot.s
 const statsValue='('+stats.replace(/^--.*$/gm,'').trim().replace(/;$/,'')+')::jsonb'
 mkdirSync(out,{recursive:true})
 const entries=[],manifest=[];let expected=[...baseline]
+const commentAliases=new Map(readdirSync(join(root,'supabase/migrations')).filter(f=>/^\d{14}_.+\.sql$/.test(f)).map(f=>[f.slice(0,8)+'_'+f.slice(15,-4),f.slice(0,-4)]))
+const normalizeComments=text=>text.replace(/^[ \t]*--.*$/gm,line=>line.replace(/\b(\d{8}_[a-z0-9_]+)\b/g,name=>commentAliases.get(name)??name))
 const payload=(extra='')=>"select jsonb_build_object('data',"+statsValue+",'app_booking_enabled',(select app_booking_enabled from public.booking_settings),'history_count',(select count(*) from supabase_migrations.schema_migrations),'history_key',(select md5(coalesce(string_agg(version||':'||coalesce(name,''),E'\\n' order by version),'')) from supabase_migrations.schema_migrations),'history',(select jsonb_agg(jsonb_build_object('version',version,'name',name) order by version) from supabase_migrations.schema_migrations)"+extra+") as verification;\n"
 const snapshot=(rows,extra='')=>'begin read only;\n'+historyGuard(rows)+'\n'+payload(extra)+'commit;\n'
 writeFileSync(join(out,'check_00.sql'),snapshot(expected))
@@ -31,7 +33,7 @@ for(let i=0;i<order.length;i++){
  if(fn){const start=source.indexOf('create or replace function app_private.'+fn+'(');if(start<0)throw new Error('Missing function');const end=source.indexOf('$$;',start);if(end<0)throw new Error('Missing function terminator');body=source.slice(start,end+3)}
  // Existing source migration comments retain legacy filenames. Only generated comment lines
  // use the current filenames so static preflight can inspect the release directory too.
- body=body.replace(/^[ \t]*--.*$/gm,line=>line.replace(/\b(2026100[2345])_(booking_phase1|customer_ledger|ginpay_ledger|checkout)\b/g,(_match,day,label)=>day+'000000_'+label))
+ body=normalizeComments(body)
  const before=[...expected]
  if(!fn){if(expected.some(([v])=>v===version))throw new Error('Version collision');expected.push([version,label])}
  const n=String(i+1).padStart(2,'0'),file=n+'_'+name+(fn?'_'+fn:'')+'.sql'
@@ -55,6 +57,18 @@ writeFileSync(join(out,'check_acl.sql'),snapshot(before15,aclFields))
 const approvals="select count(*) as approved, md5(coalesce(string_agg(c.id::text||':'||c.user_id,E'\\n' order by c.id,c.user_id),'')) as fingerprint, count(*) filter(where v.verified_by='一括（店の記録あり）') as bulk_label from app_private.customer_store_verifications v join public.customers c on c.id=v.customer_id;"
 writeFileSync(join(out,'check_bulk.sql'),snapshot(before15,aclFields+",'approvals',"+jsonRow(approvals)))
 writeFileSync(join(out,'check_final.sql'),snapshot(expected,aclFields+",'approvals',"+jsonRow(approvals)+",'ginpay_consistent',(app_private.ginpay_reconcile_json())->>'consistent'"))
-for(const file of readdirSync(out).filter(f=>/^check_(?:\d\d|acl|bulk|final)\.sql$/.test(f))){manifest.push({file,sha256:createHash('sha256').update(readFileSync(join(out,file))).digest('hex')})}
-writeFileSync(join(out,'manifest.json'),JSON.stringify({project_ref:'ufyzynpmkxytnhebombq',baseline:baseline.length,final:expected.length,entries,files:manifest},null,2)+'\n')
+// This is a separate post-Web publication step. Never run it in the initial 20-step loop:
+// sessionless legacy customer reads must switch to the store verification flow first.
+const lockdownName='20261001000400_security_hardening_b_lockdown'
+const lockdownSource=readFileSync(join(root,'supabase/migrations',lockdownName+'.sql'),'utf8')
+const postExpected=[...expected,[lockdownName.slice(0,14),lockdownName.slice(15)]]
+const postFile='post_web_security_lockdown.sql'
+const postSql="-- POST-WEB ONLY: confirm new app/customer handover before running.\nbegin;\nset local lock_timeout='5s';\nset local statement_timeout='120s';\n"+historyGuard(expected)+'\n'+normalizeComments(lockdownSource)+"\ninsert into supabase_migrations.schema_migrations(version,name) values('20261001000400','security_hardening_b_lockdown');\n"+historyGuard(postExpected)+"\nnotify pgrst,'reload schema';\ncommit;\n"
+writeFileSync(join(out,postFile),postSql)
+manifest.push({file:postFile,sha256:createHash('sha256').update(postSql).digest('hex'),source:lockdownName,source_sha256:createHash('sha256').update(lockdownSource).digest('hex')})
+const securityTest=readFileSync(join(root,'supabase/tests/preflight_security.sql'),'utf8')
+writeFileSync(join(out,'check_post_web_lockdown.sql'),snapshot(postExpected,aclFields+",'approvals',"+jsonRow(approvals)).replace('begin read only;\n',()=>'begin read only;\n'+securityTest+'\n'))
+for(const file of readdirSync(out).filter(f=>/^check_(?:\d\d|acl|bulk|final|post_web_lockdown)\.sql$/.test(f))){manifest.push({file,sha256:createHash('sha256').update(readFileSync(join(out,file))).digest('hex')})}
+writeFileSync(join(out,'manifest.json'),JSON.stringify({project_ref:'ufyzynpmkxytnhebombq',baseline:baseline.length,final:expected.length,entries,post_web:{file:postFile,check:'check_post_web_lockdown.sql',history:postExpected.length},files:manifest},null,2)+'\n')
 console.log(`Prepared ${entries.length} rollout files and read-only checks; history ${baseline.length} -> ${expected.length}. No database connection made.`)
+console.log('Prepared separate post-Web lockdown; history 39 -> 40. Do not run before the new Web app is published and verified.')
