@@ -14,6 +14,10 @@
 
 クライアントとEdgeは同じ私有情報を含まない環境定義を使う。リクエストのOriginやHostからRP IDを作らず、別環境・未知のプロジェクト・プレビューURLからの認証を受け付けない。Stagingのパスキーを本番用として流用しない。本番の会員データを引き継いだうえで、本番の正規URLで一度設定する。
 
+## ④の公開用ブランチでの更新（2026-10-20）
+
+[公開用PRの準備](production-release-pr.md)で、Webの.env.productionにVITE_CUSTOMER_ACCESS_ENABLED=trueを用意した。以下の「OFF」はリモートの現状を指す。SupabaseのCUSTOMER_ACCESS_ENABLEDとVercel Productionの値は未変更で、⑤の公開手順で人がONにする。実画面の発券確認はPR #8でClaudeが完了し、②の実iPhone認証は別の確認として残る。閉鎖Bは新画面と実機確認のあと・営業再開前に適用し、直後に古いアプリの見え方も確認する。
+
 ## 機能の切り替え
 
 | 設定 | 場所 | 本番の既定 |

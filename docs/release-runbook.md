@@ -76,21 +76,20 @@ npx -y supabase@2.121.0 functions deploy hq-johnny     --use-api --project-ref u
 ```
 Codex 担当の関数（customer-passkeys など）も、staging と本番の版を比べて必要なら同様に。
 
-## 4. 画面（staging → main）
+## 4. 画面（公開用release → main）
 
-1. `git fetch && git checkout -b release origin/main && git merge origin/staging`
-2. `docs/accounting-production-rollout.md` の 3. にある「Staging だけに出している所」の条件を外す
-   （StaffHome のメニュー、AdminScreen の「お会計に進む」、hqMockData の hqTabEnabled、HqClientsScreen の銀Pay）。
-3. `npx tsc -b && npx vite build && node scripts/staging-preflight.mjs --skip-build`
+④ではmain起点のrelease/20261020へStagingとPR #10の手順を統合した。[公開用PRの準備](production-release-pr.md)を正本にする。以下の1〜2の準備はreleaseブランチで実施済みで、公開自体はまだ行わない。
+
+1. 準備済みのrelease/20261020とrelease→mainのドラフトPRをレビューする。Stagingから作り直して④の変更を落とさない。
+2. 会計・GINPayの表示、券の消費を会計確定へ統一、本番ビルドのFace IDフラグONを確認。StaffHomeの3メニューは既に条件なし。
+3. ④で57テスト・型チェック・ビルド・Lintと、架空データDBを明示した44本のpreflightが成功。再検査する場合もローカル専用DBを明示する。本番DB・関数・フラグの実作業完了と実機確認を待つ。
 4. Vercel の無料枠は1日のデプロイ回数に上限あり。まとめて1回で出す。
 5. 本番で確認：アプリ（iPhone・Android）／店舗端末（スマホ）／本部（PC・スマホ）／SB（タブレット・PC・スマホ）。
-6. 新しい会員引継ぎが確認できたら、[DBコマンド一覧](production-db-commands.md)末尾の閉鎖Bを人が実行・読み取り確認する。履歴39→40。全画面を再確認し、閉鎖B完了前に営業を再開しない。
+6. 新しい画面と実機での会員引継ぎが確認できたら、[DBコマンド一覧](production-db-commands.md)末尾の閉鎖Bを人が実行・読み取り確認する。履歴39→40。直後に古いアプリのお客様の見え方と店頭引継ぎも確認する。全画面を再確認し、閉鎖B完了前に営業を再開しない。
 
 ## 5. 残っている作業
 
-- Codex：自分の Lint 差分（`Desktop/otokomae-passport/.qa/react-lint-cleanup/changes.patch`）を staging に反映・検証・コミット。
-  残りの Lint：App.tsx, AdminScreen, TicketWalletScreen, HomeScreen, MyPageScreen, TryOnScreen, FreshnessWidget,
-  customer-passkeys/bridge.ts。SbScreen.tsx:82 は warning だけ（ref の cleanup）で急がない。
+- CodexのLint差分はPR #7／#8を経て取り込み済み。④でもエラー0を確認。既存SbScreenのref cleanup警告1は残る。
 - 本部「予約設定」の「JOHNNY のお知らせ」→「送信を始める」は慶一郎さんが押す（押すまで空き枠のお知らせは出ない）。
 - 祝日 `app_private.holidays` は毎年足す（料金の会員時間に使う）。
 
