@@ -49,7 +49,7 @@ preflightは--database-urlを上記の専用DBに明示し--skip-buildで実行�
 
 ## merge前・営業再開前の条件
 
-1. ⑤の[環境変数・関数・cronの手順](production-platform-commands.md)は作成済み。②の実iPhone確認とスタッフのStaging会計練習、[⑥の当日時刻表](release-day-timetable.md)は作成済み。⑦の公開後確認リストを完成させる。
+1. ⑤の[環境変数・関数・cronの手順](production-platform-commands.md)、[⑥の当日時刻表](release-day-timetable.md)、[⑦の公開後確認リスト](post-release-device-checklist.md)は作成済み。②の実iPhone確認とスタッフのStaging会計練習は実施報告待ち。公開日決定とClaudeによるPR #11の最終レビューも未完了。
 2. 休業中に人が③のDB手順を1本ずつ実行する。30人の人数・照合値が変われば停止。
 3. DB成功後に関数・本番フラグを人が設定する。⑤で固定したソースと対象projectを確認する。
 4. レビュー後にこのrelease→mainのPRを取り込み、新画面を公開する。mainへ直接pushしない。
