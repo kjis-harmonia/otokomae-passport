@@ -2,7 +2,7 @@
 
 対象本番：`ufyzynpmkxytnhebombq`。SQL作成・ローカル検証まで完了。本番・Stagingへの書き込みはしていない。
 
-公開前の確認：回帰テスト51件・型チェック・ビルドは成功。スマートフォン幅の実画面確認は、操作可能なブラウザーがツールにないため未完了。本番のFace ID・来店確認UIの環境設定も未対応。下のコマンドはその確認を終えてから使う。
+2026-10-20更新：最新本番バックアップのコピーで20工程＋権限閉鎖＋30人の一括承認が成功。スマートフォン幅の発券確認はPR #8で完了。実iPhone・公開用設定・新しいWeb公開後の閉鎖Bは別途必要。[最新の検証結果](../production-db-rehearsal.md)と[コマンド一覧](../production-db-commands.md)を正本とする。本番・Stagingへは書き込んでいない。
 
 ## 承認済みの対象
 
@@ -68,19 +68,7 @@ main `848679f` と staging `ca4c923` の顧客・店舗コードで、対象表�
 
 各SQLは独立したトランザクション。**1本でも失敗すれば次へ進まない。Codexは本番書き込みを実行しない。**
 
-次はWindowsでの実在ファイルを指定した人向けのコマンド。CLI 2.121.0の `db query --help` でフラグを確認した。前提が整った段階で慶一郎さんが1本ずつ `!` から実行する。今すぐ3本まとめて流さない。
-
-~~~powershell
-! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --file "C:/Users/user/Desktop/otokomae-passport/docs/sql/production_lock_legacy_record_writes.sql"
-~~~
-
-~~~powershell
-! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --file "C:/Users/user/Desktop/otokomae-passport/docs/sql/production_store_verification_candidates.sql"
-~~~
-
-~~~powershell
-! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --file "C:/Users/user/Desktop/otokomae-passport/docs/sql/production_seed_store_verifications.sql"
-~~~
+Windowsで人が1本ずつ貼るコマンドは[本番DBコマンド一覧](../production-db-commands.md)の14-A〜14-Cを使う。古いDesktopチェックアウトでは実行しない。
 
 ## ローカル検証結果
 

@@ -3,9 +3,11 @@
 Claude は週の利用制限が近いため、ここから先は Codex が引き継ぐ。
 **正本は staging ブランチ**。main へ直接 push しない。staging → main は両者（または Codex と慶一郎さん）が「問題なし」を出してから。
 
-## 0. いまの状態（10/19 時点）
+## 0. いまの状態（10/19 時点の引き継ぎ。10/20の更新は下記）
 
-**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認の準備コードとフラグ設定、未完了の発券画面確認は [本番対応の手順](customer-access-production.md) を参照する。設定はまだ変更していない。
+**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認の準備コードとフラグ設定は [本番対応の手順](customer-access-production.md) を参照する。設定はまだ変更していない。
+
+2026-10-20更新：最新バックアップのコピーで20工程＋権限閉鎖＋30人の承認が成功。追加の閉鎖Bを含めたrollback検査も成功。練習用DBは削除し、バックアップを保持。本番・Stagingへは未適用。詳細は[検証記録](production-db-rehearsal.md)。
 
 - staging ブランチ：Claude 分はすべてコミット済み（キャンセル待ち・料金の正本化・本部 JOHNNY・SB・Lint の片づけ）。
 - Staging の DB：migration 44本すべて適用済み。毎分のキャンセル待ち（cron `johnny-waitlist-minutely`）稼働中。
@@ -17,18 +19,9 @@ Claude は週の利用制限が近いため、ここから先は Codex が引き
 
 ## 1. 本番 DB に入れる（1本ずつ・結果を見てから次へ）
 
-順番は `supabase/rollout/release_prod_order.txt`。包んだ SQL を作る：
+順番は supabase/rollout/release_prod_order.txt。**人が実行するコマンドの正本は[本番DBコマンド一覧](production-db-commands.md)**。③は[最新コピーの記録](production-db-rehearsal.md)のとおり20工程と30人の一括承認まで成功。ただし閉鎖Bが公開計画から抜けていたため、本番公開は保留する。新しいWebの確認後に閉鎖Bを適用する工程もコマンド一覧へ追加した。
 
-```
-bash supabase/rollout/build_accounting_rollout.sh release_prod_order.txt out_release
-```
-
-`supabase/rollout/out_release/01_… 〜 20_…` ができる（各ファイル begin; … commit;。失敗したらその1本は何も入らない）。
-**本番への書き込みは慶一郎さんに `!` コマンドで渡す**（Codex/Claude は本番に直接書かない）：
-
-```
-! cd ~/.claude/worktrees/sb-staging && npx -y supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq -f "supabase/rollout/out_release/01_20261004000000_ginpay_ledger.sql"
-```
+最新バックアップ→履歴と既存データの読み取り→01〜14→権限閉鎖→承認対象再照合→一括承認→15〜20の順。新しい scripts/prepare-production-db-release.mjs で、前後の履歴照合付きSQLと各工程の読み取り確認を生成する。旧いbash生成器の出力で上書きしない。各工程は1トランザクション、1本でも失敗したら停止する。本番へ書き込むのは休業中に慶一郎さんが1ブロックずつ実行する ! コマンドだけ。
 
 | # | 中身 | 担当 |
 |---|---|---|
@@ -91,6 +84,7 @@ Codex 担当の関数（customer-passkeys など）も、staging と本番の版
 3. `npx tsc -b && npx vite build && node scripts/staging-preflight.mjs --skip-build`
 4. Vercel の無料枠は1日のデプロイ回数に上限あり。まとめて1回で出す。
 5. 本番で確認：アプリ（iPhone・Android）／店舗端末（スマホ）／本部（PC・スマホ）／SB（タブレット・PC・スマホ）。
+6. 新しい会員引継ぎが確認できたら、[DBコマンド一覧](production-db-commands.md)末尾の閉鎖Bを人が実行・読み取り確認する。履歴39→40。全画面を再確認し、閉鎖B完了前に営業を再開しない。
 
 ## 5. 残っている作業
 
