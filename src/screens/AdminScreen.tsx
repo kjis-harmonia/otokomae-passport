@@ -855,11 +855,11 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       }}>
 
         {mainTab === 'issue' && (pendingIssue || initialIssueRecovery.error) && (
-          <section role="status" style={{ padding: 18, marginBottom: 20, border: '1px solid rgba(201,162,74,0.35)', borderRadius: 14, color: '#F2E6C8', lineHeight: 1.7 }}>
+          <section role="status" style={{ padding: 18, marginBottom: 20, border: '1px solid rgba(154,116,48,0.45)', borderRadius: 14, background: '#FBF6EA', color: '#2A211B', lineHeight: 1.7 }}>
             <strong>チケット発行の確認</strong>
             {pendingIssue && <p>{pendingIssue.customerName}様 · {pendingIssue.amount.toLocaleString()}円 × {pendingIssue.quantity}枚</p>}
             <p>{issueError || initialIssueRecovery.error || '確認待ちの発行があります。同じ発行を確認してから次へ進んでください。'}</p>
-            {pendingIssue && <button type="button" disabled={issueLoading} onClick={() => { void handleIssueTicket(true) }} style={{ marginTop: 12, minHeight: 48, padding: '10px 18px', borderRadius: 10, background: '#F2E6C8', color: '#21110E' }}>
+            {pendingIssue && <button type="button" disabled={issueLoading} onClick={() => { void handleIssueTicket(true) }} style={{ marginTop: 12, minHeight: 48, padding: '10px 18px', borderRadius: 10, background: '#2A211B', color: '#FBF6EA' }}>
               {issueLoading ? '確認中…' : '同じ発行を確認・再試行'}
             </button>}
           </section>

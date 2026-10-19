@@ -59,7 +59,7 @@ Stagingは従来どおりON。未知のSupabaseプロジェクトは、フラグ
 node scripts/test-helpers/issuance-ui-fixture.mjs
 ~~~
 
-ブラウザーで `http://127.0.0.1:5198/staff.html?qa=issue-recovery` を開き、店舗メニューのチケット・QRの画面へ進む。検証専用の保存情報がlocalhostに作られるので、プライベートウィンドウで使う。
+ブラウザーで `http://127.0.0.1:5198/staff?qa=issue-recovery` を開き、店舗メニューのチケット・QRの画面へ進む。検証専用の保存情報がlocalhostに作られるので、プライベートウィンドウで使う。
 
 - 320 / 390 / 412px幅で、架空会員の500円×2枚の確認待ち案内と再確認ボタンが読める。
 - 「同じ発行を確認・再試行」後に成功し、更新後は確認待ち案内が消える。

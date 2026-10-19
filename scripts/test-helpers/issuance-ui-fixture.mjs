@@ -26,4 +26,4 @@ const server=await createServer({root,configFile:root+'/vite.config.ts',
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result))
  })}}
 ]})
-await server.listen();console.log('Local UI fixture: http://127.0.0.1:5198/staff.html?qa=issue-recovery; fake member only; no external database forwarding')
+await server.listen();console.log('Local UI fixture: http://127.0.0.1:5198/staff?qa=issue-recovery (open 店舗端末); fake member only; no external database forwarding')
