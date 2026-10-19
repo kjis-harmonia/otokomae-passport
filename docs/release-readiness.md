@@ -53,6 +53,10 @@ Safariのプライベートですでに同じ会員がログイン済みなら�
 
 参考：[Apple：Safariのプライベートブラウズ](https://support.apple.com/guide/iphone/browse-the-web-privately-iphb01fc3c85/ios)、[Apple：パスキーでサインイン](https://support.apple.com/guide/iphone/sign-in-with-passkeys-in-safari-iph37306ae67/ios)。
 
+## ③ 本番DBコマンドとリハーサル
+
+[1本ずつ貼るコマンド一覧](production-db-commands.md)と[リハーサル記録](production-db-rehearsal.md)を用意した。③は未完了・本番実行保留。10/17バックアップのコピーでは01〜14と権限閉鎖が成功し、9表の対象列の照合値は不変だった。一括承認は対象29人のため停止し、15〜20へ進んでいない。現在の本番は読み取りで59人中30人、承認済み照合値と一致する。最新バックアップの取得許可と、それを使う通し検証を待つ。
+
 ## 公開前に残ること
 
 1. 上の②の実iPhone確認。発券画面の幅375px・393pxでのローカル確認はClaudeの報告により完了。実店舗端末のカメラ・実発券の確認とは区別する。

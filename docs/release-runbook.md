@@ -5,7 +5,7 @@ Claude は週の利用制限が近いため、ここから先は Codex が引き
 
 ## 0. いまの状態（10/19 時点）
 
-**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認の準備コードとフラグ設定、未完了の発券画面確認は [本番対応の手順](customer-access-production.md) を参照する。設定はまだ変更していない。
+**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認の準備コードとフラグ設定は [本番対応の手順](customer-access-production.md) を参照する。設定はまだ変更していない。
 
 - staging ブランチ：Claude 分はすべてコミット済み（キャンセル待ち・料金の正本化・本部 JOHNNY・SB・Lint の片づけ）。
 - Staging の DB：migration 44本すべて適用済み。毎分のキャンセル待ち（cron `johnny-waitlist-minutely`）稼働中。
@@ -17,18 +17,9 @@ Claude は週の利用制限が近いため、ここから先は Codex が引き
 
 ## 1. 本番 DB に入れる（1本ずつ・結果を見てから次へ）
 
-順番は `supabase/rollout/release_prod_order.txt`。包んだ SQL を作る：
+順番は supabase/rollout/release_prod_order.txt。**人が実行するコマンドの正本は[本番DBコマンド一覧](production-db-commands.md)**。現在③は[リハーサル記録](production-db-rehearsal.md)のとおり一括承認の手前で停止しており、本番実行を保留する。
 
-```
-bash supabase/rollout/build_accounting_rollout.sh release_prod_order.txt out_release
-```
-
-`supabase/rollout/out_release/01_… 〜 20_…` ができる（各ファイル begin; … commit;。失敗したらその1本は何も入らない）。
-**本番への書き込みは慶一郎さんに `!` コマンドで渡す**（Codex/Claude は本番に直接書かない）：
-
-```
-! cd ~/.claude/worktrees/sb-staging && npx -y supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq -f "supabase/rollout/out_release/01_20261004000000_ginpay_ledger.sql"
-```
+最新バックアップ→履歴と既存データの読み取り→01〜14→権限閉鎖→承認対象再照合→一括承認→15〜20の順。新しい scripts/prepare-production-db-release.mjs で、前後の履歴照合付きSQLと各工程の読み取り確認を生成する。旧いbash生成器の出力で上書きしない。各工程は1トランザクション、1本でも失敗したら停止する。本番へ書き込むのは休業中に慶一郎さんが1ブロックずつ実行する ! コマンドだけ。
 
 | # | 中身 | 担当 |
 |---|---|---|
