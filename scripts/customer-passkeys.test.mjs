@@ -24,9 +24,9 @@ for(const [name,changes] of [['tampered signature',{badSignature:true}],['wrong 
 await assert.rejects(()=>webauthn.verifyAuthenticationResponse({response:assertion,expectedChallenge:request.challenge,expectedOrigin:origin,expectedRPID:rpID,credential:{...credential,counter:1},requireUserVerification:true}));checks.push('rejects signature counter reuse')
 let databaseCalls=0
 const fakeFetch=async()=>{databaseCalls++;throw Error('Unexpected service call')}
-const config={base:'https://kfufxzmucjljjouzpumi.supabase.co',serviceKey:'local-only-test',origin,rpID}
+const config={base:'https://kfufxzmucjljjouzpumi.supabase.co',serviceKey:'local-only-test',origin:'https://otokomae-passport-staging.vercel.app',rpID:'otokomae-passport-staging.vercel.app'}
 const foreign=await createPasskeyHandler(config,webauthn,fakeFetch)(new Request(origin,{method:'POST',headers:{origin:'https://other.example'},body:'{}'}))
 assert.equal(foreign.status,403);assert.equal(databaseCalls,0);checks.push('foreign origins fail before database access')
 const otherProject=await createPasskeyHandler({...config,base:'https://other-project.supabase.co'},webauthn,fakeFetch)(new Request(origin,{method:'POST',headers:{origin},body:'{}'}))
-assert.equal(otherProject.status,503);assert.equal(databaseCalls,0);checks.push('all non-Staging projects are refused before database access')
+assert.equal(otherProject.status,503);assert.equal(databaseCalls,0);checks.push('unknown projects are refused before database access')
 console.log(JSON.stringify({passed:checks.length,checks,externalNetworkCalls:0},null,2))

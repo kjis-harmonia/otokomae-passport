@@ -1,17 +1,17 @@
+import {customerAccessEnabled,customerEnvironment} from '../_shared/customer-environment.ts'
 type Json = Record<string, unknown>
 interface PasskeyVerification {
   verified:boolean
   registrationInfo?:{credential:{id:string;publicKey:Uint8Array;counter:number;transports?:string[]}}
   authenticationInfo?:{newCounter:number}
 }
-export interface PasskeyConfig {base:string;serviceKey:string;origin:string;rpID:string}
+export interface PasskeyConfig {base:string;serviceKey:string;origin:string;rpID:string;productionEnabled?:boolean}
 export interface WebAuthnServer {
   generateRegistrationOptions(input:Json):Promise<{challenge:string}>
   generateAuthenticationOptions(input:Json):Promise<{challenge:string}>
   verifyRegistrationResponse(input:Json):Promise<PasskeyVerification>
   verifyAuthenticationResponse(input:Json):Promise<PasskeyVerification>
 }
-const STAGING='https://kfufxzmucjljjouzpumi.supabase.co'
 const b64=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','')
 const bytes=(value:string)=>Uint8Array.from(atob(value.replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0))
 const text=(value:unknown,max:number)=>typeof value==='string'&&value.length<=max?value:''
@@ -25,7 +25,8 @@ export function createPasskeyHandler(config:PasskeyConfig,webauthn:WebAuthnServe
     return value as T
   }
   return async(request:Request):Promise<Response>=>{
-    if(config.base!==STAGING||!config.serviceKey)return reply({error:'unavailable',message:'この機能はStagingで準備中です。'},503)
+    const environment=customerEnvironment(config.base)
+    if(!customerAccessEnabled(config.base,config.productionEnabled)||!config.serviceKey||environment?.origin!==config.origin||environment?.rpID!==config.rpID)return reply({error:'unavailable',message:'現在この機能の準備中です。'},503)
     if(request.headers.get('origin')!==config.origin)return reply({error:'origin_not_allowed',message:'銀二郎appから開き直してください。'},403)
     if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors})
     if(request.method!=='POST')return reply({error:'method_not_allowed'},405)

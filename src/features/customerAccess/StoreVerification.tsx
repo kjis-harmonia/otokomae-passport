@@ -1,10 +1,10 @@
 import {useState} from 'react'
 import {approveStoreAccess, type StoreAccessMode} from './storeAccess'
-import {ONE_TAP_STAGING} from './passkeys'
+import {CUSTOMER_ACCESS_ENABLED} from './passkeys'
 import './customerAccess.css'
 
 export function StoreRequestNotice({mode,error,onRefresh}:{mode:StoreAccessMode;error:string;onRefresh:()=>void}){
-  if(!ONE_TAP_STAGING||mode==='verified')return null
+  if(!CUSTOMER_ACCESS_ENABLED||mode==='verified')return null
   return <section className="customer-access access-settings" aria-label="来店時の本人確認">
     <h2>来店時に、Johnnyを使えるように</h2>
     <p>この会員QRをスタッフに見せてください。初回の本人確認後に、Face IDなどを設定できます。</p>
@@ -14,7 +14,7 @@ export function StoreRequestNotice({mode,error,onRefresh}:{mode:StoreAccessMode;
 
 export function StaffStoreApproval({requestId,userId,memberName,staffName}:{requestId:string;userId:string;memberName:string;staffName:string}){
   const [busy,setBusy]=useState(false),[done,setDone]=useState(false),[error,setError]=useState('')
-  if(!ONE_TAP_STAGING)return null
+  if(!CUSTOMER_ACCESS_ENABLED)return null
   return <section className="store-staff-approval" aria-label="Johnnyの初回本人確認">
     <h2>Johnnyの初回本人確認</h2>
     {done?<p role="status">確認しました。お客さまの端末でFace IDなどを設定できます。</p>:<>

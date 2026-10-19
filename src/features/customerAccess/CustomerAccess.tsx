@@ -1,12 +1,12 @@
 import {useEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
 import {useCustomerAccessSession} from './useCustomerAccessSession'
-import {enrollPasskey,loginPasskey,passkeyMessage,passkeyStatus,resumeSavedMember,revokePasskeys,ONE_TAP_STAGING,supportsPasskeys,type PasskeyStatus} from './passkeys'
+import {enrollPasskey,loginPasskey,passkeyMessage,passkeyStatus,resumeSavedMember,revokePasskeys,CUSTOMER_ACCESS_ENABLED,supportsPasskeys,type PasskeyStatus} from './passkeys'
 import './customerAccess.css'
 
 export function PasskeyLoginButton({onSignedIn,label='Face IDなどでログイン',disabled=false,onBusyChange}:{onSignedIn?:()=>void;label?:string;disabled?:boolean;onBusyChange?:(busy:boolean)=>void}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('')
-  if(!ONE_TAP_STAGING)return null
+  if(!CUSTOMER_ACCESS_ENABLED)return null
   return <div className="customer-access">
     <button type="button" className="access-primary" disabled={busy||disabled} onClick={()=>{
       if(busy||disabled)return
@@ -30,12 +30,12 @@ export function CustomerAccessSettings({onRecovered}:{onRecovered?:()=>void}){
   const [loaded,setLoaded]=useState<{session:string;status:PasskeyStatus}|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[confirmRevoke,setConfirmRevoke]=useState(false)
   const status=loaded?.session===session?loaded.status:null
   useEffect(()=>{
-    if(!ONE_TAP_STAGING||!session)return
+    if(!CUSTOMER_ACCESS_ENABLED||!session)return
     let alive=true
     void passkeyStatus().then(value=>{if(alive){setLoaded({session,status:value});setError('')}}).catch(e=>{if(alive)setError(passkeyMessage(e))})
     return()=>{alive=false}
   },[session])
-  if(!ONE_TAP_STAGING)return null
+  if(!CUSTOMER_ACCESS_ENABLED)return null
   const register=async()=>{
     if(busy)return
     setBusy(true);setError('');setMessage('')

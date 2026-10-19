@@ -1,4 +1,4 @@
-import {ONE_TAP_STAGING} from '../features/customerAccess/passkeys'
+import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
 import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
 import {loadMemberStatus} from '../utils/storage'
 import { useState } from 'react'
@@ -247,7 +247,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
     }
   }
 
-  if(ONE_TAP_STAGING)return <main className="customer-access access-welcome">
+  if(CUSTOMER_ACCESS_ENABLED)return <main className="customer-access access-welcome">
     <header><p className="access-brand">銀二郎</p><h1>銀二郎へようこそ</h1><p>かんたんログインを設定済みの方は、入力せずにログインできます。</p></header>
     <PasskeyLoginButton disabled={submitting||authBusy} onBusyChange={setAuthBusy} onSignedIn={()=>onDone(loadMemberStatus())}/>
     <form onSubmit={event=>{event.preventDefault();void handleFinish()}}>

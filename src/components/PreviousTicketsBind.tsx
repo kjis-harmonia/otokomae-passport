@@ -1,5 +1,5 @@
 import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
-import {ONE_TAP_STAGING} from '../features/customerAccess/passkeys'
+import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { getUserId } from '../utils/userId'
@@ -144,7 +144,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
   zIndex?: number
 }) {
   const reduced = useReducedMotion() ?? false
-  const [step, setStep] = useState<Step>(ONE_TAP_STAGING ? 'ask' : startWithCode ? 'code' : 'ask')
+  const [step, setStep] = useState<Step>(CUSTOMER_ACCESS_ENABLED ? 'ask' : startWithCode ? 'code' : 'ask')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -182,7 +182,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
           boxShadow: '0 20px 56px rgba(0,0,0,0.8)',
         }}
       >
-        {ONE_TAP_STAGING&&step==='ask'?<><h2 style={{color:IVORY,fontSize:20,marginBottom:16}}>会員情報で続ける</h2><PasskeyLoginButton onSignedIn={()=>{onBound?.();onClose()}}/><button type="button" onClick={()=>setStep('code')} className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}}>別の方法で引き継ぐ</button><button type="button" className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}} onClick={onLater}>あとで</button></>:step === 'done' ? (
+        {CUSTOMER_ACCESS_ENABLED&&step==='ask'?<><h2 style={{color:IVORY,fontSize:20,marginBottom:16}}>会員情報で続ける</h2><PasskeyLoginButton onSignedIn={()=>{onBound?.();onClose()}}/><button type="button" onClick={()=>setStep('code')} className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}}>別の方法で引き継ぐ</button><button type="button" className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}} onClick={onLater}>あとで</button></>:step === 'done' ? (
           <>
             <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: IVORY, marginBottom: 16 }}>引き継ぎが完了しました</p>
             <DialogButton primary onClick={onClose}>閉じる</DialogButton>

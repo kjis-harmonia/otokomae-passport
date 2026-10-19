@@ -1,5 +1,5 @@
 import {useStoreAccess} from './features/customerAccess/storeAccess'
-import {ONE_TAP_STAGING,resumeSavedMember,supportsPasskeys,passkeyStatus} from './features/customerAccess/passkeys'
+import {CUSTOMER_ACCESS_ENABLED,resumeSavedMember,supportsPasskeys,passkeyStatus} from './features/customerAccess/passkeys'
 import {PasskeyEnrollmentOffer} from './features/customerAccess/CustomerAccess'
 import {useCustomerAccessSession} from './features/customerAccess/useCustomerAccessSession'
 import { useState, useCallback, useEffect } from 'react'
@@ -54,7 +54,7 @@ type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function isShopUnlocked(): boolean {
-  return ONE_TAP_STAGING || localStorage.getItem(SHOP_AUTH_KEY) === '1'
+  return CUSTOMER_ACCESS_ENABLED || localStorage.getItem(SHOP_AUTH_KEY) === '1'
 }
 
 function isLocalPreviewHost(hostname: string): boolean {
@@ -817,7 +817,7 @@ function App() {
   })
 
   // ── Loading state: min time + critical image preload ──────────────────────────
-  const quickBooking=ONE_TAP_STAGING && new URLSearchParams(location.search).get('tab')==='reserve'
+  const quickBooking=CUSTOMER_ACCESS_ENABLED && new URLSearchParams(location.search).get('tab')==='reserve'
   const [minTimeDone, setMinTimeDone] = useState(quickBooking)
   const [imgReady,    setImgReady]    = useState(quickBooking)
   const appLoading = !minTimeDone || !imgReady
@@ -869,7 +869,7 @@ function App() {
   const storeAccess=useStoreAccess()
   const customerAccessSession=useCustomerAccessSession()
   useEffect(()=>{
-    if(!ONE_TAP_STAGING)return
+    if(!CUSTOMER_ACCESS_ENABLED)return
     const changed=()=>{if(getCustomerSession()&&getStoredValue<boolean>(ONBOARDING_DONE_KEY,false)){setMemberStatus(loadMemberStatus());setPhase('app')}}
     window.addEventListener('ginjiro:customer-session-changed',changed)
     if(phase==='onboarding'&&getCustomerSession())void resumeSavedMember().catch(()=>{})
@@ -885,7 +885,7 @@ function App() {
   const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
-    if (ONE_TAP_STAGING && requestedTab==='reserve')return 'shop'
+    if (CUSTOMER_ACCESS_ENABLED && requestedTab==='reserve')return 'shop'
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
     if (requestedTab === 'diagnosis') return 'shop'
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
@@ -893,7 +893,7 @@ function App() {
   })
   // Existing signed-in members also need a first setup entry; never enroll from a display-only member ID.
   useEffect(()=>{
-    if(!ONE_TAP_STAGING || storeAccess.mode!=='verified' || phase!=='app' || appLoading || activeTab!=='home' || showQrModal || welcomeCouponDialog || hasOpenModal || isPremiumGachaOpen || !customerAccessSession || !supportsPasskeys())return
+    if(!CUSTOMER_ACCESS_ENABLED || storeAccess.mode!=='verified' || phase!=='app' || appLoading || activeTab!=='home' || showQrModal || welcomeCouponDialog || hasOpenModal || isPremiumGachaOpen || !customerAccessSession || !supportsPasskeys())return
     let alive=true
     void passkeyStatus().then(status=>{
       if(alive && getCustomerSession()===customerAccessSession && !status.registered && getStoredValue<string|null>(PASSKEY_SETUP_PROMPT_KEY,null)!==status.user_id)setPasskeyOffer(true)
@@ -1034,7 +1034,7 @@ function App() {
   const [showMusicGuide, setShowMusicGuide] = useState(false)
 
   useEffect(() => {
-    if (phase !== 'app' || ONE_TAP_STAGING) return
+    if (phase !== 'app' || CUSTOMER_ACCESS_ENABLED) return
     if (welcomeCouponDialog) return
     // ホーム画面でのみ案内する（「クーポンを見る」でWalletへ直行したときにクーポンを隠さない）
     if (activeTab !== 'home') return

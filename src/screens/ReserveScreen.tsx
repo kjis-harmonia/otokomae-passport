@@ -1,5 +1,5 @@
 import {useStoreAccess} from '../features/customerAccess/storeAccess'
-import {ONE_TAP_STAGING} from '../features/customerAccess/passkeys'
+import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
 import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
 import {useCustomerAccessSession} from '../features/customerAccess/useCustomerAccessSession'
 import { useState } from 'react'
@@ -27,8 +27,8 @@ const HOTPEPPER_MENUS: { label: string; url: string }[] = [
 export function ReserveScreen(props:{onShowQr?:()=>void}){
   const session=useCustomerAccessSession()
   const access=useStoreAccess()
-  if(ONE_TAP_STAGING&&access.mode!=='verified')return <StoreBookingGate session={session} access={access} onShowQr={props.onShowQr}/>
-  return <ReservationContent key={ONE_TAP_STAGING?session:'legacy'} {...props}/>
+  if(CUSTOMER_ACCESS_ENABLED&&access.mode!=='verified')return <StoreBookingGate session={session} access={access} onShowQr={props.onShowQr}/>
+  return <ReservationContent key={CUSTOMER_ACCESS_ENABLED?session:'legacy'} {...props}/>
 }
 
 function StoreBookingGate({session,access,onShowQr}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void}){

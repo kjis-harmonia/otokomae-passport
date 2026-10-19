@@ -5,7 +5,7 @@ Claude は週の利用制限が近いため、ここから先は Codex が引き
 
 ## 0. いまの状態（10/19 時点）
 
-**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認UIの本番対応とスマートフォン幅での画面検証を先に完了する。
+**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認の準備コードとフラグ設定、未完了の発券画面確認は [本番対応の手順](customer-access-production.md) を参照する。設定はまだ変更していない。
 
 - staging ブランチ：Claude 分はすべてコミット済み（キャンセル待ち・料金の正本化・本部 JOHNNY・SB・Lint の片づけ）。
 - Staging の DB：migration 44本すべて適用済み。毎分のキャンセル待ち（cron `johnny-waitlist-minutely`）稼働中。

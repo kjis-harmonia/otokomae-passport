@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react'
 import {callRpc,callStaffRpc,RpcError} from '../../utils/staffSession'
 import {clearCustomerSession,getCustomerSession} from '../../utils/customerSession'
 import {getUserId} from '../../utils/userId'
-import {adoptMember,ONE_TAP_STAGING} from './passkeys'
+import {adoptMember,CUSTOMER_ACCESS_ENABLED} from './passkeys'
 import {useCustomerAccessSession} from './useCustomerAccessSession'
 
 export type StoreAccessMode='checking'|'verified'|'unverified'|'unauthenticated'|'error'
@@ -11,13 +11,13 @@ export function useStoreAccess(){
   const [result,setResult]=useState<{session:string;verified:boolean;failed:boolean}|null>(null)
   const [tick,setTick]=useState(0)
   useEffect(()=>{
-    if(!ONE_TAP_STAGING||!session)return
+    if(!CUSTOMER_ACCESS_ENABLED||!session)return
     let alive=true
     const refresh=()=>{void callRpc<{verified:boolean}>('customer_store_access_status',{p_session:session}).then(r=>{if(alive)setResult({session,verified:r.verified===true,failed:false})}).catch(error=>{if(import.meta.env.DEV)console.warn('store_status_failed',error instanceof RpcError?error.code:'unexpected');if(!alive)return;if(error instanceof Error&&error.message.includes('customer_auth_required')&&getCustomerSession()===session){clearCustomerSession();window.dispatchEvent(new Event('ginjiro:customer-session-changed'))}else setResult({session,verified:false,failed:true})})}
     refresh();window.addEventListener('focus',refresh)
     return()=>{alive=false;window.removeEventListener('focus',refresh)}
   },[session,tick])
-  const mode:StoreAccessMode=!ONE_TAP_STAGING?'verified':!session?'unauthenticated':result?.session!==session?'checking':result.failed?'error':result.verified?'verified':'unverified'
+  const mode:StoreAccessMode=!CUSTOMER_ACCESS_ENABLED?'verified':!session?'unauthenticated':result?.session!==session?'checking':result.failed?'error':result.verified?'verified':'unverified'
   return {mode,refresh:()=>setTick(n=>n+1)}
 }
 interface StoreRequest {id:string;proof:string;user_id:string;expires_in:number}
@@ -25,7 +25,7 @@ export function useStoreRequest(enabled:boolean){
   const session=useCustomerAccessSession(),userId=getUserId()
   const [request,setRequest]=useState<StoreRequest|null>(null),[error,setError]=useState(''),[tick,setTick]=useState(0)
   useEffect(()=>{
-    if(!ONE_TAP_STAGING||!enabled)return
+    if(!CUSTOMER_ACCESS_ENABLED||!enabled)return
     let alive=true,checking=false,expires=0
     const expectedSession=session
     let pending:StoreRequest|null=null

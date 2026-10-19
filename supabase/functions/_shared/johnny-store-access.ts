@@ -1,6 +1,7 @@
-// No AI call occurs until this check completes. Missing DB support fails closed on Staging.
+// No paid AI call occurs until this check completes. Missing DB support fails closed in both environments.
+import {customerEnvironment} from './customer-environment.ts'
 export async function checkJohnnyStoreAccess(base:string,anonKey:string,session:unknown,fetcher:typeof fetch=fetch):Promise<{status:number;error:string}|null>{
-  if(base!=='https://kfufxzmucjljjouzpumi.supabase.co')return null // rollout is Staging-only
+  if(!customerEnvironment(base))return {status:503,error:'store_access_unavailable'}
   if(typeof session!=='string'||session.length<32||session.length>256)return {status:401,error:'customer_auth_required'}
   try{
     const response=await fetcher(base+'/rest/v1/rpc/customer_store_access_status',{

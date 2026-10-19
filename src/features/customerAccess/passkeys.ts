@@ -3,18 +3,20 @@ import {getStoredValue,loadMemberStatus,saveMemberStatus,setStoredValue,ONBOARDI
 import {USER_ID_KEY} from '../../utils/userId'
 import type {PublicKeyCredentialCreationOptionsJSON,PublicKeyCredentialRequestOptionsJSON} from '@simplewebauthn/browser'
 
-export const ONE_TAP_STAGING=import.meta.env.VITE_SUPABASE_URL==='https://kfufxzmucjljjouzpumi.supabase.co'
-const ENDPOINT='https://kfufxzmucjljjouzpumi.supabase.co/functions/v1/customer-passkeys'
+import {customerAccessEnabled,customerEnvironment} from '../../../supabase/functions/_shared/customer-environment.ts'
+export const CUSTOMER_ACCESS_ENABLED=customerAccessEnabled(import.meta.env.VITE_SUPABASE_URL,import.meta.env.VITE_CUSTOMER_ACCESS_ENABLED==='true')
+const ENVIRONMENT=customerEnvironment(import.meta.env.VITE_SUPABASE_URL)
+const ENDPOINT=ENVIRONMENT?ENVIRONMENT.base+'/functions/v1/customer-passkeys':''
 export interface PasskeyStatus {user_id:string;name:string;registered:boolean}
 interface MemberIdentity {user_id:string;name:string;session:string}
 export class PasskeyError extends Error {code:string;constructor(code:string,message:string){super(message);this.code=code}}
-export function supportsPasskeys(){return ONE_TAP_STAGING&&window.isSecureContext&&typeof PublicKeyCredential!=='undefined'}
+export function supportsPasskeys(){return CUSTOMER_ACCESS_ENABLED&&window.isSecureContext&&typeof PublicKeyCredential!=='undefined'}
 function requireStorage(){
   try{localStorage.setItem('ginjiro_access_probe','1');if(localStorage.getItem('ginjiro_access_probe')!=='1')throw Error();localStorage.removeItem('ginjiro_access_probe')}
   catch{throw new Error('会員情報を保存できません。通常のブラウザーで開いてください。')}
 }
 async function request<T>(action:string,input:Record<string,unknown>={}):Promise<T>{
-  if(!ONE_TAP_STAGING)throw new Error('この機能はStagingで準備中です。')
+  if(!CUSTOMER_ACCESS_ENABLED)throw new Error('現在この機能の準備中です。')
   const response=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json',apikey:import.meta.env.VITE_SUPABASE_ANON_KEY??''},body:JSON.stringify({action,...input}),signal:AbortSignal.timeout(20000)})
   const result=await response.json()
   if(!response.ok){
