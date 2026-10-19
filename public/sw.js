@@ -8,22 +8,20 @@
  * install/activate は即時に反映させるため skipWaiting + clients.claim を使用。
  */
 
-const SW_VERSION = '2026-10-18c'
-// 確かめ用の記録（アプリの QR 画面に出す）：この SW の版と、最後にお知らせを受け取った時刻
-const note = (key, value) => caches.open('ginjiro-diag').then((c) => c.put(key, new Response(String(value)))).catch(() => {})
+// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-10-19a
 
 self.addEventListener('install', () => self.skipWaiting())
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(Promise.all([clients.claim(), note('/diag/version', SW_VERSION)]))
+  // 確かめ用に使っていた記録を片づける
+  event.waitUntil(Promise.all([clients.claim(), caches.delete('ginjiro-diag')]))
 })
 
 self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { data = { body: event.data ? event.data.text() : '' } }
   const title = data.title || '銀二郎 JOHNNY'
-  event.waitUntil(Promise.all([
-    note('/diag/push', new Date().toISOString()),
+  event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',
       icon: '/assets/app-icon.png',
@@ -31,12 +29,8 @@ self.addEventListener('push', (event) => {
       tag: data.tag || 'ginjiro-johnny',
       renotify: true,
       data: { url: data.url || '/?tab=reserve&johnny=1' },
-    })
-      // 確かめ：iPhone が通知を作ったか（表示中の数）と、失敗したならその理由
-      .then(() => self.registration.getNotifications())
-      .then((list) => note('/diag/shown', list.length + '件'))
-      .catch((e) => note('/diag/shown', 'エラー ' + String(e && e.message || e).slice(0, 60))),
-  ]))
+    }),
+  )
 })
 
 self.addEventListener('notificationclick', (event) => {
