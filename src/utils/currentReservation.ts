@@ -1,4 +1,5 @@
 import { getStoredValue, setStoredValue, removeStoredValue } from './storage'
+import { livePremiumPrice } from './bookingCoupons'
 import { getJapanDateString } from './dateUtils'
 import { PREMIUM_COUPONS } from '../data/wallet'
 
@@ -97,7 +98,10 @@ function japanDateOf(iso: unknown): string | null {
 export function createReservation(id: string, visitDate: string, reservedAt = new Date().toISOString()): CurrentReservation | null {
   const preset = RESERVATION_PRESETS[id]
   if (!preset || !isYmd(visitDate)) return null
-  return { ...preset, visitDate, reservedAt }
+  // 漢前Premium の料金はサーバーの料金表（読めていれば）
+  const def = preset.kind === 'premium' ? PREMIUM_COUPONS.find(d => d.id === preset.id) : undefined
+  const live = def ? livePremiumPrice(def) : null
+  return { ...preset, ...(live ?? {}), visitDate, reservedAt }
 }
 
 /**

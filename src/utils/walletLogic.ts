@@ -8,6 +8,7 @@
  */
 
 import type { TicketRow } from '../data/ticket'
+import { livePremiumPrice } from './bookingCoupons'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
 import {
   MAINTENANCE_CUT, PREMIUM_COUPONS,
@@ -271,7 +272,8 @@ export function buildPremiumCards(state: PremiumState): WalletCard[] {
     status:       state.isOpenNow ? 'active' : 'waiting',
     statusLabel:  state.label,
     statusHint:   state.hint,
-    prices:       def.prices,
+    // 料金はサーバーの料金表（本部で変えたら、ここも変わる）。読めるまではクーポンマスタの値
+    prices:       def.prices.map((p, i) => { const live = i === 0 ? livePremiumPrice(def) : null; return live ? { ...p, ...live } : p }),
     bookingType:  def.bookingType,
     phoneNumber:  def.phoneNumber,
     isMemberOnly: def.isMemberOnly,

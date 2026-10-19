@@ -58,6 +58,12 @@ export interface PremiumApplied {
   eligible: boolean
 }
 
+/** プレミアムクーポンの料金（サーバーの料金表を読めていればそちら。クーポン名＝member_label で照らし合わせる） */
+export function livePremiumPrice(def: CouponDefinition): { normalPrice: number; memberPrice: number } | null {
+  const m = rules?.menus.find(x => x.member_label === def.title && x.normal_price != null && x.price != null)
+  return m ? { normalPrice: m.normal_price as number, memberPrice: m.price as number } : null
+}
+
 /** そのメニュー・日時のプレミアムクーポン（対象外なら null） */
 export function premiumFor(menuCode: string, startsAt: string): PremiumApplied | null {
   const m = jst(startsAt).min
