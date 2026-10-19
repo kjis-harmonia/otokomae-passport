@@ -143,7 +143,8 @@ async function main() {
   await stage('checkout', async () => {
     if (skipDb) return 'skipped'
     runPsqlFile(dbUrl, join(testsDir, 'preflight_checkout_coupon.sql'), 'checkout/coupon smoke')
-    return 'checkout + coupon + void smoke ok'
+    runPsqlFile(dbUrl, join(testsDir, 'preflight_checkout_safety.sql'), 'checkout retry/lookup/QR identity')
+    return 'checkout + coupon + void + retry/lookup/QR identity smoke ok'
   })
 
   await stage('ginpay', async () => {
