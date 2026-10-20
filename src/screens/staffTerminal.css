@@ -176,7 +176,7 @@
 .st-pin-dots .is-error { background: var(--st-red); border-color: var(--st-red); }
 .st-pin-dots .is-ok { background: #246b52; border-color: #246b52; }
 .st-pin-pad { display: grid; grid-template-columns: repeat(3, 78px); gap: 16px 26px; justify-content: center; }
-.st-pin-key {
+.st-pin .st-pin-key {
   width: 78px; height: 78px; border-radius: 50%; border: 0;
   background: #fff; color: var(--st-ink); font-size: 32px; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1;
   box-shadow: 0 1px 2px rgba(20, 28, 24, 0.06), 0 6px 16px rgba(20, 28, 24, 0.06);
@@ -190,5 +190,5 @@
   .st-pin-prompt { margin: 24px 0 14px; }
   .st-pin-dots { margin-bottom: 28px; }
   .st-pin-pad { grid-template-columns: repeat(3, 70px); gap: 12px 24px; }
-  .st-pin-key, .st-pin-del { width: 70px; height: 70px; font-size: 28px; }
+  .st-pin .st-pin-key, .st-pin .st-pin-del { width: 70px; height: 70px; font-size: 28px; }
 }

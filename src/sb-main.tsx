@@ -12,7 +12,7 @@ document.body.style.background = '#fff'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <StaffPinGate>
+    <StaffPinGate app="sb">
       <SbScreen />
     </StaffPinGate>
   </StrictMode>,

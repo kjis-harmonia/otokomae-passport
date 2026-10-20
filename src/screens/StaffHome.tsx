@@ -46,6 +46,7 @@ export function StaffHome() {
       <div className="st-app">
         <div className="st-menu st-home">
           <header className="st-head">
+            <img src="/icons/staff-192.png" alt="" width={56} height={56} style={{ display: 'block', objectFit: 'contain', marginBottom: 12 }} />
             <h1><span className="st-wordmark">銀二郎</span><span className="st-mark">端末</span></h1>
             <p className="st-latin"><i aria-hidden="true" />GINJIRO</p>
           </header>

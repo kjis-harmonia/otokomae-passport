@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, ChevronLeft, Check, ZoomIn, ZoomOut, Share2, ImagePlus, Wand2 } from 'lucide-react'
 import type { ImageSegmenter } from '@mediapipe/tasks-vision'
@@ -102,6 +102,7 @@ export function TryOnScreen() {
     getStoredValue<string>(TRYON_STYLE_KEY, '') || null,
   )
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const selectedStyle = STYLES.find((s) => s.id === selectedId) ?? null
   const fileInputRef   = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
@@ -117,29 +118,11 @@ export function TryOnScreen() {
   const [hairMaskUrl,   setHairMaskUrl]   = useState<string | null>(null)
   const segmenterRef    = useRef<ImageSegmenter | null>(null)
   const analyzedKeyRef  = useRef<string | null>(null) // `${photoUrl}:${styleId}`
-
-  // Auto-run analysis when entering compose (once per photo+style combo)
-  useEffect(() => {
-    if (phase !== 'compose' || !photoUrl || !selectedId) return
-    const key = `${photoUrl}:${selectedId}`
-    if (analyzedKeyRef.current === key) return
-    void runAnalysis()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase])
-
-  // Reset overlay position when style changes in setup phase
-  useEffect(() => {
-    if (phase === 'setup') {
-      setOverlayPos({ x: 0, y: 0 })
-      setOverlayScale(1.0)
-      setHairMaskUrl(null)
-      analyzedKeyRef.current = null
-    }
-  }, [selectedId, phase])
+  const analysisRun = useRef(0)
 
   // ── Segmenter ────────────────────────────────────────────────────────────────
 
-  async function getSegmenter(): Promise<ImageSegmenter> {
+  const getSegmenter = useCallback(async (): Promise<ImageSegmenter> => {
     if (segmenterRef.current) return segmenterRef.current
     const { ImageSegmenter, FilesetResolver } = await import('@mediapipe/tasks-vision')
     const vision = await FilesetResolver.forVisionTasks(VISION_WASM_URL)
@@ -149,11 +132,11 @@ export function TryOnScreen() {
       runningMode: 'IMAGE',
     })
     return segmenterRef.current
-  }
+  }, [])
 
-  async function runAnalysis() {
+  const runAnalysis = useCallback(async () => {
     if (!photoUrl || !selectedStyle?.imageSrc) return
-    setIsAnalyzing(true)
+    const request = ++analysisRun.current
 
     try {
       const W = compositeRef.current?.clientWidth  ?? 390
@@ -208,6 +191,7 @@ export function TryOnScreen() {
         mc.putImageData(mi, 0, 0)
         styleMaskCache.set(selectedStyle.id, styleMaskCanvas)
       }
+      if (request !== analysisRun.current) return
       setHairMaskUrl(styleMaskCanvas.toDataURL())
 
       // ── 3. Auto-position overlay ───────────────────────────────────────────
@@ -234,8 +218,31 @@ export function TryOnScreen() {
       console.error('[HairSeg]', err)
       // Analysis failed — keep default centered position
     } finally {
-      setIsAnalyzing(false)
+      if (request === analysisRun.current) setIsAnalyzing(false)
     }
+  }, [photoUrl, selectedId, selectedStyle, getSegmenter])
+
+  // DOMの組み立て後に解析する。開始表示とリセットは操作した時点で行う。
+  useEffect(() => {
+    if (phase !== 'compose' || !photoUrl || !selectedId) return
+    if (analyzedKeyRef.current === `${photoUrl}:${selectedId}`) return
+    void runAnalysis()
+  }, [phase, photoUrl, selectedId, runAnalysis])
+
+  useEffect(() => () => { analysisRun.current++ }, [])
+
+  function resetComposition() {
+    analysisRun.current++
+    setOverlayPos({ x: 0, y: 0 })
+    setOverlayScale(1.0)
+    setHairMaskUrl(null)
+    setIsAnalyzing(false)
+    analyzedKeyRef.current = null
+  }
+
+  function showSetup() {
+    resetComposition()
+    setPhase('setup')
   }
 
   // ── Event handlers ────────────────────────────────────────────────────────────
@@ -246,13 +253,14 @@ export function TryOnScreen() {
     const reader = new FileReader()
     reader.onload = (ev) => {
       const r = ev.target?.result
-      if (typeof r === 'string') setPhotoUrl(r)
+      if (typeof r === 'string') { resetComposition(); setPhotoUrl(r) }
     }
     reader.readAsDataURL(file)
     e.target.value = ''
   }
 
   function handleSelectStyle(id: string) {
+    resetComposition()
     setSelectedId(id)
     setStoredValue(TRYON_STYLE_KEY, id)
   }
@@ -344,7 +352,6 @@ export function TryOnScreen() {
     }, 'image/png')
   }
 
-  const selectedStyle = STYLES.find((s) => s.id === selectedId) ?? null
   const canStart = !!photoUrl && !!selectedId
 
   /* ══════════════════════════════════════════════════════════════════════════
@@ -365,7 +372,7 @@ export function TryOnScreen() {
         >
           <button
             type="button"
-            onClick={() => setPhase('setup')}
+            onClick={showSetup}
             className="flex items-center gap-1 active:opacity-60"
             style={{ color: 'rgba(201,162,74,0.68)' }}
           >
@@ -378,7 +385,7 @@ export function TryOnScreen() {
           {/* Re-analyze button */}
           <button
             type="button"
-            onClick={() => { analyzedKeyRef.current = null; void runAnalysis() }}
+            onClick={() => { analyzedKeyRef.current = null; setIsAnalyzing(true); void runAnalysis() }}
             disabled={isAnalyzing}
             className="flex items-center gap-1 px-2 py-1 rounded-lg active:opacity-60 disabled:opacity-30"
             style={{ background: 'rgba(201,162,74,0.08)', border: '1px solid rgba(201,162,74,0.22)', color: 'rgba(201,162,74,0.72)' }}
@@ -540,7 +547,7 @@ export function TryOnScreen() {
           </div>
           <button
             type="button"
-            onClick={() => setPhase('setup')}
+            onClick={showSetup}
             className="w-full text-center text-[11px] tracking-[0.14em] py-1 active:opacity-60"
             style={{ color: 'rgba(201,162,74,0.34)' }}
           >
@@ -683,7 +690,7 @@ export function TryOnScreen() {
       <div className="px-5">
         <motion.button
           type="button"
-          onClick={() => { if (canStart) setPhase('compose') }}
+          onClick={() => { if (canStart) { setIsAnalyzing(true); setPhase('compose') } }}
           disabled={!canStart}
           whileTap={canStart ? { scale: 0.98 } : {}}
           transition={{ duration: 0.15 }}

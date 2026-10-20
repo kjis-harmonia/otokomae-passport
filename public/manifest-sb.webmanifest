@@ -10,10 +10,22 @@
   "lang": "ja",
   "icons": [
     {
-      "src": "/assets/app-icon.png",
-      "sizes": "any",
+      "src": "/icons/sb-192.png",
+      "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/sb-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/sb-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
