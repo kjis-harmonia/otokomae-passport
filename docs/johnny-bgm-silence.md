@@ -24,3 +24,7 @@ scripts/bgm-suspension.test.mjsは実際の音声管理モジュールとuseBgm�
 本番main・DB・関数・フラグ・cronは変更しない。公開用PR #11にも同じ修正を含め、最終レビュー対象とする。
 
 今回の結果：回帰68件PASS、型チェック・Vite build成功、変更した製品4ファイルのLint成功、diff --check成功。全体LintはGit対象外.qaの走査に時間を要したためこの実行のプロセスだけ中止し、対象を変更ファイルへ絞った。iPhone実機と本番での停止は未確認。
+
+ユーザーから、停止しなかったのは本番の銀二郎appと回答あり。初回登録BGM等のどの再生経路だったかは未確定。本番の修正反映はPR #11の最終レビュー・公開手順の後に行う。
+
+公開用ブランチで本番フラグONの型チェック・ビルドも成功。全体Lintはエラー0・既存SB警告1、静的preflightは44本の順序と秘密検査PASS（DB・baseline・DB機能検査は未実行）。Stagingの正規URLは修正コミットa0fcffeでREADYとCLI読み取り確認済み。iPhone実機確認は未実施。

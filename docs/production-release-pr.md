@@ -59,3 +59,11 @@ preflightは--database-urlを上記の専用DBに明示し--skip-buildで実行�
 ⑥では「停止中cronの準備 → 新画面公開・実機確認 → 閉鎖B → 古いアプリの見え方と引継ぎ確認 → 毎分cronの明示開始 → 営業再開」を独立した段にする。
 
 参照：[Viteの環境変数の優先順位](https://vite.dev/guide/env-and-mode)、[Supabase Edgeの環境変数](https://supabase.com/docs/guides/functions/secrets)。
+
+## 追加修正：Johnny予約中のBGM（2026-10-20）
+
+[停止漏れの再現と修正](johnny-bgm-silence.md)を追加。旧Stagingで、通常BGMを所有しないHookでは初回登録BGMが停止しないことを再現した。全BGMをJohnny表示前から一時停止し、遅い再生・前面復帰・曲変更による再開も抑止する。既存ON/OFF設定は保持。PR #12でStagingへ取り込み済み（a0fcffe）、同じ修正をreleaseへ反映した。本番main・DB・関数・設定は未変更。
+
+回帰テスト68件（追加11件）PASS、型チェック・ビルド成功、変更製品ファイルLint成功。全体LintはStagingのGit外.qaを走査したためその実行だけ中止し、対象を絞って確認。公開用ブランチでもフラグONのビルドを別途確認する。実iPhoneのBGM停止・再開は未確認のため、②と⑦の確認に含める。最終レビュー対象が増えたのでPR #11の承認は引き続き必要。
+
+公開用ブランチで本番フラグONの型チェック・ビルドも成功。全体Lintはエラー0・既存SB警告1、静的preflightは44本の順序と秘密検査PASS（DB・baseline・DB機能検査は未実行）。Stagingの正規URLは修正コミットa0fcffeでREADYとCLI読み取り確認済み。iPhone実機確認は未実施。
