@@ -137,7 +137,7 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
     }
     const buf = new Float32Array(1024)
     const started = Date.now()
-    let floor = 0, floorN = 0, voiced = false, lastVoice = 0, cancelled = false
+    let floor = 1, floorN = 0, voiced = false, lastVoice = 0, cancelled = false
     const finish = (cancel: boolean) => {
       if (recStopRef.current !== finish) return
       recStopRef.current = null
@@ -163,11 +163,13 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
         let sum = 0
         for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
         const rms = Math.sqrt(sum / buf.length)
-        if (now - started < 300) { floor += rms; floorN++; return }
-        const base = floorN ? floor / floorN : 0
-        if (rms > Math.max(0.02, base * 2.5)) { voiced = true; lastVoice = now; setInterim('聞いています…') }
-        // 話し終わり：話したあと 0.9 秒静か
-        if (voiced && now - lastVoice > 900) { finish(false); return }
+        if (now - started < 300) { floor = floorN ? Math.min(floor, rms) : rms; floorN++; return }
+        // まわりの音：すぐ話し始めた人の声を「まわりの音」と取り違えないよう、最初 0.3 秒の一番静かな所を使い上限も付ける
+        const base = Math.min(floor, 0.02)
+        // 話し始めは大きめの音、話している途中は語尾など小さい音も「まだ話している」とみなす
+        if (rms > (voiced ? Math.max(0.01, base * 1.6) : Math.max(0.018, base * 2.5))) { voiced = true; lastVoice = now; setInterim('聞いています…') }
+        // 話し終わり：「えーと」「明日の…3時」の間で切らないよう 1.3 秒静か（話し始めて 2 秒までは 1.6 秒待つ）
+        if (voiced && now - lastVoice > (lastVoice - started < 2000 ? 1600 : 1300)) { finish(false); return }
         // 何も話さないまま 8 秒
         if (!voiced && now - started > 8000) { finish(false); return }
       } else if (now - started > 7000) { finish(false); return } // 大きさを測れない端末は 7 秒で区切る（マイクを押せばすぐ区切れる）
