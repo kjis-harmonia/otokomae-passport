@@ -29,7 +29,7 @@ async function transcribe(b64: string, mime: string, menus: MenuInfo[], staff: S
   form.append('file', new Blob([bytes], { type: mime || 'audio/webm' }), `voice.${ext}`)
   form.append('model', STT_MODEL)
   form.append('language', 'ja')
-  form.append('prompt', `理容室の予約の会話。メニュー：${menus.map(m => m.name).join('、').slice(0, 600)}。スタッフ：${staff.map(x => x.name).join('、')}。`)
+  form.append('prompt', `福岡の理容室「銀二郎」の予約の会話。博多弁のことがある（〜けん、〜と？、よか）。よく出る言葉：今日、明日、あさって、今週、来週、土曜、日曜、午前、午後、何時、何時ごろ、空いとる？、予約、指名、変更、キャンセル、いつもの、カット、パーマ、カラー、顔そり。メニュー：${menus.map(m => m.name).join('、').slice(0, 600)}。スタッフ：${staff.map(x => x.name).join('、')}。`)
   const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_KEY}` }, body: form })
   if (!r.ok) throw new Error(`stt_unavailable ${r.status} ${(await r.text()).slice(0, 200)}`)
   const data = await r.json()

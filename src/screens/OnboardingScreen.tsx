@@ -36,7 +36,7 @@ function playIntroBgm() {
     const audio = registerBgmAudio(new Audio(DEFAULT_BGM_TRACK_SRC))
     audio.volume = 0.28
     audio.loop = false
-    void audio.play()
+    void audio.play().catch(() => { /* Interrupted playback is optional. */ })
   } catch {
     // Audio is optional and must not block onboarding.
   }

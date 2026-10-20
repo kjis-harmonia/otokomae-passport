@@ -378,16 +378,16 @@ function MaintenanceScheduleSection() {
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(getNotificationPermission)
 
   // 最終来店日をサーバー（get_my_last_visit RPC）から取得。通信できない場合のみ端末内の旧データで表示
-  async function fetchVisit() {
-    try {
-      setLastVisitDate(await fetchLastVisitDateStrict(userId))
-      return
-    } catch { /* 通信失敗 → 端末内の旧データ */ }
-    const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
-    setLastVisitDate(local[userId] ?? null)
-  }
-
-  useEffect(() => { void fetchVisit() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let alive = true
+    void fetchLastVisitDateStrict(userId).then(date => {
+      if (alive) setLastVisitDate(date)
+    }).catch(() => {
+      const local = getStoredValue<Record<string, string>>(MAINTENANCE_LOCAL_KEY, {})
+      if (alive) setLastVisitDate(local[userId] ?? null)
+    })
+    return () => { alive = false }
+  }, [userId])
 
   useEffect(() => {
     if (lastVisitDate) triggerMaintenanceNotification(lastVisitDate)

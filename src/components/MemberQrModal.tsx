@@ -13,7 +13,7 @@ export function MemberQrModal({ onClose }: Props) {
   return (
     <motion.div
       className="fixed inset-0"
-      style={{ zIndex: 10020, background: 'rgba(4,2,1,0.97)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
+      style={{ zIndex: 10020, overflowY: 'auto', overscrollBehavior: 'contain', background: 'rgba(4,2,1,0.97)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
