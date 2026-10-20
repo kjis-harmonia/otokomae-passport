@@ -3,7 +3,7 @@
 // お客様の言葉は、まず予約の AI（Edge Function johnny-agent）が読む。AI は DB で確かめた空き・予約だけを提案し、
 // 予約・キャンセル・変更は確認画面の「はい」でアプリが RPC で行う。AI が使えないときは、決まった規則（visitParser）の
 // 案内に切り替える。空き枠・仮押さえ・確定はどちらも DB の予約エンジン（customer_* RPC）が決める。
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUp, Keyboard, Mic, Volume2, VolumeX, X } from 'lucide-react'
@@ -29,7 +29,7 @@ import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
 import { TICKET_TYPE_LABELS } from '../../data/ticket'
 import { clearCouponPlan, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
-import { BGM_PAUSE_EVENT, BGM_RESUME_EVENT } from '../../hooks/useBgm'
+import { suspendBgm } from '../../audio/bgm'
 
 // ── 見た目（黒・白・グレーだけ） ─────────────────────────────────
 
@@ -195,11 +195,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     speak(text, () => { if (listenAfter && voice.listen !== 'unsupported' && voice.listen !== 'denied') startListening() })
   }, [speak, startListening, voice.listen])
 
-  // 話しているあいだは銀二郎の BGM を止める（閉じたら元に戻す）
-  useEffect(() => {
-    window.dispatchEvent(new Event(BGM_PAUSE_EVENT))
-    return () => { window.dispatchEvent(new Event(BGM_RESUME_EVENT)) }
-  }, [])
+  // Stop every BGM before the assistant is painted; keep it stopped until unmount.
+  useLayoutEffect(() => suspendBgm(), [])
 
   // ── 読み込み（引き継ぎのあと・再試行で読み直す） ──
   const [loadKey, setLoadKey] = useState(0)
