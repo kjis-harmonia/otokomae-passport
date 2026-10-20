@@ -13,6 +13,7 @@ import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { normalizePhone } from '../../utils/customerContact'
 import { bookingAssistantApi, type AssistantOptions, type CustomerReservation } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
+import { orderMenuSuggestions, presentMenuChoices } from './menuPresentation'
 import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
 import { isEmptyRequest, parseVisitRequest, parseYesNo, type VisitRequest } from './visitParser'
@@ -241,7 +242,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
 
   const menus = useMemo(() => {
     const list = options?.menus ?? []
-    return lastMenuCode ? [...list].sort((a, b) => (a.code === lastMenuCode ? -1 : b.code === lastMenuCode ? 1 : 0)) : list
+    return orderMenuSuggestions(list, lastMenuCode)
   }, [options, lastMenuCode])
 
   // ── メニューが決まっていて、日が決まっていない／希望の日が埋まっている：近い日から探して、間をあけて3件 ──
@@ -464,7 +465,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       case 'none': case 'handoff': return { k: 'ai', say: a.say, view: { kind: 'talk', handoff: ui.type === 'handoff' } }
       case 'menus': {
         const items = ui.items.flatMap(i => { const menu = menuOf(i.menu_code); return menu ? [{ menu, first: i.first_time }] : [] })
-        return { k: 'ai', say: a.say, view: items.length ? { kind: 'menus', date: ui.date, items } : { kind: 'talk', handoff: false } }
+        if (!items.length) return null
+        const shown = presentMenuChoices(items, lastMenuCode, iso => `${dayWord(slotDate(iso))}${spokenTime(iso)}`)
+        return { k: 'ai', say: shown.say, view: { kind: 'menus', date: ui.date, items: shown.items } }
       }
       case 'slots': {
         const menu = menuOf(ui.menu_code)
@@ -489,7 +492,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
         return list.length ? { k: 'ai', say: a.say, view: { kind: 'reservations', list } } : null
       }
     }
-  }, [api, myReservations, options])
+  }, [api, lastMenuCode, myReservations, options])
 
   const legacyRef = useRef<(text: string, s: Step) => void>(() => {})
   /** AI に聞く。使えなければ、この画面のあいだは決まった規則の JOHNNY に切り替えて、同じ言葉を読み直す */
@@ -507,7 +510,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       legacyRef.current(text, back)
       return
     }
-    turnsRef.current = [...history, { role: 'user' as const, text }, { role: 'assistant' as const, text: a.say }].slice(-20)
+    turnsRef.current = [...history, { role: 'user' as const, text }, { role: 'assistant' as const, text: next.k === 'ai' ? next.say : a.say }].slice(-20)
     setStep(next)
   }, [api, stepFromAgent, stopListening])
 
@@ -662,7 +665,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       return
     }
     setHeard(r.heard)
-    if (transcribeOnly) { stepRef.current = s; setStep(s); handleText(r.heard); return }
+    // 専用クーポンの案内は、音声でも文字入力と同じ経路で AI の返答より優先する。
+    if (transcribeOnly || /メンテ|めんて/.test(r.heard)) { stepRef.current = s; setStep(s); handleText(r.heard); return }
     const next = r.answer ? await stepFromAgent(r.answer) : null
     if (!r.answer || !next) {
       // 聞き取れたが AI が答えられなかった：決まった規則の JOHNNY で続ける
@@ -672,7 +676,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       legacyRef.current(r.heard, back)
       return
     }
-    turnsRef.current = [...history, { role: 'user' as const, text: r.heard }, { role: 'assistant' as const, text: r.answer.say }].slice(-20)
+    turnsRef.current = [...history, { role: 'user' as const, text: r.heard }, { role: 'assistant' as const, text: next.k === 'ai' ? next.say : r.answer.say }].slice(-20)
     setStep(next)
   }, [api, handleText, stepFromAgent])
   useEffect(() => { handleAudioRef.current = audio => { void handleAudio(audio) } }, [handleAudio])

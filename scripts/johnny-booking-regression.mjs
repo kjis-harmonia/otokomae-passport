@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { parseVisitRequest, parseYesNo, isEmptyRequest } from '../src/features/johnny/visitParser.ts'
 import { matchMenu } from '../src/features/johnny/menuMatcher.ts'
 import { planOffer } from '../src/features/johnny/slotPlanner.ts'
+import { orderMenuSuggestions, presentMenuChoices } from '../src/features/johnny/menuPresentation.ts'
 
 // 2026-10-15（木）10:00 日本時間
 const NOW = new Date('2026-10-15T01:00:00Z')
@@ -142,3 +143,131 @@ check('メニュー不明の時間質問は相談', () => assert.equal(detectAsk
 check('普通の予約は質問ではない', () => assert.equal(detectAsk('明日の15時でパンチ', M2), null))
 check('「はい」は質問ではない', () => assert.equal(detectAsk('はい、お願いします', M2), null))
 console.log(`ask intent: ok (total ${passed})`)
+
+// Exercise the actual input callbacks without a browser, DB, or AI request.
+const { readFileSync } = await import('node:fs')
+const vm = await import('node:vm')
+const ts = await import('typescript')
+const componentSource = readFileSync(new URL('../src/features/johnny/JohnnyBookingAssistant.tsx', import.meta.url), 'utf8')
+const componentAst = ts.createSourceFile('JohnnyBookingAssistant.tsx', componentSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+function initializer(name) {
+  let found
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) found = node.initializer
+    ts.forEachChild(node, visit)
+  }
+  visit(componentAst)
+  assert.ok(found, `missing production declaration: ${name}`)
+  return found
+}
+function voiceHarness(heard, initial = { k: 'askWhen' }, hasAnswer = true) {
+  const state = { step: initial, converted: 0, legacy: 0, bookings: 0 }
+  const skinStep = { k: 'ai', say: 'スキンフェードの空き', view: { kind: 'slots', menu: { code: 'skin' }, slots: [] } }
+  const context = vm.createContext({
+    stepRef: { current: initial }, aiOnRef: { current: true }, turnsRef: { current: [] },
+    setStep: step => { state.step = step }, setHeard: () => {}, setVoiceNote: () => {},
+    takeAiTurn: () => true, shownFor: () => undefined,
+    api: { agentVoice: async () => ({ heard, answer: hasAnswer ? { say: '元のAIの案内' } : null }) },
+    stepFromAgent: async () => { state.converted++; return skinStep },
+    legacyRef: { current: () => { state.legacy++ } },
+    parseYesNo, COMPANION_WORDS: /お連れ|息子/,
+    book: () => { state.bookings++ }, cancelReservation: () => { throw new Error('unexpected cancellation') },
+  })
+  const declarations = ['AI_STEPS', 'handleText', 'handleAudio'].map(name => {
+    const node = initializer(name)
+    const expression = name === 'AI_STEPS' ? node : node.arguments[0]
+    return `globalThis.${name} = ${expression.getText(componentAst)};`
+  }).join('\n')
+  const compiled = ts.transpileModule(declarations, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  vm.runInContext(compiled, context)
+  return { state, context, run: () => context.handleAudio({}) }
+}
+for (const heard of ['メンテナンス。', 'メンテナンスカットで', 'めんてで']) {
+  const h = voiceHarness(heard)
+  await h.run()
+  check(`voice maintenance route: ${heard}`, () => {
+    assert.equal(h.state.step.view.kind, 'maintenance')
+    assert.match(h.state.step.say, /メンテナンスカット/)
+    assert.equal(h.state.converted, 0)
+    assert.equal(h.state.legacy, 0)
+    assert.equal(h.state.bookings, 0)
+    assert.equal(h.context.turnsRef.current.length, 0)
+    const text = voiceHarness(heard)
+    text.context.handleText(heard)
+    assert.equal(JSON.stringify(h.state.step), JSON.stringify(text.state.step))
+  })
+}
+const maintenanceWithoutAi = voiceHarness('メンテナンスカット', { k: 'askWhen' }, false)
+await maintenanceWithoutAi.run()
+check('voice maintenance still routes when AI answer is absent', () => {
+  assert.equal(maintenanceWithoutAi.state.step.view.kind, 'maintenance')
+  assert.equal(maintenanceWithoutAi.state.legacy, 0)
+})
+const ordinaryVoice = voiceHarness('スキンフェードで')
+await ordinaryVoice.run()
+check('ordinary voice keeps the AI response path and the displayed conversation', () => {
+  assert.equal(ordinaryVoice.state.converted, 1)
+  assert.equal(ordinaryVoice.context.turnsRef.current.at(-1).text, ordinaryVoice.state.step.say)
+})
+const confirmationVoice = voiceHarness('はい', { k: 'confirm', menu: { code: 'skin' }, slot: {}, req: {} })
+await confirmationVoice.run()
+check('voice confirmation still uses the explicit confirmation handler', () => {
+  assert.equal(confirmationVoice.state.bookings, 1)
+  assert.equal(confirmationVoice.state.converted, 0)
+})
+console.log(`voice routing: ok (total ${passed})`)
+
+const suggestedMenus = [
+  { code: 'shave', name: '顔そり男性', duration_min: 30, price: 2000 },
+  { code: 'nurepan', name: '濡れパン', duration_min: 120, price: 8000 },
+  { code: 'cut-regular', name: '通常カット', duration_min: 45, price: 4000 },
+  { code: 'fade', name: 'スキンフェードカット', duration_min: 60, price: 5000 },
+  { code: 'cut-shave', name: 'カット＋顔そり', duration_min: 60, price: 5000 },
+]
+const codes = menus => menus.map(m => m.code)
+const originalMenus = JSON.stringify(suggestedMenus)
+check('no history: haircut leads, standalone shaving is not promoted', () => {
+  assert.deepEqual(codes(orderMenuSuggestions(suggestedMenus, null)), ['cut-regular', 'fade', 'nurepan', 'cut-shave', 'shave'])
+  assert.equal(JSON.stringify(suggestedMenus), originalMenus)
+})
+check('previous hair menu leads without selecting it automatically', () => {
+  assert.equal(orderMenuSuggestions(suggestedMenus, 'nurepan')[0].code, 'nurepan')
+})
+check('previous standalone shave does not displace hair menus', () => {
+  assert.equal(orderMenuSuggestions(suggestedMenus, 'shave')[0].code, 'cut-regular')
+})
+const choices = suggestedMenus.map(menu => ({ menu, first: menu.code === 'nurepan' ? '2026-10-21T11:30:00+09:00' : '2026-10-21T08:00:00+09:00' }))
+const label = iso => `明日${iso.slice(11, 16)}`
+check('narration and visible choices use the same ranking and returned times', () => {
+  const reply = presentMenuChoices(choices, 'fade', label)
+  assert.equal(reply.items[0].menu.code, 'fade')
+  assert.ok(reply.say.startsWith('スキンフェードカットなら明日08:00から'))
+  assert.match(reply.say, /濡れパンなら明日11:30から/)
+  assert.doesNotMatch(reply.say, /顔そり/)
+  assert.equal(reply.items.at(-1).menu.code, 'shave')
+  assert.equal(reply.items.find(item => item.menu.code === 'nurepan').first, choices[1].first)
+})
+check('absent or invalid slot evidence is not narrated as available', () => {
+  const reply = presentMenuChoices([{ menu: suggestedMenus[2], first: null }, { menu: suggestedMenus[3], first: 'invalid' }], null, () => { throw new Error('invalid slot narrated') })
+  assert.doesNotMatch(reply.say, /空き|から|ご案内できます/)
+})
+const menuContext = vm.createContext({
+  options: { menus: suggestedMenus }, lastMenuCode: 'fade', myReservations: [],
+  presentMenuChoices, dayWord: () => '明日', slotDate: iso => iso.slice(0, 10), spokenTime: iso => iso.slice(11, 16),
+})
+const converter = ts.transpileModule(`globalThis.convert = ${initializer('stepFromAgent').arguments[0].getText(componentAst)}`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+vm.runInContext(converter, menuContext)
+const overviewStep = await menuContext.convert({ say: '顔そり男性がおすすめです', ui: { type: 'menus', date: '2026-10-21', items: choices.map(item => ({ menu_code: item.menu.code, first_time: item.first })) } })
+check('actual menu-response handler replaces the unsolicited shaving recommendation', () => {
+  assert.equal(overviewStep.view.items[0].menu.code, 'fade')
+  assert.doesNotMatch(overviewStep.say, /顔そり/)
+  assert.ok(overviewStep.say.startsWith('スキンフェードカット'))
+})
+const shavingStep = await menuContext.convert({ say: '顔そりの空きです', ui: { type: 'slots', menu_code: 'shave', staff_id: null, times: [choices[0].first] } })
+check('explicit shaving requests keep their own slot and confirmation flow', () => {
+  assert.equal(shavingStep.view.menu.code, 'shave')
+  assert.equal(shavingStep.say, '顔そりの空きです')
+})
+const emptyStep = await menuContext.convert({ say: '空いています', ui: { type: 'menus', date: '2026-10-21', items: [] } })
+check('empty AI choices are rejected instead of claiming availability', () => assert.equal(emptyStep, null))
+console.log(`menu presentation: ok (total ${passed})`)
