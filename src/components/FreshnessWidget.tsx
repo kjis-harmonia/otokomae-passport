@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { motion } from 'framer-motion'
 import { MAINTENANCE_CUT_URL } from '../data/reserveLinks'
 import { fmtDate } from '../utils/maintenanceSchedule'
@@ -8,6 +8,14 @@ const MONO = 'ui-monospace, "SF Mono", "Fira Code", monospace'
 
 const CX = 110, CY = 110, RING_R = 84
 const CIRC = 2 * Math.PI * RING_R  // ≈ 527.79
+
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
+function subscribeReducedMotion(changed: () => void) {
+  const query = window.matchMedia(REDUCED_MOTION_QUERY)
+  query.addEventListener('change', changed)
+  return () => query.removeEventListener('change', changed)
+}
+function reducedMotionSnapshot() { return window.matchMedia(REDUCED_MOTION_QUERY).matches }
 
 // 14 tick marks: one per day interval, day-0 at top (clockwise)
 const TICKS = Array.from({ length: 14 }, (_, i) => {
@@ -117,15 +125,7 @@ export function FreshnessWidget({
   notifPermission,
   onRequestNotif,
 }: FreshnessWidgetProps) {
-  const [reducedMotion, setReducedMotion] = useState(false)
-
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setReducedMotion(mq.matches)
-    const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
+  const reducedMotion = useSyncExternalStore(subscribeReducedMotion, reducedMotionSnapshot, () => false)
 
   // ── Empty state (no visit record) ─────────────────────────────────────────
   if (!lastVisitDate) {
