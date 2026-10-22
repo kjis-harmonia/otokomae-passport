@@ -6,7 +6,7 @@ import { Html5Qrcode } from 'html5-qrcode'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
-import { getTicketsForStaff, redeemTickets } from '../utils/ticketStore'
+import { getTicketsForStaff } from '../utils/ticketStore'
 import {
   registerCustomerWithContext, searchCustomersByName, recoverMember,
   getCustomerContextForStaff, issueBindCode,
@@ -243,16 +243,11 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [userTickets, setUserTickets]       = useState<TicketRow[]>([])
   const [ticketsLoading, setTicketsLoading] = useState(false)
 
-  // Manual use confirm (staff-side)
-  const [showUseConfirm, setShowUseConfirm]       = useState(false)
-  // 使用する割引券（複数選択。同じ種別のみ・使用確定はまとめて1回）
+  // 割引券は会計へ渡し、会計確定と同じ処理で消費する。
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([])
   const [selectNotice, setSelectNotice]           = useState<string | null>(null)
-  const [useConfirmLoading, setUseConfirmLoading] = useState(false)
   const [useError, setUseError]                   = useState<string | null>(null)
   const [todayUsedType, setTodayUsedType]         = useState<string | null>(null)
-  const [showUseComplete, setShowUseComplete]     = useState(false)
-  const [useCompleteInfo, setUseCompleteInfo]     = useState<{ name: string; label: string; amount: number; count: number; remaining: number; checkedIn: boolean } | null>(null)
 
   // Ticket-use QR flow
   const [ticketUseData, setTicketUseData]         = useState<TicketUseQRData | null>(null)
@@ -312,7 +307,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     !t.used && !t.pending_transfer && (!t.expires_at || new Date(t.expires_at) > new Date()),
   )
   const selectedTickets = activeTickets.filter(t => selectedTicketIds.includes(t.id))
-  const selectedTotal   = selectedTickets.reduce((sum, t) => sum + t.amount, 0)
   const selectedType    = selectedTickets[0]?.type ?? null
   const currentTab    = TICKET_TABS.find(t => t.type === ticketTab) ?? TICKET_TABS[0]
   const tc            = STAFF_TICKET_COLORS[ticketTab]
@@ -346,14 +340,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     setCheckInDate(null)
     setBindCode(null)
     setBindCodeError(null)
-    setShowUseConfirm(false)
     setSelectedTicketIds([])
     setSelectNotice(null)
-    setUseConfirmLoading(false)
     setUseError(null)
     setTodayUsedType(null)
-    setShowUseComplete(false)
-    setUseCompleteInfo(null)
     setMaintCouponData(null)
     setMaintCouponTodayUsed(false)
     setMaintCouponConfirming(false)
@@ -539,7 +529,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   /** 割引券の選択／解除。使えない券は選べない。種別の違う券は混ぜずに選び直す */
   function toggleTicketSelection(ticket: TicketRow) {
-    if (useConfirmLoading || !activeTickets.some(t => t.id === ticket.id)) return
+    if (!activeTickets.some(t => t.id === ticket.id)) return
     if (!canUseDiscountType(todayUsedType, ticket.type) || !staffId.trim()) return
     if (isWelcomeCouponBlockedToday(ticket)) return
     setUseError(null)
@@ -555,77 +545,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     }
     setSelectedTicketIds(prev => [...prev, ticket.id])
     setSelectNotice(null)
-  }
-
-  function openUseConfirm() {
-    if (isStaging() || selectedTickets.length === 0 || !staffId.trim()) return
-    setUseError(null)
-    setShowUseConfirm(true)
-  }
-
-  function closeUseConfirm() {
-    setShowUseConfirm(false)
-    setUseError(null)
-  }
-
-  const handleConfirmUse = async () => {
-    if (isStaging() || useConfirmLoading || selectedTickets.length === 0 || !scannedData || !staffId.trim()) return
-    setUseConfirmLoading(true)
-    setUseError(null)
-    const ticketIds  = selectedTickets.map(t => t.id)
-    const ticketType = selectedTickets[0].type
-    const total      = selectedTotal
-    const count      = selectedTickets.length
-    try {
-      if (ticketUseData && (!ticketUseData.expiresAt || isQrPayloadExpired(ticketUseData.expiresAt))) {
-        setUseError('QRコードの有効期限が切れました。お客様のQRを読み取り直してください。')
-        return
-      }
-      if (selectedTickets.some(t => isWelcomeCouponBlockedToday(t))) {
-        setUseError(WELCOME_COUPON_WEEKEND_MESSAGE)
-        setUseConfirmLoading(false)
-        return
-      }
-      if (selectedTickets.some(t => !canUseDiscountType(todayUsedType, t.type))) {
-        setUseError('本日はメンテナンスクーポンとほかの券を一緒に使えません。')
-        setUseConfirmLoading(false)
-        return
-      }
-      if (selectedTickets.some(t => t.type === 'coupon') && selectedTickets.some(t => t.type !== 'coupon')) {
-        setUseError('メンテナンスクーポンは、ほかの券と一緒に使えません。')
-        setUseConfirmLoading(false)
-        return
-      }
-      // 選択した券の used化・使用ログ・来店日更新をサーバー側で1トランザクション（全部成功か全部失敗）
-      const { visitDate: today } = await redeemTickets({
-        userId: scannedData.userId, ticketIds, staffName: staffId, customerName: scannedData.name,
-      })
-      const usedSet   = new Set(ticketIds)
-      const remaining = userTickets.filter(t => !t.used && !usedSet.has(t.id) && t.type === ticketType).length
-      const usedAt    = new Date().toISOString()
-      setUserTickets(prev => prev.map(t => (usedSet.has(t.id) ? { ...t, used: true, used_at: usedAt } : t)))
-      setTodayUsedType(ticketType)
-      setCheckInStatus('done')
-      setCheckInDate(today)
-      setUseCompleteInfo({
-        name:      scannedData.name,
-        label:     TICKET_TYPE_LABELS[ticketType] ?? selectedTickets[0].title,
-        amount:    total,
-        count,
-        remaining,
-        checkedIn: true,
-      })
-      setShowUseConfirm(false)
-      setSelectedTicketIds([])
-      setSelectNotice(null)
-      setShowUseComplete(true)
-      setTimeout(() => setShowUseComplete(false), 3500)
-      playSuccessSound()
-    } catch (err) {
-      setUseError(`使用確定に失敗しました。${rpcErrorMessage(err, 'ネットワークを確認してください。')}`)
-    } finally {
-      setUseConfirmLoading(false)
-    }
   }
 
   /** 本人確認のうえ、お客様の端末をアプリに紐付けるコードを発行（お客様がアプリで入力） */
@@ -1100,6 +1019,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             </div>
 
             {scannedData.storeRequestId&&<StaffStoreApproval key={scannedData.storeRequestId} requestId={scannedData.storeRequestId} userId={scannedData.userId} memberName={scannedData.name} staffName={staffId}/>}
+            {useError && <p role="alert" style={{ color: '#b23a3a', marginBottom: 14 }}>{useError}</p>}
             {/* ── 来店チェックイン ── */}
             <div style={{ marginBottom: 14 }}>
               {checkInStatus === 'done' && checkInDate ? (
@@ -1128,26 +1048,24 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   </p>
                   {visitInfo && <VisitMenuPicker key={scannedData.userId} userId={scannedData.userId} info={visitInfo} staffName={staffId} />}
                   {visitInfo && <CheckoutSummary info={visitInfo} selected={selectedTickets} />}
-                  {/* お会計（銀Pay・現金ほか）は会計の仕組みがある Staging だけ。券は会計の中で使用済みになる */}
-                  {isStaging() && (
-                    <MemberCheckout
-                      key={scannedData.userId}
-                      userId={scannedData.userId}
-                      staffName={staffId}
-                      ticketIds={selectedTicketIds}
-                      onPaid={() => {
-                        setSelectedTicketIds([])
-                        playSuccessSound()
-                        getTicketsForStaff(scannedData.userId).then(setUserTickets).catch(() => {})
-                      }}
-                    />
-                  )}
+                  {/* 券は会計確定と同時に使用済みにする。 */}
+                  <MemberCheckout
+                    key={scannedData.userId}
+                    userId={scannedData.userId}
+                    staffName={staffId}
+                    ticketIds={selectedTicketIds}
+                    onPaid={() => {
+                      setSelectedTicketIds([])
+                      playSuccessSound()
+                      getTicketsForStaff(scannedData.userId).then(setUserTickets).catch(() => {})
+                    }}
+                  />
                   {/* 次にやること */}
                   <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: '#f8f7f4', border: '1px solid rgba(151,115,43,0.28)' }}>
                     <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>NEXT STEP</p>
                     {[
                       '来店チェックインは完了しています',
-                      isStaging() ? '割引券を選んで「お会計に進む」を押してください。券は会計確定時に使用されます' : '割引券の使用・発行がある場合は下で処理してください',
+                      '割引券を選んで「お会計に進む」を押してください。券は会計確定時に使用されます',
                       'すべて完了したら「来店完了」を押してください',
                     ].map((text, i) => (
                       <p key={text} style={{ display: 'flex', gap: 10, fontFamily: SERIF, fontSize: 13, color: '#1c1f1d', lineHeight: 1.6, marginTop: i === 0 ? 0 : 6 }}>
@@ -1158,13 +1076,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   </div>
                   <button
                     onClick={handleReset}
-                    disabled={useConfirmLoading || issueLoading}
+                    disabled={issueLoading}
                     style={{
                       width: '100%', marginTop: 14, padding: '15px 0', borderRadius: 14,
                       background: 'linear-gradient(160deg, #3a3e3b 0%, #1c1f1d 100%)',
                       border: '1px solid rgba(151,115,43,0.55)', boxShadow: '0 4px 24px rgba(28,31,29,0.12)',
                       color: '#ffffff', fontFamily: SERIF, fontSize: 16, fontWeight: 700, letterSpacing: '0.22em',
-                      cursor: useConfirmLoading || issueLoading ? 'default' : 'pointer', opacity: useConfirmLoading || issueLoading ? 0.6 : 1,
+                      cursor: issueLoading ? 'default' : 'pointer', opacity: issueLoading ? 0.6 : 1,
                     }}
                   >
                     来店完了
@@ -1303,23 +1221,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   {selectNotice && (
                     <p style={{ fontSize: 11, color: '#a86b00', lineHeight: 1.6 }}>{selectNotice}</p>
                   )}
-                  {!isStaging() && <button
-                    onClick={openUseConfirm}
-                    disabled={selectedTickets.length === 0 || !staffId.trim()}
-                    style={{
-                      width: '100%', padding: '15px 0', borderRadius: 14,
-                      background: selectedTickets.length === 0 || !staffId.trim() ? '#ffffff' : 'linear-gradient(160deg, #2f7d61 0%, #1f5e47 100%)',
-                      border: `1px solid ${selectedTickets.length === 0 || !staffId.trim() ? '#e6e3dd' : 'rgba(36,107,82,0.44)'}`,
-                      boxShadow: selectedTickets.length === 0 || !staffId.trim() ? 'none' : '0 4px 20px rgba(36,107,82,0.08)',
-                      color: selectedTickets.length === 0 || !staffId.trim() ? '#6b716d' : '#ffffff',
-                      fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.14em',
-                      cursor: selectedTickets.length === 0 || !staffId.trim() ? 'default' : 'pointer',
-                    }}
-                  >
-                    {selectedTickets.length === 0
-                      ? '使用する割引券を選択してください'
-                      : `選択した${selectedTickets.length}枚を使用確定${selectedTotal > 0 ? `（合計 ¥${selectedTotal.toLocaleString()}）` : ''}`}
-                  </button>}
                 </div>
               )}
             </div>
@@ -2087,119 +1988,6 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Use confirm modal ── */}
-      {showUseConfirm && selectedTickets.length > 0 && scannedData && (
-        <div
-          onClick={() => { if (!useConfirmLoading) closeUseConfirm() }}
-          style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(28,31,29,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 440, maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto', borderRadius: 24, background: 'linear-gradient(160deg, #ffffff 0%, #ffffff 100%)', border: '1px solid rgba(36,107,82,0.28)', boxShadow: '0 32px 80px rgba(28,31,29,0.42)' }}
-          >
-            <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(36,107,82,0.4) 30%, #246b52 50%, rgba(36,107,82,0.4) 70%, transparent)' }} />
-            <div style={{ padding: '28px 26px 24px' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#246b52', marginBottom: 10, textAlign: 'center' }}>CONFIRM USE</p>
-              <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#1c1f1d', textAlign: 'center', marginBottom: 22 }}>
-                チケットを{selectedTickets.length}枚使用します
-              </p>
-
-              <div style={{ borderRadius: 14, background: 'rgba(36,107,82,0.04)', border: '1px solid rgba(36,107,82,0.16)', padding: '16px 18px', marginBottom: 16 }}>
-                {([
-                  { label: 'お客様', value: `${scannedData.name} 様` },
-                  { label: '種別',   value: TICKET_TYPE_LABELS[selectedTickets[0].type] },
-                  { label: '枚数',   value: `${selectedTickets.length}枚` },
-                  ...(selectedTotal > 0 ? [{ label: '合計金額', value: `¥${selectedTotal.toLocaleString()}` }] : []),
-                  { label: '担当',   value: staffId },
-                ] as { label: string; value: string }[]).map(({ label, value }) => (
-                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid rgba(36,107,82,0.08)' }}>
-                    <span style={{ fontSize: 10, color: '#1c1f1d', letterSpacing: '0.1em' }}>{label}</span>
-                    <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#1c1f1d' }}>{value}</span>
-                  </div>
-                ))}
-                <div style={{ marginBottom: 8, maxHeight: 160, overflowY: 'auto' }}>
-                  {selectedTickets.map(t => (
-                    <p key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#1c1f1d', lineHeight: 1.7 }}>
-                      <span>{t.title}</span>
-                      <span>{t.amount > 0 ? `¥${t.amount.toLocaleString()}` : ''}</span>
-                    </p>
-                  ))}
-                </div>
-                <p style={{ fontSize: 10, color: '#1c1f1d', lineHeight: 1.7, letterSpacing: '0.04em' }}>
-                  この操作は取り消せません。
-                </p>
-              </div>
-
-              {useError && (
-                <div style={{ borderRadius: 10, background: 'rgba(28,31,29,0.12)', border: '1px solid rgba(178,58,58,0.28)', padding: '8px 12px', marginBottom: 14 }}>
-                  <p style={{ fontSize: 11, color: '#b23a3a' }}>{useError}</p>
-                </div>
-              )}
-
-              <p style={{ fontSize: 11, color: '#1c1f1d', textAlign: 'center', marginBottom: 20, letterSpacing: '0.04em' }}>
-                本当に使用しますか？
-              </p>
-
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={closeUseConfirm}
-                  disabled={useConfirmLoading}
-                  style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: '#ffffff', border: '1px solid #e6e3dd', fontSize: 13, color: '#1c1f1d', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}
-                >
-                  キャンセル
-                </button>
-                <button
-                  onClick={() => { void handleConfirmUse() }}
-                  disabled={useConfirmLoading}
-                  style={{
-                    flex: 2, padding: '14px 0', borderRadius: 14,
-                    background: useConfirmLoading ? 'rgba(36,107,82,0.08)' : 'linear-gradient(160deg, #2f7d61 0%, #1f5e47 100%)',
-                    border: `1px solid ${useConfirmLoading ? 'rgba(36,107,82,0.12)' : 'rgba(36,107,82,0.44)'}`,
-                    boxShadow: useConfirmLoading ? 'none' : '0 4px 20px rgba(36,107,82,0.08)',
-                    fontSize: 15, fontWeight: 700,
-                    color: useConfirmLoading ? '#6b716d' : '#ffffff',
-                    fontFamily: SERIF, letterSpacing: '0.18em',
-                    cursor: useConfirmLoading ? 'default' : 'pointer',
-                  }}
-                >
-                  {useConfirmLoading ? '確定中…' : `${selectedTickets.length}枚を使用確定`}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Use complete overlay ── */}
-      {showUseComplete && useCompleteInfo && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 510, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'gj-success-fade 3.5s ease-in-out both' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.97)' }} />
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', boxShadow: 'inset 0 0 120px rgba(36,107,82,0.16), inset 0 0 60px rgba(0,100,40,0.12)' }} />
-          <div style={{ position: 'relative', textAlign: 'center', padding: '32px 28px', maxWidth: 380, animation: 'gj-success-pop 0.55s cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px', background: 'radial-gradient(circle, rgba(36,107,82,0.16) 0%, rgba(36,107,82,0.1) 60%, transparent 100%)', border: '1.5px solid rgba(36,107,82,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(36,107,82,0.28), 0 0 64px rgba(36,107,82,0.12)' }}>
-              <span style={{ fontSize: 38, color: '#246b52', lineHeight: 1 }}>✓</span>
-            </div>
-            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: '#246b52', marginBottom: 14 }}>USED</p>
-            <p style={{ fontFamily: SERIF, fontSize: 34, fontWeight: 700, color: '#246b52', letterSpacing: '0.14em', marginBottom: 18, lineHeight: 1.1, textShadow: '0 0 40px rgba(36,107,82,0.4), 0 2px 6px rgba(28,31,29,0.45)' }}>
-              使用完了
-            </p>
-            <p style={{ fontFamily: SERIF, fontSize: 16, color: '#1c1f1d', lineHeight: 1.9, letterSpacing: '0.04em', textShadow: '0 1px 10px rgba(28,31,29,0.45)', marginBottom: 16 }}>
-              {useCompleteInfo.name}様の<br />
-              {useCompleteInfo.label}{useCompleteInfo.amount > 0 ? ` 合計 ¥${useCompleteInfo.amount.toLocaleString()}` : ''} を<br />
-              {useCompleteInfo.count}枚使用しました。
-            </p>
-            <p style={{ fontFamily: SERIF, fontSize: 14, color: '#1c1f1d', letterSpacing: '0.06em' }}>
-              残り：{useCompleteInfo.remaining}枚
-            </p>
-            {useCompleteInfo.checkedIn && (
-              <p style={{ fontFamily: SERIF, fontSize: 12, color: '#246b52', marginTop: 14, letterSpacing: '0.08em' }}>
-                来店チェックインも完了しました
-              </p>
-            )}
           </div>
         </div>
       )}

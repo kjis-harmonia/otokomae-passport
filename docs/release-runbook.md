@@ -3,9 +3,11 @@
 Claude は週の利用制限が近いため、ここから先は Codex が引き継ぐ。
 **正本は staging ブランチ**。main へ直接 push しない。staging → main は両者（または Codex と慶一郎さん）が「問題なし」を出してから。
 
-## 0. いまの状態（10/19 時点）
+## 0. いまの状態（10/19 時点の引き継ぎ。10/20の更新は下記）
 
-**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認の準備コードとフラグ設定、未完了の発券画面確認は [本番対応の手順](customer-access-production.md) を参照する。設定はまだ変更していない。
+**本番公開は保留**。この手順の実行前に [Codexの最終確認と残作業](release-readiness.md) を確認する。Face ID・来店確認の準備コードとフラグ設定は [本番対応の手順](customer-access-production.md) を参照する。設定はまだ変更していない。
+
+2026-10-20更新：最新バックアップのコピーで20工程＋権限閉鎖＋30人の承認が成功。追加の閉鎖Bを含めたrollback検査も成功。練習用DBは削除し、バックアップを保持。本番・Stagingへは未適用。詳細は[検証記録](production-db-rehearsal.md)。
 
 - staging ブランチ：Claude 分はすべてコミット済み（キャンセル待ち・料金の正本化・本部 JOHNNY・SB・Lint の片づけ）。
 - Staging の DB：migration 44本すべて適用済み。毎分のキャンセル待ち（cron `johnny-waitlist-minutely`）稼働中。
@@ -17,18 +19,9 @@ Claude は週の利用制限が近いため、ここから先は Codex が引き
 
 ## 1. 本番 DB に入れる（1本ずつ・結果を見てから次へ）
 
-順番は `supabase/rollout/release_prod_order.txt`。包んだ SQL を作る：
+順番は supabase/rollout/release_prod_order.txt。**人が実行するコマンドの正本は[本番DBコマンド一覧](production-db-commands.md)**。③は[最新コピーの記録](production-db-rehearsal.md)のとおり20工程と30人の一括承認まで成功。ただし閉鎖Bが公開計画から抜けていたため、本番公開は保留する。新しいWebの確認後に閉鎖Bを適用する工程もコマンド一覧へ追加した。
 
-```
-bash supabase/rollout/build_accounting_rollout.sh release_prod_order.txt out_release
-```
-
-`supabase/rollout/out_release/01_… 〜 20_…` ができる（各ファイル begin; … commit;。失敗したらその1本は何も入らない）。
-**本番への書き込みは慶一郎さんに `!` コマンドで渡す**（Codex/Claude は本番に直接書かない）：
-
-```
-! cd ~/.claude/worktrees/sb-staging && npx -y supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq -f "supabase/rollout/out_release/01_20261004000000_ginpay_ledger.sql"
-```
+最新バックアップ→履歴と既存データの読み取り→01〜14→権限閉鎖→承認対象再照合→一括承認→15〜20の順。新しい scripts/prepare-production-db-release.mjs で、前後の履歴照合付きSQLと各工程の読み取り確認を生成する。旧いbash生成器の出力で上書きしない。各工程は1トランザクション、1本でも失敗したら停止する。本番へ書き込むのは休業中に慶一郎さんが1ブロックずつ実行する ! コマンドだけ。
 
 | # | 中身 | 担当 |
 |---|---|---|
@@ -55,50 +48,36 @@ select (app_private.ginpay_reconcile_json())->>'consistent';  -- true
 select count(*) from public.customers;                        -- 当てる前と同じ
 ```
 
-## 2. 本番のキャンセル待ちの毎分ジョブ（DB のあと）
+## 2〜3. 環境変数・関数・cron（⑤が正本）
 
-秘密の値はファイルに書かない。今ある `johnny-notify-daily` の中身を写して作る（`!` で渡す）：
+[人が1本ずつ貼る⑤のコマンド一覧](production-platform-commands.md)を使う。旧い「既存ジョブを消して即開始するSQL」は使わない。
 
-```sql
-do $$
-declare c text;
-begin
-  select command into c from cron.job where jobname = 'johnny-notify-daily';
-  if c is null then raise exception 'no daily job'; end if;
-  c := regexp_replace(c, 'body\s*:=\s*''[^'']*''::jsonb', 'body := ''{"waitlist":true}''::jsonb');
-  if position('waitlist' in c) = 0 then raise exception 'body not replaced'; end if;
-  perform cron.unschedule(jobid) from cron.job where jobname = 'johnny-waitlist-minutely';
-  perform cron.schedule('johnny-waitlist-minutely', '* * * * *', c);
-end $$;
-```
+DB01〜20の成功（15番の来店確認を含む）→ソース・Secrets・Vercel本番対象を確認→johnny-notify→johnny-agent→hq-johnny→customer-passkeys→johnny-style-adviceを1本ずつ確認→両フラグON→毎分ジョブを停止状態で作成、の順。新Web・閉鎖B・古いアプリの実機確認のあとで、人が毎分ジョブを開始する。
 
-**必ず 3. の johnny-notify デプロイを先に**（古い johnny-notify は waitlist を知らない）。
+本部の「お知らせOFF」はキャンセル待ちの毎分処理を止めない。⑤の準備SQLはactive=falseでcommitし、公開前の仮押さえ・送信を防ぐ。「送信を始める」を自動でONにする工程はない。
 
-## 3. 本番の関数をデプロイ（DB のあと）
+公開前にテイテイさんたちのStaging練習（会員QR→チェックイン→会計→券選択→確定）も完了させる。本番スタッフには券の単独使用ボタンがなくなることを共有する。
 
-```
-npx -y supabase@2.121.0 functions deploy johnny-notify --use-api --project-ref ufyzynpmkxytnhebombq
-npx -y supabase@2.121.0 functions deploy johnny-agent  --use-api --project-ref ufyzynpmkxytnhebombq
-npx -y supabase@2.121.0 functions deploy hq-johnny     --use-api --project-ref ufyzynpmkxytnhebombq
-```
-Codex 担当の関数（customer-passkeys など）も、staging と本番の版を比べて必要なら同様に。
+## 4. 画面（公開用release → main）
 
-## 4. 画面（staging → main）
+④ではmain起点のrelease/20261020へStagingとPR #10の手順を統合した。[公開用PRの準備](production-release-pr.md)を正本にする。以下の1〜2の準備はreleaseブランチで実施済みで、公開自体はまだ行わない。
 
-1. `git fetch && git checkout -b release origin/main && git merge origin/staging`
-2. `docs/accounting-production-rollout.md` の 3. にある「Staging だけに出している所」の条件を外す
-   （StaffHome のメニュー、AdminScreen の「お会計に進む」、hqMockData の hqTabEnabled、HqClientsScreen の銀Pay）。
-3. `npx tsc -b && npx vite build && node scripts/staging-preflight.mjs --skip-build`
+1. 準備済みのrelease/20261020とrelease→mainのドラフトPRをレビューする。Stagingから作り直して④の変更を落とさない。
+2. 会計・GINPayの表示、券の消費を会計確定へ統一、本番ビルドのFace IDフラグONを確認。StaffHomeの3メニューは既に条件なし。
+3. ④で57テスト・型チェック・ビルド・Lintと、架空データDBを明示した44本のpreflightが成功。再検査する場合もローカル専用DBを明示する。本番DB・関数・フラグの実作業完了と実機確認を待つ。
 4. Vercel の無料枠は1日のデプロイ回数に上限あり。まとめて1回で出す。
 5. 本番で確認：アプリ（iPhone・Android）／店舗端末（スマホ）／本部（PC・スマホ）／SB（タブレット・PC・スマホ）。
+6. 新しい画面と実機での会員引継ぎが確認できたら、[DBコマンド一覧](production-db-commands.md)末尾の閉鎖Bを人が実行・読み取り確認する。履歴39→40。直後に古いアプリのお客様の見え方と店頭引継ぎも確認する。全画面を再確認し、閉鎖B完了前に営業を再開しない。
 
 ## 5. 残っている作業
 
-- Codex：自分の Lint 差分（`Desktop/otokomae-passport/.qa/react-lint-cleanup/changes.patch`）を staging に反映・検証・コミット。
-  残りの Lint：App.tsx, AdminScreen, TicketWalletScreen, HomeScreen, MyPageScreen, TryOnScreen, FreshnessWidget,
-  customer-passkeys/bridge.ts。SbScreen.tsx:82 は warning だけ（ref の cleanup）で急がない。
+- CodexのLint差分はPR #7／#8を経て取り込み済み。④でもエラー0を確認。既存SbScreenのref cleanup警告1は残る。
 - 本部「予約設定」の「JOHNNY のお知らせ」→「送信を始める」は慶一郎さんが押す（押すまで空き枠のお知らせは出ない）。
 - 祝日 `app_private.holidays` は毎年足す（料金の会員時間に使う）。
+
+## ⑥ 当日のタイムテーブル
+
+[休業中の時刻表](release-day-timetable.md)に、09:00開始の仮例・工程ごとの確認/復旧限界・閉鎖B直後の旧PWA確認をまとめた。各関数デプロイは、最新release/cleanの確認に成功した直後だけ動く⑤のラッパーを使う。日付や公開を予約したものではない。⑦と実機・スタッフ練習が未完了なら開始しない。
 
 ## 6. 守ること
 
