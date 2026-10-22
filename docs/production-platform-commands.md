@@ -78,7 +78,7 @@
 ! npx --yes supabase@2.121.0 functions list --project-ref ufyzynpmkxytnhebombq --output json
 ```
 
-現時点の本番：johnny-notify v3、johnny-agent v7、hq-johnny v14、johnny-style-advice v2、4本ともJWT=true。customer-passkeysは未配置。以下は各本で「CLI成功 → 一覧のACTIVE・version更新・JWT → 負のHTTP確認」がそろってから次へ。一覧が期待と違えば停止し、固定のversion番号を推測して進めない。
+現時点の本番：johnny-notify v3、johnny-agent v7（10/20夜に聞き取り修正を本番へ出したため、今は1つ上がっている。当日09:00に記録した値を正とする）、hq-johnny v14、johnny-style-advice v2、4本ともJWT=true。customer-passkeysは未配置。以下は各本で「CLI成功 → 一覧のACTIVE・version更新・JWT → 負のHTTP確認」がそろってから次へ。一覧が期待と違えば停止し、固定のversion番号を推測して進めない。
 
 ### C-1. johnny-notify
 
