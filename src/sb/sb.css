@@ -263,6 +263,16 @@
   display: flex; align-items: flex-start; padding: 8px 10px; font-size: 11px; color: var(--sb-muted);
   background: repeating-linear-gradient(135deg, #f6f7f6, #f6f7f6 6px, #eef0ee 6px, #eef0ee 7px);
 }
+/* SB で閉めた時間（クローズ）：押して外せる。予約より下、空き枠より上 */
+.sb-time-block.sb-closed {
+  pointer-events: auto; flex-direction: column; gap: 2px; border: 0; border-radius: 0; text-align: left; cursor: pointer;
+  color: #5b4a2a; font-weight: 600; box-shadow: inset 3px 0 0 #b9a77e;
+  background: repeating-linear-gradient(135deg, #f4efe4, #f4efe4 6px, #ebe3d2 6px, #ebe3d2 7px);
+}
+.sb-time-block.sb-closed small { font-weight: 400; color: var(--sb-muted); }
+.sb-close-staff { display: flex; flex-wrap: wrap; gap: 8px; }
+.sb-close-staff .sb-secondary { flex: 1 1 0; min-width: 96px; justify-content: center; }
+.sb-close-staff .sb-secondary[aria-pressed="true"] { background: var(--sb-ink); color: #fff; border-color: var(--sb-ink); }
 /* 予約：角の丸いやわらかい面。左に色の帯 */
 .sb-reservation {
   position: absolute; z-index: 3; min-width: 0; overflow: hidden;
