@@ -8,7 +8,7 @@
  * install/activate は即時に反映させるため skipWaiting + clients.claim を使用。
  */
 
-// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-10-19a
+// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-10-23b
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -21,16 +21,20 @@ self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { data = { body: event.data ? event.data.text() : '' } }
   const title = data.title || '銀二郎 JOHNNY'
-  event.waitUntil(
+  // SB への「予約が入りました」「キャンセルが入りました」：開いている SB にも知らせて、画面で音を鳴らし予約表を読み直す
+  const sb = data.kind === 'sb-new-reservation' || data.kind === 'sb-cancel' || data.kind === 'sb-final'
+  event.waitUntil(Promise.all([
     self.registration.showNotification(title, {
       body: data.body || '',
-      icon: '/assets/app-icon.png',
+      icon: sb ? '/icons/sb-192.png' : '/assets/app-icon.png',
       badge: '/icons/icon-192.png',
       tag: data.tag || 'ginjiro-johnny',
       renotify: true,
+      vibrate: sb ? [120, 60, 220] : undefined,
       data: { url: data.url || '/?tab=reserve&johnny=1' },
     }),
-  )
+    sb ? clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: data.kind }))) : null,
+  ]))
 })
 
 self.addEventListener('notificationclick', (event) => {

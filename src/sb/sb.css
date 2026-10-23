@@ -163,6 +163,17 @@
   border: 0; border-radius: 12px; background: transparent; text-align: left; color: var(--sb-ink);
   transition: background-color .15s ease;
 }
+.sb-buddy-todo { display: flex; align-items: center; gap: 2px; padding-left: 4px; }
+.sb-buddy-todo .sb-buddy-row { flex: 1 1 auto; min-width: 0; }
+.sb-buddy-check {
+  flex: none; width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: transparent; border-radius: 50%; color: transparent;
+  position: relative;
+}
+.sb-buddy-check::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; border: 1.5px solid var(--sb-red); }
+.sb-buddy-check svg { position: relative; }
+.sb-buddy-check:hover, .sb-buddy-check:focus-visible { color: var(--sb-red); outline: none; }
+.sb-buddy-check:active::before { background: var(--sb-red); }
+.sb-buddy-check:active { color: #fff; }
 .sb-buddy-row:hover:not(:disabled) { background: var(--sb-light); }
 .sb-buddy-row:active:not(:disabled) { background: var(--sb-press); }
 .sb-buddy-row > svg { flex: none; color: var(--sb-muted); }
@@ -483,3 +494,20 @@
 .sb-hpb-row strong { font-weight: 600; }
 .sb-hpb-row span small { font-size: 12px; color: var(--sb-muted); line-height: 1.5; }
 .sb-hpb-row .sb-hpb-review { color: var(--sb-red); }
+/* AI 予約の停止（当日キャンセル・無断キャンセル）と解除 */
+.sb-ai-pause { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 4px 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(176, 42, 42, 0.07); color: var(--sb-red); font-size: 13px; font-weight: 600; }
+.sb-ai-pause .sb-secondary { min-height: 34px; padding: 0 12px; font-size: 13px; }
+.sb-ai-pause .sb-error { flex-basis: 100%; font-weight: 400; }
+/* 予約のお知らせ（ベル） */
+.sb-bell[aria-pressed="true"] { color: var(--sb-ink); }
+.sb-bell[aria-pressed="false"] { color: var(--sb-muted); }
+.sb-push-note { margin: 0 0 8px; line-height: 1.7; }
+/* 新しい AI 予約の帯（確認しましたを押すまで） */
+.sb-new-alert { display: flex; align-items: center; gap: 12px; margin: 14px 22px 0; padding: 12px 14px 12px 16px; border-radius: var(--sb-radius); background: #1f1c19; color: #fff; box-shadow: var(--sb-shadow); }
+.sb-new-alert > svg { flex: none; color: #e9c46a; }
+.sb-new-alert span { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.sb-new-alert b { font-size: 15px; }
+.sb-new-alert small { font-size: 12px; color: rgba(255, 255, 255, 0.72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-new-alert .sb-primary { flex: none; background: #fff; color: #1f1c19; }
+.sb-new-alert.is-cancel > svg { color: #ff8a80; }
+@media (max-width: 700px) { .sb-new-alert { margin: 12px 16px 0; } }

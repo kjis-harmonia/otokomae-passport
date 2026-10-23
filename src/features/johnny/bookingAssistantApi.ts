@@ -24,7 +24,12 @@ export interface CustomerReservation {
   nominated: boolean
   total_price: number | null
   items: { menu_code: string; name: string; duration_min: number; price: number | null }[]
+  /** 2時間前を切ってアプリでキャンセルしたとき：AI 予約を再開できる日（YYYY-MM-DD） */
+  ai_paused_until?: string
 }
+
+/** AI 予約が止まっているか（当日キャンセル・無断キャンセルのあと30日） */
+export interface AiBookingStatus { paused: boolean; resume_on?: string; reason?: 'late_cancel' | 'no_show' }
 
 export interface Hold { hold_id: string; starts_at: string; ends_at: string; staff_name: string; total_price: number | null }
 
@@ -57,6 +62,8 @@ export interface BookingAssistantApi {
   confirm(holdId: string, note?: string | null): Promise<CustomerReservation>
   release(holdId: string): Promise<void>
   reservations(): Promise<CustomerReservation[]>
+  /** AI 予約が止まっているか。仕組みが無い環境では無い */
+  aiStatus?(): Promise<AiBookingStatus>
   /** 最後に来店した日（QR の来店登録、YYYY-MM-DD）。無ければ null */
   lastVisit(): Promise<string | null>
   /** 手持ちの券（割引券・漢トク券など、使用済みも含む） */
@@ -94,6 +101,7 @@ export const customerBookingApi: BookingAssistantApi = {
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),
+  aiStatus: () => callCustomerRpc<AiBookingStatus>('customer_ai_booking_status'),
   joinWaitlist: (date, from, to, menuCode, staffId) => callCustomerRpc<WaitlistJoin>('customer_join_waitlist', { p_date: date, p_from: from, p_to: to, p_menu_codes: [menuCode], p_staff_id: staffId }),
   leaveWaitlist: async id => { await callCustomerRpc('customer_leave_waitlist', { p_id: id }) },
   getHold: holdId => callCustomerRpc<HoldOffer>('customer_get_hold', { p_hold_id: holdId }),

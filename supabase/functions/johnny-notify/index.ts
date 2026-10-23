@@ -57,6 +57,43 @@ function dayLabel(ymd: string): string {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${'日月火水木金土'[d.getUTCDay()]}）`
 }
 
+interface StaffNew { id: string; starts_at: string; customer_name: string; staff_name: string; menus?: string | null; kind?: 'new' | 'cancel'; rescheduled?: boolean }
+type Sub = { endpoint: string; p256dh: string; auth: string }
+
+/** SB へ：AI 予約が入った・お客様がアプリで取り消したら、SB を入れたすべての端末へ。担当は「テイテイ指名」「指名なし」。test なら試しの1通 */
+async function sendStaffNew(test = false): Promise<{ reservations: number; cancels: number; devices: number; delivered: number }> {
+  const p = await rpc<{ reservations: StaffNew[]; cancels?: StaffNew[]; overdue?: StaffNew[]; subs: Sub[] }>('staff_push_pending_for_sender', { p_secret: SECRET })
+  // 試しのときも、待っている本物の予約は一緒に送る（受け取ったことにした予約を落とさない）
+  const list: StaffNew[] = [...(test ? [{ id: `test-${Date.now()}`, starts_at: new Date(Date.now() + 3 * 3600_000).toISOString(), customer_name: 'テスト', staff_name: '銀二郎指名', menus: 'お知らせの確認' }] : []), ...(p.reservations ?? [])]
+  const gone: string[] = []
+  let delivered = 0
+  const when = (r: StaffNew) => { const jst = new Date(Date.parse(r.starts_at) + 9 * 3600_000).toISOString(); return `${dayLabel(jst.slice(0, 10))} ${jst.slice(11, 16)}〜` }
+  const send = async (payload: string) => {
+    for (const s of p.subs ?? []) {
+      try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 3600, urgency: 'high' }); delivered++ }
+      catch (e) { const code = (e as { statusCode?: number }).statusCode; if ((code === 404 || code === 410) && !gone.includes(s.endpoint)) gone.push(s.endpoint) }
+    }
+  }
+  for (const r of list) {
+    await send(JSON.stringify({ title: '予約が入りました', body: `${when(r)} ${r.customer_name}様・${r.menus ?? 'メニュー未定'}（${r.staff_name}）。サロンボードに入れてください。`, url: '/sb', tag: `sb-new-${r.id}`, kind: 'sb-new-reservation' }))
+  }
+  // お客様がアプリで取り消した予約：サロンボードからも消してもらう（日時変更なら、新しい日時は「予約が入りました」で別に届く）
+  for (const r of p.cancels ?? []) {
+    await send(JSON.stringify({
+      title: r.rescheduled ? '日時変更がありました' : 'キャンセルが入りました',
+      body: `${when(r)} ${r.customer_name}様・${r.menus ?? ''}（${r.staff_name}）${r.rescheduled ? 'は元の予約です。' : 'がキャンセルされました。'}サロンボードから消してください。`,
+      url: '/sb', tag: `sb-cancel-${r.id}`, kind: 'sb-cancel',
+    }))
+  }
+  // 最終警告：5分たっても誰もサロンボードに反映していない予約・取り消し（1回だけ）
+  for (const r of p.overdue ?? []) {
+    const cancel = r.kind === 'cancel'
+    await send(JSON.stringify({ title: 'まだ確認されていません', body: `${when(r)} ${r.customer_name}様（${r.staff_name}）${cancel ? 'のキャンセル' : ''}。サロンボードへの${cancel ? '取り消し' : '入力'}を確認してください。`, url: '/sb', tag: `sb-final-${r.id}`, kind: 'sb-final' }))
+  }
+  if (gone.length) await rpc('staff_push_gone_for_sender', { p_secret: SECRET, p_gone: gone }).catch(() => {})
+  return { reservations: list.length, cancels: (p.cancels ?? []).length, devices: (p.subs ?? []).length, delivered }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method_not_allowed', { status: 405 })
   if (!SECRET || req.headers.get('x-notify-secret') !== SECRET) return new Response('forbidden', { status: 403 })
@@ -78,8 +115,16 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ test: true, subs: results.length, results }), { headers: { 'Content-Type': 'application/json' } })
   }
 
-  // キャンセル待ち（毎分）：{ "waitlist": true } のときは、空いた枠を押さえた人へ「確定して」のお知らせ
+  // SB の試し送り：{ "staff_test": true }。SB だけの毎分の見回り（キャンセル待ちの無い本番）：{ "staff": true }
+  if ((body as { staff_test?: unknown }).staff_test === true || (body as { staff?: unknown }).staff === true) {
+    const test = (body as { staff_test?: unknown }).staff_test === true
+    return new Response(JSON.stringify({ staff: true, test, ...(await sendStaffNew(test)) }), { headers: { 'Content-Type': 'application/json' } })
+  }
+
+  // キャンセル待ち（毎分）：{ "waitlist": true } のときは、空いた枠を押さえた人へ「確定して」のお知らせ。
+  // ついでに SB へ「予約が入りました」（失敗してもキャンセル待ちは止めない）
   if ((body as { waitlist?: unknown }).waitlist === true) {
+    const staff = await sendStaffNew().catch((e: unknown) => ({ error: String(e).slice(0, 120) }))
     const offers = await rpc<WaitOffer[]>('waitlist_offers_for_sender', { p_secret: SECRET })
     const sent: { user: string; delivered: number }[] = []
     for (const o of offers ?? []) {
@@ -95,7 +140,7 @@ Deno.serve(async (req) => {
       await rpc('waitlist_record_for_sender', { p_secret: SECRET, p_user_id: o.user_id, p_title: title, p_body: text, p_delivered: delivered, p_gone: gone }).catch(() => {})
       sent.push({ user: o.user_id.slice(0, 8), delivered })
     }
-    return new Response(JSON.stringify({ waitlist: true, offers: sent.length, sent }), { headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ waitlist: true, offers: sent.length, sent, staff }), { headers: { 'Content-Type': 'application/json' } })
   }
 
   const due = await rpc<Due[]>('notify_due_for_sender', { p_secret: SECRET })
