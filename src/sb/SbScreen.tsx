@@ -252,7 +252,7 @@ export function SbScreen() {
       onChanged={() => void refresh(dateRef.current)}
       onOpen={(d, id) => { setHpbOpen(false); if (d === dateRef.current) setSelectedId(id); else { wantedId.current = id; setDate(d) } }} />}
     {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
-    {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} actor={actor} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
+    {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} actor={operator} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
     {closing && options && <SbCloseSheet options={options} preset={closing} actor={operator} onClose={() => setClosing(null)} onDone={m => { setClosing(null); setNotice(m); void refresh(dateRef.current) }} />}
     {reopening && <SbReopenSheet block={reopening.block} staffName={reopening.staffName} actor={operator} onClose={() => setReopening(null)} onDone={m => { setReopening(null); setNotice(m); void refresh(dateRef.current) }} />}
@@ -345,7 +345,7 @@ function AiPause({ reservationId, actor, blocked }: { reservationId: string; act
   const [, m, d] = st.resume_on.split('-').map(Number)
   return <p className="sb-ai-pause">AI予約 停止中（{st.reason === 'no_show' ? '無断キャンセル' : '当日キャンセル'}・{m}月{d}日から再開）
     <button className="sb-secondary" disabled={blocked || busy || !actor} onClick={() => { setBusy(true); setError(false); void callStaffRpc('staff_lift_ai_penalty', { p_reservation_id: reservationId, p_staff_name: actor }).then(() => setSt({ paused: false }), () => setError(true)).finally(() => setBusy(false)) }}>{busy ? '解除しています…' : '解除する'}</button>
-    {error && <small className="sb-error">解除できませんでした。操作者を選んでから、もう一度押してください。</small>}</p>
+    {error && <small className="sb-error">解除できませんでした。通信を確かめて、もう一度押してください。</small>}</p>
 }
 
 type AlertItem = { id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; rescheduled?: boolean }
