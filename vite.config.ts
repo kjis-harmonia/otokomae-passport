@@ -12,6 +12,7 @@ export default defineConfig({
         staff: resolve(__dirname, 'staff.html'),
         headquarters: resolve(__dirname, 'headquarters.html'),
         sb: resolve(__dirname, 'sb.html'),
+        shortcuts: resolve(__dirname, 'shortcuts.html'),
       },
     },
   },

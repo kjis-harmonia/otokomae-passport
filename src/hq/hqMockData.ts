@@ -1,4 +1,3 @@
-import { isStaging } from '../utils/env'
 // Headquarters navigation metadata. Business values come from authenticated RPCs.
 export type HqTab = 'johnny' | 'dashboard' | 'stores' | 'sales' | 'stylist' | 'members' | 'customers' | 'ledger' | 'ginpay' | 'register' | 'menus' | 'booking' | 'inventory' | 'reports' | 'settings'
 
@@ -20,7 +19,6 @@ const ALL_HQ_TABS: { id: HqTab; label: string; code: string }[] = [
   { id: 'settings',  label: '設定',           code: 'CFG' },
 ]
 
-/** 会計・GINPay の画面。本番の DB に会計の仕組みが入るまでは Staging だけで出す */
-const HQ_MONEY_TABS: HqTab[] = ['ginpay', 'register']
-export const hqTabEnabled = (id: HqTab) => isStaging() || !HQ_MONEY_TABS.includes(id)
-export const HQ_TABS = ALL_HQ_TABS.filter(t => hqTabEnabled(t.id))
+// 公開用ブランチ。会計・GINPayを含め、認証後の全メニューを両環境で表示する。
+export const hqTabEnabled = (id: HqTab) => ALL_HQ_TABS.some(t => t.id === id)
+export const HQ_TABS = ALL_HQ_TABS

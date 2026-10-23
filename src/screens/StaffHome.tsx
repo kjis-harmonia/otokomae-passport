@@ -1,13 +1,16 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Database, Package, ScanLine } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Database, Package, ScanLine, Users, Wallet } from 'lucide-react'
 import { AdminScreen } from './AdminScreen'
 import { StaffInventoryScreen } from './StaffInventoryScreen'
+import { StaffReservationsScreen } from './StaffReservationsScreen'
+import { StaffClientsScreen } from './StaffClientsScreen'
+import { StaffGinpayScreen } from './StaffGinpayScreen'
 import type { PendingChangeSummary, StaffInventoryHandle } from './StaffInventoryScreen'
 import './staffTerminal.css'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
-type StaffMode = 'menu' | 'shop' | 'inventory' | 'recovery'
+type StaffMode = 'menu' | 'shop' | 'ginpay' | 'reservations' | 'clients' | 'inventory' | 'recovery'
 
 /**
  * /staff を開いた直後の分岐画面 + 戻るナビゲーション。
@@ -54,6 +57,9 @@ export function StaffHome() {
           <h2 className="st-section"><span>毎日の業務</span><small>DAILY WORK</small></h2>
           <div className="st-tray">
             <MenuRow icon={<ScanLine size={30} />} tone="gold" title="店舗端末" sub="会員QR・来店・割引券" onClick={() => setMode('shop')} />
+            <MenuRow icon={<Wallet size={30} />} tone="dark" title="銀Pay チャージ" sub="現金でチャージ・残高" onClick={() => setMode('ginpay')} />
+            <MenuRow icon={<CalendarDays size={30} />} title="予約" sub="予約台帳・電話予約" onClick={() => setMode('reservations')} />
+            <MenuRow icon={<Users size={30} />} title="顧客" sub="顧客一覧・顧客台帳" onClick={() => setMode('clients')} />
           </div>
 
           <h2 className="st-section"><span>管理</span><small>MANAGEMENT</small></h2>
@@ -66,15 +72,23 @@ export function StaffHome() {
     )
   }
 
-  // どの画面もメニューと同じあたたかい白
+  // どの画面も明るい地。予約・顧客は白、それ以外（銀Pay・店舗端末・在庫・会員復旧）はメニューと同じあたたかい白
+  const white = mode === 'reservations' || mode === 'clients'
+
   return (
-    <div className="st-app" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: '#f6f5f2' }}>
+    <div className={white ? undefined : 'st-app'} style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: white ? '#FFFFFF' : '#f6f5f2' }}>
       <div className="st-app st-bar"><button type="button" className="st-back" onClick={handleBackClick}><ChevronLeft size={24} />メニュー</button></div>
 
       <div style={{ flex: '1 1 auto' }}>
         {mode === 'shop'
           ? <AdminScreen key="staff-issue" mode="issue" />
-          : mode === 'recovery'
+          : mode === 'reservations'
+            ? <StaffReservationsScreen />
+            : mode === 'clients'
+            ? <StaffClientsScreen />
+            : mode === 'ginpay'
+            ? <StaffGinpayScreen />
+            : mode === 'recovery'
               ? <AdminScreen key="staff-recovery" mode="recovery" />
               : <StaffInventoryScreen ref={inventoryRef} />}
       </div>

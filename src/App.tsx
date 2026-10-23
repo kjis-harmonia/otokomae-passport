@@ -1,3 +1,7 @@
+import {useStoreAccess} from './features/customerAccess/storeAccess'
+import {CUSTOMER_ACCESS_ENABLED,resumeSavedMember,supportsPasskeys,passkeyStatus} from './features/customerAccess/passkeys'
+import {PasskeyEnrollmentOffer} from './features/customerAccess/CustomerAccess'
+import {useCustomerAccessSession} from './features/customerAccess/useCustomerAccessSession'
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import { getCustomerSession, clearCustomerSession } from './utils/customerSession'
@@ -25,6 +29,7 @@ import {
   loadMemberStatus,
   saveMemberStatus,
   getStoredValue,
+  setStoredValue,
   removeStoredValue,
   MEMBER_STATUS_KEY,
   ONBOARDING_DONE_KEY,
@@ -34,7 +39,7 @@ import { HERO_SLIDE_IMAGES } from './data/styleImages'
 import type { TicketRow } from './data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from './data/ticket'
 import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
-import { getUserId, MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
+import { MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
 import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
 import { InstallGuide } from './components/InstallGuide'
@@ -43,12 +48,13 @@ import { refreshPushIfGranted } from './utils/webPush'
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const MUSIC_GUIDE_KEY = 'ginjiro_music_guided'
 const SHOP_AUTH_KEY = 'ginjiro_shop_auth'
+const PASSKEY_SETUP_PROMPT_KEY = 'ginjiro_passkey_setup_prompt_v1'
 
 type AppPhase = 'onboarding' | 'app'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function isShopUnlocked(): boolean {
-  return localStorage.getItem(SHOP_AUTH_KEY) === '1'
+  return CUSTOMER_ACCESS_ENABLED || localStorage.getItem(SHOP_AUTH_KEY) === '1'
 }
 
 function isLocalPreviewHost(hostname: string): boolean {
@@ -445,12 +451,11 @@ function ShopPasswordGate({
   const [error, setError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
 
-  useEffect(() => {
-    if (!open) {
-      setPasscode('')
-      setError(null)
-    }
-  }, [open])
+  function closeGate() {
+    setPasscode('')
+    setError(null)
+    onClose()
+  }
 
   // パスコードはサーバー側（verify_shop_passcode RPC）で照合する。フロントは正解を持たない。
   async function submit() {
@@ -463,6 +468,8 @@ function ShopPasswordGate({
       const r = data as { ok?: boolean; error?: string }
       if (r?.ok) {
         localStorage.setItem(SHOP_AUTH_KEY, '1')
+        setPasscode('')
+        setError(null)
         onUnlock()
         return
       }
@@ -572,7 +579,7 @@ function ShopPasswordGate({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, marginTop: 18 }}>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={closeGate}
                 style={{
                   height: 48,
                   borderRadius: 999,
@@ -810,8 +817,9 @@ function App() {
   })
 
   // ── Loading state: min time + critical image preload ──────────────────────────
-  const [minTimeDone, setMinTimeDone] = useState(false)
-  const [imgReady,    setImgReady]    = useState(false)
+  const quickBooking=CUSTOMER_ACCESS_ENABLED && new URLSearchParams(location.search).get('tab')==='reserve'
+  const [minTimeDone, setMinTimeDone] = useState(quickBooking)
+  const [imgReady,    setImgReady]    = useState(quickBooking)
   const appLoading = !minTimeDone || !imgReady
 
   useEffect(() => {
@@ -841,7 +849,8 @@ function App() {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
     return done ? 'app' : 'onboarding'
   })
-  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+  const [showBgmMenu, setShowBgmMenu] = useState(false)
+  const [activeTab, setActiveTabState] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
@@ -850,7 +859,22 @@ function App() {
     const valid: NavTab[] = ['home', 'styles', 'shop', 'diagnosis', 'tryon', 'reserve', 'mypage', 'tickets']
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
+  const setActiveTab = useCallback((tab: NavTab) => {
+    setActiveTabState(tab)
+    if (tab !== 'home') setShowBgmMenu(false)
+  }, [])
   const [memberStatus, setMemberStatus] = useState<MemberStatus>(loadMemberStatus)
+  const [passkeyOffer,setPasskeyOffer]=useState(false)
+  const [afterStoreSetup,setAfterStoreSetup]=useState(false)
+  const storeAccess=useStoreAccess()
+  const customerAccessSession=useCustomerAccessSession()
+  useEffect(()=>{
+    if(!CUSTOMER_ACCESS_ENABLED)return
+    const changed=()=>{if(getCustomerSession()&&getStoredValue<boolean>(ONBOARDING_DONE_KEY,false)){setMemberStatus(loadMemberStatus());setPhase('app')}}
+    window.addEventListener('ginjiro:customer-session-changed',changed)
+    if(phase==='onboarding'&&getCustomerSession())void resumeSavedMember().catch(()=>{})
+    return()=>window.removeEventListener('ginjiro:customer-session-changed',changed)
+  },[phase])
   const [welcomeCouponDialog, setWelcomeCouponDialog] = useState<{ name: string; ticket: TicketRow | null } | null>(null)
   const [ticketInitialFilter, setTicketInitialFilter] = useState<WalletFilter>('cut')
   const [ticketRefreshKey, setTicketRefreshKey] = useState(0)
@@ -861,11 +885,32 @@ function App() {
   const [navHighlight, setNavHighlight] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
+    if (CUSTOMER_ACCESS_ENABLED && requestedTab==='reserve')return 'shop'
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
     if (requestedTab === 'diagnosis') return 'shop'
     const navTabs: NavTab[] = ['home', 'styles', 'shop', 'tickets']
     return navTabs.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
+  // Existing signed-in members also need a first setup entry; never enroll from a display-only member ID.
+  useEffect(()=>{
+    if(!CUSTOMER_ACCESS_ENABLED || storeAccess.mode!=='verified' || phase!=='app' || appLoading || activeTab!=='home' || showQrModal || welcomeCouponDialog || hasOpenModal || isPremiumGachaOpen || !customerAccessSession || !supportsPasskeys())return
+    let alive=true
+    void passkeyStatus().then(status=>{
+      if(alive && getCustomerSession()===customerAccessSession && !status.registered && getStoredValue<string|null>(PASSKEY_SETUP_PROMPT_KEY,null)!==status.user_id)setPasskeyOffer(true)
+    }).catch(()=>{})
+    return()=>{alive=false}
+  },[phase,appLoading,activeTab,showQrModal,welcomeCouponDialog,hasOpenModal,isPremiumGachaOpen,customerAccessSession,storeAccess.mode])
+  useEffect(()=>{
+    const verified=()=>{
+      setShowQrModal(false);setMemberStatus(loadMemberStatus());setPhase('app')
+      void passkeyStatus().then(status=>{
+        if(!status.registered&&supportsPasskeys()){setActiveTab('home');setNavHighlight('home');setAfterStoreSetup(true);setPasskeyOffer(true)}
+        else {setActiveTab('reserve');setNavHighlight('reserve')}
+      }).catch(()=>{setActiveTab('reserve');setNavHighlight('reserve')})
+    }
+    window.addEventListener('ginjiro:store-verified',verified)
+    return()=>window.removeEventListener('ginjiro:store-verified',verified)
+  },[setActiveTab])
 
   // ── Transfer acceptance overlay ───────────────────────────────────────────────
   const [transferToken, setTransferToken]   = useState<string | null>(() => {
@@ -882,25 +927,25 @@ function App() {
 
   useEffect(() => {
     if (!transferToken) return
-    setTransferLoading(true)
-    setTransferTicket(null)
+    let alive = true
     getTicketByTransferToken(transferToken)
       .then(t => {
-        setTransferTicket(t)
+        if (alive) setTransferTicket(t)
       })
       .catch(err => {
         console.error('[App] getTicketByTransferToken error:', err)
-        setTransferTicket(null)
+        if (alive) setTransferTicket(null)
       })
-      .finally(() => setTransferLoading(false))
+      .finally(() => { if (alive) setTransferLoading(false) })
     window.history.replaceState({}, '', window.location.pathname)
-  }, [transferToken]) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { alive = false }
+  }, [transferToken])
 
   async function handleAcceptTransfer() {
     if (!transferToken || !transferTicket) return
     setTransferPhase('accepting')
     try {
-      const ticket = await acceptTransfer(transferToken, getUserId())
+      const ticket = await acceptTransfer(transferToken)
       setAcceptedTicket(ticket)
       setTransferPhase('done')
     } catch (e) {
@@ -940,6 +985,7 @@ function App() {
     saveMemberStatus(nextStatus)
     setMemberStatus(nextStatus)
     setPhase('app')
+    // Face ID is offered after the first store verification, not on self-registration.
     if (payload?.welcomeCouponIssued && payload.ticket) {
       setWelcomeCouponDialog({ name: nextStatus.memberName, ticket: payload.ticket })
     }
@@ -962,14 +1008,14 @@ function App() {
     // 下タブの SHOP は予約の画面を開く（タブの表示は SHOP のまま）
     setActiveTab(nextTab === 'shop' ? 'reserve' : nextTab)
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
-  }, [shopUnlocked])
+  }, [shopUnlocked, setActiveTab])
 
   const handleShopUnlock = useCallback(() => {
     setShopUnlocked(true)
     setShowShopPasswordGate(false)
     setNavHighlight('shop')
     setActiveTab('reserve')
-  }, [])
+  }, [setActiveTab])
 
   const handleGachaComplete = useCallback(() => {
     // 結果の表示はガチャ演出側で行う
@@ -980,7 +1026,6 @@ function App() {
   }, [])
 
   const bgm = useBgm()
-  const [showBgmMenu, setShowBgmMenu] = useState(false)
 
   // JOHNNY のお知らせ：許可済みなら受け取り先をサーバーに入れ直す（変わることがある）
   useEffect(() => { if (phase === 'app') void refreshPushIfGranted() }, [phase])
@@ -989,7 +1034,7 @@ function App() {
   const [showMusicGuide, setShowMusicGuide] = useState(false)
 
   useEffect(() => {
-    if (phase !== 'app') return
+    if (phase !== 'app' || CUSTOMER_ACCESS_ENABLED) return
     if (welcomeCouponDialog) return
     // ホーム画面でのみ案内する（「クーポンを見る」でWalletへ直行したときにクーポンを隠さない）
     if (activeTab !== 'home') return
@@ -997,10 +1042,6 @@ function App() {
     const t = setTimeout(() => setShowMusicGuide(true), 700)
     return () => clearTimeout(t)
   }, [phase, welcomeCouponDialog, activeTab])
-
-  useEffect(() => {
-    if (activeTab !== 'home') setShowBgmMenu(false)
-  }, [activeTab])
 
   function dismissMusicGuide() {
     localStorage.setItem(MUSIC_GUIDE_KEY, 'true')
@@ -1151,7 +1192,7 @@ function App() {
           </AnimatePresence>
 
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。音楽の案内・クーポンのあと） */}
-          <InstallGuide autoAllowed={activeTab === 'home' && !showMusicGuide && !welcomeCouponDialog && !showQrModal} />
+          <InstallGuide autoAllowed={activeTab === 'home' && !passkeyOffer && !showMusicGuide && !welcomeCouponDialog && !showQrModal} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (
@@ -1315,6 +1356,7 @@ function App() {
         </>
       )}
 
+      {passkeyOffer&&!welcomeCouponDialog&&!appLoading&&<PasskeyEnrollmentOffer onClose={()=>{const memberId=getStoredValue<string|null>(USER_ID_KEY,null);if(memberId)setStoredValue(PASSKEY_SETUP_PROMPT_KEY,memberId);setPasskeyOffer(false);if(afterStoreSetup){setAfterStoreSetup(false);setActiveTab('reserve');setNavHighlight('reserve')}}}/>}
       {/* Loading screen — topmost, covers everything during initial load */}
       <AnimatePresence>
         {appLoading && <GinjiroLoadingScreen key="loading" />}

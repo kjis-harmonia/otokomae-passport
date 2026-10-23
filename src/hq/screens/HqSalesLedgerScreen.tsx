@@ -46,6 +46,7 @@ export function HqSalesLedgerScreen() {
             {day.voided > 0 && <>{'　'}取消 {day.voided}件</>}
           </p>
         )}
+        {day && <DayBreakdown day={day} />}
         {error && <p style={{ color: C.danger, fontSize: 14, marginTop: 12 }}>{error}</p>}
         {!day ? (!error && <p style={{ color: C.sub, fontSize: 14, marginTop: 16 }}>読み込み中…</p>)
           : day.rows.length === 0 ? <p style={{ color: C.mute, fontSize: 14, marginTop: 16 }}>この日の会計はありません</p>
@@ -179,6 +180,41 @@ function SaleDetail({ id, onClose, onChanged }: { id: string; onClose: () => voi
   )
 }
 
+/** 支払方法ごとの合計と銀Payの内訳（経理・レジ締め用） */
+function DayBreakdown({ day }: { day: SalesDay }) {
+  const methods = day.by_method ?? []
+  const g = day.ginpay
+  if (methods.length === 0 && !g?.charge_count) return null
+  const cell: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 14, lineHeight: 1.9, fontVariantNumeric: 'tabular-nums' }
+  const note: CSSProperties = { fontSize: 12, color: C.mute, lineHeight: 1.6 }
+  return (
+    <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+      {methods.length > 0 && (
+        <section aria-label="支払方法ごと" style={panel}>
+          <p style={panelTitle}>支払方法ごと</p>
+          {methods.map(m => (
+            <div key={m.method}>
+              <div style={cell}><span>{PAYMENT_LABEL[m.method] ?? m.method}<span style={{ color: C.mute }}>{'　' + m.count + '件'}</span></span><span>{yen(m.total)}</span></div>
+              {m.method === 'ginpay' && g && g.paid_bonus > 0 && <p style={{ ...note, textAlign: 'right' }}>{`うち特典から ${yen(g.paid_bonus)}・チャージ済みの現金から ${yen(g.paid - g.paid_bonus)}`}</p>}
+            </div>
+          ))}
+        </section>
+      )}
+      {g && (g.charge_count > 0 || day.cash_in != null) && (
+        <section aria-label="銀Payチャージとレジの現金" style={panel}>
+          <p style={panelTitle}>銀Pay チャージ・レジの現金</p>
+          <div style={cell}><span>店頭チャージ<span style={{ color: C.mute }}>{'　' + g.charge_count + '件'}</span></span><span>{yen(g.charge_cash)}</span></div>
+          {g.charge_bonus > 0 && <div style={{ ...cell, color: C.sub }}><span>付けた特典</span><span>{yen(g.charge_bonus)}</span></div>}
+          {day.cash_in != null && <div style={{ ...cell, marginTop: 4, paddingTop: 6, borderTop: `1px solid ${C.line}`, fontWeight: 600 }}><span>レジに入った現金</span><span>{yen(day.cash_in)}</span></div>}
+          <p style={note}>現金の会計＋店頭チャージで受け取った現金。銀Payでの支払いは、チャージのときに受け取り済みなので含めません。</p>
+        </section>
+      )}
+    </div>
+  )
+}
+
+const panel: CSSProperties = { padding: '12px 16px', borderRadius: 12, border: `1px solid ${C.line}` }
+const panelTitle: CSSProperties = { fontSize: 12, color: C.sub, marginBottom: 4 }
 const navBtn: CSSProperties = { minWidth: 40, minHeight: 40, background: 'none', border: 'none', color: C.text, fontSize: 22, cursor: 'pointer', fontFamily: SANS }
 const rowBtn: CSSProperties = {
   display: 'block', width: '100%', textAlign: 'left', minHeight: 52, padding: '10px 0', background: 'none', border: 'none',

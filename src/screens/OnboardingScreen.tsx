@@ -1,3 +1,6 @@
+import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
+import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
+import {loadMemberStatus} from '../utils/storage'
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { MemberStatus } from '../data/brand'
@@ -187,6 +190,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [focusedField, setFocusedField] = useState<'name' | 'phone' | null>(null)
+  const [authBusy,setAuthBusy]=useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -204,7 +208,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   }
 
   async function handleFinish() {
-    if (submitting) return
+    if (submitting||authBusy) return
     if (hasVisitedBefore === null) {
       setSubmitError('来店経験を選択してください。')
       setStep(1)
@@ -242,6 +246,19 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       setSubmitting(false)
     }
   }
+
+  if(CUSTOMER_ACCESS_ENABLED)return <main className="customer-access access-welcome">
+    <header><p className="access-brand">銀二郎</p><h1>銀二郎へようこそ</h1><p>かんたんログインを設定済みの方は、入力せずにログインできます。</p></header>
+    <PasskeyLoginButton disabled={submitting||authBusy} onBusyChange={setAuthBusy} onSignedIn={()=>onDone(loadMemberStatus())}/>
+    <form onSubmit={event=>{event.preventDefault();void handleFinish()}}>
+      <h2>はじめての登録</h2>
+      <label htmlFor="access-name">お名前</label><input id="access-name" autoComplete="name" value={name} maxLength={20} required disabled={submitting||authBusy} onChange={event=>setName(event.target.value)}/>
+      <label htmlFor="access-phone">電話番号</label><input id="access-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} maxLength={16} required disabled={submitting||authBusy} onChange={event=>setPhone(event.target.value)}/>
+      <fieldset disabled={submitting||authBusy}><legend>銀二郎へのご来店は初めてですか？</legend><div className="access-radio"><label><input type="radio" name="first-visit" required checked={hasVisitedBefore===false} onChange={()=>setHasVisitedBefore(false)}/>初めて</label><label><input type="radio" name="first-visit" required checked={hasVisitedBefore===true} onChange={()=>setHasVisitedBefore(true)}/>来店したことがある</label></div></fieldset>
+      {submitError&&<p role="alert" className="access-error">{submitError}</p>}
+      <button className="access-primary" disabled={submitting||authBusy} type="submit">{submitting?'登録しています…':'登録して始める'}</button>
+    </form>
+  </main>
 
   return (
     <motion.div
@@ -622,7 +639,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   ariaLabel="お名前（本名）"
                   autoComplete="name"
                   maxLength={20}
-                  disabled={submitting}
+                  disabled={submitting||authBusy}
                 />
                 <GoldField
                   focused={focusedField === 'phone'}
@@ -637,7 +654,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   inputMode="tel"
                   autoComplete="tel"
                   maxLength={16}
-                  disabled={submitting}
+                  disabled={submitting||authBusy}
                 />
 
                 {submitError && (
@@ -662,7 +679,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   <button
                     type="button"
                     onClick={() => { void handleFinish() }}
-                    disabled={submitting}
+                    disabled={submitting||authBusy}
                     style={{
                       position: 'relative', zIndex: 1,
                       display: 'block', width: '100%',
