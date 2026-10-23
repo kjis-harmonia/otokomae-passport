@@ -15,8 +15,8 @@ const baseline=[
  ['20261015100000','customer_contact'],['20261016000000','hq_app_booking_switch'],['20261016000100','customer_availability_overview'],
  ['20261017000000','visit_log'],['20261017000100','visit_log_maintenance'],['20261017000200','ticket_rules_checkin_price'],['20261017000300','johnny_push'],
  ['20261018000000','hq_messages'],['20261018000110','hq_tasks'],['20261018000210','open_slot_push'],['20261018000300','menu_price_changes'],
- // 10/23 に本番へ先行して入れた SB のお知らせ5本（公開前からある）
- ['20261023000100','staff_push'],['20261023000200','staff_push_ack'],['20261023000300','staff_push_final'],['20261023000400','staff_push_cancel'],['20261023000500','staff_alert_fallback'],
+ // 10/23 に本番へ先行して入れた SB のお知らせ5本と、10/24 の SB のクローズ（公開前からある）
+ ['20261023000100','staff_push'],['20261023000200','staff_push_ack'],['20261023000300','staff_push_final'],['20261023000400','staff_push_cancel'],['20261023000500','staff_alert_fallback'],['20261024000000','sb_close_time'],
 ]
 function historyKey(rows){return createHash('md5').update([...rows].sort(([a],[b])=>a.localeCompare(b)).map(([v,n])=>v+':'+n).join('\n')).digest('hex')}
 function historyGuard(rows){return `do $release_history$\nbegin\n  if (select count(*) from supabase_migrations.schema_migrations) <> ${rows.length}\n    or (select md5(coalesce(string_agg(version || ':' || coalesce(name,''), E'\\n' order by version),'')) from supabase_migrations.schema_migrations) <> '${historyKey(rows)}' then\n    raise exception 'Release history differs from reviewed state (${rows.length} entries); STOP';\n  end if;\nend;\n$release_history$;`}

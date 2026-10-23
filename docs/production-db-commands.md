@@ -32,7 +32,7 @@
 ! node "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/prepare-production-db-release.mjs"
 ```
 
-成功条件：21 rollout files、history 25 -> 45、No database connection made。生成先はsupabase/rollout/out_release。既存のbuild_accounting_rollout.shで上書きしない。この一覧用の生成器は工程前後の履歴照合を追加している。Git対象外のmanifest.jsonにSQLと元migrationのSHA256を保存する。
+成功条件：21 rollout files、history 26 -> 46、No database connection made。生成先はsupabase/rollout/out_release。既存のbuild_accounting_rollout.shで上書きしない。この一覧用の生成器は工程前後の履歴照合を追加している。Git対象外のmanifest.jsonにSQLと元migrationのSHA256を保存する。
 
 ## 0-2. 本番の実行前状態を読み取る
 
@@ -46,7 +46,7 @@
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：履歴は25件（10/23 に本番へ先行で入れた SB のお知らせ 20261023000100〜0500 の5本を含む）でversionと名前がレビュー済みの集合に一致する。件数だけでなくSQL内で照合する。dataの9表の件数・合計・md5、app_booking_enabledを保存しておく。以後、全工程で同じ値であること。名簿・連絡先・トークンは出力しない。
+次へ：履歴は26件（本番へ先行で入れた SB のお知らせ 20261023000100〜0500 の5本と 20261024000000_sb_close_time を含む）でversionと名前がレビュー済みの集合に一致する。件数だけでなくSQL内で照合する。dataの9表の件数・合計・md5、app_booking_enabledを保存しておく。以後、全工程で同じ値であること。名簿・連絡先・トークンは出力しない。
 
 ## 01〜21（14と15の間に追加の3工程）
 ### 01. ginpay_ledger
@@ -66,7 +66,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=26、履歴照合値=030d88d726b5f5600faa2f2dbeee33d4（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=27、履歴照合値=6f5f1a47b5b31c2591747cf8b6323366（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 02. checkout
 
@@ -85,7 +85,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=27、履歴照合値=3ec6caea7adaf4a7ec8d5d4348100073（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=28、履歴照合値=2bef95944b4b637119b64d2ed3d98bc8（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 03. service_master（カタログ関数だけ復元）
 
@@ -104,7 +104,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=27、履歴照合値=3ec6caea7adaf4a7ec8d5d4348100073（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。03は既存versionを維持し、履歴を増やさない。違えば停止する。
+次へ：エラーなし、verification.history_count=28、履歴照合値=2bef95944b4b637119b64d2ed3d98bc8（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。03は既存versionを維持し、履歴を増やさない。違えば停止する。
 
 ### 04. client_visit_model
 
@@ -123,7 +123,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=28、履歴照合値=753a2c576d178e87299b28553fbd57a7（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=29、履歴照合値=e73cfb8d66ecbab2378a6afd28992a41（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 05. ticket_issue_idempotency
 
@@ -142,7 +142,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=29、履歴照合値=34b01e06e30d6ab3749a2cc719260055（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=30、履歴照合値=a8c345e3242e52601c53e7d5c9cb433a（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 06. ticket_issue_require_request_id
 
@@ -161,7 +161,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=30、履歴照合値=d244d4fbaae9bafc608a19ec5cbba0a1（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=31、履歴照合値=54f7a807817448eacb74baee2805e14e（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 07. unified_booking_flow
 
@@ -180,7 +180,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=31、履歴照合値=60fd72c05912de580671780449921174（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=32、履歴照合値=4ac0a13eca285c03716d8144ecd29e99（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 08. customer_shortcuts
 
@@ -199,7 +199,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=32、履歴照合値=05a3243092d780617ad3d2a99b630e62（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=33、履歴照合値=28bcf8b4beac6bc6719a8130a91afde1（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 09. ginpay_charge_bonus
 
@@ -218,7 +218,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=33、履歴照合値=8cd350a129a1d7fc893c917c69cd234d（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=34、履歴照合値=4c6605d11cdc10352b794538b4d2ab5a（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 10. ginpay_member_lookup
 
@@ -237,7 +237,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=34、履歴照合値=0479f226f898b82dbbdba463684a0b49（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=35、履歴照合値=594346255192cd40ef7164d2937e4ef0（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 11. customer_passkeys
 
@@ -256,7 +256,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=35、履歴照合値=a7a6d2e5d8a2e8c3b52ced6468842fd3（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=36、履歴照合値=e1b43b7843aa12d3e83de54a04f5991c（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 12. member_checkout
 
@@ -275,7 +275,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=36、履歴照合値=c69b700230f1a92ba572b7d9d2eb0c47（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=37、履歴照合値=dcfddfd9c4b88da34d276e3552759f2b（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 13. checkout_ticket_mix
 
@@ -294,7 +294,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=37、履歴照合値=1ea69914bc123bfd910d138c4102de08（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=38、履歴照合値=85356cc68329168f82c73269186b5b70（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 14. sales_day_breakdown
 
@@ -313,7 +313,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=38、履歴照合値=2448aed41533eab9fe7d5443096983e9（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=39、履歴照合値=70b8ee95c89eb046715e395ae1132265（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 14-A. 古い記録への一般書き込みを閉じる
 
@@ -372,7 +372,7 @@ SQL：check_bulk.sqlはcustomer_store_verificationsとcustomersを結合して�
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=39、履歴照合値=f7aed30f7fc70343fcd90edb3eb2590d（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。この工程で未承認客の予約が制限される。承認30人の事前登録がなければ適用SQL自体が停止する。違えば停止する。
+次へ：エラーなし、verification.history_count=40、履歴照合値=258e2888afd9dc45dad508675c813770（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。この工程で未承認客の予約が制限される。承認30人の事前登録がなければ適用SQL自体が停止する。違えば停止する。
 
 ### 16. waitlist
 
@@ -391,7 +391,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=40、履歴照合値=672dd70993fbd54cbc357dd3f6aaf9b9（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=41、履歴照合値=d42c439713c84c7c7eb6085f26ae7dff（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 17. menu_price_rules
 
@@ -410,7 +410,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=41、履歴照合値=9d55e9eacf2ac69c109f7b0c6dcbe48a（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=42、履歴照合値=53994c3ce3606dfc37b6374a84980bf3（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 18. checkout_safety
 
@@ -429,7 +429,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=42、履歴照合値=d077b3be561b41ea11fd2d3fd16d5ebc（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=43、履歴照合値=c700d99fe6757dbba3ed548c869ae3b2（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 19. finalize_sale_ticket_alias
 
@@ -448,7 +448,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=43、履歴照合値=5c954d76a45d27badea6c89b59bf6437（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=44、履歴照合値=89416b1789ddb321909a551e78189a9a（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 20. app_private_helper_grants
 
@@ -467,7 +467,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=44、履歴照合値=cd55d0057d8fd5bc5dc564977f5a8663（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=45、履歴照合値=ed50692b1c87a4ce932dd51668d35720（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ### 21. ai_booking_penalty（AI 予約の当日キャンセル防止）
 
@@ -489,7 +489,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 ' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=45、履歴照合値=91a0c8bc82677ffbe0e1a9a5bac19357（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+次へ：エラーなし、verification.history_count=46、履歴照合値=beec3b4503fa77ac30d0bb7a90d3e2e6（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
 ## 最後の読み取り確認
 
@@ -497,13 +497,13 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_final.sql"
 ```
 
-次へ：履歴45件（公開前の25件＋新規20件、03は復元のみ）、既存data・予約設定不変、13表の書き込み閉鎖と旧RPC閉鎖を維持、承認30人・照合値一致、ginpay_consistent="true"。
+次へ：履歴46件（公開前の26件＋新規20件、03は復元のみ）、既存data・予約設定不変、13表の書き込み閉鎖と旧RPC閉鎖を維持、承認30人・照合値一致、ginpay_consistent="true"。
 
 **ここで先行DB作業を止める。** [⑤の手順](production-platform-commands.md)に従い5関数のデプロイと設定、停止状態のキャンセル待ちcron、レビュー済みrelease PRの公開、実機確認へ進む。johnny-agentの新しい来店確認ガードはDB15番より前に本番へ出さない。当日の順番と中断時の扱いは[⑥の時刻表](release-day-timetable.md)を参照。新しい画面と引継ぎが確認できたら次の閉鎖Bへ進み、閉鎖B後の再確認を終えるまで営業を再開しない。
 
 ## 新しいWebを公開・確認した後：セキュリティ閉鎖B
 
-既存ファイル20261001000400_security_hardening_b_lockdown.sqlを、45件→46件の履歴照合と記録付きで包んだもの。先行21工程に混ぜない。旧い画面・セッションなしの直接読み取りを使う人は、会員証QRをスタッフに見せて同じ会員情報を引き継ぐ案内に変わる。新規登録し直させない。会員・券・残高は削除しない。
+既存ファイル20261001000400_security_hardening_b_lockdown.sqlを、46件→47件の履歴照合と記録付きで包んだもの。先行21工程に混ぜない。旧い画面・セッションなしの直接読み取りを使う人は、会員証QRをスタッフに見せて同じ会員情報を引き継ぐ案内に変わる。新規登録し直させない。会員・券・残高は削除しない。
 
 慶一郎さんが新しい画面で「店舗確認→Face ID設定→同じ会員ID・券でログイン」を確認し、店舗操作を止めていることが前提。まだなら停止する。
 
@@ -518,13 +518,13 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 
 新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB21完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜21は開始時との不変比較を維持する。承認30人の集合は増減しない。
 
-次へ：preflight_securityのDO検査にエラーがなく、履歴46件、data・予約設定・承認30人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
+次へ：preflight_securityのDO検査にエラーがなく、履歴47件、data・予約設定・承認30人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
 
 閉鎖BのSQL・履歴の記録・読み取り確認もコピーでrollback試験済み。16私有表にanon/authenticatedの表・列権限がないこと、商品の最低在庫列は読めず公開表示列は読めること、承認30人の予約オプション取得を確認した。セキュリティ・来店確認・パスキー・会計・GINPayの5検査も閉鎖Bを含めて成功。実行後はアプリ・店舗端末・本部・SBの実機を再確認し、失敗時は営業再開を止める。読み取り権限を無条件に開き直さない。
 
 ## リハーサルの再実行方法（本番には接続しない）
 
-最新バックアップをローカルPostgreSQL 17の使い捨てDBへ復元し、履歴25件の開始状態を確認してから実行する。復元先は127.0.0.1:55433、DB名はrelease_rehearsal_で始める。Supabase専用拡張や管理スキーマの扱いを記録し、実本番に復元しない。古いバックアップには後から適用済みのschemaと履歴を補ったことを記録する。
+最新バックアップをローカルPostgreSQL 17の使い捨てDBへ復元し、履歴26件の開始状態を確認してから実行する。復元先は127.0.0.1:55433、DB名はrelease_rehearsal_で始める。Supabase専用拡張や管理スキーマの扱いを記録し、実本番に復元しない。古いバックアップには後から適用済みのschemaと履歴を補ったことを記録する。
 
 ```powershell
 node "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/rehearse-production-release.mjs" "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport" "postgresql://postgres@127.0.0.1:55433/release_rehearsal_YYYYMMDD"
