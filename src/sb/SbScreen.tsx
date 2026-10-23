@@ -13,7 +13,7 @@ import { SbToday } from './SbToday'
 import { SbHotpepper } from './SbHotpepper'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
-import { playChime, unlockChime } from './sbChime'
+import { playChime, speak, unlockChime } from './sbChime'
 import './sb.css'
 
 const ACTOR = 'ginjiro_staff_name'
@@ -77,16 +77,47 @@ export function SbScreen() {
     try { const value = await sbApi.options(); if (!Array.isArray(value.actors) || !Array.isArray(value.menus)) throw new Error(); setOptions(value) }
     catch { setError('予約設定を取得できません。SB用migrationの適用・端末認証を確認してください。') }
   }, [])
+  // 新しい AI 予約の確認：誰かが「確認しました」を押すまで帯を出し、2分ごとに声で知らせる（確認は全端末で共通）
+  const [unacked, setUnacked] = useState<{ id: string; starts_at: string; customer_name: string; staff_name: string; sent_at: string }[]>([])
+  const seen = useRef<Set<string> | null>(null)
+  const lastVoice = useRef(0)
+  const announce = () => { if (Date.now() - lastVoice.current < 20_000) return; lastVoice.current = Date.now(); playChime(); speak('予約が入りました', 900) }
+  const loadUnacked = async () => {
+    try {
+      const list = await callStaffRpc<typeof unacked>('staff_new_unacked')
+      // 開いている間に増えた分は、お知らせが届かなくても鳴らす（最初の読み込みでは鳴らさない）
+      if (seen.current && list.some(r => !seen.current!.has(r.id))) announce()
+      seen.current = new Set(list.map(r => r.id))
+      setUnacked(list)
+    } catch { /* 仕組みが無い・通信切れ：次の読み込みで */ }
+  }
+  useEffect(() => {
+    void loadUnacked() // eslint-disable-line react-hooks/set-state-in-effect -- 通信の結果で入れる（同期的な setState ではない）
+    const poll = window.setInterval(() => { if (document.visibilityState === 'visible') void loadUnacked() }, 30_000)
+    return () => clearInterval(poll)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!unacked.length) return
+    const nag = window.setInterval(() => {
+      const oldest = Date.parse(unacked[0].sent_at)
+      if (Date.now() - oldest >= 120_000 && Date.now() - lastVoice.current >= 120_000) { lastVoice.current = Date.now(); playChime(); speak('予約が入ってます。スタッフの方は確認してください', 900) }
+    }, 10_000)
+    return () => clearInterval(nag)
+  }, [unacked])
+  const ackNew = async () => {
+    unlockChime()
+    try { await callStaffRpc('staff_ack_new', { p_staff_name: actor || null }); setUnacked([]); window.speechSynthesis?.cancel() } catch { /* 次の読み込みでもう一度 */ }
+  }
   // AI 予約のお知らせ：この端末で受け取っているか。届いたら（開いているとき）ピコーンと鳴らして予約表を読み直す
   const [push, setPush] = useState<SbPushState | null>(null)
   const [pushNote, setPushNote] = useState<string | null>(null)
   useEffect(() => {
     void sbPushState().then(setPush); void sbPushRefresh()
-    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'sb-new-reservation') { playChime(); void refresh(dateRef.current) } }
+    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'sb-new-reservation') { announce(); void refresh(dateRef.current); void loadUnacked() } }
     navigator.serviceWorker?.addEventListener('message', onMessage)
     window.addEventListener('pointerdown', unlockChime)
     return () => { navigator.serviceWorker?.removeEventListener('message', onMessage); window.removeEventListener('pointerdown', unlockChime) }
-  }, [refresh])
+  }, [refresh]) // eslint-disable-line react-hooks/exhaustive-deps -- announce・loadUnacked は ref だけを使う
   const togglePush = async () => {
     unlockChime()
     try {
@@ -183,6 +214,7 @@ export function SbScreen() {
       {!pending.pending && !pending.error && online && <button className="sb-icon" aria-label="再読み込み" onClick={() => { void refresh(date); void loadOptions() }}><RefreshCw size={18} /></button>}
     </div>}
     {hpb && hpb.open > 0 && <div className="sb-alert" role="status"><span>HOT PEPPERのメールで確認が必要なものが{hpb.open}件あります。</span><button className="sb-secondary" onClick={() => setHpbOpen(true)}>確認する</button></div>}
+    {unacked.length > 0 && <div className="sb-new-alert" role="alert"><Bell size={18} /><span><b>新しい予約 {unacked.length}件</b><small>{unacked.slice(0, 2).map(r => `${jstTime(r.starts_at)} ${r.customer_name}様（${r.staff_name}）`).join('、')}{unacked.length > 2 ? ' ほか' : ''}</small></span><button className="sb-primary" onClick={() => void ackNew()}>確認しました</button></div>}
     {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
       onNew={p => newBooking({ date, minutes: p.minutes, staffId: p.staffId })} onTransfer={() => setArchive('transfer')} />}
     <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />予約</span><span><i className="sb-dot sb-green" />来店済み</span><span><i className="sb-dot sb-gold-dot" />未転記</span></div>
