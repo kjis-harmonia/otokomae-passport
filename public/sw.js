@@ -22,7 +22,7 @@ self.addEventListener('push', (event) => {
   try { data = event.data ? event.data.json() : {} } catch { data = { body: event.data ? event.data.text() : '' } }
   const title = data.title || '銀二郎 JOHNNY'
   // SB への「予約が入りました」：開いている SB にも知らせて、画面で音を鳴らし予約表を読み直す
-  const sb = data.kind === 'sb-new-reservation'
+  const sb = data.kind === 'sb-new-reservation' || data.kind === 'sb-final'
   event.waitUntil(Promise.all([
     self.registration.showNotification(title, {
       body: data.body || '',
@@ -33,7 +33,7 @@ self.addEventListener('push', (event) => {
       vibrate: sb ? [120, 60, 220] : undefined,
       data: { url: data.url || '/?tab=reserve&johnny=1' },
     }),
-    sb ? clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: 'sb-new-reservation' }))) : null,
+    sb ? clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: data.kind }))) : null,
   ]))
 })
 

@@ -21,6 +21,38 @@ export function unlockChime(): void {
   }
 }
 
+// 声のファイル（public/sounds/sb-*.mp3）。置いてあればそれを鳴らし、無ければ端末の声で同じ文を読む
+export const SB_VOICES = {
+  new: { file: '/sounds/sb-new.mp3', text: '予約が入りました' },
+  remind: { file: '/sounds/sb-remind.mp3', text: '予約が入ってます。スタッフの方は確認してください' },
+  final: { file: '/sounds/sb-final.mp3', text: 'テイテイさん、ギンジロウさん、スタッフの皆さん。新しい予約がまだ確認されていません。サロンボードへの入力をお願いします' },
+} as const
+const buffers = new Map<string, AudioBuffer | null>()
+
+async function voiceBuffer(file: string): Promise<AudioBuffer | null> {
+  if (buffers.has(file)) return buffers.get(file) ?? null
+  const a = audio()
+  let buf: AudioBuffer | null = null
+  try {
+    const r = await fetch(file, { cache: 'force-cache' })
+    if (r.ok && (r.headers.get('content-type') ?? '').startsWith('audio')) buf = await a!.decodeAudioData(await r.arrayBuffer())
+  } catch { buf = null }
+  buffers.set(file, buf)
+  return buf
+}
+
+/** ピコーンのあとに声（ファイル、無ければ端末の声） */
+export function announceVoice(kind: keyof typeof SB_VOICES): void {
+  const v = SB_VOICES[kind]
+  playChime()
+  void voiceBuffer(v.file).then(buf => {
+    const a = audio()
+    if (buf && a) {
+      const src = a.createBufferSource(); src.buffer = buf; src.connect(a.destination); src.start(a.currentTime + 0.9)
+    } else speak(v.text, 900)
+  })
+}
+
 /** 端末の声（日本語）で読み上げる。ピコーンのあとに続けたいときは delayMs で少し待つ */
 export function speak(text: string, delayMs = 0): void {
   if (!('speechSynthesis' in window)) return
