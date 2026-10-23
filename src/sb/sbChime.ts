@@ -48,7 +48,11 @@ export function announceVoice(kind: keyof typeof SB_VOICES): void {
   void voiceBuffer(v.file).then(buf => {
     const a = audio()
     if (buf && a) {
-      const src = a.createBufferSource(); src.buffer = buf; src.connect(a.destination); src.start(a.currentTime + 0.9)
+      // 3つの声の大きさをそろえる：一番大きい所が 0.9 になるように持ち上げる（上げすぎない）
+      const d = buf.getChannelData(0); let peak = 0
+      for (let i = 0; i < d.length; i += 4) { const x = Math.abs(d[i]); if (x > peak) peak = x }
+      const g = a.createGain(); g.gain.value = peak > 0 ? Math.min(0.9 / peak, 3) : 1
+      const src = a.createBufferSource(); src.buffer = buf; src.connect(g).connect(a.destination); src.start(a.currentTime + 0.9)
     } else speak(v.text, 900)
   })
 }
