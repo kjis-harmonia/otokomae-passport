@@ -1,6 +1,6 @@
 // 「今日の相棒」：今日の予約表の上に、次のお客様・空き時間・やることを出す。押すとその予約・新規予約が開く。
 import { useMemo, useState } from 'react'
-import { ChevronRight, Clock, Plus } from 'lucide-react'
+import { Check, ChevronRight, Plus } from 'lucide-react'
 import { jstTime, yen } from '../utils/bookingApi'
 import { summarizeToday } from './sbTodaySummary'
 import type { SbLedger } from './sbTypes'
@@ -8,6 +8,11 @@ import type { SbLedger } from './sbTypes'
 const JST = 9 * 60 * 60 * 1000
 const hm = (ms: number) => new Date(ms + JST).toISOString().slice(11, 16)
 const minutesOfDay = (ms: number) => { const d = new Date(ms + JST); return d.getUTCHours() * 60 + d.getUTCMinutes() }
+
+// やることの「済み」：左の丸を押すと確認なしで消す。この端末に覚えるだけで、予約の状態は変えない
+const DONE_KEY = 'ginjiro_sb_todo_done'
+function readDone(): string[] { try { const v = JSON.parse(localStorage.getItem(DONE_KEY) ?? '[]'); return Array.isArray(v) ? v.slice(-200) : [] } catch { return [] } }
+function saveDone(ids: string[]) { try { localStorage.setItem(DONE_KEY, JSON.stringify(ids.slice(-200))) } catch { /* 保存できなくても今の画面では消す */ } }
 
 function until(startIso: string, now: number): string {
   const min = Math.round((Date.parse(startIso) - now) / 60000)
@@ -26,7 +31,10 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
   const nextOne = s.next[0]
   // スマホでは3つを切り替えて1つずつ見せる（パソコンでは3列すべて）
   const [tab, setTab] = useState(0)
-  const tabs = ['次のお客様', `空き時間${s.gaps.length ? ` ${s.gaps.length}` : ''}`, `やること${s.late.length + (s.pendingTransfer > 0 ? 1 : 0) ? ` ${s.late.length + (s.pendingTransfer > 0 ? 1 : 0)}` : ''}`]
+  const [done, setDone] = useState<string[]>(readDone)
+  const late = s.late.filter(r => !done.includes(r.id))
+  const markDone = (id: string) => setDone(d => { const next = [...d.filter(x => x !== id), id]; saveDone(next); return next })
+  const tabs = ['次のお客様', `空き時間${s.gaps.length ? ` ${s.gaps.length}` : ''}`, `やること${late.length + (s.pendingTransfer > 0 ? 1 : 0) ? ` ${late.length + (s.pendingTransfer > 0 ? 1 : 0)}` : ''}`]
 
   return (
     <section className="sb-buddy" aria-label="今日の相棒">
@@ -66,12 +74,14 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
 
       <div className="sb-buddy-col" data-active={tab === 2}>
         <h2>やること</h2>
-        {s.late.map(r => (
-          <button key={r.id} type="button" className="sb-buddy-row sb-buddy-alert" onClick={() => onOpen(r.id)}>
-            <Clock size={16} />
-            <span className="sb-buddy-main"><strong>{r.customer_name}</strong><small>{jstTime(r.starts_at)}の予約・まだ来店になっていません</small></span>
-            <ChevronRight size={16} />
-          </button>
+        {late.map(r => (
+          <div key={r.id} className="sb-buddy-todo">
+            <button type="button" className="sb-buddy-check" onClick={() => markDone(r.id)} aria-label={`${r.customer_name}様のやることを済みにする`}><Check size={14} /></button>
+            <button type="button" className="sb-buddy-row sb-buddy-alert" onClick={() => onOpen(r.id)}>
+              <span className="sb-buddy-main"><strong>{r.customer_name}</strong><small>{jstTime(r.starts_at)}の予約・まだ来店になっていません</small></span>
+              <ChevronRight size={16} />
+            </button>
+          </div>
         ))}
         {s.pendingTransfer > 0 && (
           <button type="button" className="sb-buddy-row" onClick={onTransfer}>
