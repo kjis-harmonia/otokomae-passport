@@ -101,9 +101,10 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ test: true, subs: results.length, results }), { headers: { 'Content-Type': 'application/json' } })
   }
 
-  // SB の試し送り：{ "staff_test": true }
-  if ((body as { staff_test?: unknown }).staff_test === true) {
-    return new Response(JSON.stringify({ staff_test: true, ...(await sendStaffNew(true)) }), { headers: { 'Content-Type': 'application/json' } })
+  // SB の試し送り：{ "staff_test": true }。SB だけの毎分の見回り（キャンセル待ちの無い本番）：{ "staff": true }
+  if ((body as { staff_test?: unknown }).staff_test === true || (body as { staff?: unknown }).staff === true) {
+    const test = (body as { staff_test?: unknown }).staff_test === true
+    return new Response(JSON.stringify({ staff: true, test, ...(await sendStaffNew(test)) }), { headers: { 'Content-Type': 'application/json' } })
   }
 
   // キャンセル待ち（毎分）：{ "waitlist": true } のときは、空いた枠を押さえた人へ「確定して」のお知らせ。
