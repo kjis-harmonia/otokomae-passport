@@ -95,7 +95,10 @@ export function SbScreen() {
   useEffect(() => {
     void loadUnacked() // eslint-disable-line react-hooks/set-state-in-effect -- 通信の結果で入れる（同期的な setState ではない）
     const poll = window.setInterval(() => { if (document.visibilityState === 'visible') void loadUnacked() }, 30_000)
-    return () => clearInterval(poll)
+    // 画面に戻ったら（iPad のスリープ明け・別のアプリから戻ったとき）すぐ確かめる
+    const onVisible = () => { if (document.visibilityState === 'visible') void loadUnacked() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(poll); document.removeEventListener('visibilitychange', onVisible) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!unacked.length) return
@@ -103,7 +106,7 @@ export function SbScreen() {
       const oldest = Date.parse(unacked[0].sent_at)
       // 2分：確認してください。5分：最終警告（テイテイさん、ギンジロウさん…）。押すまで2分ごと
       const age = Date.now() - oldest
-      if (age >= 120_000 && Date.now() - lastVoice.current >= 120_000) { lastVoice.current = Date.now(); announceVoice(age >= 300_000 ? 'final' : 'remind') }
+      if (age >= 120_000 && Date.now() - lastVoice.current >= 120_000) { lastVoice.current = Date.now(); announceVoice(age >= 300_000 ? 'final' : unacked.every(r => r.kind === 'cancel') ? 'cancel' : 'remind') }
     }, 10_000)
     return () => clearInterval(nag)
   }, [unacked])

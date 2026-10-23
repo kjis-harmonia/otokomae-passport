@@ -8,6 +8,12 @@ const VAPID_PUBLIC_KEY = 'BBQJYd10vYeZsU922Mm38NB_yhLK3Cq13BdD63kDJCAB3uDhe50HgW
 
 export type SbPushState = 'on' | 'off' | 'denied' | 'needs-install' | 'unsupported'
 
+// この端末で SB の受け取りを止めたか。端末の受け取り口（PushSubscription）はお客様アプリの JOHNNY と共有のことがあるので、
+// 止めるときは消さずに、サーバーの登録だけ外してここに覚える
+const OFF_KEY = 'ginjiro_sb_push_off'
+const offHere = () => { try { return localStorage.getItem(OFF_KEY) === '1' } catch { return false } }
+const setOffHere = (off: boolean) => { try { if (off) localStorage.setItem(OFF_KEY, '1'); else localStorage.removeItem(OFF_KEY) } catch { /* 保存できない端末 */ } }
+
 const supported = () => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 const standalone = () => window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
@@ -33,7 +39,7 @@ async function save(sub: PushSubscription): Promise<void> {
 export async function sbPushState(): Promise<SbPushState> {
   if (!supported()) return isIOS() && !standalone() ? 'needs-install' : 'unsupported'
   if (Notification.permission === 'denied') return 'denied'
-  if (Notification.permission !== 'granted') return 'off'
+  if (Notification.permission !== 'granted' || offHere()) return 'off'
   try { return (await (await registration())?.pushManager.getSubscription()) ? 'on' : 'off' } catch { return 'off' }
 }
 
@@ -46,22 +52,21 @@ export async function sbPushOn(): Promise<SbPushState> {
   if (!reg) return 'unsupported'
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }))
   await save(sub)
+  setOffHere(false)
   return 'on'
 }
 
 export async function sbPushOff(): Promise<SbPushState> {
   const sub = supported() ? await (await registration())?.pushManager.getSubscription() : null
-  if (sub) {
-    await callStaffRpc('staff_delete_push', { p_endpoint: sub.endpoint }).catch(() => {})
-    await sub.unsubscribe().catch(() => false)
-  }
+  if (sub) await callStaffRpc('staff_delete_push', { p_endpoint: sub.endpoint })
+  setOffHere(true)
   return sbPushState()
 }
 
 /** 許可済みなら、受け取り先をサーバーに入れ直す（SB を開いたとき。受け取り先は変わることがある） */
 export async function sbPushRefresh(): Promise<void> {
   try {
-    if (!supported() || Notification.permission !== 'granted') return
+    if (!supported() || Notification.permission !== 'granted' || offHere()) return
     const sub = await (await registration())?.pushManager.getSubscription()
     if (sub) await save(sub)
   } catch { /* 次に開いたときにもう一度 */ }
