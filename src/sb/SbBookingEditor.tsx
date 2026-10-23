@@ -16,8 +16,8 @@ export interface SbPreset {
   date: string; minutes?: number; staffId?: string | null
   draft?: { customerName: string | null; phone: string | null; menuCodes: string[]; source: SbInput['source'] | null; externalRef: string | null; understood: string[] }
 }
-export function SbBookingEditor({ options, preset, reservation, actor, setActor, busy: sending, onSend, onClose }: {
-  options: SbOptions; preset: SbPreset; reservation?: SbReservation; actor: string; setActor: (name: string) => void
+export function SbBookingEditor({ options, preset, reservation, actor, busy: sending, onSend, onClose }: {
+  options: SbOptions; preset: SbPreset; reservation?: SbReservation; actor: string
   busy: boolean; onSend: (command: SbCommand) => Promise<void>; onClose: () => void
 }) {
   const r = reservation
@@ -61,7 +61,7 @@ export function SbBookingEditor({ options, preset, reservation, actor, setActor,
 
   async function review() {
     if (reviewing.current || busy || !form.current?.reportValidity()) return
-    if (!options.actors.some(a => a.name === actor)) { setError('操作者を選択してください。'); return }
+    if (!options.actors.some(a => a.name === actor)) { setError('本部でスタッフの設定が必要です。'); return }
     if (!codes.length) { setError('メニューを選択してください。'); return }
     reviewing.current = true; setChecking(true); setError(null)
     try {
@@ -95,12 +95,10 @@ export function SbBookingEditor({ options, preset, reservation, actor, setActor,
       <dt>メニュー</dt><dd>{preview.value.items.map(i => <span className="sb-line" key={i.menu_code}>{i.name}<small>{i.duration_min}分 / {yen(i.price)}</small></span>)}</dd>
       <dt>所要時間</dt><dd>{preview.value.duration_min}分{preview.value.buffer_min ? ` ＋片付け${preview.value.buffer_min}分` : ''}</dd>
       <dt>予約時の金額</dt><dd className="sb-price">{yen(preview.value.total_price)}</dd>
-      <dt>操作者</dt><dd>{preview.actor}</dd>
       {preview.input.note && <><dt>メモ</dt><dd className="sb-prewrap">{preview.input.note}</dd></>}
     </dl> : <form ref={form} onSubmit={e => { e.preventDefault(); void review() }}>
       <fieldset disabled={busy} className="sb-fieldset">
         {d && <p className="sb-understood">{d.understood.length ? `読み取った内容：${d.understood.join("・")}` : "読み取れた内容がありません"}。足りないところを入れて確かめてください。</p>}
-        <label className="sb-field">操作者<select value={actor} onChange={e => setActor(e.target.value)} required><option value="">選択してください</option>{options.actors.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></label>
         <label className="sb-field">お客様名<input value={name} onChange={e => { setName(e.target.value); if (!r) setClient(null) }} required={!!r} maxLength={60} autoComplete="off" placeholder={r ? 'お名前' : '空なら「電話予約」で入れます'} /></label>
         <label className="sb-field">電話番号（任意）<input type="tel" value={phone} onChange={e => { setPhone(e.target.value); if (!r) setClient(null) }} maxLength={20} autoComplete="off" /></label>
         {!r && !client && query && candidates.length > 0 && <div className="sb-candidates">{candidates.map(c => <button type="button" className="sb-candidate" key={c.id} onClick={() => { setClient(c); setName(c.name); if (c.phone) setPhone(c.phone) }}><span>{c.name}<small>{c.phone || (c.phone_last4 ? `電話 下4桁 ${c.phone_last4}` : '')}{c.last_visit ? ` / 前回 ${c.last_visit}` : ''}</small></span><span>選択</span></button>)}</div>}

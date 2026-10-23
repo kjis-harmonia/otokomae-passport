@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Bell, BellOff, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Clipboard, List, LoaderCircle, Plus, RefreshCw, UserRound } from 'lucide-react'
+import { Bell, BellOff, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Clipboard, List, LoaderCircle, Plus, RefreshCw } from 'lucide-react'
 import { addDaysToDateString, getJapanDateString } from '../utils/dateUtils'
 import { jstDateLabel, jstMinutesOf, jstTime, STATUS_LABEL, yen } from '../utils/bookingApi'
 import { callStaffRpc } from './sbRpc'
@@ -33,8 +33,8 @@ export function SbScreen() {
   const [options, setOptions] = useState<SbOptions | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [actor, setActorState] = useState(loadActor)
-  const [pickActor, setPickActor] = useState(false)
+  // 操作者は選ばない（SB はサブの道具：楽な操作を優先）。履歴に残す名前は、この端末で前に選んだ人、いなければスタッフの先頭
+  const [actor] = useState(loadActor)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editor, setEditor] = useState<{ preset: SbPreset; reservation?: SbReservation } | null>(null)
   // 時間を閉める（クローズ）・外す
@@ -58,10 +58,7 @@ export function SbScreen() {
   const scrolled = useRef<string | null>(null)
   const blocked = busy || !!pending.pending || !!pending.error || !online || !!error
 
-  const setActor = (name: string) => {
-    setActorState(name)
-    try { localStorage.setItem(ACTOR, JSON.stringify(name)) } catch { /* Sending fails closed if persistence is unavailable. */ }
-  }
+  const operator = options?.actors.some(a => a.name === actor) ? actor : options?.actors[0]?.name ?? ''
   const loadHpb = useCallback(async () => {
     try { const value = await hpbApi.list(); if (Array.isArray(value?.mails)) setHpb(value) } catch { /* メールの取込一覧が読めなくても予約表は止めない */ }
   }, [])
@@ -117,7 +114,7 @@ export function SbScreen() {
   const ackNew = async () => {
     unlockChime()
     // 画面に出ている分だけ確認済みにする（押す直前に届いた予約は、次の読み込みで帯に出る）
-    try { await callStaffRpc('staff_ack_new', { p_staff_name: actor || null, p_ids: unacked.map(r => r.id) }); setUnacked([]); void loadUnacked(); window.speechSynthesis?.cancel(); void refresh(dateRef.current) } catch { /* 次の読み込みでもう一度 */ }
+    try { await callStaffRpc('staff_ack_new', { p_staff_name: operator || null, p_ids: unacked.map(r => r.id) }); setUnacked([]); void loadUnacked(); window.speechSynthesis?.cancel(); void refresh(dateRef.current) } catch { /* 次の読み込みでもう一度 */ }
   }
   // AI 予約のお知らせ：この端末で受け取っているか。届いたら（開いているとき）ピコーンと鳴らして予約表を読み直す
   const [push, setPush] = useState<SbPushState | null>(null)
@@ -174,7 +171,8 @@ export function SbScreen() {
   useEffect(() => {
     if (!ledger || !scrollRef.current || scrolled.current === date) return
     scrolled.current = date
-    scrollRef.current.scrollLeft = minutesNow !== null ? Math.max(0, x(minutesNow) - 96) : 0
+    // ちょうどの時刻（1時間前の正時）から見せる：目盛りの「18:00」が担当者の列に隠れて「8:00」に見えないように
+    scrollRef.current.scrollLeft = minutesNow !== null ? Math.max(0, x(Math.floor(minutesNow / 60) * 60 - 60)) : 0
   }, [ledger, date, minutesNow, x])
   const selected = ledger?.reservations.find(r => r.id === selectedId)
   const active = ledger?.reservations.filter(r => OCCUPYING.has(r.status)) ?? []
@@ -191,9 +189,9 @@ export function SbScreen() {
   }
   async function send(command: SbCommand) {
     if (sending.current || blocked) return
-    if (!options?.actors.some(a => a.name === actor)) { setPickActor(true); return }
+    if (!operator) { setNotice('本部でスタッフの設定が必要です。'); return }
     sending.current = true; setBusy(true); setNotice(null)
-    try { await applyOutcome(await sbPending.start(command, actor, sbApi.mutate)) }
+    try { await applyOutcome(await sbPending.start(command, operator, sbApi.mutate)) }
     catch (err) { setEditor(null); setSelectedId(null); setNotice(errorText(err)) }
     finally { sending.current = false; setBusy(false) }
   }
@@ -219,7 +217,7 @@ export function SbScreen() {
       <div className="sb-date-nav"><button className="sb-nav" aria-label="前の日" title="前の日" onClick={() => setDate(addDaysToDateString(date, -1))}><ChevronLeft size={24} /></button>
         <label className="sb-date-label"><span>{jstDateLabel(date)}</span><input type="date" aria-label="予約表の日付" value={date} onChange={e => e.target.value && setDate(e.target.value)} /></label>
         <button className="sb-nav" aria-label="次の日" title="次の日" onClick={() => setDate(addDaysToDateString(date, 1))}><ChevronRight size={24} /></button><button className="sb-secondary sb-today" onClick={() => setDate(today)}>今日</button></div>
-      <div className="sb-toolbar-actions"><button className="sb-actor sb-bell" aria-pressed={push === 'on'} title={push === 'on' ? '予約のお知らせ：受け取り中（押すと止める）' : '予約のお知らせを受け取る'} onClick={() => void togglePush()}>{push === 'on' ? <Bell size={18} /> : <BellOff size={18} />}<span>{push === 'on' ? '通知オン' : '通知'}</span></button><button className="sb-actor" disabled={busy || !!pending.pending} onClick={() => setPickActor(true)}><UserRound size={18} /><span>{options?.actors.some(a => a.name === actor) ? actor : '操作者'}</span></button>
+      <div className="sb-toolbar-actions"><button className="sb-actor sb-bell" aria-pressed={push === 'on'} title={push === 'on' ? '予約のお知らせ：受け取り中（押すと止める）' : '予約のお知らせを受け取る'} onClick={() => void togglePush()}>{push === 'on' ? <Bell size={18} /> : <BellOff size={18} />}<span>{push === 'on' ? '通知オン' : '通知'}</span></button>
         <button className="sb-primary" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} /><span className="sb-primary-label">新規予約</span></button></div>
     </header>
     <SbCommandBar options={options} disabled={blocked} onDraft={draft => {
@@ -250,16 +248,15 @@ export function SbScreen() {
     <footer className="sb-statusbar"><div>{ledger?.closure ? <span>休業日{ledger.closure.reason ? `：${ledger.closure.reason}` : ''}</span> : ledger && !ledger.staff.some(s => s.shifts.length) ? <span>本部で勤務時間の設定が必要です。</span> : <span>{active.length}件</span>}
       <button onClick={() => setHpbOpen(true)}>HPBメール</button>{cancelled.length > 0 && <button onClick={() => setArchive('cancelled')}>取消・不来店 {cancelled.length}件</button>}{toTransfer.length > 0 && <button onClick={() => setArchive('transfer')}>未転記 {toTransfer.length}件</button>}</div><span>{updated ? `${updated} 更新` : ''}</span></footer>
     {pushNote && <SbModal title="予約のお知らせ" onClose={() => setPushNote(null)}><p className="sb-push-note">{pushNote}</p></SbModal>}
-    {pickActor && options && <SbModal title="操作者" onClose={() => setPickActor(false)}><div className="sb-actor-list">{options.actors.map(a => <button className="sb-secondary" aria-pressed={actor === a.name} key={a.id} onClick={() => { setActor(a.name); setPickActor(false) }}>{a.name}{actor === a.name && <Check size={18} />}</button>)}</div></SbModal>}
-    {hpbOpen && <SbHotpepper list={hpb} actor={actor} disabled={!online} onClose={() => setHpbOpen(false)}
+    {hpbOpen && <SbHotpepper list={hpb} actor={operator} disabled={!online} onClose={() => setHpbOpen(false)}
       onChanged={() => void refresh(dateRef.current)}
       onOpen={(d, id) => { setHpbOpen(false); if (d === dateRef.current) setSelectedId(id); else { wantedId.current = id; setDate(d) } }} />}
     {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
     {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} actor={actor} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
-    {closing && options && <SbCloseSheet options={options} preset={closing} actor={actor} setActor={setActor} onClose={() => setClosing(null)} onDone={m => { setClosing(null); setNotice(m); void refresh(dateRef.current) }} />}
-    {reopening && <SbReopenSheet block={reopening.block} staffName={reopening.staffName} actor={actor} onClose={() => setReopening(null)} onDone={m => { setReopening(null); setNotice(m); void refresh(dateRef.current) }} />}
-    {editor && options && <SbBookingEditor key={editor.reservation?.id ?? 'new'} options={options} preset={editor.preset} reservation={editor.reservation} actor={actor} setActor={setActor} busy={busy} onSend={send} onClose={() => setEditor(null)} />}
+    {closing && options && <SbCloseSheet options={options} preset={closing} actor={operator} onClose={() => setClosing(null)} onDone={m => { setClosing(null); setNotice(m); void refresh(dateRef.current) }} />}
+    {reopening && <SbReopenSheet block={reopening.block} staffName={reopening.staffName} actor={operator} onClose={() => setReopening(null)} onDone={m => { setReopening(null); setNotice(m); void refresh(dateRef.current) }} />}
+    {editor && options && <SbBookingEditor key={editor.reservation?.id ?? 'new'} options={options} preset={editor.preset} reservation={editor.reservation} actor={operator} busy={busy} onSend={send} onClose={() => setEditor(null)} />}
   </div>
 }
 
