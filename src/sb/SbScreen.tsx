@@ -9,6 +9,7 @@ import type { SbCommand, SbLedger, SbOptions, SbReservation, TransferStatus } fr
 import { SbBookingEditor, type SbPreset } from './SbBookingEditor'
 import { SbModal } from './SbModal'
 import { SbCommandBar } from './SbCommandBar'
+import { SbCloseSheet, SbReopenSheet, type SbClosePreset } from './SbCloseSheet'
 import { SbToday } from './SbToday'
 import { SbHotpepper } from './SbHotpepper'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
@@ -36,6 +37,9 @@ export function SbScreen() {
   const [pickActor, setPickActor] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editor, setEditor] = useState<{ preset: SbPreset; reservation?: SbReservation } | null>(null)
+  // 時間を閉める（クローズ）・外す
+  const [closing, setClosing] = useState<SbClosePreset | null>(null)
+  const [reopening, setReopening] = useState<{ block: SbLedger['blocks'][number]; staffName: string } | null>(null)
   const [view, setView] = useState<'board' | 'list'>('board')
   const [archive, setArchive] = useState<'cancelled' | 'transfer' | null>(null)
   const [hpb, setHpb] = useState<HpbList | null>(null)
@@ -205,6 +209,10 @@ export function SbScreen() {
     if (blocked || !options) return
     setNotice(null); setEditor({ preset })
   }
+  function openClose(preset: SbClosePreset) {
+    if (blocked || !options) return
+    setNotice(null); setClosing(preset)
+  }
   const list = archive === 'cancelled' ? cancelled : archive === 'transfer' ? toTransfer : ledger?.reservations ?? []
   return <div className={`sb-app${compact ? ' sb-compact' : ''}`}>
     <header className="sb-toolbar"><h1><span className="sb-wordmark">銀二郎</span><span className="sb-mark">SB</span></h1>
@@ -214,7 +222,11 @@ export function SbScreen() {
       <div className="sb-toolbar-actions"><button className="sb-actor sb-bell" aria-pressed={push === 'on'} title={push === 'on' ? '予約のお知らせ：受け取り中（押すと止める）' : '予約のお知らせを受け取る'} onClick={() => void togglePush()}>{push === 'on' ? <Bell size={18} /> : <BellOff size={18} />}<span>{push === 'on' ? '通知オン' : '通知'}</span></button><button className="sb-actor" disabled={busy || !!pending.pending} onClick={() => setPickActor(true)}><UserRound size={18} /><span>{options?.actors.some(a => a.name === actor) ? actor : '操作者'}</span></button>
         <button className="sb-primary" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} /><span className="sb-primary-label">新規予約</span></button></div>
     </header>
-    <SbCommandBar options={options} disabled={blocked} onDraft={draft => newBooking({ date: draft.date < today ? today : draft.date, minutes: draft.minutes ?? undefined, staffId: draft.staffId, draft })} />
+    <SbCommandBar options={options} disabled={blocked} onDraft={draft => {
+      const day = draft.date < today ? today : draft.date
+      if (draft.close) openClose({ date: day, minutes: draft.minutes, endMinutes: draft.endMinutes, staffId: draft.staffId })
+      else newBooking({ date: day, minutes: draft.minutes ?? undefined, staffId: draft.staffId, draft })
+    }} />
     {(pending.error || pending.pending || !online || error) && <div className="sb-alert" role="alert">
       <span>{pending.error ? sbError('storage_error') : pending.pending ? '送信済み予約の結果確認が必要です。新しい予約の送信は停止中です。' : !online ? 'オフラインです。予約の登録・変更はできません。' : error}</span>
       {pending.pending && !pending.error && <button className="sb-secondary" disabled={busy || !online} onClick={() => void retry()}>{busy ? '確認中…' : '同じ内容で結果を確認'}</button>}
@@ -233,7 +245,7 @@ export function SbScreen() {
         <div className="sb-axis-name">担当者</div><div className="sb-axis">{Array.from({ length: (range.end - range.start) / 60 }, (_, i) => range.start + i * 60).map(m => <span key={m} style={{ left: x(m) + 8 }}>{Math.floor(m / 60)}:00</span>)}</div>
         {ledger.staff.map(staff => { const bookings = active.filter(r => r.staff_id === staff.id); const used = Math.max(0, ...bookings.map(r => r.booking_lane + 1)); const lanes = Math.max(2, used) /* ふだんは2段。同時に3件入った日だけ3段に増やす */
           return <StaffRow key={staff.id} staff={staff} lanes={lanes} reservations={bookings} ledger={ledger} date={date} range={range} nowMin={minutesNow} x={x} blocked={blocked}
-            onOpen={setSelectedId} onNew={minutes => newBooking({ date, staffId: staff.id, minutes })} /> })}
+            onOpen={setSelectedId} onNew={minutes => newBooking({ date, staffId: staff.id, minutes })} onBlock={b => setReopening({ block: b, staffName: b.staff_id ? staff.name : '全員' })} /> })}
       </div>{!ledger.staff.length && <p className="sb-empty">本部で予約スタッフの設定が必要です。</p>}</div>}
     <footer className="sb-statusbar"><div>{ledger?.closure ? <span>休業日{ledger.closure.reason ? `：${ledger.closure.reason}` : ''}</span> : ledger && !ledger.staff.some(s => s.shifts.length) ? <span>本部で勤務時間の設定が必要です。</span> : <span>{active.length}件</span>}
       <button onClick={() => setHpbOpen(true)}>HPBメール</button>{cancelled.length > 0 && <button onClick={() => setArchive('cancelled')}>取消・不来店 {cancelled.length}件</button>}{toTransfer.length > 0 && <button onClick={() => setArchive('transfer')}>未転記 {toTransfer.length}件</button>}</div><span>{updated ? `${updated} 更新` : ''}</span></footer>
@@ -245,14 +257,16 @@ export function SbScreen() {
     {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
     {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} actor={actor} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
+    {closing && options && <SbCloseSheet options={options} preset={closing} actor={actor} setActor={setActor} onClose={() => setClosing(null)} onDone={m => { setClosing(null); setNotice(m); void refresh(dateRef.current) }} />}
+    {reopening && <SbReopenSheet block={reopening.block} staffName={reopening.staffName} actor={actor} onClose={() => setReopening(null)} onDone={m => { setReopening(null); setNotice(m); void refresh(dateRef.current) }} />}
     {editor && options && <SbBookingEditor key={editor.reservation?.id ?? 'new'} options={options} preset={editor.preset} reservation={editor.reservation} actor={actor} setActor={setActor} busy={busy} onSend={send} onClose={() => setEditor(null)} />}
   </div>
 }
 
-function StaffRow({ staff, lanes, reservations, ledger, date, range, nowMin, x, blocked, onOpen, onNew }: {
+function StaffRow({ staff, lanes, reservations, ledger, date, range, nowMin, x, blocked, onOpen, onNew, onBlock }: {
   staff: SbLedger['staff'][number]; lanes: number; reservations: SbReservation[]; ledger: SbLedger; date: string
   range: { start: number; end: number }; nowMin: number | null; x: (minute: number) => number; blocked: boolean
-  onOpen: (id: string) => void; onNew: (minute?: number) => void
+  onOpen: (id: string) => void; onNew: (minute?: number) => void; onBlock: (block: SbLedger['blocks'][number]) => void
 }) {
   const blocks = ledger.blocks.filter(b => b.staff_id === null || b.staff_id === staff.id)
   return <><div className="sb-staff-name" style={{ minHeight: lanes * LANE_H }}><strong>{staff.name}</strong><small>{staff.shifts.length ? `同時${staff.capacity}枠` : '休み'}</small></div>
@@ -265,7 +279,13 @@ function StaffRow({ staff, lanes, reservations, ledger, date, range, nowMin, x, 
           if (nowMin !== null && m < nowMin) return
           if (staff.shifts.some(s => jstMinutesOf(s.start, date) <= m && jstMinutesOf(s.end, date) > m)) onNew(m)
         }} />)}
-      {blocks.map(b => <div className="sb-time-block" key={b.id} style={{ left: x(Math.max(range.start, jstMinutesOf(b.starts_at, date))), width: x(Math.min(range.end, jstMinutesOf(b.ends_at, date))) - x(Math.max(range.start, jstMinutesOf(b.starts_at, date))) }}>{b.kind === 'break' ? '休憩' : '受付外'}</div>)}
+      {blocks.map(b => {
+        const style = { left: x(Math.max(range.start, jstMinutesOf(b.starts_at, date))), width: x(Math.min(range.end, jstMinutesOf(b.ends_at, date))) - x(Math.max(range.start, jstMinutesOf(b.starts_at, date))) }
+        // SB で閉めた時間（クローズ）は押して外せる。本部の休憩などは表示だけ
+        return b.kind === 'unavailable'
+          ? <button type="button" className="sb-time-block sb-closed" key={b.id} style={style} disabled={blocked} aria-label={`${staff.name} ${jstTime(b.starts_at)}から${jstTime(b.ends_at)}までクローズ`} onClick={() => onBlock(b)}>クローズ<small>{jstTime(b.starts_at)}–{jstTime(b.ends_at)}</small></button>
+          : <div className="sb-time-block" key={b.id} style={style}>{b.kind === 'break' ? '休憩' : '受付外'}</div>
+      })}
       {reservations.map(r => {
         const start = jstMinutesOf(r.starts_at, date), end = jstMinutesOf(r.ends_at, date), until = jstMinutesOf(r.occupied_until, date)
         return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}`} aria-label={`${jstTime(r.starts_at)} ${r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`} onClick={() => onOpen(r.id)}
