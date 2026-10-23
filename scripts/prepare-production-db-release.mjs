@@ -8,13 +8,15 @@ import {createHash} from 'node:crypto'
 const root=resolve(process.argv[2]??dirname(dirname(fileURLToPath(import.meta.url))))
 const out=join(root,'supabase/rollout/out_release')
 const order=readFileSync(join(root,'supabase/rollout/release_prod_order.txt'),'utf8').trim().split(/\r?\n/)
-if(order.length!==20||order[2]!=='20261006000000_service_master#checkout_catalog_json'||!order[14].endsWith('_customer_store_access'))throw new Error('Release order changed; review before generating')
+if(order.length!==21||order[20]!=='20261023000000_ai_booking_penalty'||order[2]!=='20261006000000_service_master#checkout_catalog_json'||!order[14].endsWith('_customer_store_access'))throw new Error('Release order changed; review before generating')
 const baseline=[
  ['20261002000000','booking_phase1'],['20261003000000','customer_ledger'],['20261006000000','service_master'],
  ...['sb_reservation_board','sb_capacity_setting','sb_hotpepper_mail','sb_hotpepper_mail_notices','sb_hotpepper_no_coupon','sb_hotpepper_note'].map((n,i)=>['20261015'+String(i*100).padStart(6,'0'),n]),
  ['20261015100000','customer_contact'],['20261016000000','hq_app_booking_switch'],['20261016000100','customer_availability_overview'],
  ['20261017000000','visit_log'],['20261017000100','visit_log_maintenance'],['20261017000200','ticket_rules_checkin_price'],['20261017000300','johnny_push'],
  ['20261018000000','hq_messages'],['20261018000110','hq_tasks'],['20261018000210','open_slot_push'],['20261018000300','menu_price_changes'],
+ // 10/23 に本番へ先行して入れた SB のお知らせ（公開前からある）
+ ['20261023000100','staff_push'],['20261023000200','staff_push_ack'],['20261023000300','staff_push_final'],['20261023000400','staff_push_cancel'],
 ]
 function historyKey(rows){return createHash('md5').update([...rows].sort(([a],[b])=>a.localeCompare(b)).map(([v,n])=>v+':'+n).join('\n')).digest('hex')}
 function historyGuard(rows){return `do $release_history$\nbegin\n  if (select count(*) from supabase_migrations.schema_migrations) <> ${rows.length}\n    or (select md5(coalesce(string_agg(version || ':' || coalesce(name,''), E'\\n' order by version),'')) from supabase_migrations.schema_migrations) <> '${historyKey(rows)}' then\n    raise exception 'Release history differs from reviewed state (${rows.length} entries); STOP';\n  end if;\nend;\n$release_history$;`}
@@ -57,7 +59,7 @@ writeFileSync(join(out,'check_acl.sql'),snapshot(before15,aclFields))
 const approvals="select count(*) as approved, md5(coalesce(string_agg(c.id::text||':'||c.user_id,E'\\n' order by c.id,c.user_id),'')) as fingerprint, count(*) filter(where v.verified_by='一括（店の記録あり）') as bulk_label from app_private.customer_store_verifications v join public.customers c on c.id=v.customer_id;"
 writeFileSync(join(out,'check_bulk.sql'),snapshot(before15,aclFields+",'approvals',"+jsonRow(approvals)))
 writeFileSync(join(out,'check_final.sql'),snapshot(expected,aclFields+",'approvals',"+jsonRow(approvals)+",'ginpay_consistent',(app_private.ginpay_reconcile_json())->>'consistent'"))
-// This is a separate post-Web publication step. Never run it in the initial 20-step loop:
+// This is a separate post-Web publication step. Never run it in the initial 21-step loop:
 // sessionless legacy customer reads must switch to the store verification flow first.
 const lockdownName='20261001000400_security_hardening_b_lockdown'
 const lockdownSource=readFileSync(join(root,'supabase/migrations',lockdownName+'.sql'),'utf8')
@@ -71,4 +73,4 @@ writeFileSync(join(out,'check_post_web_lockdown.sql'),snapshot(postExpected,aclF
 for(const file of readdirSync(out).filter(f=>/^check_(?:\d\d|acl|bulk|final|post_web_lockdown)\.sql$/.test(f))){manifest.push({file,sha256:createHash('sha256').update(readFileSync(join(out,file))).digest('hex')})}
 writeFileSync(join(out,'manifest.json'),JSON.stringify({project_ref:'ufyzynpmkxytnhebombq',baseline:baseline.length,final:expected.length,entries,post_web:{file:postFile,check:'check_post_web_lockdown.sql',history:postExpected.length},files:manifest},null,2)+'\n')
 console.log(`Prepared ${entries.length} rollout files and read-only checks; history ${baseline.length} -> ${expected.length}. No database connection made.`)
-console.log('Prepared separate post-Web lockdown; history 39 -> 40. Do not run before the new Web app is published and verified.')
+console.log(`Prepared separate post-Web lockdown; history ${expected.length} -> ${postExpected.length}.`+' Do not run before the new Web app is published and verified.')

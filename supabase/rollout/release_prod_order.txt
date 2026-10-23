@@ -18,3 +18,4 @@
 20261019000200_checkout_safety
 20261019000300_finalize_sale_ticket_alias
 20261019000400_app_private_helper_grants
+20261023000000_ai_booking_penalty

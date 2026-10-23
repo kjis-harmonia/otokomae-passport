@@ -20,7 +20,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot read local release commit; stop' }
 $taskRemote = & git @taskGitOptions rev-parse refs/remotes/origin/release/20261020
 if ($LASTEXITCODE -ne 0 -or $taskHead -ne $taskRemote) { throw 'Local HEAD is not the latest origin/release/20261020; stop' }
 $taskFunctions = & git @taskGitOptions rev-parse 'HEAD:supabase/functions'
-if ($LASTEXITCODE -ne 0 -or $taskFunctions -ne 'ae67f4b29f3a5381538d3dff47a44aa8bf14d8a9') { throw 'Reviewed Edge source changed; stop' }
+if ($LASTEXITCODE -ne 0 -or $taskFunctions -ne 'a3ab54751d26b8d45643e89325e495ddb10fc9fa') { throw 'Reviewed Edge source changed; stop' }
 $taskConfig = & git @taskGitOptions rev-parse 'HEAD:supabase/config.toml'
 if ($LASTEXITCODE -ne 0 -or $taskConfig -ne '6bd1ccae724058b9b6d46ef53448b9f67f6583f2') { throw 'Reviewed JWT configuration changed; stop' }
 Assert-ReleaseWorktree

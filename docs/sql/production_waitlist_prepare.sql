@@ -1,4 +1,4 @@
--- Human-run only, AFTER DB steps 01-20. Creates a paused job; does not send.
+-- Human-run only, AFTER DB steps 01-21. Creates a paused job; does not send.
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
@@ -11,7 +11,8 @@ declare
   n bigint;
   j bigint;
 begin
-  if (select count(*) from supabase_migrations.schema_migrations) <> 39
+  if (select count(*) from supabase_migrations.schema_migrations) <> 44
+     or not exists (select 1 from supabase_migrations.schema_migrations where version='20261023000000' and name='ai_booking_penalty')
      or not exists (select 1 from supabase_migrations.schema_migrations where version='20261019000000' and name='waitlist')
      or not exists (select 1 from supabase_migrations.schema_migrations where version='20261018040349' and name='customer_store_access') then
     raise exception 'release_db_not_ready';
