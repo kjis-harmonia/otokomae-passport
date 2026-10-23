@@ -983,7 +983,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
 
             {(step.k === 'confirm' || step.k === 'booking') && (
               <Summary menu={step.menu} slot={step.slot} hidePrice={step.k === 'confirm' && !!confirmPrice}
-                staffName={step.k === 'confirm' && step.staffId ? options?.staff?.find(x => x.id === step.staffId)?.name ?? '指名あり' : undefined}
+                staffName={step.k !== 'confirm' ? undefined : step.staffId ? options?.staff?.find(x => x.id === step.staffId)?.name ?? '指名あり' : step.staffChosen ? '指名なし' : undefined}
                 before={step.k === 'confirm' ? step.change : undefined} />
             )}
 

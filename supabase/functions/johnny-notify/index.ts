@@ -57,36 +57,41 @@ function dayLabel(ymd: string): string {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${'日月火水木金土'[d.getUTCDay()]}）`
 }
 
-interface StaffNew { id: string; starts_at: string; customer_name: string; staff_name: string; menus: string | null }
+interface StaffNew { id: string; starts_at: string; customer_name: string; staff_name: string; menus?: string | null; kind?: 'new' | 'cancel'; rescheduled?: boolean }
 type Sub = { endpoint: string; p256dh: string; auth: string }
 
-/** SB へ：AI 予約が入ったら、SB を入れたすべての端末に「予約が入りました」。test なら試しの1通 */
-async function sendStaffNew(test = false): Promise<{ reservations: number; devices: number; delivered: number }> {
-  const p = await rpc<{ reservations: StaffNew[]; overdue?: StaffNew[]; subs: Sub[] }>('staff_push_pending_for_sender', { p_secret: SECRET })
+/** SB へ：AI 予約が入った・お客様がアプリで取り消したら、SB を入れたすべての端末へ。担当は「テイテイ指名」「指名なし」。test なら試しの1通 */
+async function sendStaffNew(test = false): Promise<{ reservations: number; cancels: number; devices: number; delivered: number }> {
+  const p = await rpc<{ reservations: StaffNew[]; cancels?: StaffNew[]; overdue?: StaffNew[]; subs: Sub[] }>('staff_push_pending_for_sender', { p_secret: SECRET })
   // 試しのときも、待っている本物の予約は一緒に送る（受け取ったことにした予約を落とさない）
-  const list: StaffNew[] = [...(test ? [{ id: `test-${Date.now()}`, starts_at: new Date(Date.now() + 3 * 3600_000).toISOString(), customer_name: 'テスト', staff_name: '銀二郎', menus: 'お知らせの確認' }] : []), ...(p.reservations ?? [])]
+  const list: StaffNew[] = [...(test ? [{ id: `test-${Date.now()}`, starts_at: new Date(Date.now() + 3 * 3600_000).toISOString(), customer_name: 'テスト', staff_name: '銀二郎指名', menus: 'お知らせの確認' }] : []), ...(p.reservations ?? [])]
   const gone: string[] = []
   let delivered = 0
-  for (const r of list) {
-    const jst = new Date(Date.parse(r.starts_at) + 9 * 3600_000).toISOString()
-    const body = `${dayLabel(jst.slice(0, 10))} ${jst.slice(11, 16)}〜 ${r.customer_name}様・${r.menus ?? 'メニュー未定'}（${r.staff_name}）。確認お願いします。`
-    const payload = JSON.stringify({ title: '予約が入りました', body, url: '/sb', tag: `sb-new-${r.id}`, kind: 'sb-new-reservation' })
-    for (const s of p.subs ?? []) {
-      try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 3600, urgency: 'high' }); delivered++ }
-      catch (e) { const code = (e as { statusCode?: number }).statusCode; if (code === 404 || code === 410) gone.push(s.endpoint) }
-    }
-  }
-  // 最終警告：5分たっても誰も「サロンボードに入れました」を押していない予約（1回だけ）
-  for (const r of p.overdue ?? []) {
-    const jst = new Date(Date.parse(r.starts_at) + 9 * 3600_000).toISOString()
-    const payload = JSON.stringify({ title: 'まだ確認されていません', body: `${dayLabel(jst.slice(0, 10))} ${jst.slice(11, 16)}〜 ${r.customer_name}様（${r.staff_name}）。サロンボードへの入力を確認してください。`, url: '/sb', tag: `sb-final-${r.id}`, kind: 'sb-final' })
+  const when = (r: StaffNew) => { const jst = new Date(Date.parse(r.starts_at) + 9 * 3600_000).toISOString(); return `${dayLabel(jst.slice(0, 10))} ${jst.slice(11, 16)}〜` }
+  const send = async (payload: string) => {
     for (const s of p.subs ?? []) {
       try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 3600, urgency: 'high' }); delivered++ }
       catch (e) { const code = (e as { statusCode?: number }).statusCode; if ((code === 404 || code === 410) && !gone.includes(s.endpoint)) gone.push(s.endpoint) }
     }
   }
+  for (const r of list) {
+    await send(JSON.stringify({ title: '予約が入りました', body: `${when(r)} ${r.customer_name}様・${r.menus ?? 'メニュー未定'}（${r.staff_name}）。サロンボードに入れてください。`, url: '/sb', tag: `sb-new-${r.id}`, kind: 'sb-new-reservation' }))
+  }
+  // お客様がアプリで取り消した予約：サロンボードからも消してもらう（日時変更なら、新しい日時は「予約が入りました」で別に届く）
+  for (const r of p.cancels ?? []) {
+    await send(JSON.stringify({
+      title: r.rescheduled ? '日時変更がありました' : 'キャンセルが入りました',
+      body: `${when(r)} ${r.customer_name}様・${r.menus ?? ''}（${r.staff_name}）${r.rescheduled ? 'は元の予約です。' : 'がキャンセルされました。'}サロンボードから消してください。`,
+      url: '/sb', tag: `sb-cancel-${r.id}`, kind: 'sb-cancel',
+    }))
+  }
+  // 最終警告：5分たっても誰もサロンボードに反映していない予約・取り消し（1回だけ）
+  for (const r of p.overdue ?? []) {
+    const cancel = r.kind === 'cancel'
+    await send(JSON.stringify({ title: 'まだ確認されていません', body: `${when(r)} ${r.customer_name}様（${r.staff_name}）${cancel ? 'のキャンセル' : ''}。サロンボードへの${cancel ? '取り消し' : '入力'}を確認してください。`, url: '/sb', tag: `sb-final-${r.id}`, kind: 'sb-final' }))
+  }
   if (gone.length) await rpc('staff_push_gone_for_sender', { p_secret: SECRET, p_gone: gone }).catch(() => {})
-  return { reservations: list.length, devices: (p.subs ?? []).length, delivered }
+  return { reservations: list.length, cancels: (p.cancels ?? []).length, devices: (p.subs ?? []).length, delivered }
 }
 
 Deno.serve(async (req) => {

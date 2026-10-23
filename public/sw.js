@@ -8,7 +8,7 @@
  * install/activate は即時に反映させるため skipWaiting + clients.claim を使用。
  */
 
-// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-10-19a
+// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-10-23b
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -21,8 +21,8 @@ self.addEventListener('push', (event) => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch { data = { body: event.data ? event.data.text() : '' } }
   const title = data.title || '銀二郎 JOHNNY'
-  // SB への「予約が入りました」：開いている SB にも知らせて、画面で音を鳴らし予約表を読み直す
-  const sb = data.kind === 'sb-new-reservation' || data.kind === 'sb-final'
+  // SB への「予約が入りました」「キャンセルが入りました」：開いている SB にも知らせて、画面で音を鳴らし予約表を読み直す
+  const sb = data.kind === 'sb-new-reservation' || data.kind === 'sb-cancel' || data.kind === 'sb-final'
   event.waitUntil(Promise.all([
     self.registration.showNotification(title, {
       body: data.body || '',
