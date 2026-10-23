@@ -1,5 +1,5 @@
 // 「話して予約登録」：1文を言う・打つと、入力済みの新規予約フォームが開く。
-// 例：「明日15時 田中さん パンチ 銀二郎で」。読み取りは決まった規則（sbCommand）、確定はフォームでスタッフが行う。
+// 例：「明日15時 田中さん パンチ 銀二郎で」。「今日15時から16時半 クローズ」なら時間を閉める画面。読み取りは決まった規則（sbCommand）、確定はスタッフが行う。
 import { useState } from 'react'
 import { ArrowUp, Mic } from 'lucide-react'
 import { useVoice } from '../features/johnny/useVoice'
@@ -32,7 +32,7 @@ export function SbCommandBar({ options, disabled, onDraft }: {
       <input
         value={listening ? voice.interim : text}
         onChange={e => setText(e.target.value)}
-        placeholder={listening ? '聞いています…' : '例：明日15時 田中さん パンチ 銀二郎で'}
+        placeholder={listening ? '聞いています…' : '例：今日15時から16時半 クローズ／明日15時 田中さん パンチ'}
         aria-label="予約内容を話す・入力する"
         enterKeyHint="go"
         disabled={disabled || !options}

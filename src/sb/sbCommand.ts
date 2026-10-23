@@ -1,4 +1,5 @@
 // 話した・打った1文から、予約フォームの下書きを作る（例：「明日15時 田中さん パンチ 銀二郎で」）。
+// 「今日15時から16時半 クローズ」は予約でなく、時間を閉める下書き（close）。サロンボードに入れた電話予約などで AI 予約を止める。
 // 決まった規則だけで読む（AI に推測させない）。読めなかった項目は空のまま返し、フォームでスタッフが埋める。
 // 空き・料金・担当の可否はここでは決めない（フォームの「内容を確認」で DB の予約エンジンが決める）。
 import { parseVisitRequest, normalizeUtterance } from '../features/johnny/visitParser.ts'
@@ -21,7 +22,14 @@ export interface SbDraft {
   externalRef: string | null
   /** 読み取れた項目（画面で「読み取った内容」として見せる） */
   understood: string[]
+  /** 時間を閉める（クローズ）。予約フォームでなく、閉める画面を開く */
+  close: boolean
+  /** 閉める終わりの時刻（0時からの分）。「〜まで」を言わなければ null */
+  endMinutes: number | null
 }
+
+/** 「クローズ」「閉めて」「押さえて」「ブロック」：時間を閉める言い方 */
+const CLOSE_WORDS = /close|クローズ|くろーず|閉め|しめて|締め|押さえ|おさえ|抑え|ブロック|ぶろっく|塞|ふさい/i
 
 const JST = 9 * 60 * 60 * 1000
 
@@ -141,8 +149,13 @@ export function parseSbCommand<T extends MenuOption>(
   const n = normalizeUtterance(raw)
   const source = /ホットペッパー|ほっとぺっぱー|hotpepper|hpb|サロンボード/i.test(n) ? 'hotpepper' : /電話/.test(n) ? 'phone' : null
   const ref = raw.normalize('NFKC').match(/\b([A-Z]{2}\d{8,10})\b/i)
+  // 「クローズ」等と言ったとき、または「〜から〜まで」だけでお客様もメニューも無いときは、時間を閉める
+  const to = req.range?.to ?? null
+  const endMinutes = to ? Number(to.slice(0, 2)) * 60 + Number(to.slice(3, 5)) : null
+  const close = CLOSE_WORDS.test(raw.normalize('NFKC')) || (endMinutes !== null && !customerName && !menuCodes.length)
+  if (close && endMinutes !== null) understood.push('終わりの時刻')
   return {
     date, minutes, customerName, phone, menuCodes, staffId: st.id, source,
-    externalRef: source === 'hotpepper' && ref ? ref[1].toUpperCase() : null, understood,
+    externalRef: source === 'hotpepper' && ref ? ref[1].toUpperCase() : null, understood, close, endMinutes,
   }
 }
