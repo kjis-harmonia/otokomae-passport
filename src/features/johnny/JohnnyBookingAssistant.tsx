@@ -11,7 +11,7 @@ import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
 import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { normalizePhone } from '../../utils/customerContact'
-import { bookingAssistantApi, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
+import { bookingAssistantApi, type AiBookingStatus, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
 import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
@@ -162,6 +162,19 @@ function dateWord(date: string): string {
 
 const AI_STEPS = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel'])
 
+// 当日キャンセル防止（お店の決まり）：開始2時間前を切ってからのアプリのキャンセルは、30日間 AI の新規予約を止める。
+// 判定と記録はサーバー（customer_cancel_reservation・予約の入口）。ここは先に知らせるための表示だけ。
+const LATE_CANCEL_MIN = 120
+const PENALTY_DAYS = 30
+const isLateForAi = (startsAt: string) => Date.parse(startsAt) - Date.now() < LATE_CANCEL_MIN * 60_000
+const monthDay = (ymd: string) => { const [, m, d] = ymd.split('-').map(Number); return `${m}月${d}日` }
+/** 今日（日本時間）＋30日：止めた場合に再開できる日 */
+const resumeIfCancelledNow = () => new Date(Date.now() + 9 * 3_600_000 + PENALTY_DAYS * 86_400_000).toISOString().slice(0, 10)
+const BOOKING_RULE_NOTE = `ご来店2時間前を過ぎてからのAIキャンセルは、${PENALTY_DAYS}日間AI予約をご利用いただけません。お電話でのキャンセルは対象外です。`
+const pausedSay = (resumeOn?: string) =>
+  `${resumeOn ? `${monthDay(resumeOn)}から、` : 'しばらくの間、'}AI予約はお休みです。それまでは、お電話でのご予約をお願いします。今のご予約の確認とキャンセルは、このままできます。`
+const pausedStep = (s?: AiBookingStatus | null): Step => ({ k: 'ai', say: pausedSay(s?.resume_on), view: { kind: 'talk', handoff: true } })
+
 const BUSINESS_ERRORS = new Set(['slot_taken', 'too_late', 'date_not_open', 'invalid_starts_at', 'menu_not_available', 'hold_expired', 'hold_not_found'])
 
 export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
@@ -216,12 +229,15 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       api.contact().catch(() => null),
       api.lastVisit().catch(() => null),
       api.recentVisits().catch(() => []),
+      api.aiStatus ? api.aiStatus().catch(() => null) : Promise.resolve(null),
     ])
-      .then(([opts, list, contact, lastVisit, visits]) => {
+      .then(([opts, list, contact, lastVisit, visits, aiStatus]) => {
         if (!alive) return
         setOptions(opts)
         setMyReservations(list)
         api.tickets().then(setMyTickets).catch(() => {})
+        // 当日キャンセル・無断キャンセルのあと：新しい予約は電話へ。今の予約の確認・キャンセルはできる
+        if (aiStatus?.paused) { setStep(pausedStep(aiStatus)); return }
         // 前回のメニュー（キャンセル以外で一番新しい予約）を選択肢の先頭に出す
         const last = [...list].filter(r => r.status !== 'cancelled').sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0]
         setLastMenuCode(last?.items[0]?.menu_code ?? null)
@@ -371,6 +387,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       setStep({ k: 'done', reservation, changedFrom: change, oldKept })
     } catch (err) {
       const code = err instanceof RpcError ? err.code : ''
+      if (code === 'ai_booking_paused') {
+        if (holdId) api.release(holdId).catch(() => {})
+        setStep(pausedStep(api.aiStatus ? await api.aiStatus().catch(() => null) : null))
+        return
+      }
       if (BUSINESS_ERRORS.has(code)) {
         if (holdId) api.release(holdId).catch(() => {})
         if (aiOnRef.current) {
@@ -507,6 +528,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       case 'confirm_change': {
         const menu = menuOf(ui.menu_code)
         const change = await findReservation(ui.reservation_id)
+        // 2時間前を切った予約の変更は、AI では受けず電話へ
+        if (change && isLateForAi(change.starts_at)) {
+          return { k: 'ai', say: 'ご予約の2時間前を過ぎているため、AIでは変更できません。お手数ですが、お電話でご連絡ください。お電話なら、ペナルティーはありません。', view: { kind: 'talk', handoff: true } }
+        }
         return menu && change ? { k: 'confirm', req: reqFromSlot(ui.starts_at), menu, slot: { starts_at: ui.starts_at }, staffId: ui.staff_id, change, say: a.say } : null
       }
       case 'confirm_cancel': {
@@ -768,7 +793,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
       }
       case 'searching': return { title: step.label ?? '空き状況を確認しています' }
       case 'ai': return { title: step.say, listen: true, speech: step.say }
-      case 'confirmCancel': return { title: 'この予約をキャンセルしますか？', speech: step.say, listen: true }
+      case 'confirmCancel': return isLateForAi(step.reservation.starts_at)
+        ? { title: 'この予約をキャンセルしますか？', speech: `${step.say}ご予約の2時間前を過ぎています。今キャンセルすると、${monthDay(resumeIfCancelledNow())}までAI予約がご利用いただけません。お電話でのキャンセルなら対象外です。`, listen: true }
+        : { title: 'この予約をキャンセルしますか？', speech: step.say, listen: true }
       case 'cancelling': return { title: 'キャンセルしています' }
       case 'companionMenu': return { title: 'お連れ様のメニューは何にしますか？', speech: 'お連れ様のメニューは何にしますか？', listen: true }
       case 'confirmParty': {
@@ -783,7 +810,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
           listen: true,
         }
       }
-      case 'cancelled': return { title: 'ご予約をキャンセルしました', sub: 'またのご来店をお待ちしています。', speech: 'ご予約をキャンセルしました。またのご来店をお待ちしています。' }
+      case 'cancelled': return step.reservation.ai_paused_until
+        ? { title: 'ご予約をキャンセルしました', sub: `${monthDay(step.reservation.ai_paused_until)}から、AI予約をまたご利用いただけます。それまではお電話でご予約ください。`, speech: `ご予約をキャンセルしました。${monthDay(step.reservation.ai_paused_until)}から、AI予約をまたご利用いただけます。それまではお電話でご予約ください。` }
+        : { title: 'ご予約をキャンセルしました', sub: 'またのご来店をお待ちしています。', speech: 'ご予約をキャンセルしました。またのご来店をお待ちしています。' }
       case 'pick': {
         const times = step.offer.slots.map(x => spokenTime(x.starts_at)).join('、')
         const missed = step.offer.kind === 'nearby' && step.req.time
@@ -1010,6 +1039,16 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
             {step.k === 'confirm' && confirmPrice && (
               <PriceBox menuName={step.menu.name} price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
                 onToggle={id => toggleCoupon(confirmPrice.key, id)} />
+            )}
+            {step.k === 'confirm' && !step.change && <p style={{ margin: '10px 2px 0', fontSize: 12, lineHeight: 1.6, color: C.secondary }}>{BOOKING_RULE_NOTE}</p>}
+
+            {step.k === 'confirmCancel' && isLateForAi(step.reservation.starts_at) && (
+              <div role="note" style={{ margin: '0 0 12px', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(214,82,82,0.45)', background: 'rgba(214,82,82,0.08)', fontSize: 13, lineHeight: 1.7, color: C.text }}>
+                <b>ご予約の2時間前を過ぎています。</b><br />
+                今アプリでキャンセルすると、{monthDay(resumeIfCancelledNow())}までAI予約がご利用いただけません。
+                お電話でのキャンセルなら対象外です。<br />
+                <a href={SHOP_PHONE_TEL} style={{ color: 'inherit', fontWeight: 700 }}>☎ {SHOP_PHONE_DISPLAY}</a>
+              </div>
             )}
 
             {step.k === 'done' && <ReservationSummary r={step.reservation} />}

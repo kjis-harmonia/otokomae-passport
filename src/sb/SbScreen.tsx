@@ -180,7 +180,7 @@ export function SbScreen() {
       onChanged={() => void refresh(dateRef.current)}
       onOpen={(d, id) => { setHpbOpen(false); if (d === dateRef.current) setSelectedId(id); else { wantedId.current = id; setDate(d) } }} />}
     {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
-    {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
+    {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} actor={actor} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
     {editor && options && <SbBookingEditor key={editor.reservation?.id ?? 'new'} options={options} preset={editor.preset} reservation={editor.reservation} actor={actor} setActor={setActor} busy={busy} onSend={send} onClose={() => setEditor(null)} />}
   </div>
@@ -218,8 +218,8 @@ function ReservationList({ reservations, onPick }: { reservations: SbReservation
   return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong>{r.customer_name}</strong><small>{r.items.map(i => i.name).join('・')}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}<ChevronRight size={18} /></button>)}</div> : <p className="sb-muted">予約はありません。</p>
 }
 
-function ReservationDetails({ reservation: r, busy, blocked, onClose, onEdit, onSend }: {
-  reservation: SbReservation; busy: boolean; blocked: boolean; onClose: () => void; onEdit: () => void; onSend: (c: SbCommand) => Promise<void>
+function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onEdit, onSend }: {
+  reservation: SbReservation; actor: string; busy: boolean; blocked: boolean; onClose: () => void; onEdit: () => void; onSend: (c: SbCommand) => Promise<void>
 }) {
   const [cancel, setCancel] = useState(false)
   const [reason, setReason] = useState('')
@@ -235,6 +235,7 @@ function ReservationDetails({ reservation: r, busy, blocked, onClose, onEdit, on
   return <SbModal title={`${jstTime(r.starts_at)}–${jstTime(r.ends_at)} ${STATUS_LABEL[r.status]}`} busy={busy} onClose={onClose}
     footer={cancel ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setCancel(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'cancel', reason })}>予約を取り消す</button></div> : ['confirmed', 'checked_in'].includes(r.status) ? <button className="sb-primary sb-grow" disabled={blocked} onClick={onEdit}>内容を変更</button> : undefined}>
     <h3 className="sb-customer-name">{r.customer_name}</h3>{r.customer_phone && <a className="sb-phone" href={`tel:${r.customer_phone}`}>{r.customer_phone}</a>}
+    {r.source === 'app' && <AiPause reservationId={r.id} actor={actor} blocked={blocked} />}
     <dl className="sb-facts"><dt>日付</dt><dd>{jstDateLabel(getJapanDateString(new Date(r.starts_at)))}</dd><dt>担当</dt><dd>{r.staff_name}{r.nominated ? '（指名）' : '（指名なし）'}</dd>
       <dt>メニュー</dt><dd>{r.items.map(i => <span className="sb-line" key={i.menu_code}>{i.name}<small>{i.duration_min}分 / {yen(i.price)}</small></span>)}</dd>
       <dt>予約時の金額</dt><dd>{yen(r.total_price)}</dd>{r.note && <><dt>メモ</dt><dd className="sb-prewrap">{r.note}</dd></>}{r.external_ref && <><dt>予約番号</dt><dd>{r.external_ref}</dd></>}
@@ -252,4 +253,17 @@ function ReservationDetails({ reservation: r, busy, blocked, onClose, onEdit, on
       <details className="sb-extra" onToggle={e => { if (e.currentTarget.open && !history) void callStaffRpc<typeof history>('staff_reservation_events', { p_reservation_id: r.id }).then(setHistory).catch(() => setHistoryError(true)) }}><summary>変更履歴</summary>{historyError ? <p className="sb-error">履歴を取得できません。</p> : history?.map((e, i) => <p className="sb-history" key={i}>{jstTime(e.created_at)} {labels[e.event_type] ?? e.event_type} / {e.actor_name}</p>)}</details>
     </>}
   </SbModal>
+}
+
+/** アプリ会員の予約：当日キャンセル・無断キャンセルで AI 予約が止まっていれば、再開日と「解除」（体調不良など）を出す */
+function AiPause({ reservationId, actor, blocked }: { reservationId: string; actor: string; blocked: boolean }) {
+  const [st, setSt] = useState<{ paused: boolean; resume_on?: string; reason?: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(false)
+  useEffect(() => { let alive = true; void callStaffRpc<typeof st>('staff_ai_penalty_for_reservation', { p_reservation_id: reservationId }).then(v => { if (alive) setSt(v) }).catch(() => {}); return () => { alive = false } }, [reservationId])
+  if (!st?.paused || !st.resume_on) return null
+  const [, m, d] = st.resume_on.split('-').map(Number)
+  return <p className="sb-ai-pause">AI予約 停止中（{st.reason === 'no_show' ? '無断キャンセル' : '当日キャンセル'}・{m}月{d}日から再開）
+    <button className="sb-secondary" disabled={blocked || busy || !actor} onClick={() => { setBusy(true); setError(false); void callStaffRpc('staff_lift_ai_penalty', { p_reservation_id: reservationId, p_staff_name: actor }).then(() => setSt({ paused: false }), () => setError(true)).finally(() => setBusy(false)) }}>{busy ? '解除しています…' : '解除する'}</button>
+    {error && <small className="sb-error">解除できませんでした。操作者を選んでから、もう一度押してください。</small>}</p>
 }
