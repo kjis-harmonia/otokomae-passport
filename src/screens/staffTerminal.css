@@ -186,9 +186,35 @@
 .st-pin-del { width: 78px; height: 78px; border-radius: 50%; border: 0; background: transparent; color: var(--st-ink); display: inline-flex; align-items: center; justify-content: center; }
 .st-pin-del:disabled { opacity: 0; cursor: default; }
 .st-pin-del:active:not(:disabled) { background: #ece9e3; }
+.st-pin { overflow-x: hidden; overflow-y: auto; }
 @media (max-height: 700px) {
   .st-pin-prompt { margin: 24px 0 14px; }
   .st-pin-dots { margin-bottom: 28px; }
   .st-pin-pad { grid-template-columns: repeat(3, 70px); gap: 12px 24px; }
   .st-pin .st-pin-key, .st-pin .st-pin-del { width: 70px; height: 70px; font-size: 28px; }
+}
+/* iPad のウィンドウ表示・横向きのスマホなど、低くて横長の画面：左にロゴと丸、右に数字。ボタンは高さに合わせて縮める */
+@media (max-height: 600px) and (min-width: 600px) {
+  .st-pin {
+    --k: clamp(44px, calc((100dvh - 72px) / 4.6), 70px);
+    display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto auto;
+    column-gap: clamp(32px, 8vw, 96px); align-content: center; justify-content: center; align-items: center;
+    padding-block: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-bottom));
+  }
+  .st-pin-head { grid-column: 1; grid-row: 1; align-self: end; }
+  .st-pin-head .st-wordmark { font-size: 36px; }
+  .st-pin-head .st-latin { margin-top: 8px; }
+  .st-pin-prompt { grid-column: 1; grid-row: 2; margin: 18px 0 10px; }
+  .st-pin-dots { grid-column: 1; grid-row: 3; margin: 0; justify-self: center; align-self: start; }
+  .st-pin-pad { grid-column: 2; grid-row: 1 / 4; grid-template-columns: repeat(3, var(--k)); gap: calc(var(--k) * 0.16) calc(var(--k) * 0.34); }
+  .st-pin .st-pin-key, .st-pin .st-pin-del { width: var(--k); height: var(--k); font-size: calc(var(--k) * 0.4); }
+}
+/* 低くて幅も狭い画面：1列のままボタンを高さに合わせて縮める */
+@media (max-height: 600px) and (max-width: 599px) {
+  .st-pin { --k: clamp(40px, calc((100dvh - 210px) / 4.6), 70px); justify-content: flex-start; }
+  .st-pin-head .st-wordmark { font-size: 32px; }
+  .st-pin-prompt { margin: 12px 0 8px; }
+  .st-pin-dots { margin-bottom: 14px; }
+  .st-pin-pad { grid-template-columns: repeat(3, var(--k)); gap: calc(var(--k) * 0.16) calc(var(--k) * 0.34); }
+  .st-pin .st-pin-key, .st-pin .st-pin-del { width: var(--k); height: var(--k); font-size: calc(var(--k) * 0.4); }
 }
