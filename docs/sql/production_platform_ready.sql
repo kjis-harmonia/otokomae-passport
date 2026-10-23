@@ -2,7 +2,7 @@
 begin read only;
 select jsonb_build_object(
   'history_count',(select count(*) from supabase_migrations.schema_migrations),
-  'history_ready',(select count(*)=44 from supabase_migrations.schema_migrations),
+  'history_ready',(select count(*)=45 from supabase_migrations.schema_migrations),
   'store_ready',to_regprocedure('public.customer_store_access_status(text)') is not null and to_regprocedure('app_private.require_store_verified(text)') is not null,
   'waitlist_ready',to_regprocedure('public.waitlist_offers_for_sender(text)') is not null,
   'passkeys_ready',to_regprocedure('public.customer_passkey_service(text,jsonb)') is not null,

@@ -8,7 +8,7 @@ do $$
 declare d record; w record; expected text;
   body_pattern constant text := 'body\s*:=\s*''([^'']*)''::jsonb';
 begin
-  if (select count(*) from supabase_migrations.schema_migrations) <> 45
+  if (select count(*) from supabase_migrations.schema_migrations) <> 46
      or not exists (select 1 from supabase_migrations.schema_migrations where version='20261001000400' and name='security_hardening_b_lockdown')
      or not exists (select 1 from supabase_migrations.schema_migrations where version='20261018040349' and name='customer_store_access')
      or not exists (select 1 from supabase_migrations.schema_migrations where version='20261019000000' and name='waitlist') then raise exception 'closure_b_or_release_db_not_ready'; end if;

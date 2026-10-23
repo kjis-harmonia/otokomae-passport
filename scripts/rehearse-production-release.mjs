@@ -14,7 +14,7 @@ const pg=process.env.RELEASE_PSQL??'C:/Program Files/PostgreSQL/17/bin/psql.exe'
 const out=join(root,'supabase/rollout/out_release'),logs=join(root,'.qa','release-rehearsal',url.pathname.slice(1))
 mkdirSync(logs,{recursive:true})
 const manifest=JSON.parse(readFileSync(join(out,'manifest.json'),'utf8'))
-if(manifest.project_ref!=='ufyzynpmkxytnhebombq'||manifest.entries.length!==21||manifest.baseline!==24||manifest.final!==44)throw new Error('Unexpected release manifest')
+if(manifest.project_ref!=='ufyzynpmkxytnhebombq'||manifest.entries.length!==21||manifest.baseline!==25||manifest.final!==45)throw new Error('Unexpected release manifest')
 for(const item of manifest.files){
  if(!/^[a-zA-Z0-9_.-]+\.sql$/.test(item.file)||item.file.includes('..')||createHash('sha256').update(readFileSync(join(out,item.file))).digest('hex')!==item.sha256)throw new Error('Generated SQL changed; review and regenerate before rehearsal')
  if(item.source&&createHash('sha256').update(readFileSync(join(root,'supabase/migrations',item.source+'.sql'))).digest('hex')!==item.source_sha256)throw new Error('Migration source changed since generation')
