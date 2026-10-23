@@ -164,7 +164,7 @@ function dateWord(date: string): string {
 
 type ConfirmStep = Extract<Step, { k: 'confirm' }>
 // 「指名なし」の言い方
-const ANY_STAFF = /どちら|どっち|おまかせ|お任せ|指名なし|しめいなし|誰でも|だれでも|どなたでも|フリー/
+const ANY_STAFF = /どちら|どっち|おまかせ|お任せ|指名なし|しめいなし|指名しない|しめいしない|指名は(?:いい|大丈夫|なし)|なしで|誰でも|だれでも|どなたでも|フリー|空いて(?:いる|る)(?:方|ほう)|あいて(?:いる|る)(?:方|ほう)|早い(?:方|ほう)|はやい(?:方|ほう)/
 const AI_STEPS = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel'])
 
 // 当日キャンセル防止（お店の決まり）：開始2時間前を切ってからのアプリのキャンセルは、30日間 AI の新規予約を止める。
@@ -631,7 +631,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     // 担当を選ぶ段階（AI に聞かない）：名前か「どちらでも」
     if (s.k === 'pickStaff') {
       const staff = optionsRef.current?.staff ?? []
-      const hit = staff.find(st => text.includes(st.name) || (st.name === '銀二郎' && /ぎんじろう|ギンジロウ|銀次郎/.test(text)) || (st.name === 'テイテイ' && /ていてい|てぃてぃ|TT/i.test(text)))
+      const hit = staff.find(st => text.includes(st.name) || (st.name === '銀二郎' && /ぎんじろう|ギンジロウ|ギンジロー|銀次郎|銀ちゃん|ぎんちゃん|ギンちゃん/.test(text)) || (st.name === 'テイテイ' && /ていてい|てぃてぃ|ティティ|テイテー|ていてー|TT/i.test(text)))
       if (hit) { chooseStaff(s, hit.id); return }
       if (ANY_STAFF.test(text)) { chooseStaff(s, null); return }
       setStep({ ...s, note: '担当のお名前か「どちらでも」とお伝えください。' })
@@ -751,7 +751,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
   const handleAudio = useCallback(async (audio: Blob) => {
     const s = stepRef.current
     const partyStep = s.k === 'companionMenu' || s.k === 'confirmParty'
-    if (!AI_STEPS.has(s.k) && !partyStep) return
+    // 担当を選ぶ画面の声も受け取る（文字にするだけ。ここで捨てると、話しても反応しない）
+    if (!AI_STEPS.has(s.k) && !partyStep && s.k !== 'pickStaff') return
     let transcribeOnly = !aiOnRef.current || partyStep || s.k === 'confirm' || s.k === 'confirmCancel' || s.k === 'pickStaff'
     if (!transcribeOnly && !takeAiTurn()) { aiOnRef.current = false; transcribeOnly = true }
     setVoiceNote(null)
