@@ -77,17 +77,18 @@ export function SbScreen() {
     try { const value = await sbApi.options(); if (!Array.isArray(value.actors) || !Array.isArray(value.menus)) throw new Error(); setOptions(value) }
     catch { setError('予約設定を取得できません。SB用migrationの適用・端末認証を確認してください。') }
   }, [])
-  // 新しい AI 予約の確認：誰かが「確認しました」を押すまで帯を出し、2分ごとに声で知らせる（確認は全端末で共通）
-  const [unacked, setUnacked] = useState<{ id: string; starts_at: string; customer_name: string; staff_name: string; sent_at: string }[]>([])
+  // 新しい AI 予約・アプリでの取り消しの確認：誰かがサロンボードに反映して押すまで帯を出し、2分ごとに声で知らせる（確認は全端末で共通）
+  const [unacked, setUnacked] = useState<{ id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; sent_at: string; rescheduled?: boolean }[]>([])
   const seen = useRef<Set<string> | null>(null)
   const lastVoice = useRef(0)
-  const announce = (kind: 'new' | 'final' = 'new') => { if (kind === 'new' && Date.now() - lastVoice.current < 20_000) return; lastVoice.current = Date.now(); announceVoice(kind) }
+  const announce = (kind: 'new' | 'cancel' | 'final' = 'new') => { if (kind !== 'final' && Date.now() - lastVoice.current < 20_000) return; lastVoice.current = Date.now(); announceVoice(kind) }
   const loadUnacked = async () => {
     try {
       const list = await callStaffRpc<typeof unacked>('staff_new_unacked')
       // 開いている間に増えた分は、お知らせが届かなくても鳴らす（最初の読み込みでは鳴らさない）
-      if (seen.current && list.some(r => !seen.current!.has(r.id))) announce()
-      seen.current = new Set(list.map(r => r.id))
+      const fresh = seen.current ? list.filter(r => !seen.current!.has(`${r.kind}:${r.id}`)) : []
+      if (fresh.length) announce(fresh.some(r => r.kind !== 'cancel') ? 'new' : 'cancel')
+      seen.current = new Set(list.map(r => `${r.kind}:${r.id}`))
       setUnacked(list)
     } catch { /* 仕組みが無い・通信切れ：次の読み込みで */ }
   }
@@ -108,14 +109,15 @@ export function SbScreen() {
   }, [unacked])
   const ackNew = async () => {
     unlockChime()
-    try { await callStaffRpc('staff_ack_new', { p_staff_name: actor || null }); setUnacked([]); window.speechSynthesis?.cancel(); void refresh(dateRef.current) } catch { /* 次の読み込みでもう一度 */ }
+    // 画面に出ている分だけ確認済みにする（押す直前に届いた予約は、次の読み込みで帯に出る）
+    try { await callStaffRpc('staff_ack_new', { p_staff_name: actor || null, p_ids: unacked.map(r => r.id) }); setUnacked([]); void loadUnacked(); window.speechSynthesis?.cancel(); void refresh(dateRef.current) } catch { /* 次の読み込みでもう一度 */ }
   }
   // AI 予約のお知らせ：この端末で受け取っているか。届いたら（開いているとき）ピコーンと鳴らして予約表を読み直す
   const [push, setPush] = useState<SbPushState | null>(null)
   const [pushNote, setPushNote] = useState<string | null>(null)
   useEffect(() => {
     void sbPushState().then(setPush); void sbPushRefresh()
-    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'sb-new-reservation' || e.data?.type === 'sb-final') { announce(e.data.type === 'sb-final' ? 'final' : 'new'); void refresh(dateRef.current); void loadUnacked() } }
+    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'sb-new-reservation' || e.data?.type === 'sb-cancel' || e.data?.type === 'sb-final') { announce(e.data.type === 'sb-final' ? 'final' : e.data.type === 'sb-cancel' ? 'cancel' : 'new'); void refresh(dateRef.current); void loadUnacked() } }
     navigator.serviceWorker?.addEventListener('message', onMessage)
     window.addEventListener('pointerdown', unlockChime)
     return () => { navigator.serviceWorker?.removeEventListener('message', onMessage); window.removeEventListener('pointerdown', unlockChime) }
@@ -216,7 +218,7 @@ export function SbScreen() {
       {!pending.pending && !pending.error && online && <button className="sb-icon" aria-label="再読み込み" onClick={() => { void refresh(date); void loadOptions() }}><RefreshCw size={18} /></button>}
     </div>}
     {hpb && hpb.open > 0 && <div className="sb-alert" role="status"><span>HOT PEPPERのメールで確認が必要なものが{hpb.open}件あります。</span><button className="sb-secondary" onClick={() => setHpbOpen(true)}>確認する</button></div>}
-    {unacked.length > 0 && <div className="sb-new-alert" role="alert"><Bell size={18} /><span><b>新しい予約 {unacked.length}件</b><small>{unacked.slice(0, 2).map(r => `${jstTime(r.starts_at)} ${r.customer_name}様（${r.staff_name}）`).join('、')}{unacked.length > 2 ? ' ほか' : ''}</small></span><button className="sb-primary" onClick={() => void ackNew()}>サロンボードに入れました</button></div>}
+    {unacked.length > 0 && <NewAlert list={unacked} onAck={() => void ackNew()} />}
     {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
       onNew={p => newBooking({ date, minutes: p.minutes, staffId: p.staffId })} onTransfer={() => setArchive('transfer')} />}
     <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />予約</span><span><i className="sb-dot sb-green" />来店済み</span><span><i className="sb-dot sb-gold-dot" />未転記</span></div>
@@ -324,4 +326,18 @@ function AiPause({ reservationId, actor, blocked }: { reservationId: string; act
   return <p className="sb-ai-pause">AI予約 停止中（{st.reason === 'no_show' ? '無断キャンセル' : '当日キャンセル'}・{m}月{d}日から再開）
     <button className="sb-secondary" disabled={blocked || busy || !actor} onClick={() => { setBusy(true); setError(false); void callStaffRpc('staff_lift_ai_penalty', { p_reservation_id: reservationId, p_staff_name: actor }).then(() => setSt({ paused: false }), () => setError(true)).finally(() => setBusy(false)) }}>{busy ? '解除しています…' : '解除する'}</button>
     {error && <small className="sb-error">解除できませんでした。操作者を選んでから、もう一度押してください。</small>}</p>
+}
+
+type AlertItem = { id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; rescheduled?: boolean }
+/** 新しい AI 予約・アプリでの取り消しの帯。日付も出す（明日以降の予約をサロンボードの今日に入れない）。中身に合わせて「入れました／消しました」 */
+function NewAlert({ list, onAck }: { list: AlertItem[]; onAck: () => void }) {
+  const added = list.filter(r => r.kind !== 'cancel'), removed = list.filter(r => r.kind === 'cancel')
+  const today = getJapanDateString()
+  const day = (iso: string) => { const d = getJapanDateString(new Date(iso)); if (d === today) return '今日'; const [, m, dd] = d.split('-').map(Number); return `${m}/${dd}` }
+  const title = [added.length ? `新しい予約 ${added.length}件` : '', removed.length ? `キャンセル ${removed.length}件` : ''].filter(Boolean).join('・')
+  const label = !removed.length ? 'サロンボードに入れました' : !added.length ? 'サロンボードから消しました' : 'サロンボードに反映しました'
+  return <div className={`sb-new-alert${removed.length ? ' is-cancel' : ''}`} role="alert"><Bell size={18} /><span><b>{title}</b>
+    {list.slice(0, 3).map(r => <small key={`${r.kind}:${r.id}`}>{r.kind === 'cancel' ? (r.rescheduled ? '日時変更（元の予約を消す） ' : '取消 ') : ''}{day(r.starts_at)} {jstTime(r.starts_at)} {r.customer_name}様（{r.staff_name}）</small>)}
+    {list.length > 3 && <small>ほか {list.length - 3}件</small>}</span>
+    <button className="sb-primary" onClick={onAck}>{label}</button></div>
 }
