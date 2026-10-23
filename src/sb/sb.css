@@ -384,6 +384,9 @@
   border: 1px solid #b9c2bc; border-radius: 4px; background: #fff; color: var(--sb-ink); font-size: 16px;
 }
 .sb-field textarea { min-height: 80px; resize: vertical; }
+/* iPhone の日付・時刻の欄は、幅を合わせないと右にはみ出す */
+.sb-field input, .sb-field select { box-sizing: border-box; max-width: 100%; }
+.sb-field input[type="date"], .sb-field input[type="time"] { -webkit-appearance: none; appearance: none; display: block; text-align: left; }
 .sb-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .sb-form-section { display: flex; flex-direction: column; gap: 6px; }
 .sb-form-section h3 { margin: 0 0 2px; font-size: 13px; font-weight: 400; color: var(--sb-muted); }
