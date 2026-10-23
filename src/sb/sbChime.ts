@@ -10,9 +10,30 @@ function audio(): AudioContext | null {
   return ctx
 }
 
+let speechReady = false
 export function unlockChime(): void {
   const a = audio()
   if (a && a.state === 'suspended') void a.resume().catch(() => {})
+  // iPad は一度タップの中で話させないと、あとから声が出ない：最初のタップで無音の一言を話しておく
+  if (!speechReady && 'speechSynthesis' in window) {
+    speechReady = true
+    try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u) } catch { /* 声が使えない端末 */ }
+  }
+}
+
+/** 端末の声（日本語）で読み上げる。ピコーンのあとに続けたいときは delayMs で少し待つ */
+export function speak(text: string, delayMs = 0): void {
+  if (!('speechSynthesis' in window)) return
+  window.setTimeout(() => {
+    try {
+      const u = new SpeechSynthesisUtterance(text)
+      u.lang = 'ja-JP'; u.rate = 1; u.pitch = 1; u.volume = 1
+      const ja = window.speechSynthesis.getVoices().find(v => v.lang.startsWith('ja'))
+      if (ja) u.voice = ja
+      window.speechSynthesis.cancel()
+      window.speechSynthesis.speak(u)
+    } catch { /* 声が使えない端末 */ }
+  }, delayMs)
 }
 
 /** ベルの1音：基音＋少し高い倍音を重ね、すっと立ち上がってゆっくり消える */
