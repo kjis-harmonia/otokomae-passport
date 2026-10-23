@@ -25,7 +25,7 @@ export function unlockChime(): void {
 export const SB_VOICES = {
   new: { file: '/sounds/sb-new.mp3', text: '予約が入りました' },
   remind: { file: '/sounds/sb-remind.mp3', text: '予約が入ってます。スタッフの方は確認してください' },
-  final: { file: '/sounds/sb-final.mp3', text: 'テイテイさん、ギンジロウさん、スタッフの皆さん。新しい予約がまだ確認されていません。サロンボードへの入力をお願いします' },
+  final: { file: '/sounds/sb-final.mp3', text: 'テイテイさん、ギンジロウさん、従業員の皆様へ、ご予約の確認をお願いいたします' },
 } as const
 const buffers = new Map<string, AudioBuffer | null>()
 
