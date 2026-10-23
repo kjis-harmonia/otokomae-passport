@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Clipboard, List, LoaderCircle, Plus, RefreshCw, UserRound } from 'lucide-react'
+import { Bell, BellOff, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, Clipboard, List, LoaderCircle, Plus, RefreshCw, UserRound } from 'lucide-react'
 import { addDaysToDateString, getJapanDateString } from '../utils/dateUtils'
 import { jstDateLabel, jstMinutesOf, jstTime, STATUS_LABEL, yen } from '../utils/bookingApi'
 import { callStaffRpc } from './sbRpc'
@@ -12,6 +12,8 @@ import { SbCommandBar } from './SbCommandBar'
 import { SbToday } from './SbToday'
 import { SbHotpepper } from './SbHotpepper'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
+import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
+import { playChime, unlockChime } from './sbChime'
 import './sb.css'
 
 const ACTOR = 'ginjiro_staff_name'
@@ -75,6 +77,27 @@ export function SbScreen() {
     try { const value = await sbApi.options(); if (!Array.isArray(value.actors) || !Array.isArray(value.menus)) throw new Error(); setOptions(value) }
     catch { setError('予約設定を取得できません。SB用migrationの適用・端末認証を確認してください。') }
   }, [])
+  // AI 予約のお知らせ：この端末で受け取っているか。届いたら（開いているとき）ピコーンと鳴らして予約表を読み直す
+  const [push, setPush] = useState<SbPushState | null>(null)
+  const [pushNote, setPushNote] = useState<string | null>(null)
+  useEffect(() => {
+    void sbPushState().then(setPush); void sbPushRefresh()
+    const onMessage = (e: MessageEvent) => { if (e.data?.type === 'sb-new-reservation') { playChime(); void refresh(dateRef.current) } }
+    navigator.serviceWorker?.addEventListener('message', onMessage)
+    window.addEventListener('pointerdown', unlockChime)
+    return () => { navigator.serviceWorker?.removeEventListener('message', onMessage); window.removeEventListener('pointerdown', unlockChime) }
+  }, [refresh])
+  const togglePush = async () => {
+    unlockChime()
+    try {
+      const next = push === 'on' ? await sbPushOff() : await sbPushOn()
+      setPush(next)
+      if (next === 'on') { playChime(); setPushNote('この端末で「予約が入りました」を受け取ります。') }
+      else if (next === 'needs-install') setPushNote('お知らせは、ホーム画面に追加した SB で受け取れます。Safari の共有ボタン →「ホーム画面に追加」から開いてください。')
+      else if (next === 'denied') setPushNote('お知らせが許可されていません。設定 → 通知 → 銀二郎SB で「通知を許可」をオンにしてください。')
+      else if (next === 'unsupported') setPushNote('この端末・ブラウザではお知らせを受け取れません。')
+    } catch { setPushNote('お知らせの設定に失敗しました。通信を確かめて、もう一度押してください。') }
+  }
   useEffect(() => { void loadOptions() }, [loadOptions]) // eslint-disable-line react-hooks/set-state-in-effect -- 通信の結果で設定を入れる（同期的な setState ではない）
   useEffect(() => {
     dateRef.current = date; setLedger(null); setSelectedId(null) // eslint-disable-line react-hooks/set-state-in-effect
@@ -150,7 +173,7 @@ export function SbScreen() {
       <div className="sb-date-nav"><button className="sb-nav" aria-label="前の日" title="前の日" onClick={() => setDate(addDaysToDateString(date, -1))}><ChevronLeft size={24} /></button>
         <label className="sb-date-label"><span>{jstDateLabel(date)}</span><input type="date" aria-label="予約表の日付" value={date} onChange={e => e.target.value && setDate(e.target.value)} /></label>
         <button className="sb-nav" aria-label="次の日" title="次の日" onClick={() => setDate(addDaysToDateString(date, 1))}><ChevronRight size={24} /></button><button className="sb-secondary sb-today" onClick={() => setDate(today)}>今日</button></div>
-      <div className="sb-toolbar-actions"><button className="sb-actor" disabled={busy || !!pending.pending} onClick={() => setPickActor(true)}><UserRound size={18} /><span>{options?.actors.some(a => a.name === actor) ? actor : '操作者'}</span></button>
+      <div className="sb-toolbar-actions"><button className="sb-actor sb-bell" aria-pressed={push === 'on'} title={push === 'on' ? '予約のお知らせ：受け取り中（押すと止める）' : '予約のお知らせを受け取る'} onClick={() => void togglePush()}>{push === 'on' ? <Bell size={18} /> : <BellOff size={18} />}<span>{push === 'on' ? '通知オン' : '通知'}</span></button><button className="sb-actor" disabled={busy || !!pending.pending} onClick={() => setPickActor(true)}><UserRound size={18} /><span>{options?.actors.some(a => a.name === actor) ? actor : '操作者'}</span></button>
         <button className="sb-primary" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} /><span className="sb-primary-label">新規予約</span></button></div>
     </header>
     <SbCommandBar options={options} disabled={blocked} onDraft={draft => newBooking({ date: draft.date < today ? today : draft.date, minutes: draft.minutes ?? undefined, staffId: draft.staffId, draft })} />
@@ -175,6 +198,7 @@ export function SbScreen() {
       </div>{!ledger.staff.length && <p className="sb-empty">本部で予約スタッフの設定が必要です。</p>}</div>}
     <footer className="sb-statusbar"><div>{ledger?.closure ? <span>休業日{ledger.closure.reason ? `：${ledger.closure.reason}` : ''}</span> : ledger && !ledger.staff.some(s => s.shifts.length) ? <span>本部で勤務時間の設定が必要です。</span> : <span>{active.length}件</span>}
       <button onClick={() => setHpbOpen(true)}>HPBメール</button>{cancelled.length > 0 && <button onClick={() => setArchive('cancelled')}>取消・不来店 {cancelled.length}件</button>}{toTransfer.length > 0 && <button onClick={() => setArchive('transfer')}>未転記 {toTransfer.length}件</button>}</div><span>{updated ? `${updated} 更新` : ''}</span></footer>
+    {pushNote && <SbModal title="予約のお知らせ" onClose={() => setPushNote(null)}><p className="sb-push-note">{pushNote}</p></SbModal>}
     {pickActor && options && <SbModal title="操作者" onClose={() => setPickActor(false)}><div className="sb-actor-list">{options.actors.map(a => <button className="sb-secondary" aria-pressed={actor === a.name} key={a.id} onClick={() => { setActor(a.name); setPickActor(false) }}>{a.name}{actor === a.name && <Check size={18} />}</button>)}</div></SbModal>}
     {hpbOpen && <SbHotpepper list={hpb} actor={actor} disabled={!online} onClose={() => setHpbOpen(false)}
       onChanged={() => void refresh(dateRef.current)}

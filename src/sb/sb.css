@@ -494,3 +494,7 @@
 .sb-hpb-row strong { font-weight: 600; }
 .sb-hpb-row span small { font-size: 12px; color: var(--sb-muted); line-height: 1.5; }
 .sb-hpb-row .sb-hpb-review { color: var(--sb-red); }
+/* 予約のお知らせ（ベル） */
+.sb-bell[aria-pressed="true"] { color: var(--sb-ink); }
+.sb-bell[aria-pressed="false"] { color: var(--sb-muted); }
+.sb-push-note { margin: 0 0 8px; line-height: 1.7; }
