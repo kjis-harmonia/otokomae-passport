@@ -10,6 +10,8 @@ import { SbMenuPicker } from './SbMenuPicker'
 import { recordMenuUsage } from './sbMenuUsage'
 
 /** 新規予約の初期値。draft は「話して予約登録」で読み取った内容（スタッフがフォームで確かめてから送る） */
+/** 名前を言わずに入れた予約（サロンボードに電話予約が入ったときの枠埋め） */
+const PHONE_PLACEHOLDER = '電話予約'
 export interface SbPreset {
   date: string; minutes?: number; staffId?: string | null
   draft?: { customerName: string | null; phone: string | null; menuCodes: string[]; source: SbInput['source'] | null; externalRef: string | null; understood: string[] }
@@ -65,7 +67,8 @@ export function SbBookingEditor({ options, preset, reservation, actor, setActor,
     try {
       const [h, m] = time.split(':').map(Number)
       const input: SbInput = { starts_at: jstIsoFromMinutes(date, h * 60 + m), menu_codes: [...codes], staff_id: staffId,
-        customer_name: name.trim(), customer_phone: phone.trim() || undefined, source,
+        // 予約の正本はサロンボード。SB は枠埋めの補助なので、新しい予約は名前なしでよい（「電話予約」で入れる）
+        customer_name: name.trim() || (r ? '' : PHONE_PLACEHOLDER), customer_phone: phone.trim() || undefined, source: !r && !name.trim() && source === 'staff' ? 'phone' : source,
         external_ref: source === 'hotpepper' ? externalRef.trim() : undefined, note: note.trim() || undefined, client_id: client?.id }
       const value = await sbApi.preview(input, r?.id)
       // Freeze the reviewed request, not the mutable controls.
@@ -98,7 +101,7 @@ export function SbBookingEditor({ options, preset, reservation, actor, setActor,
       <fieldset disabled={busy} className="sb-fieldset">
         {d && <p className="sb-understood">{d.understood.length ? `読み取った内容：${d.understood.join("・")}` : "読み取れた内容がありません"}。足りないところを入れて確かめてください。</p>}
         <label className="sb-field">操作者<select value={actor} onChange={e => setActor(e.target.value)} required><option value="">選択してください</option>{options.actors.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></label>
-        <label className="sb-field">お客様名<input value={name} onChange={e => { setName(e.target.value); if (!r) setClient(null) }} required maxLength={60} autoComplete="off" placeholder="お名前" /></label>
+        <label className="sb-field">お客様名<input value={name} onChange={e => { setName(e.target.value); if (!r) setClient(null) }} required={!!r} maxLength={60} autoComplete="off" placeholder={r ? 'お名前' : '空なら「電話予約」で入れます'} /></label>
         <label className="sb-field">電話番号（任意）<input type="tel" value={phone} onChange={e => { setPhone(e.target.value); if (!r) setClient(null) }} maxLength={20} autoComplete="off" /></label>
         {!r && !client && query && candidates.length > 0 && <div className="sb-candidates">{candidates.map(c => <button type="button" className="sb-candidate" key={c.id} onClick={() => { setClient(c); setName(c.name); if (c.phone) setPhone(c.phone) }}><span>{c.name}<small>{c.phone || (c.phone_last4 ? `電話 下4桁 ${c.phone_last4}` : '')}{c.last_visit ? ` / 前回 ${c.last_visit}` : ''}</small></span><span>選択</span></button>)}</div>}
         {client && <div className="sb-client">既存顧客：{client.name}{!r && <button type="button" onClick={() => setClient(null)}>解除</button>}</div>}
