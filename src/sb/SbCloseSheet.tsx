@@ -18,8 +18,8 @@ const iso = (date: string, m: number) => `${date}T${hm(m)}:00+09:00`
 const TIMES = Array.from({ length: (22 - 8) * 4 + 1 }, (_, i) => 8 * 60 + i * 15)
 const snap = (m: number) => Math.round(m / 15) * 15
 
-export function SbCloseSheet({ options, preset, actor, setActor, onClose, onDone }: {
-  options: SbOptions; preset: SbClosePreset; actor: string; setActor: (name: string) => void
+export function SbCloseSheet({ options, preset, actor, onClose, onDone }: {
+  options: SbOptions; preset: SbClosePreset; actor: string
   onClose: () => void; onDone: (message: string) => void
 }) {
   const today = getJapanDateString()
@@ -32,14 +32,14 @@ export function SbCloseSheet({ options, preset, actor, setActor, onClose, onDone
   const [error, setError] = useState<string | null>(null)
   const all = options.staff.map(s => s.id)
   const both = all.length > 1 && all.every(id => staffIds.includes(id))
-  const ready = !!actor && start !== null && end !== null && end > start && staffIds.length > 0
+  const ready = start !== null && end !== null && end > start && staffIds.length > 0
 
   const submit = async () => {
     if (!ready || busy) return
     setBusy(true); setError(null)
     try {
       const r = await callStaffRpc<{ ok?: boolean; overlap?: number; error?: string }>('staff_close_time', {
-        p_staff_ids: staffIds, p_starts_at: iso(date, start!), p_ends_at: iso(date, end!), p_actor: actor, p_note: null,
+        p_staff_ids: staffIds, p_starts_at: iso(date, start!), p_ends_at: iso(date, end!), p_actor: actor || 'SB', p_note: null,
       })
       if (r.error) { setError(r.error === 'past' ? 'もう過ぎた時間は閉められません。' : r.error === 'invalid_staff' ? '担当を選び直してください。' : '時間を確かめてください（15分刻み・終わりは始まりより後）。'); return }
       const who = options.staff.filter(s => staffIds.includes(s.id)).map(s => s.name).join('・')
@@ -49,10 +49,9 @@ export function SbCloseSheet({ options, preset, actor, setActor, onClose, onDone
   }
 
   return <SbModal title="時間をクローズ" busy={busy} onClose={onClose}
-    footer={<div className="sb-actions"><button className="sb-primary sb-grow" disabled={!ready || busy} onClick={() => void submit()}><Check size={18} />{busy ? '閉めています…' : 'クローズする'}</button></div>}>
+    footer={<div className="sb-actions"><button className="sb-primary sb-grow" disabled={!ready || busy} onClick={() => void submit()}><Check size={18} />{busy ? '閉めています…' : !staffIds.length ? '担当を選んでください' : 'クローズする'}</button></div>}>
     <fieldset disabled={busy} className="sb-fieldset">
       <p className="sb-understood">サロンボードに入れた時間を閉めて、AI 予約が入らないようにします。</p>
-      {!actor && <label className="sb-field">操作者<select value={actor} onChange={e => setActor(e.target.value)} required><option value="">選択してください</option>{options.actors.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></label>}
       <section className="sb-form-section"><h3>担当</h3>
         <div className="sb-close-staff" role="group" aria-label="閉める担当">
           {options.staff.map(s => <button type="button" key={s.id} className="sb-secondary" aria-pressed={staffIds.length === 1 && staffIds[0] === s.id} onClick={() => setStaffIds([s.id])}>{s.name}</button>)}
