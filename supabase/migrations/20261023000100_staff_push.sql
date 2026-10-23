@@ -60,7 +60,7 @@ begin
     returning reservation_id
   )
   select coalesce(json_agg(json_build_object(
-      'id', r.id, 'starts_at', r.starts_at, 'customer_name', r.customer_name, 'staff_name', m.name,
+      'id', r.id, 'starts_at', r.starts_at, 'customer_name', r.customer_name, 'staff_name', m.display_name,
       'menus', (select string_agg(i.name, '・' order by i.sort_order) from public.reservation_items i where i.reservation_id = r.id)
     ) order by r.starts_at), '[]'::json)
   into v_list
