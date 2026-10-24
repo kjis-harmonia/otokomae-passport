@@ -413,7 +413,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [soonest])
 
   // ── 予約の確定（仮押さえ → 確定）。通信が切れたら予約一覧で結果を確かめる ──
-  // ── 担当（指名）：どのメニューでも、確定の前に必ず聞く（担当が2人以上いるとき・変更でないとき・指名がまだ無いとき） ──
+  // ── 担当：指名なしの予約は無い。担当が決まっていなければ確定の前に必ず聞く（担当が1人なら、その人に決める） ──
   const optionsRef = useRef(options)
   useEffect(() => { optionsRef.current = options }, [options])
   const chooseStaff = useCallback((s: Extract<Step, { k: 'pickStaff' }>, staffId: string | null) => {
@@ -425,10 +425,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep({ ...s.next, staffId, staffChosen: true })
   }, [])
   useEffect(() => {
-    if (step.k !== 'confirm' || step.change || step.staffChosen || step.staffId) return
+    if (step.k !== 'confirm' || step.staffChosen || step.staffId) return
     const staff = options?.staff ?? []
-    if (staff.length < 2) return
-    setStep({ k: 'pickStaff', next: step }) // eslint-disable-line react-hooks/set-state-in-effect -- 確定の前に担当の画面へ差し替える
+    if (staff.length === 0) return
+    if (staff.length === 1) { setStep({ ...step, staffId: staff[0].id, staffChosen: true }); return } // eslint-disable-line react-hooks/set-state-in-effect -- 担当が1人ならその人。2人以上なら確定の前に担当の画面へ差し替える
+    setStep({ k: 'pickStaff', next: step })
   }, [step, options])
   // 担当を選ぶ画面：その時間にそれぞれの担当が空いているか（空いていない担当は押せない表示に）
   useEffect(() => {
@@ -573,9 +574,17 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     let companion: CustomerReservation | undefined
     try {
-      const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, null)
-      companion = await api.confirm(hold.hold_id, 'お連れ様')
-      rememberCompanion(companion.id)
+      // お連れ様も担当を決めて取る（指名なしは無い）。予約者と違う担当から順に、空いている人で押さえる
+      const staff = optionsRef.current?.staff ?? []
+      const order = [...staff.filter(st => st.id !== s.primary.staffId), ...staff.filter(st => st.id === s.primary.staffId)]
+      for (const st of order) {
+        try {
+          const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id)
+          companion = await api.confirm(hold.hold_id, 'お連れ様')
+          rememberCompanion(companion.id)
+          break
+        } catch { /* 次の担当で試す */ }
+      }
     } catch { /* 下で伝える */ }
     api.reservations().then(setMyReservations).catch(() => {})
     setStep({ k: 'done', reservation, companion, companionFailed: !companion, ginpay: ginpayResult })
@@ -1208,7 +1217,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {(step.k === 'confirm' || step.k === 'booking') && (
               <Summary menu={step.menu} slot={step.slot} hidePrice={step.k === 'confirm' && !!confirmPrice}
-                staffName={step.k !== 'confirm' ? undefined : step.staffId ? options?.staff?.find(x => x.id === step.staffId)?.name ?? '指名あり' : step.staffChosen ? '指名なし' : undefined}
+                staffName={step.k !== 'confirm' ? undefined : step.staffId ? options?.staff?.find(x => x.id === step.staffId)?.name ?? '指名あり' : undefined}
                 before={step.k === 'confirm' ? step.change ?? ownActive ?? undefined : undefined} />
             )}
 
@@ -1726,7 +1735,7 @@ function ReservationSummary({ r, companion }: { r: CustomerReservation; companio
       {(companion || companionIds().includes(r.id)) && <SummaryRow label="ご来店" value="お連れ様" />}
       <SummaryRow label="日時" value={visitLabel(r.starts_at)} />
       <SummaryRow label="メニュー" value={names} />
-      <SummaryRow label="担当" value={r.nominated ? r.staff_name : '指名なし'} />
+      <SummaryRow label="担当" value={r.staff_name} />
     </div>
   )
 }
