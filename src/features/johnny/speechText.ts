@@ -39,8 +39,11 @@ function minuteReading(n: number): string | null {
   return `${h}${MIN_TENS[tens]}${MIN_ONES[ones]}`
 }
 
+// お店の言葉の読み（声の AI は「漢」を「かん」と読む）：漢トク券＝おとくけん、漢前＝おとこまえ
+const SHOP_WORDS: [RegExp, string][] = [[/漢トク券/g, 'おとくけん'], [/漢トク/g, 'おとく'], [/漢前/g, 'おとこまえ'], [/銀Pay/gi, 'ぎんペイ']]
+
 export function toSpeech(text: string): string {
-  return text.normalize('NFKC')
+  return SHOP_WORDS.reduce((t, [re, to]) => t.replace(re, to), text.normalize('NFKC'))
     .replace(/(\d{1,2})時(?!間)(半)?(?:(\d{1,2})分)?/g, (all, h: string, half: string | undefined, m: string | undefined) => {
       const hr = hourReading(Number(h))
       if (!hr) return all

@@ -1577,6 +1577,7 @@ function PriceBox({ menuName, price, usable, selected, onToggle }: { menuName: s
           <span style={{ fontSize: 22, fontWeight: 700 }}>{yenOf(price.total)}</span>
         </div>
       </div>
+      <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>お支払いは店頭で。現金・カードのほか、銀Payも使えます。</p>
       {p && !p.eligible && (
         <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>
           土日祝は 17:00〜19:00 のご来店なら {p.def.title} で {yenOf(p.memberPrice)} になります。
