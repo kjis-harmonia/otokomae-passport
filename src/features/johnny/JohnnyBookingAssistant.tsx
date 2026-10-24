@@ -173,7 +173,7 @@ function dateWord(date: string): string {
 }
 
 type ConfirmStep = Extract<Step, { k: 'confirm' }>
-// 「指名なし」の言い方
+// 「指名なし」の言い方（指名なしは選べない。言われたら担当を選んでもらう）
 const ANY_STAFF = /どちら|どっち|おまかせ|お任せ|指名なし|しめいなし|指名しない|しめいしない|指名は(?:いい|大丈夫|なし)|なしで|誰でも|だれでも|どなたでも|フリー|空いて(?:いる|る)(?:方|ほう)|あいて(?:いる|る)(?:方|ほう)|早い(?:方|ほう)|はやい(?:方|ほう)/
 const AI_STEPS = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel'])
 
@@ -419,7 +419,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const chooseStaff = useCallback((s: Extract<Step, { k: 'pickStaff' }>, staffId: string | null) => {
     if (staffId && s.avail?.[staffId] === false) {
       const name = optionsRef.current?.staff?.find(st => st.id === staffId)?.name ?? 'その担当'
-      setStep({ ...s, note: `${name}は、この時間は空いていません。ほかの担当か「どちらでも」をお選びください。` })
+      setStep({ ...s, note: `${name}は、この時間は空いていません。ほかの担当をお選びください。` })
       return
     }
     setStep({ ...s.next, staffId, staffChosen: true })
@@ -440,8 +440,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     void Promise.all(staff.map(st => api.staffSlots(date, step.next.menu.code, st.id)
       .then(list => [st.id, list.some(x => Date.parse(x.starts_at) === at)] as const)
       .catch(() => [st.id, true] as const)))
-      // どの担当も個別には空いていない（お店としては空いている）ときは、担当は聞かずに指名なしで確認へ進む
-      .then(pairs => { if (alive) setStep(cur => cur.k !== 'pickStaff' || cur.next !== step.next ? cur : pairs.every(([, ok]) => !ok) ? { ...cur.next, staffId: null, staffChosen: true } : { ...cur, avail: Object.fromEntries(pairs) }) })
+      // 担当は必ずどちらかを選ぶ（指名なしは無い）。どの担当もその時間は空いていなければ、ほかの日時を聞き直す
+      .then(pairs => { if (alive) setStep(cur => cur.k !== 'pickStaff' || cur.next !== step.next ? cur : pairs.every(([, ok]) => !ok)
+        ? { k: 'ai', say: `その時間は、${staff.map(st => st.name).join('も')}も埋まっています。ほかのご希望の日時をお聞かせください。`, view: { kind: 'talk', handoff: false } }
+        : { ...cur, avail: Object.fromEntries(pairs) }) })
     return () => { alive = false }
   }, [step, options, api])
 
@@ -729,13 +731,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       setStep({ k: 'ai', say: 'メンテナンスカットは、ホットペッパーのクーポンでご予約いただけます。下のボタンからどうぞ。', view: { kind: 'maintenance' } })
       return
     }
-    // 担当を選ぶ段階（AI に聞かない）：名前か「どちらでも」
+    // 担当を選ぶ段階（AI に聞かない）：担当の名前
     if (s.k === 'pickStaff') {
       const staff = optionsRef.current?.staff ?? []
       const hit = staff.find(st => text.includes(st.name) || (st.name === '銀二郎' && /ぎんじろう|ギンジロウ|ギンジロー|銀次郎|銀ちゃん|ぎんちゃん|ギンちゃん/.test(text)) || (st.name === 'テイテイ' && /ていてい|てぃてぃ|ティティ|テイテー|ていてー|TT/i.test(text)))
       if (hit) { chooseStaff(s, hit.id); return }
-      if (ANY_STAFF.test(text)) { chooseStaff(s, null); return }
-      setStep({ ...s, note: '担当のお名前か「どちらでも」とお伝えください。' })
+      const names = staff.map(st => st.name).join('か')
+      setStep({ ...s, note: ANY_STAFF.test(text) ? `お手数ですが、担当は${names}からお選びください。` : `担当のお名前（${names}）をお伝えください。` })
       return
     }
     // お連れ様の段階（AI に聞かない）
@@ -993,7 +995,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         return {
           title: '担当をお選びください',
           sub: step.note ?? `${visitLabel(step.next.slot.starts_at)}・${step.next.menu.name}`,
-          speech: step.note ?? `担当は、${names}、どちらにしますか？どちらでもよければ「どちらでも」とお伝えください。`,
+          speech: step.note ?? `担当は、${names}、どちらにしますか？`,
           listen: true,
         }
       }
@@ -1298,9 +1300,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         {step.k === 'pickStaff' && (
           <>
             {(options?.staff ?? []).map(st => step.avail?.[st.id] === false
-              ? <SecondaryButton key={st.id} onClick={() => setStep({ ...step, note: `${st.name}は、この時間は空いていません。ほかの担当か「どちらでも」をお選びください。` })}>{st.name}（この時間は空いていません）</SecondaryButton>
+              ? <SecondaryButton key={st.id} onClick={() => setStep({ ...step, note: `${st.name}は、この時間は空いていません。ほかの担当をお選びください。` })}>{st.name}（この時間は空いていません）</SecondaryButton>
               : <PrimaryButton key={st.id} onClick={() => chooseStaff(step, st.id)}>{st.name}</PrimaryButton>)}
-            <SecondaryButton onClick={() => chooseStaff(step, null)}>指名なし（どちらでも）</SecondaryButton>
           </>
         )}
         {step.k === 'confirm' && (
