@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { CalendarClock, Phone, Scissors } from 'lucide-react'
 import { formatVisit, useNextReservation } from '../features/johnny/nextReservation'
+import { heldFor, useGinpayHolds } from '../features/ginpay/holds'
 import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { hasCustomerSession } from '../utils/customerSession'
 import { getMaintenanceVisit, getDaysUntilRecommended, getNextRecommendedDate, fmtDate, MAINTENANCE_CYCLE_DAYS } from '../utils/maintenanceSchedule'
@@ -22,6 +23,7 @@ function useLastVisit(): string | null {
 
 export function V2Next({ onJohnny }: { onJohnny: () => void }) {
   const next = useNextReservation()
+  const prepaid = heldFor(useGinpayHolds(), next?.id)
   const visit = next ? formatVisit(next.starts_at) : null
   const last = useLastVisit()
   const days = last ? getDaysUntilRecommended(last) : null
@@ -36,6 +38,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           <div style={{ marginTop: 14, display: 'grid', gap: 6, fontSize: 15 }}>
             <span>{next.items.map(i => i.name).join('・')}</span>
             <span style={{ color: 'var(--v2-sub)' }}>担当：{next.nominated ? next.staff_name : '指名なし'}</span>
+            {prepaid != null && <span style={{ color: 'var(--v2-gold-deep)', fontWeight: 700 }}>✓ 銀Pay 仮支払い済み ¥{prepaid.toLocaleString()}<br /><small style={{ fontWeight: 400, color: 'var(--v2-sub)' }}>ご来店時にレジで会員QRを読むと、お支払いが確定します</small></span>}
           </div>
           {/* AI予約は受けた時点で確定。サロンボードへの転記はお店の仕事。重なったときだけお店から電話する（そのことを1行だけ） */}
           {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、お店からお電話します。</p>}

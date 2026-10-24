@@ -18,6 +18,7 @@ import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
 import { isEmptyRequest, parseVisitRequest, parseYesNo, type VisitRequest } from './visitParser'
 import { forgetReservation, formatVisit, pickNext, rememberReservation } from './nextReservation'
 import { clearCurrentReservation, loadCurrentReservation } from '../../utils/currentReservation'
+import { heldFor, holdGinpay, useGinpayHolds, type GinpayHoldSummary } from '../ginpay/holds'
 import type { AgentAnswer, AgentShown, AgentTurn } from './agentClient'
 import { useVoice } from './useVoice'
 import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvisor'
@@ -68,7 +69,7 @@ type Step =
   /** 担当（指名）を選ぶ：確定の前に必ず聞く。avail はその時間にその担当が空いているか */
   | { k: 'pickStaff'; next: ConfirmStep; avail?: Record<string, boolean>; note?: string }
   | { k: 'booking'; menu: MenuOption; slot: Slot }
-  | { k: 'done'; reservation: CustomerReservation; changedFrom?: CustomerReservation; oldKept?: boolean; companion?: CustomerReservation; companionFailed?: boolean }
+  | { k: 'done'; reservation: CustomerReservation; changedFrom?: CustomerReservation; oldKept?: boolean; companion?: CustomerReservation; companionFailed?: boolean; ginpay?: number | 'failed' }
   /** お連れ様：メニューを聞く → 2人分の確認（お連れ様は予約者の時間から一番早く。togetherAt：お二人同時に入れる時刻） */
   | { k: 'companionMenu'; primary: PartyPrimary }
   | { k: 'confirmParty'; primary: PartyPrimary; companion: { menu: MenuOption; slot: Slot }; togetherAt: string | null }
@@ -219,6 +220,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // 手持ちの券と、確認画面で選んだ券（key：その確認画面のメニューと時刻）
   const [myTickets, setMyTickets] = useState<TicketRow[]>([])
   const [couponPick, setCouponPick] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] })
+  // 銀Pay の仮支払い：確認画面で「銀Payで今すぐ支払う」を選ぶと、予約の確定のあとに残高を押さえる（支払いの確定はレジで会員QR を読んだとき）
+  const ginpay = useGinpayHolds()
+  const ginpayRef = useRef<GinpayHoldSummary | null>(ginpay)
+  useEffect(() => { ginpayRef.current = ginpay }, [ginpay])
+  const [payGinpay, setPayGinpay] = useState(true)
+  const ginpayPlanRef = useRef<{ key: string; amount: number }>({ key: '', amount: 0 })
   useEffect(() => { couponPickRef.current = couponPick }, [couponPick])
 
   // 聞き取った言葉 → 今の段階で処理（下で定義する handleText を ref 経由で呼ぶ）
@@ -445,6 +452,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       const hold = await api.hold(slot.starts_at, menu.code, staffId)
       holdId = hold.hold_id
       const reservation = await api.confirm(hold.hold_id)
+      const oldHeld = change ? heldFor(ginpayRef.current, change.id) : null
       // 変更：新しい予約が取れてから、元の予約をキャンセルする（取り消せなければ両方残っていることを伝える）
       let oldKept = false
       if (change) {
@@ -457,8 +465,15 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       const pickKey = `${menu.code}|${slot.starts_at}`
       const pickedIds = couponPickRef.current.key === pickKey ? couponPickRef.current.ids : []
       if (pickedIds.length) saveCouponPlan({ date: slotDate(reservation.starts_at), reservationId: reservation.id, ticketIds: pickedIds })
+      // 銀Pay の仮支払い：確認画面で選んだ額。変更で元の予約に押さえがあれば、新しい予約に付け直す（元の予約のキャンセルで押さえは外れている）
+      const plan = ginpayPlanRef.current
+      const payAmount = plan.key === pickKey ? plan.amount : oldHeld ? Math.min(oldHeld, reservation.total_price ?? oldHeld) : 0
+      let ginpayResult: number | 'failed' | undefined
+      if (payAmount > 0) {
+        try { await holdGinpay(reservation.id, payAmount); ginpayResult = payAmount } catch { ginpayResult = 'failed' }
+      }
       api.reservations().then(setMyReservations).catch(() => {})
-      setStep({ k: 'done', reservation, changedFrom: change, oldKept })
+      setStep({ k: 'done', reservation, changedFrom: change, oldKept, ginpay: ginpayResult })
     } catch (err) {
       const code = err instanceof RpcError ? err.code : ''
       if (code === 'ai_booking_paused') {
@@ -545,6 +560,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     rememberReservation(reservation)
     clearCurrentReservation()
+    // 銀Pay の仮支払いはご本人の分だけ（確認画面で選んでいたとき）
+    const plan = ginpayPlanRef.current
+    let ginpayResult: number | 'failed' | undefined
+    if (plan.amount > 0 && plan.key === `${s.primary.menu.code}|${s.primary.slot.starts_at}`) {
+      try { await holdGinpay(reservation.id, plan.amount); ginpayResult = plan.amount } catch { ginpayResult = 'failed' }
+    }
     let companion: CustomerReservation | undefined
     try {
       const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, null)
@@ -552,7 +573,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       rememberCompanion(companion.id)
     } catch { /* 下で伝える */ }
     api.reservations().then(setMyReservations).catch(() => {})
-    setStep({ k: 'done', reservation, companion, companionFailed: !companion })
+    setStep({ k: 'done', reservation, companion, companionFailed: !companion, ginpay: ginpayResult })
   }, [api, stopListening])
 
   const verifyUnknown = useCallback(async (menu: MenuOption, slot: Slot) => {
@@ -882,6 +903,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const price = priceFor(step.menu.code, step.menu.price, step.slot.starts_at, selected)
     return price ? { key, usable, selected, price } : null
   }, [step, myTickets, couponPick])
+  // 銀Pay で払える（口座があり、使える額がお会計以上）なら、選んでいる間は確定のあとに押さえる
+  const ginpayChoice = confirmPrice && ginpay && confirmPrice.price.total > 0
+    ? { available: ginpay.available, enough: ginpay.available >= confirmPrice.price.total, on: payGinpay && ginpay.available >= confirmPrice.price.total }
+    : null
+  const ginpayOn = !!ginpayChoice?.on
+  useEffect(() => {
+    ginpayPlanRef.current = confirmPrice && ginpayOn ? { key: confirmPrice.key, amount: confirmPrice.price.total } : { key: '', amount: 0 }
+  }, [confirmPrice, ginpayOn])
   const toggleCoupon = (key: string, id: string) => setCouponPick(p => {
     const ids = p.key === key ? p.ids : []
     return { key, ids: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] }
@@ -1194,7 +1223,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'confirm' && confirmPrice && (
               <PriceBox menuName={step.menu.name} price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
-                onToggle={id => toggleCoupon(confirmPrice.key, id)} />
+                onToggle={id => toggleCoupon(confirmPrice.key, id)} ginpay={ginpayChoice} onGinpay={() => setPayGinpay(v => !v)} />
             )}
             {step.k === 'confirm' && !step.change && <p style={{ margin: '10px 2px 0', fontSize: 12, lineHeight: 1.6, color: C.secondary }}>{BOOKING_RULE_NOTE}</p>}
 
@@ -1208,6 +1237,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
 
             {step.k === 'done' && <ReservationSummary r={step.reservation} />}
+            {step.k === 'done' && step.ginpay !== undefined && (
+              <p style={{ width: '100%', margin: '10px 0 0', padding: '12px 14px', borderRadius: 14, background: step.ginpay === 'failed' ? C.fill : 'rgba(168,130,63,0.10)', fontSize: 14, lineHeight: 1.6, color: C.text }}>
+                {step.ginpay === 'failed'
+                  ? '銀Payの仮支払いはできませんでした。お支払いは店頭でどうぞ。'
+                  : <><b>✓ 銀Pay 仮支払い済み {yenOf(step.ginpay)}</b><br /><span style={{ color: C.secondary, fontSize: 13 }}>ご来店時にレジで会員QRを読むと、お支払いが確定します。</span></>}
+              </p>
+            )}
             {step.k === 'done' && <PushToggle tone="mono" />}
             {step.k === 'done' && step.companion && <ReservationSummary r={step.companion} companion />}
 
@@ -1597,7 +1633,11 @@ function couponSpeech(price: PriceBreakdown | null, usableCount: number): string
 }
 
 /** お会計（プレミアムクーポン・選んだ券）と、使える券のボタン */
-function PriceBox({ menuName, price, usable, selected, onToggle }: { menuName: string; price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void }) {
+function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpay }: {
+  menuName: string; price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void
+  /** 銀Pay の仮支払い（口座があるときだけ）。enough：使える額がお会計以上 */
+  ginpay?: { available: number; enough: boolean; on: boolean } | null; onGinpay?: () => void
+}) {
   const p = price.premium
   return (
     <div style={{ width: '100%', marginTop: 12 }}>
@@ -1607,11 +1647,33 @@ function PriceBox({ menuName, price, usable, selected, onToggle }: { menuName: s
         {price.normal != null && p && <SummaryRow label={p.def.title} value={`−${yenOf(price.normal - price.base)}`} />}
         {selected.map(t => <SummaryRow key={t.id} label={TICKET_TYPE_LABELS[t.type]} value={`−${yenOf(t.amount)}`} />)}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 54, padding: '0 16px', borderTop: `0.5px solid ${C.separator}` }}>
-          <span style={{ fontSize: 15, color: C.secondary }}>お会計（店頭で）</span>
+          <span style={{ fontSize: 15, color: C.secondary }}>{ginpay?.on ? 'お会計（銀Pay）' : 'お会計（店頭で）'}</span>
           <span style={{ fontSize: 22, fontWeight: 700 }}>{yenOf(price.total)}</span>
         </div>
       </div>
-      <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>お支払いは店頭で。現金・カードのほか、銀Payも使えます。</p>
+      {ginpay?.enough ? (
+        <>
+          <button type="button" onClick={onGinpay} aria-pressed={ginpay.on}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 56, marginTop: 10, padding: '0 16px', borderRadius: 14, cursor: 'pointer', textAlign: 'left',
+              border: ginpay.on ? '1.5px solid #A8823F' : `1px solid ${C.separator}`, background: ginpay.on ? 'rgba(168,130,63,0.10)' : C.fill, color: C.text, fontFamily: 'inherit' }}>
+            <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: 12, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+              color: '#fff', background: ginpay.on ? '#A8823F' : 'transparent', border: ginpay.on ? 'none' : `1.5px solid ${C.secondary}` }}>{ginpay.on ? '✓' : ''}</span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: 'block', fontSize: 16, fontWeight: 700 }}>銀Payで今すぐ支払う</span>
+              <span style={{ display: 'block', fontSize: 12, color: C.secondary, marginTop: 2 }}>使える額 {yenOf(ginpay.available)}</span>
+            </span>
+          </button>
+          <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>
+            {ginpay.on
+              ? 'ご予約と同時に銀Payで仮支払いします。ご来店時にレジで会員QRを読むと、お支払いが確定します。キャンセルすると全額戻ります。'
+              : 'お支払いは店頭で。現金・カード・銀Payが使えます。'}
+          </p>
+        </>
+      ) : (
+        <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>
+          {ginpay ? `お支払いは店頭で。銀Payの使える額（${yenOf(ginpay.available)}）が足りないため、今すぐの支払いはできません。` : 'お支払いは店頭で。現金・カードのほか、銀Payも使えます。'}
+        </p>
+      )}
       {p && !p.eligible && (
         <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>
           土日祝は 17:00〜19:00 のご来店なら {p.def.title} で {yenOf(p.memberPrice)} になります。
