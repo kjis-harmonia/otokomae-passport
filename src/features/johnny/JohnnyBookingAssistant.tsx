@@ -440,7 +440,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     void Promise.all(staff.map(st => api.staffSlots(date, step.next.menu.code, st.id)
       .then(list => [st.id, list.some(x => Date.parse(x.starts_at) === at)] as const)
       .catch(() => [st.id, true] as const)))
-      .then(pairs => { if (alive) setStep(cur => cur.k === 'pickStaff' && cur.next === step.next ? { ...cur, avail: Object.fromEntries(pairs) } : cur) })
+      // どの担当も個別には空いていない（お店としては空いている）ときは、担当は聞かずに指名なしで確認へ進む
+      .then(pairs => { if (alive) setStep(cur => cur.k !== 'pickStaff' || cur.next !== step.next ? cur : pairs.every(([, ok]) => !ok) ? { ...cur.next, staffId: null, staffChosen: true } : { ...cur, avail: Object.fromEntries(pairs) }) })
     return () => { alive = false }
   }, [step, options, api])
 
@@ -467,6 +468,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       if (pickedIds.length) saveCouponPlan({ date: slotDate(reservation.starts_at), reservationId: reservation.id, ticketIds: pickedIds })
       // 銀Pay の仮支払い：確認画面で選んだ額。変更で元の予約に押さえがあれば、新しい予約に付け直す（元の予約のキャンセルで押さえは外れている）
       const plan = ginpayPlanRef.current
+      ginpayPlanRef.current = { key: '', amount: 0 }
       const payAmount = plan.key === pickKey ? plan.amount : oldHeld ? Math.min(oldHeld, reservation.total_price ?? oldHeld) : 0
       let ginpayResult: number | 'failed' | undefined
       if (payAmount > 0) {
@@ -562,6 +564,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     clearCurrentReservation()
     // 銀Pay の仮支払いはご本人の分だけ（確認画面で選んでいたとき）
     const plan = ginpayPlanRef.current
+    ginpayPlanRef.current = { key: '', amount: 0 }
     let ginpayResult: number | 'failed' | undefined
     if (plan.amount > 0 && plan.key === `${s.primary.menu.code}|${s.primary.slot.starts_at}`) {
       try { await holdGinpay(reservation.id, plan.amount); ginpayResult = plan.amount } catch { ginpayResult = 'failed' }
@@ -908,8 +911,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     ? { available: ginpay.available, enough: ginpay.available >= confirmPrice.price.total, on: payGinpay && ginpay.available >= confirmPrice.price.total }
     : null
   const ginpayOn = !!ginpayChoice?.on
+  // 確認画面にいる間だけ書き換える（確定を押すと画面が「予約中」に変わるので、そこで消さない。使ったら book 側で消す）
   useEffect(() => {
-    ginpayPlanRef.current = confirmPrice && ginpayOn ? { key: confirmPrice.key, amount: confirmPrice.price.total } : { key: '', amount: 0 }
+    if (confirmPrice) ginpayPlanRef.current = ginpayOn ? { key: confirmPrice.key, amount: confirmPrice.price.total } : { key: '', amount: 0 }
   }, [confirmPrice, ginpayOn])
   const toggleCoupon = (key: string, id: string) => setCouponPick(p => {
     const ids = p.key === key ? p.ids : []

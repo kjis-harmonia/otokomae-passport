@@ -109,6 +109,7 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
 .v2-pay-icon { flex: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #503b20; background: var(--lq-champagne); border: 1px solid #c1a36f; box-shadow: var(--lq-gold-shadow); }
 .v2-pay-name { flex: none; font: 700 14px/1 var(--v2-serif); letter-spacing: .08em; }
 .v2-pay-bal { flex: 1; min-width: 0; font: 700 17px/1.2 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-pay-held { display: block; margin-top: 2px; font: 600 10.5px/1.2 var(--v2-sans); color: var(--v2-sub); letter-spacing: 0; }
 .v2-pay-bal.is-off { font: 500 12px/1.4 var(--v2-sans); color: var(--v2-sub); }
 .v2-pay-go { flex: none; display: flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 600; color: var(--v2-sub); }
 
@@ -325,6 +326,9 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
   .v2-cta { padding-left: 14px; gap: 7px; }
   .v2-cta-spark { display: none; }
   .v2-cta-go { width: 48px; height: 48px; }
+  .v2-pay-go { font-size: 11px; letter-spacing: -.02em; }
+}
+@media (max-width: 359px) {
   .v2-pay-go { font-size: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
