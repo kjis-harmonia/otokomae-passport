@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { useScrollLock } from '../utils/useScrollLock'
 import { resolveStyleImageUrl, resolveDetailTopOpacity } from '../data/styleImages'
-import { getReserveUrl } from '../data/reserveLinks'
+import { ReserveChoiceSheet } from './ReserveChoice'
 import type { StyleCard } from '../data/styleCard'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -10,15 +11,16 @@ const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Minc
 export function StyleDetailModal({
   style,
   onClose,
-  onReserve,
 }: {
   style: StyleCard
   onClose: () => void
-  onReserve: () => void
+  /** 使わない（予約は ReserveChoiceSheet：Johnny か HOT PEPPER） */
+  onReserve?: () => void
 }) {
   useScrollLock()
   const topOpacity = resolveDetailTopOpacity(style)
-  const reserveUrl = getReserveUrl(style.title)
+  // 予約する → Johnny（このメニューで日時と担当を聞く）か HOT PEPPER Beauty を選ぶ
+  const [choosing, setChoosing] = useState(false)
 
   return (
     <>
@@ -169,14 +171,7 @@ export function StyleDetailModal({
           </div>
           <motion.button
             type="button"
-            onClick={() => {
-              if (reserveUrl) {
-                window.open(reserveUrl, '_blank', 'noopener,noreferrer')
-                onClose()
-              } else {
-                onReserve()
-              }
-            }}
+            onClick={() => setChoosing(true)}
             style={{
               flex: 1,
               padding: '15px 0',
@@ -198,6 +193,7 @@ export function StyleDetailModal({
           </motion.button>
         </div>
       </motion.div>
+      <ReserveChoiceSheet title={style.title} open={choosing} onClose={() => setChoosing(false)} />
     </>
   )
 }

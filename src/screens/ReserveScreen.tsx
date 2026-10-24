@@ -8,6 +8,7 @@ import { AnimatePresence } from 'framer-motion'
 import { MAINTENANCE_CUT_URL, getReserveUrl } from '../data/reserveLinks'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../data/wallet'
 import { JohnnyBookingAssistant } from '../features/johnny/JohnnyBookingAssistant'
+import { takeJohnnyIntent } from '../features/johnny/bookingIntent'
 import { formatVisit, useNextReservation } from '../features/johnny/nextReservation'
 
 // 予約。開くとすぐ予約アシスタント（JOHNNY）が日時を聞く。
@@ -51,6 +52,8 @@ function StoreBookingGate({session,access,onShowQr}:{session:string|null;access:
 }
 function ReservationContent({ onShowQr }: { onShowQr?: () => void }) {
   const [assistantOpen, setAssistantOpen] = useState(true)
+  // スタイルの「予約する」から来たとき：そのメニューを入れて Johnny を始める
+  const [intent] = useState(takeJohnnyIntent)
   const next = useNextReservation()
   const visit = next ? formatVisit(next.starts_at) : null
 
@@ -114,7 +117,7 @@ function ReservationContent({ onShowQr }: { onShowQr?: () => void }) {
       {createPortal(
         <AnimatePresence>
           {assistantOpen && (
-            <JohnnyBookingAssistant key="johnny-booking" onClose={() => setAssistantOpen(false)} onShowQr={onShowQr} />
+            <JohnnyBookingAssistant key="johnny-booking" initialMenuCode={intent?.menuCode ?? null} onClose={() => setAssistantOpen(false)} onShowQr={onShowQr} />
           )}
         </AnimatePresence>,
         document.body,

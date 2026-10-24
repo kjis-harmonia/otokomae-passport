@@ -50,3 +50,33 @@ export const RESERVE_LINKS: Readonly<Record<string, string>> = {
 export function getReserveUrl(styleTitle: string): string {
   return RESERVE_LINKS[styleTitle] ?? ''
 }
+
+/** スタイル（宣伝の名前）→ 予約メニューの code。Johnny で予約するときに、押したスタイルのメニューを最初から入れる。
+ *  対応がはっきりしないスタイルは入れない（Johnny がメニューを聞く） */
+export const STYLE_MENU_CODES: Readonly<Record<string, string>> = {
+  'サイドバックアイパー': 'perm-iper',
+  '昭和のアイパー': 'perm-iper',
+  'カールアイパー': 'perm-curl-iper',
+  '濡れパン': 'perm-nurepan',
+  '俺は濡れパン': 'perm-nurepan',
+  'パンチパーマ': 'perm-punch',
+  'バチバチパンチパーマ': 'perm-punch',
+  'ヤンキーパンチ': 'perm-punch',
+  'リーゼントパンチ': 'perm-punch',
+  'シンサイパンチ': 'perm-punch',
+  'ニグロパーマ': 'perm-negro',
+  '夏ニグロ': 'perm-negro',
+  'ジャマイカンアフロ': 'perm-afro',
+  '銀パラ': 'perm-ginpara-curly',
+  'スペインパーマ': 'perm-spain',
+  'サラリーマン専用 ギリギリパーマ': 'perm-normal',
+  '海の男専用': 'cut-skin-fade',
+  '海軍御用達': 'cut-skin-fade',
+  'シンサイ刈り': 'cut-skin-fade',
+  'トラック野郎御用達': 'cut-regular',
+  'ちょい悪オヤジ専用 昭和ヘアスタイル': 'cut-regular',
+}
+
+export function getStyleMenuCode(styleTitle: string): string | null {
+  return STYLE_MENU_CODES[styleTitle] ?? null
+}
