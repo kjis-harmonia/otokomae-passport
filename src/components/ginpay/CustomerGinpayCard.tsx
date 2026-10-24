@@ -7,6 +7,7 @@ import {
   yen,
 } from '../../utils/ginpayApi'
 import { GOLD, IVORY, SERIF } from '../wallet/walletTheme'
+import { RpcError } from '../../utils/staffSession'
 
 // ウォレットの券と同じ黒×深紅の面に、明朝のアイボリー。金は入金の「＋」だけ（飾りには使わない）
 const MUTED = 'rgba(242,230,200,0.56)'
@@ -18,11 +19,17 @@ export function CustomerGinpayCard() {
   const [error, setError] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [chargeNotice, setChargeNotice] = useState(false)
+  // まだログインしていない（店頭の本人確認の前）：カードは出さない（上のログインの案内に任せる。赤い「表示できません」を出さない）
+  const [signedOut, setSignedOut] = useState(false)
 
   const load = useCallback(() => {
     getCustomerGinpayLedger(20)
-      .then((next) => { setLedger(next); setError(null) })
-      .catch(() => { setLedger(null); setError('銀Payを表示できません') })
+      .then((next) => { setLedger(next); setError(null); setSignedOut(false) })
+      .catch((err: unknown) => {
+        setLedger(null)
+        if (err instanceof RpcError && (err.code === 'customer_auth_required' || err.message.includes('customer_auth_required'))) { setSignedOut(true); setError(null) }
+        else setError('銀Payを表示できません')
+      })
   }, [])
 
   useEffect(() => {
@@ -36,6 +43,7 @@ export function CustomerGinpayCard() {
     }
   }, [load])
 
+  if (signedOut) return null
   return (
     <section aria-label="銀Pay" style={{
       margin: '16px 16px 0',
