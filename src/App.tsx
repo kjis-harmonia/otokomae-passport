@@ -30,6 +30,7 @@ import { seedDevData } from './utils/devSeed'
 import { InstallGate, InstallGuide } from './components/InstallGuide'
 import { V2App } from './v2/V2App'
 import { needsInstallFirst } from './utils/installGuide'
+import { isStaging } from './utils/env'
 import { refreshPushIfGranted } from './utils/webPush'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -38,6 +39,9 @@ const SHOP_AUTH_KEY = 'ginjiro_shop_auth'
 const PASSKEY_SETUP_PROMPT_KEY = 'ginjiro_passkey_setup_prompt_v1'
 
 type AppPhase = 'onboarding' | 'app'
+
+// Staging だけ：?preview=v2 で、登録なしに V2.0 の画面を見られる（GPT など AI に見せる用）。本番では効かない
+const PREVIEW_V2 = isStaging() && new URLSearchParams(window.location.search).get('preview') === 'v2'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function isShopUnlocked(): boolean {
@@ -286,8 +290,9 @@ function App() {
 
   // ── Phase ─────────────────────────────────────────────────────────────────────
   // スマホでは、ホーム画面に追加してアイコンから開いたときだけ登録できる（iPhone は Safari とアプリで保存場所が別なので、二重登録を防ぐ）
-  const [installFirst] = useState(needsInstallFirst)
+  const [installFirst] = useState(() => !PREVIEW_V2 && needsInstallFirst())
   const [phase, setPhase] = useState<AppPhase>(() => {
+    if (PREVIEW_V2) return 'app'
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
     return done ? 'app' : 'onboarding'
   })
