@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Ellipsis, ExternalLink, Share, SquarePlus } from 'lucide-react'
-import { detect, installPrompt, INSTALL_GUIDE_KEY as KEY, MAX_AUTO, SHOW_INSTALL_GUIDE_EVENT, WAIT_DAYS, type InstallKind as Kind } from '../utils/installGuide'
+import { detect, externalBrowserName, externalBrowserUrl, installPrompt, INSTALL_GUIDE_KEY as KEY, MAX_AUTO, SHOW_INSTALL_GUIDE_EVENT, WAIT_DAYS, type InstallKind as Kind } from '../utils/installGuide'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const GOLD = '#C9A24A'
@@ -53,10 +53,8 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
     setOpen(false)
   }
 
-  // LINE は ?openExternalBrowser=1 を付けると外部ブラウザ（Safari）で開く
-  const externalUrl = (() => {
-    try { const u = new URL(window.location.href); u.searchParams.set('openExternalBrowser', '1'); return u.toString() } catch { return '/' }
-  })()
+  // アプリ内ブラウザ → ふつうのブラウザ（LINE・Instagram・Android それぞれのやり方。utils/installGuide）
+  const externalUrl = externalBrowserUrl()
 
   return (
     <AnimatePresence>
@@ -103,7 +101,7 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
             {(kind === 'inapp' || kind === 'ios-other') && (
               <p style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.9, color: CREAM }}>
                 このままでは追加できません。<br />
-                <b>Safari</b> で開いてから、ホーム画面に追加してください。
+                <b>{externalBrowserName()}</b> で開いてから、ホーム画面に追加してください。
               </p>
             )}
 
@@ -116,7 +114,7 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>
               {kind === 'inapp' && (
                 <a href={externalUrl} style={{ ...primary, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <ExternalLink size={17} /> Safari で開く
+                  <ExternalLink size={17} /> {externalBrowserName()} で開く
                 </a>
               )}
               {kind === 'android' && installPrompt.get() && <button type="button" onClick={installAndroid} style={primary}>ホーム画面に追加</button>}
@@ -153,9 +151,7 @@ function Step({ n, icon, children }: { n: number; icon: ReactNode; children: Rea
 /** 登録の前に出す全画面の案内。追加したらホーム画面のアイコンから開いて登録する。追加できない人だけ下の文字から先へ */
 export function InstallGate({ onSkip }: { onSkip: () => void }) {
   const [kind] = useState<Kind>(() => detect())
-  const externalUrl = (() => {
-    try { const u = new URL(window.location.href); u.searchParams.set('openExternalBrowser', '1'); return u.toString() } catch { return '/' }
-  })()
+  const externalUrl = externalBrowserUrl()
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10030, background: '#0B0908', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
       <div style={{
@@ -188,13 +184,16 @@ export function InstallGate({ onSkip }: { onSkip: () => void }) {
         {(kind === 'inapp' || kind === 'ios-other') && (
           <>
             <p style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.9, color: CREAM, margin: 0 }}>
-              このままではホーム画面に追加できません。<br /><b>Safari</b> で開いてから追加してください。
+              このままではホーム画面に追加できません。<br /><b>{externalBrowserName()}</b> で開いてから追加してください。
             </p>
-            {kind === 'inapp' && (
+            {(kind === 'inapp' || kind === 'ios-other') && (
               <a href={externalUrl} style={{ ...primary, marginTop: 20, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <ExternalLink size={17} /> Safari で開く
+                <ExternalLink size={17} /> {externalBrowserName()} で開く
               </a>
             )}
+            <p style={{ fontSize: 13, lineHeight: 1.8, color: 'rgba(242,230,200,0.55)', margin: '14px 0 0' }}>
+              開かないときは、画面右上の <b style={{ color: CREAM }}>「…」</b> から <b style={{ color: CREAM }}>「外部ブラウザで開く」</b>（または「{externalBrowserName()}で開く」）を選んでください。
+            </p>
           </>
         )}
 

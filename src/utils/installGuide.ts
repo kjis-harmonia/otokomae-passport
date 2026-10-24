@@ -53,3 +53,22 @@ export function needsInstallFirst(): boolean {
   const k = detect()
   return k === 'ios' || k === 'ios-other' || k === 'inapp'
 }
+
+/** アプリ内ブラウザ（Instagram・Facebook・TikTok・LINE など）から、ふつうのブラウザで開き直すリンク。
+ *  LINE：?openExternalBrowser=1（LINE の決まり）。Android：Chrome を直接開く intent。
+ *  iPhone：x-safari-https://（iOS 17 から Safari で開く。Instagram は ?openExternalBrowser を無視する） */
+export function externalBrowserUrl(): string {
+  if (typeof window === 'undefined') return '/'
+  try {
+    const u = new URL(window.location.href)
+    const ua = navigator.userAgent
+    if (/Line\//i.test(ua)) { u.searchParams.set('openExternalBrowser', '1'); return u.toString() }
+    if (/Android/i.test(ua)) return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=com.android.chrome;end`
+    return `x-safari-${u.toString()}`
+  } catch { return '/' }
+}
+
+/** 開き直す先のブラウザの名前（ボタンの文字） */
+export function externalBrowserName(): string {
+  return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent) ? 'Chrome' : 'Safari'
+}
