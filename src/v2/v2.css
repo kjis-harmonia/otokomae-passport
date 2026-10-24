@@ -298,3 +298,33 @@ html:has(.v2), body:has(.v2) { background: #f5f2ec; }
     inset 0 2px 1px rgba(255, 255, 255, 1), inset 0 -3px 4px rgba(255, 246, 225, 0.9),
     inset 0 -12px 20px -8px rgba(168, 130, 63, 0.18);
 }
+
+/* ══ チケット（白にそろえる）：券・クーポンの画像と黒いカードはそのまま（券そのものの絵柄）。
+   ページの地・見出し・3つのタブだけ白のリキッド・グラスに ══ */
+.v2-wallet .ginjiro-luxury-bg { background: none !important; }
+.v2-wallet .ginjiro-luxury-bg::before, .v2-wallet .ginjiro-luxury-bg::after { display: none !important; }
+.v2-wallet .wallet-cut-special__title { color: var(--v2-ink); text-shadow: none; }
+.v2-wallet .wallet-cut-special__image-wrap { box-shadow: 0 18px 34px -12px rgba(70, 52, 24, 0.35); }
+.v2-wallet .wallet-chips { gap: 8px; padding: 6px 0 4px; }
+.v2-wallet .wallet-chips::after { display: none; }
+.v2-wallet .wallet-chip {
+  min-height: 58px; border-radius: 22px; border: 1px solid rgba(255, 255, 255, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.45) 46%, rgba(255, 255, 255, 0.26) 54%, rgba(255, 255, 255, 0.55) 100%);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: var(--lq-glass-shadow);
+}
+.v2-wallet .wallet-chip[aria-pressed='true'] {
+  min-height: 58px; border: 1px solid rgba(190, 150, 80, 0.85); background: var(--lq-champagne);
+  box-shadow:
+    0 12px 26px -8px rgba(150, 110, 45, 0.45), 0 3px 8px rgba(120, 90, 40, 0.15),
+    inset 0 0 0 1.5px rgba(255, 248, 230, 0.75), inset 0 3px 2px rgba(255, 255, 255, 0.95), inset 0 -3px 5px rgba(150, 110, 45, 0.30);
+}
+.v2-wallet .wallet-chip[aria-pressed='true']::before { display: none; }
+.v2-wallet .wallet-chip-label, .v2-wallet .wallet-chip[aria-pressed='true'] .wallet-chip-label { color: var(--v2-ink); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); }
+.v2-wallet .wallet-chip:nth-child(1) .wallet-chip-sub, .v2-wallet .wallet-chip[aria-pressed='true']:nth-child(1) .wallet-chip-sub { color: var(--v2-gold-deep); }
+.v2-wallet .wallet-chip-pill { left: 44%; right: 44%; bottom: 4px; height: 3px; background: var(--lq-gold); box-shadow: 0 1px 3px rgba(140, 104, 40, 0.45); }
+.v2-wallet .wallet-chip-pill::after { display: none; }
+/* 横にスワイプする列は、はみ出した影が下で切れて線に見えるので、影が消えきる余白を取る（見た目の間隔は同じ） */
+.v2-cards { padding-bottom: 44px; margin-bottom: -36px; }
+.v2-wallet .wallet-premium-coupon-list { padding-top: 24px; margin-top: -22px; padding-bottom: 56px; margin-bottom: -26px; }
+.v2-wallet .wallet-premium-image-card img { filter: drop-shadow(0 16px 20px rgba(70, 52, 24, 0.28)); }

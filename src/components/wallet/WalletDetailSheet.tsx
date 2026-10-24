@@ -3,8 +3,16 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { useScrollLock } from '../../utils/useScrollLock'
 import type { WalletCard } from '../../data/wallet'
-import { CARD_THEMES, SERIF, IVORY, cardCategoryLabel, statusColor, yen } from './walletTheme'
+import { CARD_THEMES, SERIF, cardCategoryLabel, statusColor, yen } from './walletTheme'
 
+const INK = '#1F1C18'
+// 白いシートの上の状態ラベル（カードの表面は黒いので statusColor のまま、シートだけ白用の色）
+function lightStatus(card: Parameters<typeof statusColor>[0]): { fg: string; bg: string; border: string } {
+  const c = statusColor(card)
+  if (card.status === 'urgent') return { fg: '#9B2C2C', bg: 'rgba(155,44,44,0.08)', border: 'rgba(155,44,44,0.35)' }
+  if (card.status === 'active') return c.fg === '#1A0E04' ? c : { fg: '#8A6A2F', bg: 'rgba(168,130,63,0.10)', border: 'rgba(168,130,63,0.40)' }
+  return { fg: 'rgba(31,28,24,0.6)', bg: 'rgba(31,28,24,0.04)', border: 'rgba(31,28,24,0.12)' }
+}
 const BOOKING_LABEL: Record<WalletCard['bookingType'], string> = {
   phone:      '電話予約限定',
   web:        'Web予約（HotPepper）／店頭でクーポンQRを提示',
@@ -27,7 +35,7 @@ export function WalletDetailSheet({
   useScrollLock()
   const reduced = useReducedMotion() ?? false
   const theme = CARD_THEMES[card.accent]
-  const sc = statusColor(card)
+  const sc = lightStatus(card)
   const def = card.source.kind === 'coupon' ? card.source.definition : null
 
   const conditions: string[] = def ? def.conditions : []
@@ -43,7 +51,7 @@ export function WalletDetailSheet({
     <>
       <motion.div
         className="fixed inset-0 z-50"
-        style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)' }}
+        style={{ background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -59,11 +67,11 @@ export function WalletDetailSheet({
         style={{
           maxWidth: 480,
           maxHeight: 'calc(100svh - env(safe-area-inset-top, 0px) - 24px)',
-          background: 'linear-gradient(180deg, #120807 0%, #0A0504 40%)',
+          background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)',
           borderRadius: '24px 24px 0 0',
           border: `1px solid ${theme.border}`,
           borderBottom: 'none',
-          boxShadow: '0 -24px 60px rgba(0,0,0,0.7)',
+          boxShadow: '0 -18px 50px rgba(70,52,24,0.22)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -78,7 +86,7 @@ export function WalletDetailSheet({
 
         {/* Grabber + close */}
         <div style={{ position: 'relative', flexShrink: 0, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ width: 38, height: 4, borderRadius: 99, background: 'rgba(242,230,200,0.18)' }} />
+          <span style={{ width: 38, height: 4, borderRadius: 99, background: 'rgba(31,28,24,0.40)' }} />
           <button
             type="button"
             onClick={onClose}
@@ -87,8 +95,8 @@ export function WalletDetailSheet({
               position: 'absolute', right: 10, top: 4,
               width: 40, height: 40, borderRadius: 999,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-              color: 'rgba(242,230,200,0.75)', cursor: 'pointer',
+              background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)',
+              color: 'rgba(31,28,24,0.86)', cursor: 'pointer',
             }}
           >
             <X size={16} />
@@ -97,7 +105,7 @@ export function WalletDetailSheet({
 
         <div data-modal-scroll style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 20px 8px', overscrollBehavior: 'contain' } as React.CSSProperties}>
           {/* Header */}
-          <p style={{ fontSize: 10, letterSpacing: '0.2em', color: theme.accent, marginBottom: 6 }}>
+          <p style={{ fontSize: 10, letterSpacing: '0.2em', color: '#8A6A2F', marginBottom: 6 }}>
             {cardCategoryLabel(card)} · {card.eyebrow}
           </p>
           {def?.memberBadge && (
@@ -111,22 +119,22 @@ export function WalletDetailSheet({
             </span>
           )}
           {card.subtitle && (
-            <p style={{ fontFamily: SERIF, fontSize: 13, color: 'rgba(242,230,200,0.6)', letterSpacing: '0.12em' }}>{card.subtitle}</p>
+            <p style={{ fontFamily: SERIF, fontSize: 13, color: 'rgba(31,28,24,0.82)', letterSpacing: '0.12em' }}>{card.subtitle}</p>
           )}
-          <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: IVORY, letterSpacing: '0.05em', lineHeight: 1.25 }}>
+          <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: INK, letterSpacing: '0.05em', lineHeight: 1.25 }}>
             {card.title}
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
             <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 99, color: sc.fg, background: sc.bg, border: `1px solid ${sc.border}` }}>
               {card.statusLabel}
             </span>
-            {card.statusHint && <span style={{ fontSize: 12, color: 'rgba(242,230,200,0.5)' }}>{card.statusHint}</span>}
+            {card.statusHint && <span style={{ fontSize: 12, color: 'rgba(31,28,24,0.72)' }}>{card.statusHint}</span>}
             {card.count !== undefined && card.count > 1 && (
-              <span style={{ fontSize: 12, color: 'rgba(242,230,200,0.6)' }}>保有 {card.count}枚</span>
+              <span style={{ fontSize: 12, color: 'rgba(31,28,24,0.82)' }}>保有 {card.count}枚</span>
             )}
           </div>
           {def && (
-            <p style={{ fontSize: 14, lineHeight: 1.8, color: 'rgba(242,230,200,0.78)', marginTop: 14 }}>{def.description}</p>
+            <p style={{ fontSize: 14, lineHeight: 1.8, color: 'rgba(31,28,24,0.86)', marginTop: 14 }}>{def.description}</p>
           )}
 
           {/* 価格 */}
@@ -135,19 +143,19 @@ export function WalletDetailSheet({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {card.prices.map((p, i) => (
                   <div key={p.label ?? i} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-                    <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.72)' }}>
+                    <span style={{ fontSize: 13, color: 'rgba(31,28,24,0.86)' }}>
                       {p.label ?? (card.category === 'otoku' ? '額面' : 'アプリ会員価格')}
                     </span>
                     <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
                       {p.normalPrice !== undefined && (
-                        <span style={{ fontSize: 12, color: 'rgba(242,230,200,0.4)', textDecoration: 'line-through' }}>通常 {yen(p.normalPrice)}</span>
+                        <span style={{ fontSize: 12, color: 'rgba(31,28,24,0.62)', textDecoration: 'line-through' }}>通常 {yen(p.normalPrice)}</span>
                       )}
-                      <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: theme.accent }}>{yen(p.memberPrice)}</span>
+                      <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#8A6A2F' }}>{yen(p.memberPrice)}</span>
                     </span>
                   </div>
                 ))}
                 {def?.extras && (
-                  <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.66)', lineHeight: 1.7 }}>
+                  <p style={{ fontSize: 12, color: 'rgba(31,28,24,0.86)', lineHeight: 1.7 }}>
                     {def.extras.appliesTo}：{def.extras.items.join('＋')} 付き
                   </p>
                 )}
@@ -168,9 +176,9 @@ export function WalletDetailSheet({
 
           {/* 予約方法 */}
           <Section title="予約方法">
-            <p style={{ fontSize: 13, lineHeight: 1.7, color: 'rgba(242,230,200,0.8)' }}>{BOOKING_LABEL[card.bookingType]}</p>
+            <p style={{ fontSize: 13, lineHeight: 1.7, color: 'rgba(31,28,24,0.86)' }}>{BOOKING_LABEL[card.bookingType]}</p>
             {card.phoneNumber && (
-              <p style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15, color: IVORY, marginTop: 4, letterSpacing: '0.06em' }}>
+              <p style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15, color: INK, marginTop: 4, letterSpacing: '0.06em' }}>
                 TEL {card.phoneNumber}
               </p>
             )}
@@ -188,8 +196,8 @@ export function WalletDetailSheet({
         <div style={{
           flexShrink: 0,
           padding: '12px 20px calc(env(safe-area-inset-bottom, 0px) + 16px)',
-          borderTop: '1px solid rgba(255,255,255,0.05)',
-          background: 'rgba(10,5,4,0.96)',
+          borderTop: '1px solid rgba(31,28,24,0.04)',
+          background: 'rgba(251,248,242,0.96)',
           display: 'flex', flexDirection: 'column', gap: 8,
         }}>
           {actions}
@@ -203,7 +211,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section style={{ marginTop: 22 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <p style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.16em', color: 'rgba(242,230,200,0.9)', flexShrink: 0 }}>{title}</p>
+        <p style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.16em', color: 'rgba(31,28,24,0.86)', flexShrink: 0 }}>{title}</p>
         <span style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(201,162,74,0.26), transparent)' }} />
       </div>
       {children}
@@ -213,8 +221,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Bullet({ children }: { children: ReactNode }) {
   return (
-    <li style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.7, color: 'rgba(242,230,200,0.76)' }}>
-      <span style={{ color: 'rgba(201,162,74,0.7)', flexShrink: 0 }}>・</span>
+    <li style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.7, color: 'rgba(31,28,24,0.86)' }}>
+      <span style={{ color: 'rgba(138,106,47,0.9)', flexShrink: 0 }}>・</span>
       <span>{children}</span>
     </li>
   )

@@ -48,15 +48,19 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
     return <div className="v2"><ReserveScreen onShowQr={() => setActiveTab('qr')} onClose={back} /></div>
   }
   if (activeTab === 'tickets') {
+    // チケットも白の画面（ほかのページと同じ上のロゴ・戻る）。券の絵柄（黒いカード・クーポン画像）はそのまま
     return (
-      <div className="v2" style={{ background: '#0b0605' }}>
-        <div className="v2-head" style={{ background: 'none', gridTemplateColumns: 'auto 1fr' }}>
-          <button type="button" className="v2-back" style={{ color: 'rgba(242,230,200,0.75)' }} onClick={back}><ChevronLeft size={18} />戻る</button>
-        </div>
-        <TicketWalletScreen key={`tickets-${ticketFilter}-${ticketKey}`} onModalChange={onModalChange} initialFilter={ticketFilter} />
+      <div className="v2 v2-wallet">
+        <header className="v2-head" style={{ gridTemplateColumns: '80px 1fr 80px' }}>
+          <button type="button" className="v2-back" onClick={back}><ChevronLeft size={18} />戻る</button>
+          <img className="v2-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" />
+          <span />
+        </header>
+        <TicketWalletScreen key={`tickets-${ticketFilter}-${ticketKey}`}onModalChange={onModalChange} initialFilter={ticketFilter} />
       </div>
     )
   }
+
 
   return (
     <div className="v2">
