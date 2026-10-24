@@ -738,7 +738,7 @@ export function HomeScreen({ onTabChange, onModalChange }: Props) {
     <div className="ginjiro-luxury-bg ginjiro-luxury-bg--home">
       <div className="relative z-10">
         <HeroSlider slides={heroSlides} onPick={setSelectedStyle} />
-        {CUSTOMER_ACCESS_ENABLED&&<div className="customer-access" style={{margin:'20px 20px 0'}}><button type="button" className="access-primary" onClick={()=>onTabChange('reserve')}>Johnnyで予約</button></div>}
+        {CUSTOMER_ACCESS_ENABLED&&<div className="customer-access" style={{margin:'20px 20px 0'}}><button type="button" className="access-primary" onClick={()=>onTabChange('reserve')}>AI予約<span style={{display:'block',marginTop:2,fontSize:12,fontWeight:400,opacity:.7}}>銀二郎専属AI Johnny</span></button></div>}
 
         <div className="space-y-10 pt-5 pb-16">
 

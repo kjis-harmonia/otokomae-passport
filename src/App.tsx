@@ -44,6 +44,7 @@ import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
 import { InstallGate, InstallGuide } from './components/InstallGuide'
 import { needsInstallFirst } from './utils/installGuide'
+import { JOHNNY_INTENT_EVENT } from './features/johnny/bookingIntent'
 import { refreshPushIfGranted } from './utils/webPush'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -1013,6 +1014,13 @@ function App() {
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
   }, [shopUnlocked, setActiveTab])
 
+  // スタイルの「予約する」→「AI予約」：予約タブの Johnny を開く（メニューは ReserveScreen が受け取る）
+  useEffect(() => {
+    const open = () => { setHasOpenModal(false); setNavHighlight('shop'); setActiveTab('reserve') }
+    window.addEventListener(JOHNNY_INTENT_EVENT, open)
+    return () => window.removeEventListener(JOHNNY_INTENT_EVENT, open)
+  }, [])
+
   const handleShopUnlock = useCallback(() => {
     setShopUnlocked(true)
     setShowShopPasswordGate(false)
@@ -1036,15 +1044,7 @@ function App() {
   // ── Music guide — show once after first home screen mount ─────────────────────
   const [showMusicGuide, setShowMusicGuide] = useState(false)
 
-  useEffect(() => {
-    if (phase !== 'app' || CUSTOMER_ACCESS_ENABLED) return
-    if (welcomeCouponDialog) return
-    // ホーム画面でのみ案内する（「クーポンを見る」でWalletへ直行したときにクーポンを隠さない）
-    if (activeTab !== 'home') return
-    if (localStorage.getItem(MUSIC_GUIDE_KEY) === 'true') return
-    const t = setTimeout(() => setShowMusicGuide(true), 700)
-    return () => clearTimeout(t)
-  }, [phase, welcomeCouponDialog, activeTab])
+  // 音楽の案内は自動で出さない（音楽は聞きたい人だけ、ホーム右上の♪から。10/24 慶一郎さん決定）
 
   function dismissMusicGuide() {
     localStorage.setItem(MUSIC_GUIDE_KEY, 'true')

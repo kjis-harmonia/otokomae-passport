@@ -4,7 +4,7 @@ import { ChevronLeft, Play } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage, StyleCardPlaceholder } from '../components/StyleCardPlaceholder'
 import { resolveStyleLibraryImageUrl } from '../data/styleLibraryImages'
-import { getReserveUrl } from '../data/reserveLinks'
+import { ReserveChoiceButtons } from '../components/ReserveChoice'
 import type { StyleCard } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
 
@@ -643,7 +643,6 @@ function ReserveSheet({
   style: StyleCard
   onClose: () => void
 }) {
-  const reserveUrl = getReserveUrl(style.title)
   const imgUrl = resolveStyleLibraryImageUrl(style)
 
   return (
@@ -715,26 +714,8 @@ function ReserveSheet({
         {/* Divider */}
         <div style={{ height: '0.5px', background: 'rgba(201,162,74,0.12)', marginBottom: 24 }} />
 
-        {/* Reserve button */}
-        <motion.button
-          type="button"
-          onClick={() => {
-            if (reserveUrl) window.open(reserveUrl, '_blank', 'noopener,noreferrer')
-            onClose()
-          }}
-          style={{
-            width: '100%', padding: '15px 0', borderRadius: 14,
-            background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',
-            border: '1px solid rgba(201,162,74,0.44)',
-            boxShadow: '0 4px 28px rgba(107,15,18,0.52)',
-            fontFamily: SERIF, fontSize: 15, fontWeight: 700,
-            letterSpacing: '0.22em', color: '#F2E6C8', cursor: 'pointer',
-          }}
-          whileTap={{ scale: 0.98 }}
-          transition={{ duration: 0.13 }}
-        >
-          このスタイルで予約する
-        </motion.button>
+        {/* 予約の方法：Johnny（このメニューで日時と担当を聞く）か HOT PEPPER Beauty */}
+        <ReserveChoiceButtons title={style.title} onDone={onClose} />
 
         {/* Cancel */}
         <button
@@ -780,7 +761,6 @@ function StyleReelView({
 
   const style    = styles[idx]
   const imgUrl   = style ? resolveStyleLibraryImageUrl(style) : null
-  const reserveUrl = style ? getReserveUrl(style.title) : null
 
   function navigate(newDir: -1 | 1) {
     const next = idx + newDir
@@ -939,9 +919,7 @@ function StyleReelView({
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (reserveUrl) window.open(reserveUrl, '_blank', 'noopener,noreferrer')
-                  }}
+                  onClick={() => setShowReserveSheet(true)}
                   style={{
                     flex: 1, padding: '15px 0', borderRadius: 14,
                     background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)',

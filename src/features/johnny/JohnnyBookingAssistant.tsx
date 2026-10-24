@@ -105,6 +105,8 @@ type AiView =
 interface Props {
   onClose: () => void
   onShowQr?: () => void
+  /** スタイルの「予約する」から：このメニューを入れて始める（日時 → 担当を聞く） */
+  initialMenuCode?: string | null
 }
 
 const JST = 9 * 60 * 60 * 1000
@@ -182,7 +184,7 @@ const pausedStep = (s?: AiBookingStatus | null): Step => ({ k: 'ai', say: paused
 
 const BUSINESS_ERRORS = new Set(['slot_taken', 'too_late', 'date_not_open', 'invalid_starts_at', 'menu_not_available', 'hold_expired', 'hold_not_found'])
 
-export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
+export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null }: Props) {
   const api = useMemo(() => bookingAssistantApi(), [])
   const [step, setStep] = useState<Step>({ k: 'loading' })
   const [options, setOptions] = useState<AssistantOptions | null>(null)
@@ -294,6 +296,17 @@ export function JohnnyBookingAssistant({ onClose, onShowQr }: Props) {
     const list = options?.menus ?? []
     return lastMenuCode ? [...list].sort((a, b) => (a.code === lastMenuCode ? -1 : b.code === lastMenuCode ? 1 : 0)) : list
   }, [options, lastMenuCode])
+
+  // スタイルの「予約する」から来たとき：最初の場面（おかえり／日時）を、そのメニュー入りの「いつにしますか？」に差し替える（担当は確定の前に聞く）
+  const initialMenuRef = useRef(initialMenuCode)
+  useEffect(() => {
+    if (!initialMenuRef.current || (step.k !== 'welcome' && step.k !== 'askWhen')) return
+    const menu = (options?.menus ?? []).find(m => m.code === initialMenuRef.current)
+    initialMenuRef.current = null
+    if (!menu) return
+    turnsRef.current = [{ role: 'user', text: `${menu.name}で予約したい` }, { role: 'assistant', text: `${menu.name}ですね。いつのご来店をご希望ですか？` }]
+    setStep({ k: 'askWhen', again: 'menu', menu }) // eslint-disable-line react-hooks/set-state-in-effect -- 最初の場面をメニュー入りに差し替える
+  }, [step, options])
 
   // ── メニューが決まっていて、日が決まっていない／希望の日が埋まっている：近い日から探して、間をあけて3件 ──
   const soonest = useCallback(async (menu: MenuOption, req: VisitRequest, from: string, note: string) => {
