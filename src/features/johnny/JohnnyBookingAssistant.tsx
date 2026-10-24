@@ -30,6 +30,9 @@ import type { TicketRow } from '../../data/ticket'
 import { TICKET_TYPE_LABELS } from '../../data/ticket'
 import { clearCouponPlan, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
 import { suspendBgm } from '../../audio/bgm'
+import { infoRequest, type InfoRequest } from './infoRequest'
+import { getCustomerGinpayLedger } from '../../utils/ginpayApi'
+import { getDaysUntilRecommended, getNextRecommendedDate } from '../../utils/maintenanceSchedule'
 
 // ── 見た目（黒・白・グレーだけ） ─────────────────────────────────
 
@@ -631,12 +634,47 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep({ k: 'askWhen', again: 'retry', menu })
   }, [])
 
+  // 見るだけの頼みごと（V2.0）：会員QR を開く・使える券・銀Pay の残高・次のメンテナンス。答えるだけで、お金と券は動かさない
+  const answerInfo = useCallback(async (kind: InfoRequest) => {
+    if (kind === 'qr') {
+      if (onShowQr) { onShowQr(); return }
+      setStep({ k: 'ai', say: '会員QRは、下の「会員QR」から開けます。', view: { kind: 'talk', handoff: false } })
+      return
+    }
+    setStep({ k: 'searching', label: '確認しています' })
+    const md = (d: string) => `${Number(d.slice(5, 7))}月${Number(d.slice(8, 10))}日`
+    let say: string
+    if (kind === 'tickets') {
+      const list = usableTickets(myTickets, new Date().toISOString())
+      say = list.length
+        ? `今使える券は、${list.slice(0, 5).map(t => t.title).join('、')}${list.length > 5 ? `ほか${list.length - 5}枚` : ''}です。お会計のときに会員QRをお見せください。`
+        : '今使える割引券はありません。'
+    } else if (kind === 'ginpay') {
+      try { const l = await getCustomerGinpayLedger(1); say = `銀Payの残高は${yenOf(l.balance)}です。チャージは店頭でどうぞ。` }
+      catch { say = '銀Payの残高は、会員QRの画面でご確認ください。' }
+    } else {
+      const last = await api.lastVisit().catch(() => null)
+      if (!last) say = 'まだご来店の記録がありません。ご来店のあと、次のメンテナンスの目安をお知らせします。'
+      else {
+        const d = getDaysUntilRecommended(last)
+        say = d > 0 ? `次のメンテナンスの目安は${md(getNextRecommendedDate(last))}ごろ、あと${d}日です。` : d === 0 ? 'メンテナンスの目安は今日です。' : `メンテナンスの目安を${-d}日過ぎています。`
+      }
+    }
+    turnsRef.current = [...turnsRef.current, { role: 'assistant' as const, text: say }].slice(-20)
+    setStep({ k: 'ai', say, view: { kind: 'talk', handoff: false } })
+  }, [api, myTickets, onShowQr])
+
   const handleText = useCallback((raw: string) => {
     const text = raw.trim()
     if (!text) return
     setHeard(text)
     setVoiceNote(null)
     const s = stepRef.current
+    // 見るだけの頼みごと（予約の確認・担当選びの途中では受けない）
+    if (AI_STEPS.has(s.k) && s.k !== 'confirm' && s.k !== 'confirmCancel') {
+      const info = infoRequest(text)
+      if (info) { void answerInfo(info); return }
+    }
     // メンテナンスカットはアプリのメニューではなくホットペッパーのクーポン：予約のボタンを出す
     if (AI_STEPS.has(s.k) && s.k !== 'confirm' && s.k !== 'confirmCancel' && /メンテ|めんて/.test(text)) {
       setStep({ k: 'ai', say: 'メンテナンスカットは、ホットペッパーのクーポンでご予約いただけます。下のボタンからどうぞ。', view: { kind: 'maintenance' } })
@@ -681,7 +719,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const consultOnly = detectAsk(text, menus)?.kind === 'consult' && isEmptyRequest(parseVisitRequest(text)) && !matchMenu(text, menus)
     if (aiOnRef.current && AI_STEPS.has(s.k) && !consultOnly) { void viaAgent(text, s); return }
     legacyRef.current(text, s.k === 'ai' || s.k === 'confirmCancel' || s.k === 'welcome' ? { k: 'askWhen' } : s)
-  }, [book, bookParty, cancelReservation, chooseStaff, declineConfirm, menus, planParty, viaAgent])
+  }, [answerInfo, book, bookParty, cancelReservation, chooseStaff, declineConfirm, menus, planParty, viaAgent])
 
   /** 決まった規則の JOHNNY（AI が使えないとき・デモ） */
   const handleLegacy = useCallback((text: string, s: Step) => {
@@ -782,6 +820,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     setHeard(r.heard)
     if (transcribeOnly) { stepRef.current = s; setStep(s); handleText(r.heard); return }
+    // 見るだけの頼みごと（QR・券・銀Pay・メンテ）は AI の答えを使わず、手元で答える
+    const info = AI_STEPS.has(s.k) && s.k !== 'confirm' && s.k !== 'confirmCancel' ? infoRequest(r.heard) : null
+    if (info) { stepRef.current = s; void answerInfo(info); return }
     const next = r.answer ? await stepFromAgent(r.answer) : null
     if (!r.answer || !next) {
       // 聞き取れたが AI が答えられなかった：決まった規則の JOHNNY で続ける
@@ -793,7 +834,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     turnsRef.current = [...history, { role: 'user' as const, text: r.heard }, { role: 'assistant' as const, text: r.answer.say }].slice(-20)
     setStep(next)
-  }, [api, handleText, stepFromAgent])
+  }, [answerInfo, api, handleText, stepFromAgent])
   useEffect(() => { handleAudioRef.current = audio => { void handleAudio(audio) } }, [handleAudio])
 
   /** 答えに出したおすすめのメニューを選ぶ（今の段階に合わせて続ける） */
