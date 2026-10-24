@@ -9,6 +9,7 @@ import type { CustomerRow } from '../utils/customerStore'
 import { couponPlanForQr } from '../utils/bookingCoupons'
 import { PushToggle } from './PushToggle'
 import { formatVisit, useNextReservation } from '../features/johnny/nextReservation'
+import { heldFor, useGinpayHolds } from '../features/ginpay/holds'
 import { CustomerAccessSettings } from '../features/customerAccess/CustomerAccess'
 import { canShowInstallGuide, SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 import {
@@ -62,6 +63,8 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
   const [currentReservation, setCurrentReservation] = useState(() => loadCurrentReservation())
   // カードに出す予約は「次回予約」と同じもの（ご予約は1つ）：アプリの予約があればそれ、無ければお電話のクーポン予約（予約日つき）
   const aiNext = useNextReservation()
+  // 銀Pay の仮支払い（その予約に付いていれば「仮支払い済み」。レジで会員QR を読むと確定）
+  const prepaid = heldFor(useGinpayHolds(), aiNext?.id)
   const shownReservation = aiNext
     ? (() => { const v = formatVisit(aiNext.starts_at); return { title: aiNext.items.map(i => i.name).join('・'), when: `${v.date} ${v.time}〜`, price: aiNext.total_price } })()
     : currentReservation
@@ -399,6 +402,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   </span>}
                 </p>
                 <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.72)', marginTop: 2, letterSpacing: '0.04em' }}>{shownReservation.when}</p>
+                {aiNext && prepaid != null && <p style={{ fontSize: 13, fontWeight: 700, color: '#E6CA65', marginTop: 6, letterSpacing: '0.04em' }}>✓ 銀Pay 仮支払い済み ¥{prepaid.toLocaleString()}</p>}
               </div>
             )}
 

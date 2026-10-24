@@ -123,6 +123,8 @@ export interface CheckoutApi {
   quote(menuCodes: string[], startsAt: string | null): Promise<PriceQuote>
   lookup(idempotencyKey: string): Promise<Sale | null>
   finalize(input: SaleInput, operator?: string): Promise<CheckoutResult<Sale>>
+  /** 予約に付いた銀Pay の仮支払い（お客様が予約のときに押さえた額）。店舗端末だけ */
+  ginpayHold?(reservationId: string): Promise<{ amount: number; account_id: string } | null>
 }
 export interface SalesApi {
   day(date: string): Promise<SalesDay>
@@ -203,6 +205,7 @@ export function createStaffCheckoutApi(actor: () => string): CheckoutApi {
     quote,
     lookup: key => callStaffRpc<Sale | null>('staff_checkout_result', { p_idempotency_key: key }),
     finalize: (input, operator) => asResult(() => callStaffRpc<Sale>('staff_finalize_sale', { p: input, p_staff_name: operator ?? actor() })),
+    ginpayHold: async id => (await callStaffRpc<{ hold: { amount: number; account_id: string } | null }>('staff_ginpay_hold', { p_reservation_id: id })).hold,
   }
 }
 

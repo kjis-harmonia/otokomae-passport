@@ -50,6 +50,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [ginpayAccountId, setGinpayAccountId] = useState<string | null>(null)
+  // お客様が予約のときに銀Pay で仮支払いした額。お会計がその額以内なら GINPay を最初から選ぶ（差額があるときは選ばない＝スタッフが決める）
+  const [hold, setHold] = useState<{ amount: number; account_id: string } | null>(null)
+  const holdAutoPicked = useRef(false)
   // 初回送信前に内容と一緒に保存し、再読み込み後も同じ取引キーで照合する。
   const [saleKey, setSaleKey] = useState(() => idempotencyKey('checkout'))
   const rawAttempt = useSyncExternalStore(subscribeCheckoutAttempt, checkoutAttemptSnapshot, () => '')
@@ -142,6 +145,23 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       : type === 'coupon' ? [id]
       : [...ids.filter(x => tickets.find(t => t.id === x)?.type !== 'coupon'), id])
   }
+
+  // 予約の会計：銀Pay の仮支払いを読み込む
+  const holdReservationId = ctx?.reservation?.id ?? null
+  useEffect(() => {
+    if (!holdReservationId || !api.ginpayHold) return
+    let alive = true
+    api.ginpayHold(holdReservationId).then(h => { if (alive) setHold(h) }).catch(() => {})
+    return () => { alive = false }
+  }, [holdReservationId, api])
+  // 仮支払いがお会計以内なら、最初の1回だけ GINPay とその口座を選んでおく（スタッフが変えたら戻さない）
+  const holdCovers = !!hold && !!clientInfo && totals.total > 0 && totals.total <= hold.amount
+  useEffect(() => {
+    if (!hold || !holdCovers || holdAutoPicked.current) return
+    holdAutoPicked.current = true
+    setMethod(m => m ?? 'ginpay')
+    setGinpayAccountId(id => id ?? hold.account_id)
+  }, [hold, holdCovers])
 
   async function confirm() {
     if (submitting.current || attemptError || !ensureActor()) return
@@ -292,6 +312,16 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 </div>
               </div>
 
+              {hold && (
+                <div role="status" style={{ margin: '0 0 10px', padding: '12px 14px', borderRadius: 12, lineHeight: 1.6, fontSize: 14,
+                  background: totals.total <= hold.amount ? 'rgba(168,130,63,0.12)' : 'rgba(214,82,82,0.08)',
+                  border: totals.total <= hold.amount ? '1px solid rgba(168,130,63,0.5)' : '1px solid rgba(214,82,82,0.45)' }}>
+                  <b>銀Pay 仮支払い済み {yen(hold.amount)}</b>
+                  {totals.total <= hold.amount
+                    ? <><br />支払方法「GINPay」のまま「会計を確定」で、お支払いが完了します。</>
+                    : <><br />お会計 {yen(totals.total)}・<b>差額 {yen(totals.total - hold.amount)}</b>。差額も銀Payなら「GINPay」（全額を銀Payで）、ほかの方法なら支払方法を選んでください（仮支払いは確定と同時に戻ります）。</>}
+                </div>
+              )}
               <Row label="支払方法">
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {METHODS.filter(m => m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => setMethod(m.id)}>{m.label}</Choice>)}
