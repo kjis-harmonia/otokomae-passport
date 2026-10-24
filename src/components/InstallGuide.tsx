@@ -148,10 +148,28 @@ function Step({ n, icon, children }: { n: number; icon: ReactNode; children: Rea
   )
 }
 
-/** 登録の前に出す全画面の案内。追加したらホーム画面のアイコンから開いて登録する。追加できない人だけ下の文字から先へ */
-export function InstallGate({ onSkip }: { onSkip: () => void }) {
+/** 登録の前に出す全画面の案内。ホーム画面に追加して、アイコンから開いたときだけ登録できる（ここから先へは進めない。10/24 慶一郎さん決定） */
+export function InstallGate() {
   const [kind] = useState<Kind>(() => detect())
   const externalUrl = externalBrowserUrl()
+  // Android の Chrome：追加できるようになった合図・追加が済んだ合図
+  const [canPrompt, setCanPrompt] = useState(() => !!installPrompt.get())
+  const [installed, setInstalled] = useState(false)
+  useEffect(() => {
+    const ready = () => window.setTimeout(() => setCanPrompt(!!installPrompt.get()), 0)
+    const done = () => setInstalled(true)
+    window.addEventListener('beforeinstallprompt', ready)
+    window.addEventListener('appinstalled', done)
+    return () => { window.removeEventListener('beforeinstallprompt', ready); window.removeEventListener('appinstalled', done) }
+  }, [])
+  const installAndroid = async () => {
+    const p = installPrompt.get()
+    if (!p) return
+    await p.prompt()
+    const r = await p.userChoice.catch(() => ({ outcome: 'dismissed' }))
+    installPrompt.clear(); setCanPrompt(false)
+    if (r.outcome === 'accepted') setInstalled(true)
+  }
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10030, background: '#0B0908', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
       <div style={{
@@ -163,7 +181,7 @@ export function InstallGate({ onSkip }: { onSkip: () => void }) {
           はじめに、<br />ホーム画面に追加してください
         </h1>
         <p style={{ fontSize: 14, lineHeight: 1.8, color: 'rgba(242,230,200,0.62)', margin: '12px 0 0' }}>
-          会員登録は、ホーム画面のアイコンから開いて行います。このまま登録すると、ホーム画面から開いたときにもう一度登録が必要になります。
+          会員登録は、ホーム画面のアイコンから開いて行います。
         </p>
 
         <div style={{ height: 1, background: 'rgba(201,162,74,0.18)', margin: '28px 0 22px' }} />
@@ -197,10 +215,22 @@ export function InstallGate({ onSkip }: { onSkip: () => void }) {
           </>
         )}
 
+        {kind === 'android' && (
+          installed ? (
+            <p style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.9, color: CREAM, margin: 0 }}>
+              追加しました。<br />ホーム画面の <b>「銀二郎」</b> から開いて、会員登録へお進みください。
+            </p>
+          ) : (
+            <>
+              {canPrompt && <button type="button" onClick={() => void installAndroid()} style={primary}>ホーム画面に追加</button>}
+              <p style={{ fontSize: 14, lineHeight: 1.8, color: 'rgba(242,230,200,0.7)', margin: canPrompt ? '14px 0 0' : 0 }}>
+                {canPrompt ? 'ボタンが使えないときは、' : ''}ブラウザ右上のメニュー <b style={{ color: CREAM }}>「︙」</b> から <b style={{ color: CREAM }}>「ホーム画面に追加」</b>（または「アプリをインストール」）を選び、ホーム画面の <b style={{ color: CREAM }}>「銀二郎」</b> から開いてください。
+              </p>
+            </>
+          )
+        )}
+
         <div style={{ flex: 1, minHeight: 32 }} />
-        <button type="button" onClick={onSkip} style={{ background: 'none', border: 'none', padding: '12px 0', fontSize: 13, color: 'rgba(242,230,200,0.45)', textDecoration: 'underline', textUnderlineOffset: 4, cursor: 'pointer' }}>
-          ホーム画面に追加できない方はこちら
-        </button>
       </div>
     </div>
   )
