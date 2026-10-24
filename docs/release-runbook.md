@@ -54,7 +54,7 @@ select count(*) from public.customers;                        -- 当てる前と
 
 [人が1本ずつ貼る⑤のコマンド一覧](production-platform-commands.md)を使う。旧い「既存ジョブを消して即開始するSQL」は使わない。
 
-DB01〜21の成功（15番の来店確認を含む）→ソース・Secrets・Vercel本番対象を確認→johnny-notify→johnny-agent→hq-johnny→customer-passkeys→johnny-style-adviceを1本ずつ確認→両フラグON→毎分ジョブを停止状態で作成、の順。新Web・閉鎖B・古いアプリの実機確認のあとで、人が毎分ジョブを開始する。
+DB01〜22の成功（15番の来店確認を含む）→ソース・Secrets・Vercel本番対象を確認→johnny-notify→johnny-agent→hq-johnny→customer-passkeys→johnny-style-adviceを1本ずつ確認→両フラグON→毎分ジョブを停止状態で作成、の順。新Web・閉鎖B・古いアプリの実機確認のあとで、人が毎分ジョブを開始する。
 
 本部の「お知らせOFF」はキャンセル待ちの毎分処理を止めない。⑤の準備SQLはactive=falseでcommitし、公開前の仮押さえ・送信を防ぐ。「送信を始める」を自動でONにする工程はない。
 
@@ -69,7 +69,7 @@ DB01〜21の成功（15番の来店確認を含む）→ソース・Secrets・Ve
 3. ④で57テスト・型チェック・ビルド・Lintと、架空データDBを明示した44本のpreflightが成功。再検査する場合もローカル専用DBを明示する。本番DB・関数・フラグの実作業完了と実機確認を待つ。
 4. Vercel の無料枠は1日のデプロイ回数に上限あり。まとめて1回で出す。
 5. 本番で確認：アプリ（iPhone・Android）／店舗端末（スマホ）／本部（PC・スマホ）／SB（タブレット・PC・スマホ）。
-6. 新しい画面と実機での会員引継ぎが確認できたら、[DBコマンド一覧](production-db-commands.md)末尾の閉鎖Bを人が実行・読み取り確認する。履歴46→47。直後に古いアプリのお客様の見え方と店頭引継ぎも確認する。全画面を再確認し、閉鎖B完了前に営業を再開しない。
+6. 新しい画面と実機での会員引継ぎが確認できたら、[DBコマンド一覧](production-db-commands.md)末尾の閉鎖Bを人が実行・読み取り確認する。履歴47→48。直後に古いアプリのお客様の見え方と店頭引継ぎも確認する。全画面を再確認し、閉鎖B完了前に営業を再開しない。
 
 ## 5. 残っている作業
 

@@ -16,7 +16,7 @@
 
 ## A. DBとソースがそろっているか（読み取り）
 
-③の01〜21と、14/15間の権限閉鎖・承認済み30人の登録が成功したあとだけ進む。③のcheck_21.sqlで履歴46の集合・9表の検査対象値・設定が期待どおりであることを確認済みにする。
+③の01〜22と、14/15間の権限閉鎖・承認済み30人の登録が成功したあとだけ進む。③のcheck_22.sqlで履歴47の集合・9表の検査対象値・設定が期待どおりであることを確認済みにする。
 
 ```powershell
 ! & "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/assert-production-platform-source.ps1"

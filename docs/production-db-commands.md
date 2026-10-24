@@ -48,7 +48,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 
 次へ：履歴は26件（本番へ先行で入れた SB のお知らせ 20261023000100〜0500 の5本と 20261024000000_sb_close_time を含む）でversionと名前がレビュー済みの集合に一致する。件数だけでなくSQL内で照合する。dataの9表の件数・合計・md5、app_booking_enabledを保存しておく。以後、全工程で同じ値であること。名簿・連絡先・トークンは出力しない。
 
-## 01〜21（14と15の間に追加の3工程）
+## 01〜22（14と15の間に追加の3工程）
 ### 01. ginpay_ledger
 
 ```powershell
@@ -491,19 +491,41 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 
 次へ：エラーなし、verification.history_count=46、履歴照合値=beec3b4503fa77ac30d0bb7a90d3e2e6（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
 
+### 22. ginpay_hold（銀Pay の仮支払い）
+
+お客様が AI 予約の確定と同時に銀Pay の残高を押さえる（台帳は動かさない）。支払いの確定は今までどおりレジの会計（会員QR → GINPay → 確定）。予約がキャンセル・無断キャンセルになると押さえは消える。表 app_private.ginpay_holds と customer_ginpay_hold / customer_ginpay_release / customer_ginpay_holds / staff_ginpay_hold を足すだけで、既存の表・関数は変えない。21（予約まわり）の後に入れる。
+
+```powershell
+! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/22_20261024000100_ginpay_hold.sql"
+```
+
+読み取り確認：
+```powershell
+! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_22.sql"
+```
+
+読み取りSQL：check_22.sql（BEGIN READ ONLY）。以下の履歴SQLに加えて9表のdata・予約設定・全履歴を返す。
+
+```sql
+select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'
+' order by version),'')) as history_key from supabase_migrations.schema_migrations;
+```
+
+次へ：エラーなし、verification.history_count=47、履歴照合値=1ef4fc16d6e82e5696efff002adc7fdb（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。違えば停止する。
+
 ## 最後の読み取り確認
 
 ```powershell
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_final.sql"
 ```
 
-次へ：履歴46件（公開前の26件＋新規20件、03は復元のみ）、既存data・予約設定不変、13表の書き込み閉鎖と旧RPC閉鎖を維持、承認30人・照合値一致、ginpay_consistent="true"。
+次へ：履歴47件（公開前の26件＋新規21件、03は復元のみ）、既存data・予約設定不変、13表の書き込み閉鎖と旧RPC閉鎖を維持、承認30人・照合値一致、ginpay_consistent="true"。
 
 **ここで先行DB作業を止める。** [⑤の手順](production-platform-commands.md)に従い5関数のデプロイと設定、停止状態のキャンセル待ちcron、レビュー済みrelease PRの公開、実機確認へ進む。johnny-agentの新しい来店確認ガードはDB15番より前に本番へ出さない。当日の順番と中断時の扱いは[⑥の時刻表](release-day-timetable.md)を参照。新しい画面と引継ぎが確認できたら次の閉鎖Bへ進み、閉鎖B後の再確認を終えるまで営業を再開しない。
 
 ## 新しいWebを公開・確認した後：セキュリティ閉鎖B
 
-既存ファイル20261001000400_security_hardening_b_lockdown.sqlを、46件→47件の履歴照合と記録付きで包んだもの。先行21工程に混ぜない。旧い画面・セッションなしの直接読み取りを使う人は、会員証QRをスタッフに見せて同じ会員情報を引き継ぐ案内に変わる。新規登録し直させない。会員・券・残高は削除しない。
+既存ファイル20261001000400_security_hardening_b_lockdown.sqlを、47件→48件の履歴照合と記録付きで包んだもの。先行22工程に混ぜない。旧い画面・セッションなしの直接読み取りを使う人は、会員証QRをスタッフに見せて同じ会員情報を引き継ぐ案内に変わる。新規登録し直させない。会員・券・残高は削除しない。
 
 慶一郎さんが新しい画面で「店舗確認→Face ID設定→同じ会員ID・券でログイン」を確認し、店舗操作を止めていることが前提。まだなら停止する。
 
@@ -516,9 +538,9 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_post_web_lockdown.sql"
 ```
 
-新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB21完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜21は開始時との不変比較を維持する。承認30人の集合は増減しない。
+新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB22完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜21は開始時との不変比較を維持する。承認30人の集合は増減しない。
 
-次へ：preflight_securityのDO検査にエラーがなく、履歴47件、data・予約設定・承認30人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
+次へ：preflight_securityのDO検査にエラーがなく、履歴48件、data・予約設定・承認30人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
 
 閉鎖BのSQL・履歴の記録・読み取り確認もコピーでrollback試験済み。16私有表にanon/authenticatedの表・列権限がないこと、商品の最低在庫列は読めず公開表示列は読めること、承認30人の予約オプション取得を確認した。セキュリティ・来店確認・パスキー・会計・GINPayの5検査も閉鎖Bを含めて成功。実行後はアプリ・店舗端末・本部・SBの実機を再確認し、失敗時は営業再開を止める。読み取り権限を無条件に開き直さない。
 

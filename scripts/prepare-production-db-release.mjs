@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto'
 const root=resolve(process.argv[2]??dirname(dirname(fileURLToPath(import.meta.url))))
 const out=join(root,'supabase/rollout/out_release')
 const order=readFileSync(join(root,'supabase/rollout/release_prod_order.txt'),'utf8').trim().split(/\r?\n/)
-if(order.length!==21||order[20]!=='20261023000000_ai_booking_penalty'||order[2]!=='20261006000000_service_master#checkout_catalog_json'||!order[14].endsWith('_customer_store_access'))throw new Error('Release order changed; review before generating')
+if(order.length!==22||order[20]!=='20261023000000_ai_booking_penalty'||order[21]!=='20261024000100_ginpay_hold'||order[2]!=='20261006000000_service_master#checkout_catalog_json'||!order[14].endsWith('_customer_store_access'))throw new Error('Release order changed; review before generating')
 const baseline=[
  ['20261002000000','booking_phase1'],['20261003000000','customer_ledger'],['20261006000000','service_master'],
  ...['sb_reservation_board','sb_capacity_setting','sb_hotpepper_mail','sb_hotpepper_mail_notices','sb_hotpepper_no_coupon','sb_hotpepper_note'].map((n,i)=>['20261015'+String(i*100).padStart(6,'0'),n]),

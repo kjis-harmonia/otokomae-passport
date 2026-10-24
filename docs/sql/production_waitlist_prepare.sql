@@ -11,7 +11,7 @@ declare
   n bigint;
   j bigint;
 begin
-  if (select count(*) from supabase_migrations.schema_migrations) <> 46
+  if (select count(*) from supabase_migrations.schema_migrations) <> 47
      or not exists (select 1 from supabase_migrations.schema_migrations where version='20261023000000' and name='ai_booking_penalty')
      or not exists (select 1 from supabase_migrations.schema_migrations where version='20261019000000' and name='waitlist')
      or not exists (select 1 from supabase_migrations.schema_migrations where version='20261018040349' and name='customer_store_access') then
