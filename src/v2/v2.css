@@ -89,7 +89,8 @@
 .v2-cards { display: flex; gap: 14px; overflow-x: auto; padding: 4px 20px 8px; scroll-padding-inline: 20px; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .v2-cards::-webkit-scrollbar { display: none; }
 .v2-card { flex: none; width: min(78vw, 340px); scroll-snap-align: center; border-radius: 26px; overflow: hidden; padding: 8px; }
-.v2-card-photo { position: relative; aspect-ratio: 4 / 5; border-radius: 20px; overflow: hidden; background: #e9e4da; }
+/* 写真は 4:5。ただし画面が低い端末（iPhone SE など）では、名前・値段・AI予約のボタンが一度に見える高さまで */
+.v2-card-photo { position: relative; aspect-ratio: 4 / 5; max-height: max(240px, calc(100dvh - 470px)); width: 100%; border-radius: 20px; overflow: hidden; background: #e9e4da; }
 .v2-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .v2-card-body { padding: 14px 8px 8px; }
 .v2-card-name { font: 700 21px/1.35 var(--v2-serif); letter-spacing: 0.03em; margin: 0; }
