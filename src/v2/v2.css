@@ -1,0 +1,158 @@
+/* 銀二郎App V2.0：パールホワイト × 半透明ガラス × シャンパンゴールド。
+   金は「選んだもの」と「AI予約」にだけ使う。発光・走る光・粒子は使わない。視覚効果を減らす設定では動きを止める */
+.v2 {
+  --v2-bg: #f5f2ec;
+  --v2-ink: #1f1c18;
+  --v2-sub: #6b645a;
+  --v2-faint: #9a9288;
+  --v2-line: rgba(31, 28, 24, 0.08);
+  --v2-gold: #a8823f;
+  --v2-gold-deep: #8a6a2f;
+  --v2-gold-soft: rgba(168, 130, 63, 0.12);
+  --v2-glass: rgba(255, 255, 255, 0.62);
+  --v2-glass-strong: rgba(255, 255, 255, 0.82);
+  --v2-glass-line: rgba(255, 255, 255, 0.9);
+  --v2-shadow: 0 10px 30px rgba(70, 52, 24, 0.08), 0 1px 2px rgba(70, 52, 24, 0.06);
+  --v2-serif: "Shippori Mincho", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --v2-sans: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  --v2-nav-h: 64px;
+  min-height: 100dvh;
+  color: var(--v2-ink);
+  font-family: var(--v2-sans);
+  /* 大理石のような静かな白：やわらかい明暗だけ（模様・動きなし） */
+  background:
+    radial-gradient(120% 70% at 0% 0%, #ffffff 0%, rgba(255, 255, 255, 0) 60%),
+    radial-gradient(90% 60% at 100% 35%, #ece5d8 0%, rgba(236, 229, 216, 0) 62%),
+    radial-gradient(80% 50% at 10% 100%, #efe9df 0%, rgba(239, 233, 223, 0) 60%),
+    var(--v2-bg);
+  background-attachment: fixed;
+}
+
+/* 半透明ガラス：白い面＋ぼかし＋上の細い光の線 */
+.v2-glass {
+  background: var(--v2-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid var(--v2-glass-line);
+  box-shadow: var(--v2-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .v2-glass { background: var(--v2-glass-strong); }
+}
+
+/* ── 上：ロゴと ☰ ── */
+.v2-head {
+  position: sticky; top: 0; z-index: 30;
+  display: grid; grid-template-columns: 44px 1fr 44px; align-items: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px 8px;
+  background: linear-gradient(180deg, rgba(245, 242, 236, 0.94) 0%, rgba(245, 242, 236, 0.7) 70%, rgba(245, 242, 236, 0) 100%);
+}
+.v2-logo { justify-self: center; height: 46px; width: auto; display: block; }
+.v2-round {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--v2-ink); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.v2-round:active { transform: scale(0.96); }
+
+/* ── 下：浮かぶガラスのタブ（3つ） ── */
+.v2-nav {
+  position: fixed; left: 16px; right: 16px; z-index: 40;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  max-width: 480px; margin: 0 auto; height: var(--v2-nav-h);
+  border-radius: 24px; display: grid; grid-template-columns: repeat(3, 1fr);
+}
+.v2-nav button {
+  border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: var(--v2-faint); font: 600 11px/1 var(--v2-sans); letter-spacing: 0.04em;
+}
+.v2-nav button[aria-current="page"] { color: var(--v2-gold-deep); }
+.v2-nav button[aria-current="page"]::after { content: ""; width: 16px; height: 2px; border-radius: 1px; background: var(--v2-gold); margin-top: 2px; }
+
+.v2-main { padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 28px); }
+.v2-main.has-cta { padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 112px); }
+.v2-page { max-width: 520px; margin: 0 auto; padding: 4px 20px 0; }
+.v2-title { font: 700 24px/1.35 var(--v2-serif); letter-spacing: 0.04em; margin: 8px 0 16px; }
+
+/* ── カテゴリ（ガラスのチップ） ── */
+.v2-cats { display: flex; gap: 8px; overflow-x: auto; padding: 4px 20px 12px; scroll-padding-inline: 20px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.v2-cats::-webkit-scrollbar { display: none; }
+.v2-cat {
+  flex: none; scroll-snap-align: start; height: 40px; padding: 0 18px; border-radius: 20px;
+  font: 600 14px/1 var(--v2-sans); color: var(--v2-sub); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+.v2-cat[aria-pressed="true"] { color: var(--v2-gold-deep); border-color: rgba(168, 130, 63, 0.55); background: rgba(255, 255, 255, 0.88); }
+
+/* ── スタイルのカード（横にスワイプ） ── */
+.v2-cards { display: flex; gap: 14px; overflow-x: auto; padding: 4px 20px 8px; scroll-padding-inline: 20px; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.v2-cards::-webkit-scrollbar { display: none; }
+.v2-card { flex: none; width: min(78vw, 340px); scroll-snap-align: center; border-radius: 26px; overflow: hidden; padding: 8px; }
+.v2-card-photo { position: relative; aspect-ratio: 4 / 5; border-radius: 20px; overflow: hidden; background: #e9e4da; }
+.v2-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.v2-card-body { padding: 14px 8px 8px; }
+.v2-card-name { font: 700 21px/1.35 var(--v2-serif); letter-spacing: 0.03em; margin: 0; }
+.v2-card-copy { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--v2-sub); }
+.v2-card-meta { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
+.v2-price { font: 700 20px/1 var(--v2-serif); color: var(--v2-gold-deep); }
+.v2-price-note { font-size: 12px; color: var(--v2-faint); }
+.v2-dots { display: flex; justify-content: center; gap: 6px; padding: 6px 0 4px; }
+.v2-dots i { width: 6px; height: 6px; border-radius: 3px; background: rgba(31, 28, 24, 0.14); transition: width 0.25s, background-color 0.25s; }
+.v2-dots i.on { width: 18px; background: var(--v2-gold); }
+
+/* ── この髪型でAI予約する（下のタブのすぐ上に固定） ── */
+.v2-cta {
+  position: fixed; left: 16px; right: 16px; z-index: 39; max-width: 480px; margin: 0 auto;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--v2-nav-h) + 20px);
+  min-height: 64px; border-radius: 32px; padding: 0 10px 0 22px;
+  display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left;
+  border-color: rgba(168, 130, 63, 0.45); -webkit-tap-highlight-color: transparent;
+}
+.v2-cta:active { transform: scale(0.99); }
+.v2-cta-text { flex: 1; min-width: 0; }
+.v2-cta-text b { display: block; font: 700 16px/1.3 var(--v2-serif); letter-spacing: 0.06em; color: var(--v2-ink); }
+.v2-cta-text small { display: block; margin-top: 2px; font-size: 12px; color: var(--v2-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-cta-go { flex: none; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(160deg, #b8924d, #8a6a2f); }
+
+/* ── 面（カード）・行・ボタン ── */
+.v2-panel { border-radius: 22px; padding: 18px; }
+.v2-label { font-size: 12px; letter-spacing: 0.12em; color: var(--v2-faint); margin: 0 0 6px; }
+.v2-big { font: 700 28px/1.3 var(--v2-serif); letter-spacing: 0.02em; margin: 0; }
+.v2-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 0 4px; border: 0; border-top: 1px solid var(--v2-line); background: none; color: var(--v2-ink); font: 500 16px/1.4 var(--v2-sans); text-align: left; text-decoration: none; cursor: pointer; }
+.v2-row:first-child { border-top: 0; }
+.v2-row small { display: block; font-size: 12px; color: var(--v2-faint); font-weight: 400; }
+.v2-row svg { flex: none; color: var(--v2-gold-deep); }
+.v2-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; border-radius: 16px; border: 0; font: 700 16px/1 var(--v2-sans); cursor: pointer; text-decoration: none; }
+.v2-btn-gold { color: #fff; background: linear-gradient(160deg, #b8924d, #8a6a2f); }
+.v2-btn-quiet { color: var(--v2-ink); }
+.v2-note { font-size: 13px; line-height: 1.7; color: var(--v2-sub); }
+
+/* ── ☰ のシート ── */
+.v2-sheet-back { position: fixed; inset: 0; z-index: 60; background: rgba(31, 28, 24, 0.28); }
+.v2-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-width: 520px; margin: 0 auto;
+  border-radius: 26px 26px 0 0; padding: 10px 20px calc(env(safe-area-inset-bottom, 0px) + 20px);
+  max-height: 86dvh; overflow-y: auto; background: rgba(250, 248, 244, 0.96);
+}
+.v2-grab { width: 40px; height: 5px; border-radius: 3px; background: rgba(31, 28, 24, 0.15); margin: 0 auto 12px; }
+
+/* ── ページ（チケット・ログインなど）の上の戻る ── */
+.v2-back { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--v2-sub); font: 600 15px/1 var(--v2-sans); padding: 8px 0; cursor: pointer; }
+
+/* 本人確認の案内など、もとは黒い画面用の部品を白の上で読めるように */
+.v2 .customer-access h1 { color: var(--v2-ink); }
+.v2 .customer-access p, .v2 .customer-access .access-hint { color: var(--v2-sub); }
+.v2 .customer-access .access-primary { background: var(--v2-ink); color: #fff; }
+.v2 .customer-access .access-text { color: var(--v2-sub); }
+.v2 .customer-access summary { color: var(--v2-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .v2 *, .v2 *::before, .v2 *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* 会員QR：会員証（黒と金）はウォレットのパスのように、角丸の黒い面に載せる（本人確認の案内も読めるように） */
+.v2-pass { margin: 0 -8px; padding: 10px 0 14px; border-radius: 28px; background: linear-gradient(160deg, #1a0c0a 0%, #0b0605 100%); box-shadow: 0 16px 40px rgba(40, 20, 10, 0.18); overflow: hidden; }
+
+/* V2.0 の画面では、ページの外（引っぱったときの余白など）も白に */
+html:has(.v2), body:has(.v2) { background: #f5f2ec; }

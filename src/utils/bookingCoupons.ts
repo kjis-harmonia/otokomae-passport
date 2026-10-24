@@ -145,3 +145,9 @@ export function couponPlanForQr(): string[] | undefined {
 }
 
 export const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`
+
+/** 予約メニューの値段（サーバーの料金表）。price＝会員価格、normal＝通常価格（あれば）。読めていなければ null */
+export function menuPrice(code: string): { price: number; normal: number | null } | null {
+  const m = rules?.menus.find(x => x.code === code)
+  return m && m.price != null ? { price: m.price, normal: m.normal_price } : null
+}

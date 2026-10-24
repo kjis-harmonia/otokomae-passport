@@ -5,6 +5,7 @@ import { loadStyles } from '../utils/styleStorage'
 import { StyleCardImage, StyleCardPlaceholder } from '../components/StyleCardPlaceholder'
 import { resolveStyleLibraryImageUrl } from '../data/styleLibraryImages'
 import { ReserveChoiceButtons } from '../components/ReserveChoice'
+import { UI_CATEGORIES } from '../data/styleCategories'
 import type { StyleCard } from '../data/styleCard'
 import type { NavTab } from '../data/brand'
 
@@ -24,28 +25,6 @@ const SHOWCASE_TITLES = [
   '夏ニグロ',
 ] as const
 
-const UI_CATEGORIES = [
-  {
-    id: '昭和の漢',
-    sub: 'SHOWA MEN',
-    titles: ['昭和のアイパー', 'サイドバックアイパー', 'リーゼントパンチ', 'ヤンキーパンチ', 'カールアイパー', 'バチバチパンチパーマ', 'ちょい悪オヤジ専用 昭和ヘアスタイル'],
-  },
-  {
-    id: '王道パーマ',
-    sub: 'CLASSIC PERM',
-    titles: ['ニグロパーマ', '俺は濡れパン', 'ジャマイカンアフロ', 'スペインパーマ', 'サラリーマン専用 ギリギリパーマ'],
-  },
-  {
-    id: '威圧感MAX',
-    sub: 'MAXIMUM PRESSURE',
-    titles: ['海軍御用達', 'シンサイ刈り', '海の男専用', 'トラック野郎御用達', 'テイテイ刈り', 'バチバチパンチパーマ', 'シンサイパンチ'],
-  },
-  {
-    id: '季節限定',
-    sub: 'SEASONAL',
-    titles: ['夏ニグロ', '銀パラ', '覚醒の色'],
-  },
-] as const
 
 // ── Image helpers ─────────────────────────────────────────────────────────────
 

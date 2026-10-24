@@ -34,15 +34,16 @@ import { suspendBgm } from '../../audio/bgm'
 // ── 見た目（黒・白・グレーだけ） ─────────────────────────────────
 
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Hiragino Sans", "Noto Sans JP", sans-serif'
+// V2.0：パールホワイトの画面（文字は墨色、面は白、主なボタンは墨色）。バイクの Johnny は角丸の黒い枠の中
 const C = {
-  bg: '#000000',
-  text: '#FFFFFF',
-  secondary: 'rgba(235,235,245,0.6)',
-  tertiary: 'rgba(235,235,245,0.3)',
-  fill: '#1C1C1E',
-  fillPressed: '#2C2C2E',
-  separator: 'rgba(84,84,88,0.6)',
-  danger: '#FF453A',
+  bg: '#F5F2EC',
+  text: '#1F1C18',
+  secondary: 'rgba(31,28,24,0.6)',
+  tertiary: 'rgba(31,28,24,0.35)',
+  fill: '#FFFFFF',
+  fillPressed: '#EFEBE3',
+  separator: 'rgba(31,28,24,0.12)',
+  danger: '#C2362F',
 }
 
 // ── 会話の段階 ─────────────────────────────────────────────────
@@ -976,7 +977,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       {/* 中央：JOHNNY・質問・聞き取った言葉・選択肢 */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 20px 16px' }}>
         <div style={{ marginTop: 'min(4vh, 32px)', width: '100%', display: 'flex', justifyContent: 'center' }}>
-          <JohnnyRider state={orb} width={compact ? 200 : 340} />
+          <div style={{ borderRadius: 24, overflow: 'hidden', background: '#000', boxShadow: '0 10px 30px rgba(70,52,24,0.12)' }}><JohnnyRider state={orb} width={compact ? 200 : 340} /></div>
         </div>
 
         <AnimatePresence mode="wait">
