@@ -33,15 +33,15 @@ export function ReserveScreen(props:{onShowQr?:()=>void}){
 
 function StoreBookingGate({session,access,onShowQr}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void}){
   return <section className="customer-access" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="Johnnyの来店認証">
-    <h1>Johnnyは、来店時の確認から</h1>
-    <p>初回だけ、店頭で会員QRを見せてください。本人確認後に、Johnnyで予約できます。</p>
-    {!session&&<PasskeyLoginButton onSignedIn={()=>{}}/>}
+    {/* 主な操作は1つ（QR を見せる）。Face ID は確認済みの人だけなので小さく下に */}
+    <h1>はじめに、店頭で本人確認</h1>
+    <p>次のご来店時に、会員QRをスタッフに見せてください。確認が済むと、Johnnyで予約できます。</p>
     {access.mode==='checking'?<p role="status">会員情報を確認しています…</p>:onShowQr&&<button type="button" className="access-primary" onClick={onShowQr}>会員QRを表示する</button>}
+    {!session&&<PasskeyLoginButton quiet label="確認済みの方：Face IDでログイン" onSignedIn={()=>{}}/>}
     {access.mode==='error'&&<>
       <p role="alert" className="access-error">確認できませんでした。通信を確認してお試しください。</p>
       <button type="button" className="access-text" onClick={access.refresh}>もう一度確認</button>
     </>}
-    <p className="access-hint">確認済みの方は、次回からFace IDなどでログインできます。</p>
     <a href={SHOP_PHONE_TEL} className="access-text">電話で予約する（{SHOP_PHONE_DISPLAY}）</a>
     <details style={{marginTop:24}}>
       <summary style={{minHeight:44,cursor:'pointer'}}>HOT PEPPER Beautyで予約</summary>

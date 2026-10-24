@@ -218,3 +218,8 @@
   .st-pin-pad { grid-template-columns: repeat(3, var(--k)); gap: calc(var(--k) * 0.16) calc(var(--k) * 0.34); }
   .st-pin .st-pin-key, .st-pin .st-pin-del { width: var(--k); height: var(--k); font-size: calc(var(--k) * 0.4); }
 }
+
+/* この端末を使う人（メニューで1回だけ選ぶ） */
+.st-operators { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
+.st-operators button { min-height: 56px; border-radius: 16px; border: 1px solid rgba(28, 31, 29, 0.12); background: #fff; color: #1c1f1d; font-family: "Shippori Mincho", "Noto Serif JP", "Hiragino Mincho ProN", serif; font-size: 18px; font-weight: 700; letter-spacing: 0.06em; cursor: pointer; }
+.st-operators button[aria-pressed="true"] { background: #1c1f1d; color: #fff; border-color: #1c1f1d; }

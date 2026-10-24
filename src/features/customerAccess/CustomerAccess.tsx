@@ -4,16 +4,17 @@ import {useCustomerAccessSession} from './useCustomerAccessSession'
 import {enrollPasskey,loginPasskey,passkeyMessage,passkeyStatus,resumeSavedMember,revokePasskeys,CUSTOMER_ACCESS_ENABLED,supportsPasskeys,type PasskeyStatus} from './passkeys'
 import './customerAccess.css'
 
-export function PasskeyLoginButton({onSignedIn,label='Face IDなどでログイン',disabled=false,onBusyChange}:{onSignedIn?:()=>void;label?:string;disabled?:boolean;onBusyChange?:(busy:boolean)=>void}){
+/** quiet：小さな文字のボタンにして説明文を出さない（ほかに主な操作がある画面用） */
+export function PasskeyLoginButton({onSignedIn,label='Face IDなどでログイン',disabled=false,onBusyChange,quiet=false}:{onSignedIn?:()=>void;label?:string;disabled?:boolean;onBusyChange?:(busy:boolean)=>void;quiet?:boolean}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('')
   if(!CUSTOMER_ACCESS_ENABLED)return null
   return <div className="customer-access">
-    <button type="button" className="access-primary" disabled={busy||disabled} onClick={()=>{
+    <button type="button" className={quiet?'access-text':'access-primary'} disabled={busy||disabled} onClick={()=>{
       if(busy||disabled)return
       setBusy(true);onBusyChange?.(true);setError('')
       void loginPasskey().then(()=>{if(onSignedIn)onSignedIn();else window.location.reload()}).catch(e=>setError(passkeyMessage(e))).finally(()=>{setBusy(false);onBusyChange?.(false)})
     }}>{busy?'本人確認しています…':label}</button>
-    <p className="access-hint">設定済みの方はこちら。初回は、会員証が表示される銀二郎appのQRを店頭で見せてください。スタッフの本人確認後にFace IDなどを設定できます。再登録は不要です。</p>
+    {!quiet&&<p className="access-hint">設定済みの方はこちら。初回は、会員証が表示される銀二郎appのQRを店頭で見せてください。スタッフの本人確認後にFace IDなどを設定できます。再登録は不要です。</p>}
     {error&&<p role="alert" className="access-error">{error}</p>}
   </div>
 }
