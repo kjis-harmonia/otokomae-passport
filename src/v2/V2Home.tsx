@@ -67,7 +67,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={cat}
+        <motion.div key={cat} className="v2-stage"
           initial={reduce ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? undefined : { opacity: 0, y: -8 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
           <div className="v2-cards" ref={rail} onScroll={onScroll} aria-label={`${cat}のスタイル`}>

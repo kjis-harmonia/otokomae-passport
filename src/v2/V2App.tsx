@@ -62,8 +62,10 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   }
 
 
+  // ホームは1画面に収めて固定（上下にスワイプしない）
+  const isHome = tab === 'home' && !pay && activeTab !== 'mypage'
   return (
-    <div className="v2">
+    <div className={isHome ? 'v2 v2-home' : 'v2'}>
       <header className="v2-head">
         <span />
         <img className="v2-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" />
