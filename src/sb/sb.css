@@ -519,6 +519,17 @@
 .sb-new-alert small { font-size: 12px; line-height: 1.5; color: rgba(255, 255, 255, 0.78); }
 .sb-new-alert .sb-primary { flex: none; background: #fff; color: #1f1c19; }
 .sb-new-alert.is-cancel > svg { color: #ff8a80; }
+/* 帯の予約：押すと詳細（コピー）が開く */
+.sb-alert-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; border: 0; background: none; color: rgba(255, 255, 255, 0.86); font: inherit; font-size: 12px; line-height: 1.5; text-align: left; cursor: pointer; }
+.sb-alert-row svg { flex: none; opacity: 0.7; }
+/* 項目ごとのコピー（サロンボードに1つずつ貼る） */
+.sb-copy-rows { display: flex; flex-direction: column; border: 1px solid var(--sb-line); border-radius: 12px; overflow: hidden; }
+.sb-copy-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 8px 14px; border: 0; border-bottom: 1px solid var(--sb-line); background: #fff; color: var(--sb-ink); font: inherit; text-align: left; cursor: pointer; }
+.sb-copy-row:last-child { border-bottom: 0; }
+.sb-copy-row:active { background: rgba(151, 115, 43, 0.08); }
+.sb-copy-row span { min-width: 0; display: flex; flex-direction: column; font-size: 15px; overflow-wrap: anywhere; }
+.sb-copy-row small { font-size: 12px; color: var(--sb-muted); }
+.sb-copy-row b { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--sb-muted); }
 /* スマホ：中身を全部読めるように、ボタンは下の段いっぱいに */
 @media (max-width: 700px) {
   .sb-new-alert { margin: 12px 16px 0; flex-wrap: wrap; align-items: flex-start; }
