@@ -184,6 +184,30 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
 .v2 .customer-access .access-secondary { border-radius: 28px; border-color: #b4a58f; color: var(--v2-ink); background: var(--lq-glass); box-shadow: var(--lq-glass-shadow); }
 .v2 .customer-access :is(button,input):focus-visible { outline-color: #725126; }
 
+/* Shared legacy controls get this material only inside the customer V2 shell. */
+.v2 .push-toggle-action {
+  border: 1px solid rgba(255,255,255,.95) !important; border-radius: 22px !important;
+  color: var(--v2-ink) !important; background: var(--lq-glass) !important; box-shadow: var(--lq-glass-shadow);
+}
+.v2 .push-toggle-title { color: var(--v2-ink); }
+.v2 .push-toggle-description { color: var(--v2-sub) !important; }
+.v2 .push-toggle-indicator { color: var(--v2-gold-deep) !important; }
+.v2 .ticket-bind-backdrop { background: rgba(40,34,26,.28) !important; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.v2 .ticket-bind-dialog {
+  border-radius: 28px !important; background: #f8f5ef !important; border: 1px solid #fff !important;
+  box-shadow: 0 24px 64px -20px rgba(55,40,20,.32), inset 0 2px 2px #fff !important;
+}
+.v2 .ticket-bind-dialog :is(h2,p:not(.ticket-bind-error)) { color: var(--v2-ink) !important; }
+.v2 .ticket-bind-dialog .ticket-bind-error { color: #a23226 !important; }
+.v2 .ticket-bind-dialog .access-text { color: var(--v2-sub) !important; }
+.v2 .ticket-bind-dialog input { color: var(--v2-ink) !important; border-color: #ac9979 !important; background: #fffdf8 !important; }
+.v2 .ticket-bind-dialog input:focus-visible { outline: 2px solid #725126 !important; outline-offset: 4px; }
+.v2 .ticket-bind-action {
+  border-radius: 24px !important; color: var(--v2-ink) !important;
+  border-color: rgba(255,255,255,.95) !important; background: var(--lq-glass) !important; box-shadow: var(--lq-glass-shadow);
+}
+.v2 .ticket-bind-action.is-primary { border-color: #b59764 !important; background: var(--lq-champagne) !important; box-shadow: var(--lq-gold-shadow); }
+
 /* Wallet chrome matches the app; ticket art and the QR quiet zone keep their own colors. */
 .v2-wallet .ginjiro-luxury-bg { background: none !important; }
 .v2-wallet .ginjiro-luxury-bg::before, .v2-wallet .ginjiro-luxury-bg::after { display: none !important; }

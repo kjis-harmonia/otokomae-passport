@@ -166,10 +166,12 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
 
   return (
     <div
+      className="ticket-bind-backdrop"
       style={{ position: 'fixed', inset: 0, zIndex, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
       onClick={step === 'done' ? onClose : onLater}
     >
       <motion.div
+        className="ticket-bind-dialog"
         role="dialog"
         aria-modal="true"
         aria-label="以前のチケットを引き継ぐ"
@@ -220,7 +222,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
                     fontFamily: 'ui-monospace, monospace', fontSize: 20, letterSpacing: '0.24em', outline: 'none',
                   }}
                 />
-                {error && <p style={{ fontSize: 12, color: '#F0A8A0', marginTop: 8, lineHeight: 1.6 }}>{error}</p>}
+                {error && <p className="ticket-bind-error" style={{ fontSize: 12, color: '#F0A8A0', marginTop: 8, lineHeight: 1.6 }}>{error}</p>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
                   <DialogButton onClick={onLater}>あとで</DialogButton>
                   <DialogButton primary disabled={busy || code.length !== 6} onClick={() => { void submit() }}>
@@ -245,6 +247,7 @@ function DialogButton({ children, primary, disabled, onClick }: {
   return (
     <button
       type="button"
+      className={primary ? 'ticket-bind-action is-primary' : 'ticket-bind-action'}
       disabled={disabled}
       onClick={onClick}
       style={{
