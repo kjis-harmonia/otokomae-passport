@@ -8,6 +8,7 @@ import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customer
 import type { CustomerRow } from '../utils/customerStore'
 import { couponPlanForQr } from '../utils/bookingCoupons'
 import { PushToggle } from './PushToggle'
+import { formatVisit, useNextReservation } from '../features/johnny/nextReservation'
 import { CustomerAccessSettings } from '../features/customerAccess/CustomerAccess'
 import { canShowInstallGuide, SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 import {
@@ -59,6 +60,13 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
   const [qrEnlarged, setQrEnlarged] = useState(false)
   const [customerData, setCustomerData] = useState<CustomerRow | null | undefined>(undefined)
   const [currentReservation, setCurrentReservation] = useState(() => loadCurrentReservation())
+  // カードに出す予約は「次回予約」と同じもの（ご予約は1つ）：アプリの予約があればそれ、無ければお電話のクーポン予約（予約日つき）
+  const aiNext = useNextReservation()
+  const shownReservation = aiNext
+    ? (() => { const v = formatVisit(aiNext.starts_at); return { title: aiNext.items.map(i => i.name).join('・'), when: `${v.date} ${v.time}〜`, price: aiNext.total_price } })()
+    : currentReservation
+      ? { title: currentReservation.title, when: `${Number(currentReservation.visitDate.slice(5, 7))}月${Number(currentReservation.visitDate.slice(8, 10))}日・お電話のご予約`, price: currentReservation.memberPrice }
+      : null
 
   useEffect(() => {
     // 最終来店日はサーバー（get_my_last_visit RPC）。通信できない場合のみ端末内の旧データで表示
@@ -359,7 +367,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
               marginTop: 18, marginBottom: 10,
             }} />
 
-            {currentReservation && (
+            {shownReservation && (
               <div style={{
                 marginBottom: 12,
                 borderRadius: 14,
@@ -385,11 +393,12 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   lineHeight: 1.45,
                   letterSpacing: '0.05em',
                 }}>
-                  {currentReservation.title}
-                  <span style={{ color: '#C9A24A', marginLeft: 8 }}>
-                    ¥{currentReservation.memberPrice.toLocaleString()}
-                  </span>
+                  {shownReservation.title}
+                  {shownReservation.price != null && <span style={{ color: '#C9A24A', marginLeft: 8 }}>
+                    ¥{shownReservation.price.toLocaleString()}
+                  </span>}
                 </p>
+                <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.72)', marginTop: 2, letterSpacing: '0.04em' }}>{shownReservation.when}</p>
               </div>
             )}
 
@@ -523,7 +532,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
           }}>
             ID · {userId.slice(0, 24)}
           </p>
-          {currentReservation && (
+          {shownReservation && (
             <div style={{
               marginTop: 16,
               borderRadius: 14,
@@ -536,10 +545,10 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                 現在の予約
               </p>
               <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8', lineHeight: 1.5 }}>
-                {currentReservation.title}
+                {shownReservation.title}
               </p>
               <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.64)', lineHeight: 1.6 }}>
-                {currentReservation.menuLabel} / ¥{currentReservation.memberPrice.toLocaleString()}
+                {shownReservation.when}{shownReservation.price != null ? ` / ¥${shownReservation.price.toLocaleString()}` : ''}
               </p>
             </div>
           )}

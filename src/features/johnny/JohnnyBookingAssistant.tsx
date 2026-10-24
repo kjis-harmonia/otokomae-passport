@@ -17,6 +17,7 @@ import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
 import { isEmptyRequest, parseVisitRequest, parseYesNo, type VisitRequest } from './visitParser'
 import { forgetReservation, formatVisit, pickNext, rememberReservation } from './nextReservation'
+import { clearCurrentReservation, loadCurrentReservation } from '../../utils/currentReservation'
 import type { AgentAnswer, AgentShown, AgentTurn } from './agentClient'
 import { useVoice } from './useVoice'
 import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvisor'
@@ -209,6 +210,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const [myReservations, setMyReservations] = useState<CustomerReservation[]>([])
   // ご本人の予約は1つまで（お連れ様の予約は数えない）。新しく予約するときに本人の予約があれば「キャンセルしてこちらにしますか？」＝変更として確定する
   const ownActive = useMemo(() => pickNext(myReservations.filter(r => !companionIds().includes(r.id))), [myReservations])
+  // お電話のクーポン予約（端末に覚えた予約日つきのメモ）。AI 予約を取ったら、これと入れ替える（ご予約は1つ）
+  const [phoneReservation] = useState(loadCurrentReservation)
   const ownActiveRef = useRef(ownActive)
   useEffect(() => { ownActiveRef.current = ownActive }, [ownActive])
   /** 確定のときに入れ替える予約（変更ならその予約、新規でも本人の予約があればそれ） */
@@ -448,6 +451,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         try { await api.cancel(change.id); forgetReservation(change.id) } catch { oldKept = true }
       }
       rememberReservation(reservation)
+      clearCurrentReservation()
       // 一緒に使う券（予約の日の会員 QR に入る）。変更なら元の予約の券は外す
       if (change) clearCouponPlan(change.id)
       const pickKey = `${menu.code}|${slot.starts_at}`
@@ -540,6 +544,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       try { await api.cancel(s.primary.replace.id); forgetReservation(s.primary.replace.id); clearCouponPlan(s.primary.replace.id) } catch { /* 取り消せなければ一覧に両方出る */ }
     }
     rememberReservation(reservation)
+    clearCurrentReservation()
     let companion: CustomerReservation | undefined
     try {
       const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, null)
@@ -961,6 +966,15 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       }
       case 'confirm': {
         const rep = !step.change ? ownActive : null
+        if (!rep && !step.change && phoneReservation) {
+          const day = `${Number(phoneReservation.visitDate.slice(5, 7))}月${Number(phoneReservation.visitDate.slice(8, 10))}日`
+          return {
+            title: `現在、${day}にお電話で${phoneReservation.title}をご予約されています。こちらのご予約に変えますか？`,
+            sub: 'お電話のご予約は、お手数ですがお店にキャンセルをお伝えください。',
+            speech: `現在、${day}にお電話で${phoneReservation.title}をご予約されています。ご予約はおひとり1つまでです。${spokenVisit(step.slot.starts_at)}の${step.menu.name}に変えますか？お電話のご予約は、お店にキャンセルをお伝えください。`,
+            listen: true,
+          }
+        }
         if (rep) {
           const names = rep.items.map(i => i.name).join('・')
           return {
