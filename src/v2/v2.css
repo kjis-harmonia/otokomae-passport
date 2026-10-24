@@ -157,3 +157,15 @@
 
 /* V2.0 の画面では、ページの外（引っぱったときの余白など）も白に */
 html:has(.v2), body:has(.v2) { background: #f5f2ec; }
+
+/* ログインと引き継ぎ（白の面）：見出し・区切り線を白の上で読めるように */
+.v2 .customer-access { color: var(--v2-ink); }
+.v2 .customer-access h2 { color: var(--v2-ink); }
+.v2 .access-settings { border-top-color: var(--v2-line); }
+/* 会員QR の黒い面の中は、もとの黒い画面用の色のまま */
+.v2 .v2-pass .customer-access { color: #f2f2f2; }
+.v2 .v2-pass .customer-access h1, .v2 .v2-pass .customer-access h2, .v2 .v2-pass .customer-access summary { color: #f2f2f2; }
+.v2 .v2-pass .customer-access p, .v2 .v2-pass .customer-access .access-text { color: #b8b8bc; }
+.v2 .v2-pass .customer-access .access-hint { color: #aaa; }
+.v2 .v2-pass .customer-access .access-primary { background: #f2f2f2; color: #151515; }
+.v2 .v2-pass .access-settings { border-top-color: #333; }
