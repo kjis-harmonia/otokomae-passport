@@ -968,7 +968,7 @@ function App() {
     if (tab === 'gacha') setIsPremiumGachaOpen(true)
   }, [shopUnlocked])
 
-  // スタイルの「予約する」→「Johnnyで予約」：予約タブの Johnny を開く（メニューは ReserveScreen が受け取る）
+  // スタイルの「予約する」→「AI予約」：予約タブの Johnny を開く（メニューは ReserveScreen が受け取る）
   useEffect(() => {
     const open = () => { setHasOpenModal(false); setNavHighlight('shop'); setActiveTab('reserve') }
     window.addEventListener(JOHNNY_INTENT_EVENT, open)

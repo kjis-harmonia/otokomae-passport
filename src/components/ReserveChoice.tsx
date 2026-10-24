@@ -1,4 +1,4 @@
-// スタイルの「予約する」：Johnny（押したメニューのまま、日時と担当を聞く）か HOT PEPPER Beauty か選ぶ。
+// スタイルの「予約する」：AI予約（銀二郎専属AI Johnny。押したメニューのまま、日時と担当を聞く）か HOT PEPPER Beauty か選ぶ。
 // HOT PEPPER のクーポンページが無いスタイルは Johnny だけ。
 import type { CSSProperties } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -15,8 +15,8 @@ export function ReserveChoiceButtons({ title, onDone }: { title: string; onDone:
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <motion.button type="button" whileTap={{ scale: 0.98 }} style={primary}
         onClick={() => { requestJohnny({ menuCode: getStyleMenuCode(title), label: title }); onDone() }}>
-        Johnnyで予約
-        <span style={{ display: 'block', marginTop: 4, fontSize: 12, fontWeight: 400, letterSpacing: '0.04em', color: 'rgba(242,230,200,0.7)' }}>日時と担当をお聞きします</span>
+        AI予約
+        <span style={{ display: 'block', marginTop: 4, fontSize: 12, fontWeight: 400, letterSpacing: '0.04em', color: 'rgba(242,230,200,0.7)' }}>銀二郎専属AI Johnny が、日時と担当をお聞きします</span>
       </motion.button>
       {url && (
         <button type="button" style={secondary} onClick={() => { window.open(url, '_blank', 'noopener,noreferrer'); onDone() }}>
