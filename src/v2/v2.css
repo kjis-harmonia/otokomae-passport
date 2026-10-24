@@ -215,9 +215,6 @@
   .v2::before, .v2::after, .v2 *, .v2 *::before, .v2 *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 
-/* 会員QR：会員証（黒と金）はウォレットのパスのように、角丸の黒い面に載せる（本人確認の案内も読めるように） */
-.v2-pass { margin: 0 -8px; padding: 10px 0 14px; border-radius: 28px; background: linear-gradient(160deg, #1a0c0a 0%, #0b0605 100%); box-shadow: 0 16px 40px rgba(40, 20, 10, 0.18); overflow: hidden; }
-
 /* V2.0 の画面では、ページの外（引っぱったときの余白など）も白に */
 html:has(.v2), body:has(.v2) { background: #f5f2ec; }
 
@@ -225,10 +222,79 @@ html:has(.v2), body:has(.v2) { background: #f5f2ec; }
 .v2 .customer-access { color: var(--v2-ink); }
 .v2 .customer-access h2 { color: var(--v2-ink); }
 .v2 .access-settings { border-top-color: var(--v2-line); }
-/* 会員QR の黒い面の中は、もとの黒い画面用の色のまま */
-.v2 .v2-pass .customer-access { color: #f2f2f2; }
-.v2 .v2-pass .customer-access h1, .v2 .v2-pass .customer-access h2, .v2 .v2-pass .customer-access summary { color: #f2f2f2; }
-.v2 .v2-pass .customer-access p, .v2 .v2-pass .customer-access .access-text { color: #b8b8bc; }
-.v2 .v2-pass .customer-access .access-hint { color: #aaa; }
-.v2 .v2-pass .customer-access .access-primary { background: #f2f2f2; color: #151515; }
-.v2 .v2-pass .access-settings { border-top-color: #333; }
+
+/* ══ リキッド・グラス × リキッド・ゴールド（最後に書いて上の面・ボタンを仕上げる） ══
+   ガラス：上半分に艶（ぷっくり）、縁に沿った細い光、下の縁に光の溜まり（厚み）、浮いた影。
+   金：ベタ塗りにせず、液体金属のように明→濃→明の帯で光を流し、上に艶を重ねる。 */
+.v2 {
+  --lq-gold: linear-gradient(172deg, #fff3d6 0%, #ecd29c 16%, #c99d55 38%, #8e6a2d 55%, #b48a45 70%, #e8cd94 86%, #fff1d0 100%);
+  --lq-champagne: linear-gradient(176deg, #fffbf2 0%, #f6e7c6 26%, #dfc28c 52%, #ecd6a8 74%, #fff6e2 100%);
+  --lq-glass-shadow:
+    0 22px 44px -12px rgba(80, 58, 24, 0.22), 0 6px 14px -4px rgba(80, 58, 24, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+    inset 0 2px 1px rgba(255, 255, 255, 1),
+    inset 0 -2px 2px rgba(255, 255, 255, 0.85),
+    inset 0 -10px 18px -6px rgba(168, 130, 63, 0.10),
+    inset 0 10px 22px -10px rgba(255, 255, 255, 0.9);
+}
+.v2-glass {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.42) 46%, rgba(255, 255, 255, 0.24) 54%, rgba(255, 255, 255, 0.5) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: var(--lq-glass-shadow);
+}
+
+/* チップ：ぷっくりしたガラスの粒。文字は少し浮き彫り */
+.v2-cat { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); }
+.v2-cat[aria-pressed="true"] {
+  background: var(--lq-champagne);
+  border: 1px solid rgba(190, 150, 80, 0.85);
+  box-shadow:
+    0 12px 26px -8px rgba(150, 110, 45, 0.45), 0 3px 8px rgba(120, 90, 40, 0.15),
+    inset 0 0 0 1.5px rgba(255, 248, 230, 0.75),
+    inset 0 3px 2px rgba(255, 255, 255, 0.95),
+    inset 0 -3px 5px rgba(150, 110, 45, 0.30),
+    inset 0 -1px 0 rgba(255, 240, 205, 0.9);
+}
+
+/* AI予約：厚いガラスの棒。上に艶の帯、縁は金の二重線 */
+.v2-cta { overflow: hidden; }
+.v2-cta::after {
+  content: ""; position: absolute; left: 14px; right: 14px; top: 3px; height: 46%; border-radius: 34px 34px 60% 60% / 34px 34px 20px 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0)); pointer-events: none;
+}
+.v2-cta-text, .v2-cta-spark, .v2-cta-go { position: relative; z-index: 1; }
+/* 右の玉：透けるリキッド・ゴールドのガラス玉 */
+.v2-cta-go, .v2-pay-icon {
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 55%),
+    var(--lq-gold);
+  border: 1.5px solid rgba(255, 246, 222, 0.95);
+  box-shadow: 0 8px 18px -4px rgba(120, 88, 34, 0.5), inset 0 -3px 6px rgba(100, 72, 26, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(90, 64, 20, 0.5);
+}
+.v2-cta-go svg, .v2-pay-icon svg { filter: drop-shadow(0 1px 1px rgba(90, 64, 20, 0.45)); }
+
+/* 金のボタン（会員QR を表示する・AI予約する など） */
+.v2-btn-gold {
+  position: relative; overflow: hidden; color: #fff; text-shadow: 0 1px 2px rgba(80, 56, 18, 0.55);
+  background: var(--lq-gold);
+  border: 1px solid rgba(255, 240, 205, 0.9);
+  box-shadow: 0 14px 28px -10px rgba(120, 88, 34, 0.55), inset 0 2px 2px rgba(255, 255, 255, 0.75), inset 0 -3px 6px rgba(90, 64, 22, 0.35);
+}
+.v2-btn-gold::after { content: ""; position: absolute; left: 10px; right: 10px; top: 2px; height: 45%; border-radius: 14px 14px 40% 40%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0)); pointer-events: none; }
+.v2-btn:active, .v2-round:active { transform: scale(0.98); }
+
+/* 下のタブ：選んだタブの印をリキッド・ゴールドの小さな棒に */
+.v2-nav button[aria-current="page"]::after { width: 20px; height: 3px; border-radius: 2px; background: var(--lq-gold); box-shadow: 0 1px 3px rgba(140, 104, 40, 0.45); }
+.v2-dots i.on { background: var(--lq-gold); box-shadow: 0 1px 3px rgba(140, 104, 40, 0.4); }
+/* AI予約の棒は、共通のガラスより後ろで金の縁と厚みを付け直す */
+.v2-cta.v2-glass {
+  border: 1.5px solid rgba(206, 172, 112, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 252, 244, 0.5) 48%, rgba(250, 240, 220, 0.42) 54%, rgba(255, 248, 232, 0.72) 100%);
+  box-shadow:
+    0 24px 46px -14px rgba(110, 80, 30, 0.32), 0 6px 14px -4px rgba(110, 80, 30, 0.12),
+    0 0 0 4px rgba(255, 255, 255, 0.45), 0 0 0 5px rgba(206, 172, 112, 0.35),
+    inset 0 2px 1px rgba(255, 255, 255, 1), inset 0 -3px 4px rgba(255, 246, 225, 0.9),
+    inset 0 -12px 20px -8px rgba(168, 130, 63, 0.18);
+}

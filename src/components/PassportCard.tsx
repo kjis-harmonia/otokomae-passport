@@ -48,7 +48,8 @@ function fmtLastVisit(dateStr: string): string {
   return `${y}.${m}.${day}`
 }
 
-export function PassportCard() {
+/** compact：V2.0 の会員QR。会員証と来店時の本人確認の案内だけ（お知らせ・ログイン設定・復旧コードは別の画面） */
+export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
   const storeAccess=useStoreAccess()
   const storeRequest=useStoreRequest(storeAccess.mode!=='verified'&&storeAccess.mode!=='error')
   const memberStatus = loadMemberStatus()
@@ -407,7 +408,9 @@ export function PassportCard() {
         </div>
       </div>
 
-      <StoreRequestNotice mode={storeAccess.mode} error={storeRequest.error} onRefresh={storeRequest.refresh}/><div style={{ marginTop: 16 }}><CustomerAccessSettings /></div>
+      <StoreRequestNotice mode={storeAccess.mode} error={storeRequest.error} onRefresh={storeRequest.refresh}/>
+      {!compact && <>
+      <div style={{ marginTop: 16 }}><CustomerAccessSettings /></div>
 
       {/* ── JOHNNY のお知らせ・ホーム画面に追加 ── */}
       <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
@@ -457,6 +460,7 @@ export function PassportCard() {
           </div>
         )}
       </div>
+      </>}
     </div>
 
     {/* ── QR 拡大モーダル ── */}

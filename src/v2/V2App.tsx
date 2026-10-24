@@ -13,6 +13,7 @@ import { V2Qr } from './V2Qr'
 import { V2Next } from './V2Next'
 import { V2Menu } from './V2Menu'
 import { V2Account } from './V2Account'
+import { V2Ginpay } from './V2Ginpay'
 import './v2.css'
 
 const TABS: { id: NavTab; label: string; icon: typeof Home }[] = [
@@ -26,6 +27,9 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   ticketFilter: WalletFilter; ticketKey: number; onModalChange: (open: boolean) => void
 }) {
   const [menu, setMenu] = useState(false)
+  // 銀Pay のページ（ホームの帯から開く）。タブを切り替えたら閉じる
+  const [pay, setPay] = useState(false)
+  const go = (t: NavTab) => { setPay(false); setActiveTab(t) }
   // Johnny・チケットなどを閉じたら、開く前のタブへ戻る
   const lastTab = useRef<NavTab>(activeTab === 'qr' || activeTab === 'next' ? activeTab : 'home')
   const tab: NavTab = activeTab === 'qr' || activeTab === 'next' ? activeTab : 'home'
@@ -62,10 +66,11 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
         <button type="button" className="v2-round v2-glass" aria-label="メニュー" onClick={() => setMenu(true)}><Menu size={20} /></button>
       </header>
 
-      <main className={`v2-main${tab === 'home' ? ' has-cta' : ''}`}>
+      <main className={`v2-main${tab === 'home' && !pay ? ' has-cta' : ''}`}>
         {activeTab === 'mypage'
           ? <V2Account onBack={back} />
-          : tab === 'home' ? <V2Home onGinpay={() => setActiveTab('qr')} />
+          : tab === 'home' && pay ? <V2Ginpay onBack={() => setPay(false)} onShowQr={() => go('qr')} />
+          : tab === 'home' ? <V2Home onGinpay={() => setPay(true)} />
           : tab === 'qr' ? <V2Qr onTickets={() => setActiveTab('tickets')} />
           : <V2Next onJohnny={() => setActiveTab('reserve')} />}
       </main>
@@ -74,7 +79,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
         {TABS.map(t => {
           const Icon = t.icon
           return (
-            <button key={t.id} type="button" aria-current={activeTab === t.id ? 'page' : undefined} onClick={() => setActiveTab(t.id)}>
+            <button key={t.id} type="button" aria-current={activeTab === t.id ? 'page' : undefined} onClick={() => go(t.id)}>
               <Icon size={22} strokeWidth={1.8} />{t.label}
             </button>
           )
