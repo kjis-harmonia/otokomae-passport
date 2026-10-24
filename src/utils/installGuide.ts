@@ -47,11 +47,11 @@ export function canShowInstallGuide(): boolean {
   return detect() !== null
 }
 
-/** 初めて登録する前に「ホーム画面に追加」が要るか（iPhone の Safari・アプリ内ブラウザ）。
+/** 初めて登録する前に「ホーム画面に追加」が要るか（スマホでホーム画面から開いていないとき。登録はアイコンから開いたときだけ）。
  *  iPhone は Safari とホーム画面のアプリで保存場所が別：Safari で登録してから追加すると、アプリでもう一度登録になる（会員が二重になる） */
 export function needsInstallFirst(): boolean {
   const k = detect()
-  return k === 'ios' || k === 'ios-other' || k === 'inapp'
+  return k !== null // スマホ（iPhone・Android・アプリ内ブラウザ）でホーム画面から開いていないとき。パソコンは対象外
 }
 
 /** アプリ内ブラウザ（Instagram・Facebook・TikTok・LINE など）から、ふつうのブラウザで開き直すリンク。
