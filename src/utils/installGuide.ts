@@ -72,3 +72,11 @@ export function externalBrowserUrl(): string {
 export function externalBrowserName(): string {
   return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent) ? 'Chrome' : 'Safari'
 }
+
+/** 「〇〇で開く」ボタンが効くか。LINE（?openExternalBrowser）・Android（Chrome の intent）・iPhone の Chrome などは効く。
+ *  iPhone の Instagram・Facebook などは Safari へのリンクを止めるので、メニュー（…→外部ブラウザーで開く）の手順だけ出す（10/24 実機で確認） */
+export function externalLinkWorks(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  return /Line\//i.test(ua) || /Android/i.test(ua) || detect() === 'ios-other'
+}
