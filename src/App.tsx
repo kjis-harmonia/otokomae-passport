@@ -847,8 +847,8 @@ function App() {
   }, [])
 
   // ── Phase ─────────────────────────────────────────────────────────────────────
-  // iPhone の Safari では、登録の前にホーム画面へ追加してもらう（Safari とアプリで保存場所が別なので、二重登録になる）
-  const [installFirst, setInstallFirst] = useState(needsInstallFirst)
+  // スマホでは、ホーム画面に追加してアイコンから開いたときだけ登録できる（iPhone は Safari とアプリで保存場所が別なので、二重登録を防ぐ）
+  const [installFirst] = useState(needsInstallFirst)
   const [phase, setPhase] = useState<AppPhase>(() => {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
     return done ? 'app' : 'onboarding'
@@ -1065,7 +1065,7 @@ function App() {
       {phase === 'onboarding' ? (
 
         /* StartScreen: standalone fullscreen, HomeScreen is NOT mounted */
-        installFirst ? <InstallGate onSkip={() => setInstallFirst(false)} /> : (
+        installFirst ? <InstallGate /> : (
         <OnboardingScreen
           memberStatus={memberStatus}
           onDone={handleOnboardingDone}
