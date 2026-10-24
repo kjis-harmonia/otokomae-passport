@@ -166,6 +166,12 @@ body:has(.v2-fixed) #root { height: 100dvh; overflow: hidden; }
 .v2-fixed .v2-head { position: relative; }
 .v2-fixed .v2-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scrollbar-width: none; }
 .v2-fixed .v2-main::-webkit-scrollbar { display: none; }
+/* Reserve the dock outside the scrollport: content cannot sit underneath its buttons.
+   An 8px gap remains above the dock; short content does not gain a blank scroll tail. */
+.v2-fixed:not(.v2-home) .v2-main {
+  margin-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 18px);
+  padding-bottom: 0;
+}
 
 /* Home is a fixed stage (no vertical scroll) over marble and gold ribbons.
    Controls are clear glass so the ribbons show through; the photo surround stays pearl. */
