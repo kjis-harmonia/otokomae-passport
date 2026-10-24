@@ -47,3 +47,9 @@ export function canShowInstallGuide(): boolean {
   return detect() !== null
 }
 
+/** 初めて登録する前に「ホーム画面に追加」が要るか（iPhone の Safari・アプリ内ブラウザ）。
+ *  iPhone は Safari とホーム画面のアプリで保存場所が別：Safari で登録してから追加すると、アプリでもう一度登録になる（会員が二重になる） */
+export function needsInstallFirst(): boolean {
+  const k = detect()
+  return k === 'ios' || k === 'ios-other' || k === 'inapp'
+}

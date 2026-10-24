@@ -149,3 +149,60 @@ function Step({ n, icon, children }: { n: number; icon: ReactNode; children: Rea
     </li>
   )
 }
+
+/** 登録の前に出す全画面の案内。追加したらホーム画面のアイコンから開いて登録する。追加できない人だけ下の文字から先へ */
+export function InstallGate({ onSkip }: { onSkip: () => void }) {
+  const [kind] = useState<Kind>(() => detect())
+  const externalUrl = (() => {
+    try { const u = new URL(window.location.href); u.searchParams.set('openExternalBrowser', '1'); return u.toString() } catch { return '/' }
+  })()
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10030, background: '#0B0908', overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
+      <div style={{
+        width: '100%', maxWidth: 480, minHeight: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column',
+        padding: 'calc(56px + env(safe-area-inset-top, 0px)) 24px calc(24px + env(safe-area-inset-bottom, 0px))',
+      }}>
+        <img src="/assets/app-icon.png" alt="" width={72} height={72} style={{ borderRadius: 16, border: '1px solid rgba(201,162,74,0.35)' }} />
+        <h1 style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 700, color: CREAM, letterSpacing: '0.02em', lineHeight: 1.6, margin: '24px 0 0' }}>
+          はじめに、<br />ホーム画面に追加してください
+        </h1>
+        <p style={{ fontSize: 14, lineHeight: 1.8, color: 'rgba(242,230,200,0.62)', margin: '12px 0 0' }}>
+          会員登録は、ホーム画面のアイコンから開いて行います。このまま登録すると、ホーム画面から開いたときにもう一度登録が必要になります。
+        </p>
+
+        <div style={{ height: 1, background: 'rgba(201,162,74,0.18)', margin: '28px 0 22px' }} />
+
+        {kind === 'ios' && (
+          <>
+            <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <Step n={1} icon={<Ellipsis size={18} />}>画面右下の <b style={{ color: CREAM }}>「…」</b> をタップ</Step>
+              <Step n={2} icon={<Share size={17} />}><b style={{ color: CREAM }}>「共有」</b> をタップ</Step>
+              <Step n={3} icon={<SquarePlus size={17} />}><b style={{ color: CREAM }}>「ホーム画面に追加」</b> → 右上の <b style={{ color: CREAM }}>「追加」</b></Step>
+              <Step n={4} icon={<img src="/assets/app-icon.png" alt="" width={22} height={22} style={{ borderRadius: 5 }} />}>ホーム画面の <b style={{ color: CREAM }}>「銀二郎」</b> から開く</Step>
+            </ol>
+            <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.4)', marginTop: 16, lineHeight: 1.6 }}>
+              「…」が無いときは、画面の下にある共有ボタンから進めます。
+            </p>
+          </>
+        )}
+        {(kind === 'inapp' || kind === 'ios-other') && (
+          <>
+            <p style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.9, color: CREAM, margin: 0 }}>
+              このままではホーム画面に追加できません。<br /><b>Safari</b> で開いてから追加してください。
+            </p>
+            {kind === 'inapp' && (
+              <a href={externalUrl} style={{ ...primary, marginTop: 20, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <ExternalLink size={17} /> Safari で開く
+              </a>
+            )}
+          </>
+        )}
+
+        <div style={{ flex: 1, minHeight: 32 }} />
+        <button type="button" onClick={onSkip} style={{ background: 'none', border: 'none', padding: '12px 0', fontSize: 13, color: 'rgba(242,230,200,0.45)', textDecoration: 'underline', textUnderlineOffset: 4, cursor: 'pointer' }}>
+          ホーム画面に追加できない方はこちら
+        </button>
+      </div>
+    </div>
+  )
+}
