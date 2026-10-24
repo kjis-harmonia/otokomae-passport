@@ -297,6 +297,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   {METHODS.filter(m => m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => setMethod(m.id)}>{m.label}</Choice>)}
                 </span>
               </Row>
+              {/* 銀Pay は口座の持ち主（お客様）を選んだ会計だけ。選んでいないときに「無い」と迷わないよう一言 */}
+              {!clientInfo && <p style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, margin: '-4px 0 8px' }}>GINPay（銀Pay）は、上でお客様を選ぶと使えます。</p>}
               {method === 'ginpay' && (
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
                   {ginpayAccounts.length === 0 ? (
