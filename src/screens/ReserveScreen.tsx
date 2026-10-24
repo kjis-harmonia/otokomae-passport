@@ -25,16 +25,19 @@ const HOTPEPPER_MENUS: { label: string; url: string }[] = [
     .filter(m => m.url),
 ]
 
-export function ReserveScreen(props:{onShowQr?:()=>void}){
+/** onClose：V2.0 では Johnny を閉じたら前のタブへ戻る（予約タブの画面は出さない） */
+export function ReserveScreen(props:{onShowQr?:()=>void;onClose?:()=>void}){
   const session=useCustomerAccessSession()
   const access=useStoreAccess()
-  if(CUSTOMER_ACCESS_ENABLED&&access.mode!=='verified')return <StoreBookingGate session={session} access={access} onShowQr={props.onShowQr}/>
-  return <ReservationContent key={CUSTOMER_ACCESS_ENABLED?session:'legacy'} {...props}/>
+  // スタイルの「この髪型でAI予約する」から来たとき：そのメニュー。本人確認の確かめ中（一瞬の案内）に失わないよう、ここで1回だけ受け取る
+  const [intent]=useState(takeJohnnyIntent)
+  if(CUSTOMER_ACCESS_ENABLED&&access.mode!=='verified')return <StoreBookingGate session={session} access={access} onShowQr={props.onShowQr} onClose={props.onClose}/>
+  return <ReservationContent key={CUSTOMER_ACCESS_ENABLED?session:'legacy'} {...props} initialMenuCode={intent?.menuCode??null}/>
 }
 
-function StoreBookingGate({session,access,onShowQr}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void}){
-  useState(takeJohnnyIntent) // スタイルから来ても、本人確認の前はメニューの希望を持ち越さない
+function StoreBookingGate({session,access,onShowQr,onClose}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void;onClose?:()=>void}){
   return <section className="customer-access" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="Johnnyの来店認証">
+    {onClose&&<button type="button" className="v2-back" onClick={onClose}>‹ 戻る</button>}
     {/* 主な操作は1つ（QR を見せる）。Face ID は確認済みの人だけなので小さく下に */}
     <h1>はじめに、店頭で本人確認</h1>
     <p>次のご来店時に、会員QRをスタッフに見せてください。確認が済むと、AI予約（銀二郎専属AI Johnny）が使えます。</p>
@@ -51,10 +54,8 @@ function StoreBookingGate({session,access,onShowQr}:{session:string|null;access:
     </details>
   </section>
 }
-function ReservationContent({ onShowQr }: { onShowQr?: () => void }) {
+function ReservationContent({ onShowQr, onClose, initialMenuCode = null }: { onShowQr?: () => void; onClose?: () => void; initialMenuCode?: string | null }) {
   const [assistantOpen, setAssistantOpen] = useState(true)
-  // スタイルの「予約する」から来たとき：そのメニューを入れて Johnny を始める
-  const [intent] = useState(takeJohnnyIntent)
   const next = useNextReservation()
   const visit = next ? formatVisit(next.starts_at) : null
 
@@ -118,7 +119,7 @@ function ReservationContent({ onShowQr }: { onShowQr?: () => void }) {
       {createPortal(
         <AnimatePresence>
           {assistantOpen && (
-            <JohnnyBookingAssistant key="johnny-booking" initialMenuCode={intent?.menuCode ?? null} onClose={() => setAssistantOpen(false)} onShowQr={onShowQr} />
+            <JohnnyBookingAssistant key="johnny-booking" initialMenuCode={initialMenuCode} onClose={() => (onClose ? onClose() : setAssistantOpen(false))} onShowQr={onShowQr} />
           )}
         </AnimatePresence>,
         document.body,
