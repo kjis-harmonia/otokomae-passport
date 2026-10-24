@@ -160,7 +160,9 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
 /* Home, member QR and next booking are fixed screens: no page drag or rubber band.
    If a small phone cannot fit the content, only the middle area scrolls (without bounce). */
 html:has(.v2-fixed), body:has(.v2-fixed) { height: 100%; overflow: hidden; overscroll-behavior: none; }
-.v2-fixed { position: fixed; inset: 0; height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; overscroll-behavior: none; }
+body:has(.v2-fixed) #root { height: 100dvh; overflow: hidden; }
+/* not position:fixed — iPhone cannot read the page colour for the status bar through a fixed full-screen layer and paints it black */
+.v2-fixed { position: relative; height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; overscroll-behavior: none; }
 .v2-fixed .v2-head { position: relative; }
 .v2-fixed .v2-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scrollbar-width: none; }
 .v2-fixed .v2-main::-webkit-scrollbar { display: none; }
@@ -174,8 +176,7 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
   --lq-clear-shadow: 0 8px 18px -10px rgba(70,52,26,.30), 0 1px 2px rgba(70,52,26,.08),
     inset 0 1.5px 1px rgba(255,255,255,.98), inset 0 -1.5px 2px rgba(255,255,255,.75),
     inset 0 -8px 12px -8px rgba(120,96,60,.20);
-  position: fixed; inset: 0; height: 100dvh; min-height: 0; overflow: hidden;
-  display: flex; flex-direction: column; touch-action: pan-x; overscroll-behavior: none;
+  touch-action: pan-x;
 }
 .v2-home::before {
   /* top fades into the status-bar colour so there is no seam where the marble starts */
