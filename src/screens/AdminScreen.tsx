@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
+import { playCue } from '../audio/cue'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
@@ -310,6 +311,7 @@ export function QrCameraScanner({
         { fps: 10, qrbox: { width: 220, height: 220 } },
         (decoded) => {
           const s = claimScanner(); if (!s) return
+          playCue('qr') // 「QRコードを読み込みました！」
           setActiveState(false); void haltScanner(s).then(() => onScan(decoded))
         },
         undefined,
