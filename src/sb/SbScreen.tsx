@@ -345,7 +345,7 @@ function CopyRows({ r }: { r: SbReservation }) {
   const [done, setDone] = useState<string | null>(null)
   const rows: [string, string][] = ([
     ['お名前', r.customer_name],
-    ['電話番号', (r.customer_phone ?? '').replace(/D/g, '')],
+    ['電話番号', (r.customer_phone ?? '').replace(/[^0-9]/g, '')],
     ['日付', getJapanDateString(new Date(r.starts_at)).replace(/-/g, '/')],
     ['時刻', `${jstTime(r.starts_at)}〜${jstTime(r.ends_at)}`],
     ['メニュー', r.items.map(i => i.name).join(' / ')],
