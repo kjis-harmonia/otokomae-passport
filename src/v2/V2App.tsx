@@ -65,7 +65,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
       <main className={`v2-main${tab === 'home' ? ' has-cta' : ''}`}>
         {activeTab === 'mypage'
           ? <V2Account onBack={back} />
-          : tab === 'home' ? <V2Home />
+          : tab === 'home' ? <V2Home onGinpay={() => setActiveTab('qr')} />
           : tab === 'qr' ? <V2Qr onTickets={() => setActiveTab('tickets')} />
           : <V2Next onJohnny={() => setActiveTab('reserve')} />}
       </main>

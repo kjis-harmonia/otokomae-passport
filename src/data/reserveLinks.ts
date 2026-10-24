@@ -75,6 +75,8 @@ export const STYLE_MENU_CODES: Readonly<Record<string, string>> = {
   'シンサイ刈り': 'cut-skin-fade',
   'トラック野郎御用達': 'cut-regular',
   'ちょい悪オヤジ専用 昭和ヘアスタイル': 'cut-regular',
+  'テイテイ刈り': 'store-teitei-gari',
+  // 覚醒の色：予約メニューに対応するものが無い → Johnny には髪型の名前だけ伝える（メニューはJohnnyが聞く）
 }
 
 export function getStyleMenuCode(styleTitle: string): string | null {

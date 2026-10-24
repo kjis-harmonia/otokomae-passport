@@ -10,6 +10,7 @@ import { getReserveUrl, getStyleMenuCode } from '../data/reserveLinks'
 import { ensurePriceRules, menuPrice } from '../utils/bookingCoupons'
 import { requestJohnny } from '../features/johnny/bookingIntent'
 import type { StyleCard } from '../data/styleCard'
+import { V2GinpayBar } from './V2GinpayBar'
 
 const yen = (n: number) => `¥${n.toLocaleString()}`
 
@@ -20,7 +21,9 @@ function stylePrice(style: StyleCard): { price: number; normal: number | null } 
   return live ?? { price: style.price, normal: null }
 }
 
-export function V2Home() {
+const isMember = (s: StyleCard) => { const p = stylePrice(s); return p.normal != null && p.normal !== p.price }
+
+export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const reduce = useReducedMotion()
   const styles = useMemo(() => loadStyles().filter(s => s.isPublished), [])
   const [cat, setCat] = useState<string>(UI_CATEGORIES[0].id)
@@ -56,6 +59,7 @@ export function V2Home() {
 
   return (
     <>
+      <div style={{ padding: '2px 20px 10px' }}><V2GinpayBar onOpen={onGinpay} /></div>
       <div className="v2-cats" role="tablist" aria-label="スタイルのカテゴリ">
         {UI_CATEGORIES.map(c => (
           <button key={c.id} type="button" role="tab" className="v2-cat v2-glass" aria-pressed={cat === c.id} aria-selected={cat === c.id} onClick={() => chooseCat(c.id)}>{c.id}</button>
@@ -73,14 +77,10 @@ export function V2Home() {
                 <motion.article key={s.id} className="v2-card v2-glass" aria-current={i === index ? 'true' : undefined}
                   initial={reduce ? false : { opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.32, delay: reduce ? 0 : Math.min(i, 4) * 0.05, ease: [0.22, 1, 0.36, 1] }}>
-                  <div className="v2-card-photo"><img src={resolveStyleLibraryImageUrl(s)} alt={s.title} loading={i < 2 ? 'eager' : 'lazy'} decoding="async" /></div>
-                  <div className="v2-card-body">
-                    <h2 className="v2-card-name">{s.title}</h2>
-                    {s.catchCopy && <p className="v2-card-copy">{s.catchCopy}</p>}
-                    <div className="v2-card-meta">
-                      <span className="v2-price">{yen(p.price)}</span>
-                      {p.normal != null && p.normal !== p.price && <span className="v2-price-note">会員価格（通常 {yen(p.normal)}）</span>}
-                    </div>
+                  {/* 写真が主役：髪型の名前は写真に入っているので、写真の上には何も載せない（名前・値段は読み上げ用。値段は下のAI予約ボタンに出す） */}
+                  <div className="v2-card-photo">
+                    <img src={resolveStyleLibraryImageUrl(s)} alt="" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" />
+                    <h2 className="v2-sr">{s.title}・{yen(p.price)}</h2>
                   </div>
                 </motion.article>
               )
@@ -99,7 +99,7 @@ export function V2Home() {
         <span className="v2-cta-spark" aria-hidden="true"><Sparkle size={22} strokeWidth={1.6} /></span>
         <span className="v2-cta-text">
           <b>{selected ? 'この髪型でAI予約する' : 'AI予約（Johnny に相談）'}</b>
-          <small>{selected ? '最短で、最高の自分に。' : '銀二郎専属AI Johnny がお聞きします'}</small>
+          <small>{selected ? <><span className="v2-cta-price">{yen(stylePrice(selected).price)}</span>{isMember(selected) ? '　会員価格' : ''}</> : '銀二郎専属AI Johnny がお聞きします'}</small>
         </span>
         <span className="v2-cta-go" aria-hidden="true"><ArrowRight size={20} /></span>
       </button>

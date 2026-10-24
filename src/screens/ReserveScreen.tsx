@@ -32,7 +32,7 @@ export function ReserveScreen(props:{onShowQr?:()=>void;onClose?:()=>void}){
   // スタイルの「この髪型でAI予約する」から来たとき：そのメニュー。本人確認の確かめ中（一瞬の案内）に失わないよう、ここで1回だけ受け取る
   const [intent]=useState(takeJohnnyIntent)
   if(CUSTOMER_ACCESS_ENABLED&&access.mode!=='verified')return <StoreBookingGate session={session} access={access} onShowQr={props.onShowQr} onClose={props.onClose}/>
-  return <ReservationContent key={CUSTOMER_ACCESS_ENABLED?session:'legacy'} {...props} initialMenuCode={intent?.menuCode??null}/>
+  return <ReservationContent key={CUSTOMER_ACCESS_ENABLED?session:'legacy'} {...props} initialMenuCode={intent?.menuCode??null} initialLabel={intent?.label||null}/>
 }
 
 function StoreBookingGate({session,access,onShowQr,onClose}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void;onClose?:()=>void}){
@@ -54,7 +54,7 @@ function StoreBookingGate({session,access,onShowQr,onClose}:{session:string|null
     </details>
   </section>
 }
-function ReservationContent({ onShowQr, onClose, initialMenuCode = null }: { onShowQr?: () => void; onClose?: () => void; initialMenuCode?: string | null }) {
+function ReservationContent({ onShowQr, onClose, initialMenuCode = null, initialLabel = null }: { onShowQr?: () => void; onClose?: () => void; initialMenuCode?: string | null; initialLabel?: string | null }) {
   const [assistantOpen, setAssistantOpen] = useState(true)
   const next = useNextReservation()
   const visit = next ? formatVisit(next.starts_at) : null
@@ -119,7 +119,7 @@ function ReservationContent({ onShowQr, onClose, initialMenuCode = null }: { onS
       {createPortal(
         <AnimatePresence>
           {assistantOpen && (
-            <JohnnyBookingAssistant key="johnny-booking" initialMenuCode={initialMenuCode} onClose={() => (onClose ? onClose() : setAssistantOpen(false))} onShowQr={onShowQr} />
+            <JohnnyBookingAssistant key="johnny-booking" initialMenuCode={initialMenuCode} initialLabel={initialLabel} onClose={() => (onClose ? onClose() : setAssistantOpen(false))} onShowQr={onShowQr} />
           )}
         </AnimatePresence>,
         document.body,

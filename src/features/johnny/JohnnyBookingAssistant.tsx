@@ -56,7 +56,7 @@ type Step =
   | { k: 'contact'; name: string }
   /** 2回目以降：おかえりなさい（前回からの日数・メンテナンスカットの期限・いつものメニュー） */
   | { k: 'welcome'; w: Welcome }
-  | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption }
+  | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption; label?: string }
   | { k: 'askMenu'; req: VisitRequest }
   /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
   | { k: 'overview'; req: VisitRequest; advice: DayAdvice; note?: string }
@@ -111,6 +111,8 @@ interface Props {
   onShowQr?: () => void
   /** スタイルの「予約する」から：このメニューを入れて始める（日時 → 担当を聞く） */
   initialMenuCode?: string | null
+  /** スタイルの名前（メニューに対応しない髪型・メニューが休止中のときに、Johnny へ髪型の名前だけ伝える） */
+  initialLabel?: string | null
 }
 
 const JST = 9 * 60 * 60 * 1000
@@ -188,7 +190,7 @@ const pausedStep = (s?: AiBookingStatus | null): Step => ({ k: 'ai', say: paused
 
 const BUSINESS_ERRORS = new Set(['slot_taken', 'too_late', 'date_not_open', 'invalid_starts_at', 'menu_not_available', 'hold_expired', 'hold_not_found'])
 
-export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null }: Props) {
+export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null, initialLabel = null }: Props) {
   const api = useMemo(() => bookingAssistantApi(), [])
   const [step, setStep] = useState<Step>({ k: 'loading' })
   const [options, setOptions] = useState<AssistantOptions | null>(null)
@@ -302,14 +304,23 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [options, lastMenuCode])
 
   // スタイルの「予約する」から来たとき：最初の場面（おかえり／日時）を、そのメニュー入りの「いつにしますか？」に差し替える（担当は確定の前に聞く）
+  // メニューが無い髪型は、名前だけ会話に入れて「いつにしますか？」から（メニューはあとで聞く）。料金表を読み終える前には受け取らない
   const initialMenuRef = useRef(initialMenuCode)
+  const initialLabelRef = useRef(initialLabel)
   useEffect(() => {
-    if (!initialMenuRef.current || (step.k !== 'welcome' && step.k !== 'askWhen')) return
-    const menu = (options?.menus ?? []).find(m => m.code === initialMenuRef.current)
+    if ((!initialMenuRef.current && !initialLabelRef.current) || !options || (step.k !== 'welcome' && step.k !== 'askWhen')) return
+    const menu = initialMenuRef.current ? options.menus.find(m => m.code === initialMenuRef.current) : undefined
+    const label = initialLabelRef.current
     initialMenuRef.current = null
-    if (!menu) return
+    initialLabelRef.current = null
+    if (!menu) {
+      if (!label) return
+      turnsRef.current = [{ role: 'user', text: `「${label}」の髪型で予約したい` }, { role: 'assistant', text: `「${label}」ですね。いつのご来店をご希望ですか？` }]
+      setStep({ k: 'askWhen', again: 'menu', label })
+      return
+    }
     turnsRef.current = [{ role: 'user', text: `${menu.name}で予約したい` }, { role: 'assistant', text: `${menu.name}ですね。いつのご来店をご希望ですか？` }]
-    setStep({ k: 'askWhen', again: 'menu', menu }) // eslint-disable-line react-hooks/set-state-in-effect -- 最初の場面をメニュー入りに差し替える
+    setStep({ k: 'askWhen', again: 'menu', menu })
   }, [step, options])
 
   // ── メニューが決まっていて、日が決まっていない／希望の日が埋まっている：近い日から探して、間をあけて3件 ──
@@ -880,6 +891,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
           : step.again === 'none' ? 'その日は空きがありませんでした。'
           : step.again === 'retry' ? '別の日時をお聞かせください。'
           : step.again === 'menu' && step.menu ? `${step.menu.name}ですね。`
+          : step.again === 'menu' && step.label ? `「${step.label}」ですね。`
           : 'いつのご来店をご希望ですか？'
         const follow = step.again === 'unclear' ? 'もう一度、ご希望の日時をお聞かせください。'
           : step.again === 'none' ? 'ほかのご希望の日時をお聞かせください。'
@@ -951,8 +963,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         : step.oldKept
         ? { title: '新しいご予約をお取りしました', sub: '元のご予約を取り消せませんでした。お手数ですが、お電話でご連絡ください。', speech: '新しいご予約をお取りしました。元のご予約は取り消せなかったので、お電話でご連絡ください。' }
         : step.changedFrom
-          ? { title: 'ご予約を変更しました', sub: '当日は QR をご提示ください。', speech: 'ご予約を変更しました。当日はQRをご提示ください。' }
-          : { title: 'ご予約が完了しました', sub: '当日は QR をご提示ください。', speech: 'ご予約が完了しました。当日はQRをご提示ください。' }
+          ? { title: 'ご予約を変更しました', sub: '当日は QR をご提示ください。万一お時間の調整が必要なときは、お店からお電話します。', speech: 'ご予約を変更しました。当日はQRをご提示ください。' }
+          : { title: 'ご予約が完了しました', sub: '当日は QR をご提示ください。万一お時間の調整が必要なときは、お店からお電話します。', speech: 'ご予約が完了しました。当日はQRをご提示ください。' }
       case 'offer': {
         const v = formatVisit(step.hold.starts_at)
         const menu = step.hold.menu_names ?? 'ご希望のメニュー'
