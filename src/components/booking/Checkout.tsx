@@ -11,6 +11,7 @@ import {
 } from '../../utils/checkoutApi'
 import { PrimaryButton } from './ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
+import { playCue } from '../../audio/cue'
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
 // 「会計を確定」で初めて売上になる（確定は DB の1トランザクション。予約は完了になる）。毎日何十回も使うので、文字と金額だけで構成する。
@@ -160,7 +161,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       if (!mounted.current) return
       if ('error' in res) setError(checkoutErrorMessage(res.error))
       else if (res.status === 'voided') setError('この会計は取り消されています。新しい会計を始める場合は、下のボタンを押してください。')
-      else onDone(res)
+      else { if (method === 'ginpay') playCue('ginpayPaid'); onDone(res) } // 銀Pay 払いの確定：「銀ペイ」
     } catch (err) {
       if (!mounted.current) return
       setError(err instanceof Error ? err.message : rpcErrorMessage(err))
