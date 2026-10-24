@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
+import { playCue } from '../audio/cue'
 import { ChevronRight, QrCode, Search, X } from 'lucide-react'
 import { GinpayPanel } from '../components/ginpay/GinpayPanel'
 import { ActorSheet } from '../components/booking/ActorSheet'
@@ -50,6 +51,7 @@ export function StaffGinpayScreen() {
     const d = parseQR(text)
     const userId = d && 'userId' in d ? d.userId : null
     if (!userId) { setError('会員QRを読み取ってください。'); return }
+    playCue('ginpayCharge') // 「銀Payをチャージします！しばらくお待ちください」
     try {
       const res = await callStaffRpc<{ client_id: string; name: string; phone_last4: string | null }>('staff_client_for_member', { p_user_id: userId })
       setPicked({ clientId: res.client_id, name: res.name, last4: res.phone_last4 })
