@@ -159,7 +159,7 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
 
 /* Home is a fixed stage (no vertical scroll) over marble and gold ribbons.
    Controls are clear glass so the ribbons show through; the photo surround stays pearl. */
-html:has(.v2-home), body:has(.v2-home) { height: 100%; overflow: hidden; overscroll-behavior: none; }
+html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; overflow: hidden; overscroll-behavior: none; }
 .v2-home {
   --lq-clear: radial-gradient(90% 80% at 18% 0%, rgba(255,255,255,.70) 0%, rgba(255,255,255,0) 42%),
     linear-gradient(180deg, rgba(255,255,255,.20) 0%, rgba(255,255,255,.04) 56%, rgba(255,255,255,.18) 100%);
@@ -170,7 +170,8 @@ html:has(.v2-home), body:has(.v2-home) { height: 100%; overflow: hidden; overscr
   display: flex; flex-direction: column; touch-action: pan-x; overscroll-behavior: none;
 }
 .v2-home::before {
-  background: linear-gradient(180deg, rgba(248,246,241,.62) 0%, rgba(248,246,241,.30) 22%, rgba(248,246,241,.20) 60%, rgba(248,246,241,.30) 100%),
+  /* top fades into the status-bar colour so there is no seam where the marble starts */
+  background: linear-gradient(180deg, #f9f8f3 0, #f9f8f3 env(safe-area-inset-top, 0px), rgba(249,248,243,.62) calc(env(safe-area-inset-top, 0px) + 96px), rgba(248,246,241,.30) 26%, rgba(248,246,241,.20) 60%, rgba(248,246,241,.30) 100%),
     url(/images/v2/marble-bg.webp) center / cover no-repeat, #f4f1eb;
 }
 .v2-home .v2-head { position: relative; background: none; }
