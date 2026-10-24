@@ -6,8 +6,12 @@ import {
   type GinpayTransaction,
   yen,
 } from '../../utils/ginpayApi'
+import { GOLD, IVORY, SERIF } from '../wallet/walletTheme'
 
-const SANS = '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif'
+// ウォレットの券と同じ黒×深紅の面に、明朝のアイボリー。金は入金の「＋」だけ（飾りには使わない）
+const MUTED = 'rgba(242,230,200,0.56)'
+const LINE = '1px solid rgba(242,230,200,0.10)'
+const WARN = '#F2B2AA'
 
 export function CustomerGinpayCard() {
   const [ledger, setLedger] = useState<GinpayLedger | null>(null)
@@ -18,7 +22,7 @@ export function CustomerGinpayCard() {
   const load = useCallback(() => {
     getCustomerGinpayLedger(20)
       .then((next) => { setLedger(next); setError(null) })
-      .catch(() => { setLedger(null); setError('GINPayを表示できません') })
+      .catch(() => { setLedger(null); setError('銀Payを表示できません') })
   }, [])
 
   useEffect(() => {
@@ -33,46 +37,44 @@ export function CustomerGinpayCard() {
   }, [load])
 
   return (
-    <section style={{
+    <section aria-label="銀Pay" style={{
       margin: '16px 16px 0',
-      borderRadius: 8,
-      background: '#FFFFFF',
-      color: '#1B1B1A',
-      border: '1px solid rgba(255,255,255,0.18)',
-      fontFamily: SANS,
+      borderRadius: 16,
+      background: 'linear-gradient(160deg, #1B0C0A 0%, #0D0605 100%)',
+      color: IVORY,
+      border: '1px solid rgba(201,162,74,0.22)',
+      fontFamily: SERIF,
       overflow: 'hidden',
     }}>
-      <div style={{ padding: '16px 16px 14px', borderBottom: '1px solid #E7E7E3' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>GINPay</h2>
-          <p style={{ margin: 0, fontSize: 24, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-            {ledger ? yen(ledger.balance) : '—'}
-          </p>
-        </div>
+      <div style={{ padding: '18px 20px 16px' }}>
+        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, letterSpacing: '0.16em', color: MUTED }}>銀Pay 残高</h2>
+        <p style={{ margin: '6px 0 0', fontSize: 36, fontWeight: 700, lineHeight: 1.15, letterSpacing: '0.02em', fontVariantNumeric: 'tabular-nums' }}>
+          {ledger ? yen(ledger.balance) : '—'}
+        </p>
         {ledger?.multiple_accounts && (
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: '#5F5F5B' }}>統合元口座を含む残高です。</p>
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: MUTED }}>統合元口座を含む残高です。</p>
         )}
         {ledger && !ledger.consistent && (
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: '#C2362F' }}>残高確認が必要です。店舗へお声がけください。</p>
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: WARN }}>残高確認が必要です。店舗へお声がけください。</p>
         )}
-        {error && <p style={{ margin: '6px 0 0', fontSize: 12, color: '#C2362F' }}>{error}</p>}
+        {error && <p style={{ margin: '8px 0 0', fontSize: 12, color: WARN }}>{error}</p>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: historyOpen ? '1px solid #E7E7E3' : 'none' }}>
-        <button type="button" onClick={() => setChargeNotice(v => !v)} style={actionStyle}>チャージ</button>
-        <button type="button" onClick={() => setHistoryOpen(v => !v)} style={{ ...actionStyle, borderLeft: '1px solid #E7E7E3' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderTop: LINE }}>
+        <button type="button" aria-expanded={chargeNotice} onClick={() => setChargeNotice(v => !v)} style={actionStyle}>チャージ</button>
+        <button type="button" aria-expanded={historyOpen} onClick={() => setHistoryOpen(v => !v)} style={{ ...actionStyle, borderLeft: LINE }}>
           利用履歴
         </button>
       </div>
 
       {chargeNotice && (
-        <p style={{ margin: 0, padding: '10px 16px', fontSize: 13, color: '#5F5F5B', lineHeight: 1.7, borderBottom: '1px solid #E7E7E3' }}>
+        <p style={{ margin: 0, padding: '12px 20px', fontSize: 13, color: MUTED, lineHeight: 1.7, borderTop: LINE }}>
           チャージは店舗スタッフへお声がけください。
         </p>
       )}
 
       {historyOpen && (
-        <div style={{ padding: '4px 16px 10px' }}>
+        <div style={{ padding: '2px 20px 10px', borderTop: LINE }}>
           {!ledger ? (
             <p style={emptyStyle}>読み込み中…</p>
           ) : ledger.transactions.length === 0 ? (
@@ -86,12 +88,12 @@ export function CustomerGinpayCard() {
 
 function HistoryRow({ tx }: { tx: GinpayTransaction }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '9px 0', borderBottom: '1px solid #F1F1EE' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '11px 0', borderBottom: LINE }}>
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 13 }}>{GINPAY_TYPE_LABEL[tx.type]}</span>
-        <span style={{ display: 'block', marginTop: 2, fontSize: 11, color: '#9A9A95' }}>{formatDateTime(tx.created_at)}</span>
+        <span style={{ display: 'block', fontSize: 14 }}>{GINPAY_TYPE_LABEL[tx.type]}</span>
+        <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: MUTED }}>{formatDateTime(tx.created_at)}</span>
       </span>
-      <span style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
+      <span style={{ fontSize: 14, fontVariantNumeric: 'tabular-nums', color: tx.amount > 0 ? GOLD : IVORY }}>
         {tx.amount > 0 ? '+' : ''}{yen(tx.amount)}
       </span>
     </div>
@@ -110,14 +112,15 @@ function formatDateTime(iso: string): string {
 }
 
 const actionStyle: CSSProperties = {
-  minHeight: 46,
+  minHeight: 50,
   border: 'none',
-  background: '#FFFFFF',
-  color: '#1B1B1A',
-  fontFamily: SANS,
+  background: 'transparent',
+  color: IVORY,
+  fontFamily: SERIF,
   fontSize: 14,
-  fontWeight: 600,
+  fontWeight: 700,
+  letterSpacing: '0.14em',
   cursor: 'pointer',
 }
 
-const emptyStyle: CSSProperties = { margin: 0, padding: '10px 0', fontSize: 13, color: '#9A9A95' }
+const emptyStyle: CSSProperties = { margin: 0, padding: '12px 0', fontSize: 13, color: MUTED }
