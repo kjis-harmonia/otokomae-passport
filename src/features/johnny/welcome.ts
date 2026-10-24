@@ -3,7 +3,8 @@
 //   最後の来店日：QR で来店登録した日（customer_get_last_visit）と、履歴のいちばん新しい日の新しい方
 //   前回のメニュー：その日のメニュー（分かるときだけ）
 //   いつものメニュー：履歴（最大5回）でいちばん多いもの（同じ回数なら新しい方）
-//   メンテナンスカット：前回来店日から14日以内（来店日を DAY 14 として毎日 0:00 に減る）
+//   メンテナンスカット：前回の来店チェックイン（店頭で会員QR を読んだ日＝customer_get_last_visit・来店の記録）から14日以内。
+//     予約だけ（時間が過ぎても QR を読んでいない）では使えない。来店日を DAY 14 として毎日 0:00 に減る
 import type { CustomerReservation } from './bookingAssistantApi'
 import type { MenuOption } from './menuMatcher'
 
@@ -13,7 +14,8 @@ export interface VisitRecord { visit_date: string; menu_code: string | null; men
 export const MAINTENANCE_DAYS = 14
 /** 来店の記録でのメンテナンスカット（アプリのメニューには無い。予約はホットペッパーのクーポン） */
 export const MAINTENANCE_MENU: MenuOption = { code: 'maintenance', name: 'メンテナンスカット', duration_min: 30, price: null }
-const DONE: CustomerReservation['status'][] = ['completed', 'checked_in', 'in_service', 'awaiting_payment', 'confirmed']
+// 来店した予約だけ（「予約確定」のまま時間が過ぎたもの＝来ていないかもしれない予約は数えない）
+const DONE: CustomerReservation['status'][] = ['completed', 'checked_in', 'in_service', 'awaiting_payment']
 
 export interface Welcome {
   /** 前回の来店から何日 */
@@ -41,6 +43,10 @@ export function buildWelcome(lastVisit: string | null, reservations: readonly Cu
   const last = dates[dates.length - 1]
   if (!last) return null
   const days = dayDiff(last, today)
+  // メンテナンスは QR の来店チェックインの日だけで数える（予約の日は使わない）
+  const qrDays = [lastVisit?.slice(0, 10), ...visits.map(v => v.visit_date.slice(0, 10))].filter((d): d is string => !!d && d <= today).sort()
+  const qrLast = qrDays[qrDays.length - 1]
+  const qrSince = qrLast ? dayDiff(qrLast, today) : null
   const menuOf = (code: string | null) => (code === 'maintenance' ? MAINTENANCE_MENU : code ? menus.find(m => m.code === code) ?? null : null)
   const count = new Map<string, number>()
   history.forEach(([, c]) => { if (menuOf(c)) count.set(c!, (count.get(c!) ?? 0) + 1) })
@@ -48,8 +54,8 @@ export function buildWelcome(lastVisit: string | null, reservations: readonly Cu
   return {
     days,
     lastMenu: menuOf(byDay.get(last) ?? null),
-    maintenanceLeft: days <= MAINTENANCE_DAYS ? MAINTENANCE_DAYS - days : null,
-    usual: order.map(menuOf).filter((m): m is MenuOption => !!m && !(m.code === 'maintenance' && days <= MAINTENANCE_DAYS)).slice(0, 2),
+    maintenanceLeft: qrSince != null && qrSince <= MAINTENANCE_DAYS ? MAINTENANCE_DAYS - qrSince : null,
+    usual: order.map(menuOf).filter((m): m is MenuOption => !!m && !(m.code === 'maintenance' && qrSince != null && qrSince <= MAINTENANCE_DAYS)).slice(0, 2),
   }
 }
 
