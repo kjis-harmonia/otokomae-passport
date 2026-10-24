@@ -27,6 +27,7 @@ import { CARD_HEIGHT, CARD_STRIP } from '../components/wallet/WalletCardFace'
 import { SERIF, IVORY } from '../components/wallet/walletTheme'
 import '../components/wallet/wallet.css'
 
+const INK = '#1F1C18'
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
 
 /** 時刻依存の状態（漢前Premium・0:00跨ぎ）を再評価する間隔 */
@@ -467,7 +468,7 @@ export function TicketWalletScreen({
       }
       if (maintenance.daysRemaining === null) {
         return (
-          <p style={{ fontSize: 12, lineHeight: 1.7, color: 'rgba(242,230,200,0.62)', textAlign: 'center' }}>
+          <p style={{ fontSize: 12, lineHeight: 1.7, color: 'rgba(31,28,24,0.84)', textAlign: 'center' }}>
             ご来店時に、画面下の中央QRボタンから男前パスポートを提示してください。<br />
             スタッフが読み取ると DAY 14 がスタートします。
           </p>
@@ -488,7 +489,7 @@ export function TicketWalletScreen({
             <Phone size={16} /> 電話で予約する
           </PrimaryButton>
           {!premium.isOpenNow && (
-            <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.5)', textAlign: 'center' }}>
+            <p style={{ fontSize: 11, color: 'rgba(31,28,24,0.72)', textAlign: 'center' }}>
               {premium.label}{premium.hint ? `｜${premium.hint}` : ''}
             </p>
           )}
@@ -499,10 +500,10 @@ export function TicketWalletScreen({
     // 漢トク券
     const usable = usableTickets(card)
     if (card.status !== 'active') {
-      return <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.45)', textAlign: 'center' }}>{card.statusLabel}</p>
+      return <p style={{ fontSize: 12, color: 'rgba(31,28,24,0.67)', textAlign: 'center' }}>{card.statusLabel}</p>
     }
     if (usable.length === 0) {
-      return <p style={{ fontSize: 12, color: 'rgba(255,196,80,0.8)', textAlign: 'center' }}>譲渡手続き中のため使用できません</p>
+      return <p style={{ fontSize: 12, color: '#9A6A10', textAlign: 'center' }}>譲渡手続き中のため使用できません</p>
     }
     if (isWelcomeCouponBlockedToday(usable[0], now)) {
       return (
@@ -510,7 +511,7 @@ export function TicketWalletScreen({
           <PrimaryButton tone="quiet" disabled>
             平日のみ利用できます
           </PrimaryButton>
-          <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.5)', textAlign: 'center', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 11, color: 'rgba(31,28,24,0.72)', textAlign: 'center', lineHeight: 1.6 }}>
             {WELCOME_COUPON_WEEKEND_MESSAGE}
           </p>
         </>
@@ -522,7 +523,7 @@ export function TicketWalletScreen({
           {blockedToday(usable[0]) ? '本日は利用不可' : '使用する'}
         </PrimaryButton>
         {blockedToday(usable[0]) && (
-          <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.5)', textAlign: 'center', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 11, color: 'rgba(31,28,24,0.72)', textAlign: 'center', lineHeight: 1.6 }}>
             {usable[0].type === 'coupon'
               ? '本日はほかの券をご利用済みのため、メンテナンスクーポンは使えません。'
               : '本日はメンテナンスクーポンをご利用済みのため、ほかの券は使えません。'}
@@ -533,7 +534,7 @@ export function TicketWalletScreen({
           className="wallet-cta"
           disabled={xferring}
           onClick={() => void handleTransfer(usable[0])}
-          style={{ minHeight: 40, background: 'none', border: 'none', fontSize: 12, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.5)', cursor: 'pointer' }}
+          style={{ minHeight: 40, background: 'none', border: 'none', fontSize: 12, letterSpacing: '0.12em', color: 'rgba(31,28,24,0.72)', cursor: 'pointer' }}
         >
           {xferring ? '準備中…' : '譲る'}
         </button>
@@ -561,18 +562,18 @@ export function TicketWalletScreen({
         {/* Large title */}
         <header className="px-5">
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-            <p style={{ fontSize: 10, letterSpacing: '0.3em', color: 'rgba(201,162,74,0.62)', fontFamily: 'ui-monospace, monospace' }}>
+            <p style={{ fontSize: 10, letterSpacing: '0.3em', color: 'rgba(138,106,47,0.9)', fontFamily: 'ui-monospace, monospace' }}>
               TICKET WALLET
             </p>
-            <p style={{ fontSize: 12, letterSpacing: '0.06em', color: 'rgba(242,230,200,0.5)' }}>{todayLabel}</p>
+            <p style={{ fontSize: 12, letterSpacing: '0.06em', color: 'rgba(31,28,24,0.72)' }}>{todayLabel}</p>
           </div>
-          <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: IVORY, letterSpacing: '0.04em', lineHeight: 1.25, marginTop: 4 }}>
+          <h1 style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: INK, letterSpacing: '0.04em', lineHeight: 1.25, marginTop: 4 }}>
             チケットウォレット
           </h1>
           {summary && (
             <p style={{
               marginTop: 6, fontSize: 14, letterSpacing: '0.03em',
-              color: summary.tone === 'crimson' ? '#F2B2AA' : 'rgba(242,230,200,0.72)',
+              color: summary.tone === 'crimson' ? '#F2B2AA' : 'rgba(31,28,24,0.86)',
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <span style={{ width: 6, height: 6, borderRadius: 99, flexShrink: 0, background: summary.tone === 'crimson' ? '#D0424C' : '#C9A24A' }} />
@@ -719,21 +720,21 @@ export function TicketWalletScreen({
       <AnimatePresence>
         {xferError && (
           <div
-            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
             onClick={() => setXferError(null)}
           >
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
               transition={{ duration: reduced ? 0 : 0.22 }}
               onClick={e => e.stopPropagation()}
-              style={{ width: '100%', maxWidth: 380, borderRadius: 20, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(224,96,80,0.32)', padding: '24px 20px', textAlign: 'center' }}
+              style={{ width: '100%', maxWidth: 380, borderRadius: 20, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(224,96,80,0.32)', padding: '24px 20px', textAlign: 'center' }}
             >
               <p style={{ fontSize: 20, marginBottom: 12, color: '#E06060' }}>✕</p>
-              <p style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: IVORY, marginBottom: 10, lineHeight: 1.7 }}>
+              <p style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: INK, marginBottom: 10, lineHeight: 1.7 }}>
                 {xferError}
               </p>
               <button type="button" onClick={() => setXferError(null)}
-                style={{ width: '100%', marginTop: 8, padding: '12px 0', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.52)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                style={{ width: '100%', marginTop: 8, padding: '12px 0', borderRadius: 12, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)', fontSize: 13, color: 'rgba(31,28,24,0.74)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
                 閉じる
               </button>
             </motion.div>
@@ -744,16 +745,16 @@ export function TicketWalletScreen({
       {/* ── 譲渡 QR モーダル ── */}
       <AnimatePresence>
         {transferUrl && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.90)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
             <motion.div
               initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
               transition={{ duration: reduced ? 0 : 0.24 }}
-              style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.28)', padding: '24px 20px', textAlign: 'center' }}
+              style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.28)', padding: '24px 20px', textAlign: 'center' }}
             >
-              <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: IVORY, marginBottom: 4 }}>
+              <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: INK, marginBottom: 4 }}>
                 {transferTicket?.title ?? ''}
               </p>
-              <p style={{ fontSize: 11, color: 'rgba(242,230,200,0.40)', marginBottom: 18, letterSpacing: '0.06em' }}>
+              <p style={{ fontSize: 11, color: 'rgba(31,28,24,0.62)', marginBottom: 18, letterSpacing: '0.06em' }}>
                 受け取りたい人にQRを見せてください
               </p>
               <div style={{ display: 'inline-block', padding: 14, background: '#FFFFFF', borderRadius: 14, marginBottom: 18 }}>
@@ -765,7 +766,7 @@ export function TicketWalletScreen({
                   {copied ? 'コピーしました' : 'リンクを送る'}
                 </button>
                 <button type="button" onClick={handleCancelTransfer} className="wallet-cta"
-                  style={{ width: '100%', padding: '12px 0', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 12, color: 'rgba(242,230,200,0.44)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
+                  style={{ width: '100%', padding: '12px 0', borderRadius: 12, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)', fontSize: 12, color: 'rgba(31,28,24,0.66)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
                   取りやめる
                 </button>
               </div>
@@ -911,6 +912,13 @@ const CTA_STYLES: Record<CtaTone, { background: string; border: string; color: s
   },
 }
 
+// 白い面（詳細シート・ダイアログ）のボタン：金はリキッド・ゴールド、控えめは白いガラス
+const LIGHT_CTA_STYLES: Record<CtaTone, { background: string; border: string; color: string; shadow: string }> = {
+  gold: { background: 'linear-gradient(172deg, #fff3d6 0%, #ecd29c 16%, #c99d55 38%, #8e6a2d 55%, #b48a45 70%, #e8cd94 86%, #fff1d0 100%)', border: 'rgba(255,240,205,0.9)', color: '#FFFFFF', shadow: '0 12px 24px -10px rgba(120,88,34,0.55), inset 0 2px 2px rgba(255,255,255,0.7), inset 0 -3px 6px rgba(90,64,22,0.35)' },
+  premium: CTA_STYLES.premium,
+  quiet: { background: 'rgba(255,255,255,0.7)', border: 'rgba(31,28,24,0.12)', color: 'rgba(31,28,24,0.7)', shadow: 'inset 0 1px 0 #fff, 0 4px 12px rgba(70,52,24,0.08)' },
+}
+
 function MiniCta({ label, icon, tone, onClick, href, disabled }: {
   label: string
   icon?: ReactNode
@@ -961,7 +969,7 @@ function PrimaryButton({ children, tone, onClick, href, disabled }: {
   href?: string
   disabled?: boolean
 }) {
-  const s = CTA_STYLES[disabled ? 'quiet' : tone]
+  const s = LIGHT_CTA_STYLES[disabled ? 'quiet' : tone]
   const style: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
     width: '100%', minHeight: 52, borderRadius: 14,
@@ -985,8 +993,8 @@ function SecondaryLink({ href, children, external }: { href: string; children: R
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         minHeight: 44, borderRadius: 12,
-        border: '1px solid rgba(242,230,200,0.14)', background: 'rgba(255,255,255,0.02)',
-        fontSize: 13, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.72)', fontFamily: SERIF,
+        border: '1px solid rgba(31,28,24,0.36)', background: 'rgba(31,28,24,0.04)',
+        fontSize: 13, letterSpacing: '0.12em', color: 'rgba(31,28,24,0.86)', fontFamily: SERIF,
         textDecoration: 'none',
       }}
     >
@@ -1005,7 +1013,7 @@ function QrDialog({ eyebrow, title, amount, value, onClose }: {
   const reduced = useReducedMotion() ?? false
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.90)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onClose}
     >
       <motion.div
@@ -1015,22 +1023,22 @@ function QrDialog({ eyebrow, title, amount, value, onClose }: {
         initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
         transition={{ duration: reduced ? 0 : 0.24 }}
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.88)', padding: '28px 24px 24px', textAlign: 'center' }}
+        style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.88)', padding: '28px 24px 24px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.55)', marginBottom: 10 }}>{eyebrow}</p>
-        <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: IVORY, lineHeight: 1.4, marginBottom: amount ? 4 : 16 }}>{title}</p>
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>{eyebrow}</p>
+        <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: INK, lineHeight: 1.4, marginBottom: amount ? 4 : 16 }}>{title}</p>
         {!!amount && amount > 0 && (
-          <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#C9A24A', marginBottom: 16 }}>¥{amount.toLocaleString()}</p>
+          <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#8A6A2F', marginBottom: 16 }}>¥{amount.toLocaleString()}</p>
         )}
-        <div style={{ display: 'inline-block', padding: 14, background: '#FFFFFF', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', marginBottom: 16 }}>
+        <div style={{ display: 'inline-block', padding: 14, background: '#FFFFFF', borderRadius: 14, boxShadow: '0 8px 24px rgba(70,52,24,0.14)', marginBottom: 16 }}>
           <QRCodeSVG value={value} size={188} level="M" />
         </div>
-        <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.70)', lineHeight: 1.75, marginBottom: 20 }}>
+        <p style={{ fontSize: 13, color: 'rgba(31,28,24,0.86)', lineHeight: 1.75, marginBottom: 20 }}>
           このQRをスタッフに提示してください。<br />
           使用確定は店舗端末でのみ行われます。
         </p>
         <button type="button" onClick={onClose} className="wallet-cta"
-          style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.60)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
+          style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)', fontSize: 13, color: 'rgba(31,28,24,0.82)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
           閉じる
         </button>
       </motion.div>
@@ -1091,7 +1099,7 @@ function MaintenanceCouponQrDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.90)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onClose}
     >
       <motion.div
@@ -1101,28 +1109,28 @@ function MaintenanceCouponQrDialog({ onClose }: { onClose: () => void }) {
         initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
         transition={{ duration: reduced ? 0 : 0.24 }}
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(160deg, #160A07 0%, #0A0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.88)', padding: '28px 24px 24px', textAlign: 'center' }}
+        style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.88)', padding: '28px 24px 24px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 10, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.62)', marginBottom: 10 }}>MAINTENANCE COUPON</p>
-        <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: IVORY, lineHeight: 1.4, marginBottom: 4 }}>銀二郎Only メンテナンスカット</p>
+        <p style={{ fontSize: 10, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>MAINTENANCE COUPON</p>
+        <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: INK, lineHeight: 1.4, marginBottom: 4 }}>銀二郎Only メンテナンスカット</p>
         <p style={{ fontFamily: SERIF, marginBottom: 16, display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.45)', textDecoration: 'line-through' }}>¥3,000</span>
-          <span style={{ fontSize: 24, fontWeight: 700, color: '#C9A24A' }}>¥2,500</span>
-          <span style={{ fontSize: 12, color: 'rgba(242,230,200,0.6)' }}>担当：銀二郎</span>
+          <span style={{ fontSize: 13, color: 'rgba(31,28,24,0.67)', textDecoration: 'line-through' }}>¥3,000</span>
+          <span style={{ fontSize: 24, fontWeight: 700, color: '#8A6A2F' }}>¥2,500</span>
+          <span style={{ fontSize: 12, color: 'rgba(31,28,24,0.82)' }}>担当：銀二郎</span>
         </p>
 
-        <div style={{ width: 216, height: 216, margin: '0 auto 14px', padding: 14, background: '#FFFFFF', borderRadius: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
+        <div style={{ width: 216, height: 216, margin: '0 auto 14px', padding: 14, background: '#FFFFFF', borderRadius: 14, boxShadow: '0 8px 24px rgba(70,52,24,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
           {token && !error
             ? <QRCodeSVG value={qrValue} size={188} level="M" />
             : <p style={{ fontSize: 12, color: '#555', lineHeight: 1.7 }}>{loading ? 'QRを準備しています…' : 'QRを表示できません'}</p>}
         </div>
 
         {error ? (
-          <p style={{ fontSize: 13, color: '#F0A8A0', lineHeight: 1.7, marginBottom: 16 }}>{error}</p>
+          <p style={{ fontSize: 13, color: '#A3402F', lineHeight: 1.7, marginBottom: 16 }}>{error}</p>
         ) : (
-          <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.75)', lineHeight: 1.75, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: 'rgba(31,28,24,0.86)', lineHeight: 1.75, marginBottom: 16 }}>
             このQRをスタッフに提示してください。<br />
-            <span style={{ fontSize: 12, color: 'rgba(242,230,200,0.55)' }}>
+            <span style={{ fontSize: 12, color: 'rgba(31,28,24,0.77)' }}>
               1回限り有効・{token ? `残り ${mm}:${ss}（自動で更新されます）` : '5分間有効'}
             </span>
           </p>
@@ -1130,12 +1138,12 @@ function MaintenanceCouponQrDialog({ onClose }: { onClose: () => void }) {
 
         {error && (
           <button type="button" onClick={() => { void issue() }} className="wallet-cta"
-            style={{ width: '100%', padding: '12px 0', marginBottom: 10, borderRadius: 14, background: 'rgba(201,162,74,0.12)', border: '1px solid rgba(201,162,74,0.4)', fontSize: 13, fontWeight: 700, color: IVORY, fontFamily: SERIF, letterSpacing: '0.12em', cursor: 'pointer' }}>
+            style={{ width: '100%', padding: '12px 0', marginBottom: 10, borderRadius: 14, background: 'rgba(201,162,74,0.12)', border: '1px solid rgba(201,162,74,0.4)', fontSize: 13, fontWeight: 700, color: INK, fontFamily: SERIF, letterSpacing: '0.12em', cursor: 'pointer' }}>
             もう一度表示する
           </button>
         )}
         <button type="button" onClick={onClose} className="wallet-cta"
-          style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', fontSize: 13, color: 'rgba(242,230,200,0.60)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
+          style={{ width: '100%', padding: '13px 0', borderRadius: 14, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)', fontSize: 13, color: 'rgba(31,28,24,0.82)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
           閉じる
         </button>
       </motion.div>
@@ -1155,7 +1163,7 @@ function useReservationDate() {
 function ReservationDateField({ value, min, max, onChange }: { value: string; min: string; max: string; onChange: (v: string) => void }) {
   return (
     <label style={{ display: 'block', textAlign: 'left', marginBottom: 18 }}>
-      <span style={{ display: 'block', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.6)', marginBottom: 6 }}>
+      <span style={{ display: 'block', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(31,28,24,0.82)', marginBottom: 6 }}>
         ご予約日（この日だけ有効）
       </span>
       <input
@@ -1167,7 +1175,7 @@ function ReservationDateField({ value, min, max, onChange }: { value: string; mi
         aria-label="ご予約日"
         style={{
           width: '100%', height: 46, borderRadius: 12, padding: '0 12px', colorScheme: 'dark',
-          background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(201,162,74,0.35)', color: IVORY,
+          background: '#FFFFFF', border: '1px solid rgba(201,162,74,0.35)', color: INK,
           fontFamily: SERIF, fontSize: 15, outline: 'none',
         }}
       />
@@ -1185,7 +1193,7 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
   const { today, maxDate, visitDate, setVisitDate, validDate } = useReservationDate()
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onNo}
     >
       <motion.div
@@ -1195,30 +1203,30 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
         initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
         transition={{ duration: reduced ? 0 : 0.22 }}
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(160deg, #180806 0%, #080404 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
+        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.58)', marginBottom: 10 }}>PHONE RESERVATION</p>
-        <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: IVORY, lineHeight: 1.45, marginBottom: 8 }}>
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>PHONE RESERVATION</p>
+        <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: INK, lineHeight: 1.45, marginBottom: 8 }}>
           予約済みですか？
         </p>
-        <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.68)', lineHeight: 1.75, marginBottom: 14 }}>
+        <p style={{ fontSize: 13, color: 'rgba(31,28,24,0.86)', lineHeight: 1.75, marginBottom: 14 }}>
           電話予約が完了した場合のみ、<br />
           店舗会計用のQRを表示します。
         </p>
-        <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
-          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: IVORY, marginBottom: 5 }}>{card.title}</p>
-          <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.6)', lineHeight: 1.6, marginBottom: 8 }}>{price?.label ?? card.subtitle}</p>
+        <div style={{ borderRadius: 16, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
+          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: INK, marginBottom: 5 }}>{card.title}</p>
+          <p style={{ fontSize: 12, color: 'rgba(31,28,24,0.82)', lineHeight: 1.6, marginBottom: 8 }}>{price?.label ?? card.subtitle}</p>
           <p style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             {price?.normalPrice !== undefined && (
-              <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.38)', textDecoration: 'line-through' }}>
+              <span style={{ fontSize: 13, color: 'rgba(31,28,24,0.60)', textDecoration: 'line-through' }}>
                 ¥{price.normalPrice.toLocaleString()}
               </span>
             )}
-            <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#C9A24A', lineHeight: 1 }}>
+            <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#8A6A2F', lineHeight: 1 }}>
               ¥{(price?.memberPrice ?? 0).toLocaleString()}
             </span>
           </p>
-          <p style={{ marginTop: 8, fontSize: 11, color: 'rgba(242,230,200,0.52)', lineHeight: 1.5 }}>
+          <p style={{ marginTop: 8, fontSize: 11, color: 'rgba(31,28,24,0.74)', lineHeight: 1.5 }}>
             スキンフェード＋顔剃り込み / 店舗端末専用
           </p>
         </div>
@@ -1228,7 +1236,7 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
             type="button"
             onClick={onNo}
             className="wallet-cta"
-            style={{ minHeight: 52, borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(242,230,200,0.62)', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer' }}
+            style={{ minHeight: 52, borderRadius: 14, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)', color: 'rgba(31,28,24,0.84)', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer' }}
           >
             いいえ
           </button>
@@ -1262,7 +1270,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
   const { today, maxDate, visitDate, setVisitDate, validDate } = useReservationDate()
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onNo}
     >
       <motion.div
@@ -1272,30 +1280,30 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
         initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
         transition={{ duration: reduced ? 0 : 0.22 }}
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(160deg, #180806 0%, #080404 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
+        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.58)', marginBottom: 10 }}>PHONE RESERVATION</p>
-        <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: IVORY, lineHeight: 1.45, marginBottom: 8 }}>
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>PHONE RESERVATION</p>
+        <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: INK, lineHeight: 1.45, marginBottom: 8 }}>
           予約済みですか？
         </p>
-        <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.68)', lineHeight: 1.75, marginBottom: 14 }}>
+        <p style={{ fontSize: 13, color: 'rgba(31,28,24,0.86)', lineHeight: 1.75, marginBottom: 14 }}>
           電話予約が完了した場合のみ、<br />
           下タブのQRへ現在の予約状況を反映します。
         </p>
-        <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
-          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: IVORY, marginBottom: 5 }}>{coupon.title}</p>
-          <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.6)', lineHeight: 1.6, marginBottom: 8 }}>{coupon.menuLabel}</p>
+        <div style={{ borderRadius: 16, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
+          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: INK, marginBottom: 5 }}>{coupon.title}</p>
+          <p style={{ fontSize: 12, color: 'rgba(31,28,24,0.82)', lineHeight: 1.6, marginBottom: 8 }}>{coupon.menuLabel}</p>
           <p style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             {typeof coupon.normalPrice === 'number' && (
-              <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.38)', textDecoration: 'line-through' }}>
+              <span style={{ fontSize: 13, color: 'rgba(31,28,24,0.60)', textDecoration: 'line-through' }}>
                 ¥{coupon.normalPrice.toLocaleString()}
               </span>
             )}
-            <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#C9A24A', lineHeight: 1 }}>
+            <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#8A6A2F', lineHeight: 1 }}>
               ¥{coupon.memberPrice.toLocaleString()}
             </span>
           </p>
-          <p style={{ marginTop: 8, fontSize: 11, color: 'rgba(242,230,200,0.52)', lineHeight: 1.5 }}>
+          <p style={{ marginTop: 8, fontSize: 11, color: 'rgba(31,28,24,0.74)', lineHeight: 1.5 }}>
             {coupon.benefit} / 電話予約済み
           </p>
         </div>
@@ -1305,7 +1313,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
             type="button"
             onClick={onNo}
             className="wallet-cta"
-            style={{ minHeight: 52, borderRadius: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(242,230,200,0.62)', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer' }}
+            style={{ minHeight: 52, borderRadius: 14, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)', color: 'rgba(31,28,24,0.84)', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer' }}
           >
             いいえ
           </button>
@@ -1331,7 +1339,7 @@ function CutReservationNotice({ reservation, onClose }: {
   const reduced = useReducedMotion() ?? false
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onClose}
     >
       <motion.div
@@ -1341,27 +1349,27 @@ function CutReservationNotice({ reservation, onClose }: {
         initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
         transition={{ duration: reduced ? 0 : 0.22 }}
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(160deg, #150706 0%, #070303 100%)', border: '1px solid rgba(201,162,74,0.34)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '28px 22px 22px', textAlign: 'center' }}
+        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.34)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '28px 22px 22px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(201,162,74,0.62)', marginBottom: 12 }}>RESERVATION UPDATED</p>
-        <p style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 700, color: IVORY, lineHeight: 1.5, marginBottom: 10 }}>
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 12 }}>RESERVATION UPDATED</p>
+        <p style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 700, color: INK, lineHeight: 1.5, marginBottom: 10 }}>
           下タブのQRへ反映しました
         </p>
-        <p style={{ fontSize: 13, color: 'rgba(242,230,200,0.70)', lineHeight: 1.85, marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: 'rgba(31,28,24,0.86)', lineHeight: 1.85, marginBottom: 16 }}>
           お会計時は下タブ中央のQRコードを開き、<br />
           従業員にお見せください。
         </p>
-        <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
-          <p style={{ fontSize: 11, letterSpacing: '0.1em', color: '#C9A24A', marginBottom: 6 }}>ご予約日 {formatVisitDate(reservation.visitDate)}・当日のみ有効</p>
-          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: IVORY, marginBottom: 5 }}>{reservation.title}</p>
-          <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.62)', lineHeight: 1.6, marginBottom: 8 }}>{reservation.menuLabel}</p>
+        <div style={{ borderRadius: 16, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
+          <p style={{ fontSize: 11, letterSpacing: '0.1em', color: '#8A6A2F', marginBottom: 6 }}>ご予約日 {formatVisitDate(reservation.visitDate)}・当日のみ有効</p>
+          <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: INK, marginBottom: 5 }}>{reservation.title}</p>
+          <p style={{ fontSize: 12, color: 'rgba(31,28,24,0.84)', lineHeight: 1.6, marginBottom: 8 }}>{reservation.menuLabel}</p>
           <p style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             {typeof reservation.normalPrice === 'number' && (
-              <span style={{ fontSize: 13, color: 'rgba(242,230,200,0.38)', textDecoration: 'line-through' }}>
+              <span style={{ fontSize: 13, color: 'rgba(31,28,24,0.60)', textDecoration: 'line-through' }}>
                 ¥{reservation.normalPrice.toLocaleString()}
               </span>
             )}
-            <span style={{ fontFamily: SERIF, fontSize: 27, fontWeight: 700, color: '#C9A24A', lineHeight: 1 }}>
+            <span style={{ fontFamily: SERIF, fontSize: 27, fontWeight: 700, color: '#8A6A2F', lineHeight: 1 }}>
               ¥{reservation.memberPrice.toLocaleString()}
             </span>
           </p>
@@ -1370,7 +1378,7 @@ function CutReservationNotice({ reservation, onClose }: {
           type="button"
           onClick={onClose}
           className="wallet-cta"
-          style={{ width: '100%', minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 22px rgba(107,15,18,0.40)', color: IVORY, fontFamily: SERIF, fontSize: 14, fontWeight: 800, letterSpacing: '0.14em', cursor: 'pointer' }}
+          style={{ width: '100%', minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 22px rgba(107,15,18,0.40)', color: INK, fontFamily: SERIF, fontSize: 14, fontWeight: 800, letterSpacing: '0.14em', cursor: 'pointer' }}
         >
           OK
         </button>
@@ -1381,7 +1389,7 @@ function CutReservationNotice({ reservation, onClose }: {
 
 function DeckSkeleton() {
   const block: React.CSSProperties = {
-    borderRadius: 24, background: 'linear-gradient(158deg, #15100E 0%, #0B0807 100%)',
+    borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)',
     border: '1px solid rgba(201,162,74,0.08)',
   }
   return (
@@ -1404,15 +1412,15 @@ function EmptyState({ filter }: { filter: WalletFilter }) {
       margin: '0 16px', height: CARD_HEIGHT,
       borderRadius: 24,
       border: '1px dashed rgba(201,162,74,0.22)',
-      background: 'radial-gradient(80% 60% at 50% 0%, rgba(201,162,74,0.05) 0%, transparent 70%), rgba(255,255,255,0.012)',
+      background: 'radial-gradient(80% 60% at 50% 0%, rgba(201,162,74,0.05) 0%, transparent 70%), rgba(31,28,24,0.04)',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       padding: '0 28px', textAlign: 'center',
     }}>
       <span style={{ width: 28, height: 1, background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.6), transparent)', marginBottom: 18 }} />
-      <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: 'rgba(242,230,200,0.82)', letterSpacing: '0.08em' }}>
+      <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: 'rgba(31,28,24,0.86)', letterSpacing: '0.08em' }}>
         {label}はありません
       </p>
-      <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.46)', lineHeight: 1.8, marginTop: 10 }}>
+      <p style={{ fontSize: 12, color: 'rgba(31,28,24,0.68)', lineHeight: 1.8, marginTop: 10 }}>
         来店すると新しい特典が<br />追加されることがあります。
       </p>
       <span style={{ width: 28, height: 1, background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.6), transparent)', marginTop: 18 }} />

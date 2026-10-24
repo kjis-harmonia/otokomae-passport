@@ -107,7 +107,7 @@ export function WalletStack({
                       zIndex: i + 1,
                       marginTop: i === 0 ? 0 : -(CARD_HEIGHT - CARD_STRIP),
                       borderRadius: 24,
-                      boxShadow: '0 -12px 28px rgba(0,0,0,0.5), 0 -1px 0 rgba(242,230,200,0.04)',
+                      boxShadow: '0 -12px 28px rgba(0,0,0,0.5), 0 -1px 0 rgba(31,28,24,0.26)',
                       cursor: 'pointer',
                       outline: 'none',
                     }}
@@ -200,9 +200,9 @@ function FeaturedCard({
 function SectionLabel({ children, count, style }: { children: ReactNode; count?: number; style?: React.CSSProperties }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '0 4px 10px', ...style }}>
-      <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.86)' }}>{children}</p>
+      <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(31,28,24,0.86)' }}>{children}</p>
       {count !== undefined && (
-        <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.42)', fontFamily: 'ui-monospace, monospace' }}>{count}</p>
+        <p style={{ fontSize: 12, color: 'rgba(31,28,24,0.64)', fontFamily: 'ui-monospace, monospace' }}>{count}</p>
       )}
     </div>
   )
