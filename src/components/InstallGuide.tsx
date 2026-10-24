@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Ellipsis, ExternalLink, Share, SquarePlus } from 'lucide-react'
-import { detect, externalBrowserName, externalBrowserUrl, installPrompt, INSTALL_GUIDE_KEY as KEY, MAX_AUTO, SHOW_INSTALL_GUIDE_EVENT, WAIT_DAYS, type InstallKind as Kind } from '../utils/installGuide'
+import { detect, externalBrowserName, externalBrowserUrl, externalLinkWorks, installPrompt, INSTALL_GUIDE_KEY as KEY, MAX_AUTO, SHOW_INSTALL_GUIDE_EVENT, WAIT_DAYS, type InstallKind as Kind } from '../utils/installGuide'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const GOLD = '#C9A24A'
@@ -104,6 +104,12 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
                 <b>{externalBrowserName()}</b> で開いてから、ホーム画面に追加してください。
               </p>
             )}
+            {(kind === 'inapp' || kind === 'ios-other') && !externalLinkWorks() && (
+              <ol style={{ listStyle: 'none', margin: '16px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <Step n={1} icon={<Ellipsis size={18} />}>画面右上の <b style={{ color: CREAM }}>「…」</b> をタップ</Step>
+                <Step n={2} icon={<ExternalLink size={17} />}><b style={{ color: CREAM }}>「外部ブラウザーで開く」</b> をタップ</Step>
+              </ol>
+            )}
 
             {kind === 'android' && (
               <p style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.9, color: CREAM }}>
@@ -112,7 +118,7 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>
-              {kind === 'inapp' && (
+              {kind === 'inapp' && externalLinkWorks() && (
                 <a href={externalUrl} style={{ ...primary, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   <ExternalLink size={17} /> {externalBrowserName()} で開く
                 </a>
@@ -202,16 +208,25 @@ export function InstallGate() {
         {(kind === 'inapp' || kind === 'ios-other') && (
           <>
             <p style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.9, color: CREAM, margin: 0 }}>
-              このままではホーム画面に追加できません。<br /><b>{externalBrowserName()}</b> で開いてから追加してください。
+              このままではホーム画面に追加できません。<br /><b>{externalBrowserName()}</b> で開き直してください。
             </p>
-            {(kind === 'inapp' || kind === 'ios-other') && (
-              <a href={externalUrl} style={{ ...primary, marginTop: 20, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <ExternalLink size={17} /> {externalBrowserName()} で開く
-              </a>
+            {externalLinkWorks() ? (
+              <>
+                <a href={externalUrl} style={{ ...primary, marginTop: 20, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <ExternalLink size={17} /> {externalBrowserName()} で開く
+                </a>
+                <p style={{ fontSize: 13, lineHeight: 1.8, color: 'rgba(242,230,200,0.55)', margin: '14px 0 0' }}>
+                  開かないときは、画面右上の <b style={{ color: CREAM }}>「…」</b> から <b style={{ color: CREAM }}>「外部ブラウザーで開く」</b>を選んでください（アプリによっては「ブラウザで開く」）。
+                </p>
+              </>
+            ) : (
+              // Instagram・Facebook など：リンクでは Safari に移れないので、アプリのメニューの手順を大きく出す
+              <ol style={{ listStyle: 'none', margin: '22px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 18 }}>
+                <Step n={1} icon={<Ellipsis size={18} />}>画面右上の <b style={{ color: CREAM }}>「…」</b> をタップ</Step>
+                <Step n={2} icon={<ExternalLink size={17} />}><b style={{ color: CREAM }}>「外部ブラウザーで開く」</b> をタップ</Step>
+                <Step n={3} icon={<Share size={17} />}><b style={{ color: CREAM }}>Safari</b> で開いたら、出てくる手順でホーム画面に追加</Step>
+              </ol>
             )}
-            <p style={{ fontSize: 13, lineHeight: 1.8, color: 'rgba(242,230,200,0.55)', margin: '14px 0 0' }}>
-              開かないときは、画面右上の <b style={{ color: CREAM }}>「…」</b> から <b style={{ color: CREAM }}>「外部ブラウザーで開く」</b>を選んでください（アプリによっては「ブラウザで開く」）。
-            </p>
           </>
         )}
 
