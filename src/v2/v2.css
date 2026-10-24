@@ -121,13 +121,24 @@
 }
 .v2-cat[aria-pressed="true"]::after { content: ""; position: absolute; left: 50%; bottom: 6px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--v2-gold-deep); }
 
+/* ── 銀Pay（ホームのいちばん上） ── */
+.v2-pay { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 0 12px 0 10px; border-radius: 25px; cursor: pointer; text-align: left; color: var(--v2-ink); -webkit-tap-highlight-color: transparent; }
+.v2-pay:active { transform: scale(0.985); }
+.v2-pay-icon { flex: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: radial-gradient(circle at 35% 28%, rgba(255,246,225,0.95) 0%, rgba(206,172,112,0.95) 40%, #9c7838 100%); box-shadow: inset 0 1px 2px rgba(255,255,255,0.8), 0 2px 6px rgba(138,106,47,0.3); }
+.v2-pay-name { flex: none; font: 700 14px/1 var(--v2-serif); letter-spacing: 0.08em; }
+.v2-pay-bal { flex: 1; min-width: 0; font: 700 17px/1 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-pay-bal.is-off { font: 500 12px/1.3 var(--v2-sans); color: var(--v2-sub); }
+.v2-pay-go { flex: none; display: flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 600; color: var(--v2-sub); }
+@media (max-width: 360px) { .v2-pay-go { font-size: 0; } }
+
 /* ── スタイルのカード（横にスワイプ） ── */
 .v2-cards { display: flex; gap: 14px; overflow-x: auto; padding: 4px 20px 8px; scroll-padding-inline: 20px; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .v2-cards::-webkit-scrollbar { display: none; }
-.v2-card { flex: none; width: min(78vw, 340px); scroll-snap-align: center; border-radius: 26px; overflow: hidden; padding: 8px; }
-/* 写真は 4:5。ただし画面が低い端末（iPhone SE など）では、名前・値段・AI予約のボタンが一度に見える高さまで */
-.v2-card-photo { position: relative; aspect-ratio: 4 / 5; max-height: max(240px, calc(100dvh - 470px)); width: 100%; border-radius: 20px; overflow: hidden; background: #e9e4da; }
+.v2-card { flex: none; width: min(78vw, 340px, calc((100dvh - 420px) * 0.8 + 16px)); min-width: 200px; scroll-snap-align: center; border-radius: 26px; overflow: hidden; padding: 8px; }
+/* 写真は 4:5 のまま切らない（髪型の名前が写真に入っているため）。画面が低い端末（iPhone SE など）ではカードの幅を細くして、AI予約のボタンと一緒に見えるように */
+.v2-card-photo { position: relative; aspect-ratio: 4 / 5; width: 100%; border-radius: 20px; overflow: hidden; background: #e9e4da; }
 .v2-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.v2-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; }
 .v2-card-body { padding: 14px 8px 8px; }
 .v2-card-name { font: 700 21px/1.35 var(--v2-serif); letter-spacing: 0.03em; margin: 0; }
 .v2-card-copy { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--v2-sub); }
@@ -154,6 +165,7 @@
 /* 内側にもう1本、細い金の縁（厚いガラスの見え方） */
 .v2-cta::before { content: ""; position: absolute; inset: 4px; border-radius: 34px; border: 1px solid rgba(214, 186, 132, 0.45); pointer-events: none; }
 .v2-cta:active { transform: scale(0.985); }
+.v2-cta-price { font: 700 15px/1 var(--v2-serif); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
 .v2-cta-spark { flex: none; color: var(--v2-gold); display: flex; }
 .v2-cta-text { flex: 1; min-width: 0; text-align: center; }
 .v2-cta-text b { display: block; font: 700 18px/1.3 var(--v2-serif); letter-spacing: 0.06em; color: var(--v2-ink); white-space: nowrap; }

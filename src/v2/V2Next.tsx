@@ -30,13 +30,15 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
       <h1 className="v2-title">次回予約</h1>
       {next && visit ? (
         <section className="v2-panel v2-glass" aria-label="次のご予約">
-          <p className="v2-label">ご予約確定</p>
+          <p className="v2-label">{next.status === 'confirmed' ? 'ご予約確定' : 'ご来店中'}</p>
           <p className="v2-big">{visit.relative ? `${visit.relative}・` : ''}{visit.date}</p>
           <p className="v2-big" style={{ color: 'var(--v2-gold-deep)' }}>{visit.time}〜</p>
           <div style={{ marginTop: 14, display: 'grid', gap: 6, fontSize: 15 }}>
             <span>{next.items.map(i => i.name).join('・')}</span>
             <span style={{ color: 'var(--v2-sub)' }}>担当：{next.nominated ? next.staff_name : '指名なし'}</span>
           </div>
+          {/* AI予約は受けた時点で確定。サロンボードへの転記はお店の仕事。重なったときだけお店から電話する（そのことを1行だけ） */}
+          {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、お店からお電話します。</p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
             <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={onJohnny}>変更・キャンセル（AI予約）</button>
             <a className="v2-btn v2-btn-quiet v2-glass" href={SHOP_PHONE_TEL}><Phone size={18} />お店に電話する</a>
