@@ -210,7 +210,7 @@ export function InstallGate() {
               </a>
             )}
             <p style={{ fontSize: 13, lineHeight: 1.8, color: 'rgba(242,230,200,0.55)', margin: '14px 0 0' }}>
-              開かないときは、画面右上の <b style={{ color: CREAM }}>「…」</b> から <b style={{ color: CREAM }}>「外部ブラウザで開く」</b>（または「{externalBrowserName()}で開く」）を選んでください。
+              開かないときは、画面右上の <b style={{ color: CREAM }}>「…」</b> から <b style={{ color: CREAM }}>「外部ブラウザーで開く」</b>を選んでください（アプリによっては「ブラウザで開く」）。
             </p>
           </>
         )}
