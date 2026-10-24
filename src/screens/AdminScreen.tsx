@@ -4,6 +4,7 @@ import {StaffStoreApproval} from '../features/customerAccess/StoreVerification'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { playCue } from '../audio/cue'
+import { TERMINAL_OPERATORS } from './staffOperators'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import type { TicketRow, TicketType } from '../data/ticket'
 import { TICKET_TYPE_LABELS } from '../data/ticket'
@@ -32,7 +33,7 @@ import {
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
-const STAFF_NAMES  = ['テイテイ', 'ヨンピル', '銀二郎', 'シルビア', 'リアン', 'キャンディ', 'ヒョウ']
+const STAFF_NAMES  = TERMINAL_OPERATORS
 const MAX_QTY      = 30
 const QTY_PRESETS  = [1, 2, 3, 5, 10, 30]
 const DISCOUNT_AMOUNT_PRESETS = [100, 500, 1000]
