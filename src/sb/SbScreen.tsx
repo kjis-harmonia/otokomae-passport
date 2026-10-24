@@ -207,6 +207,11 @@ export function SbScreen() {
     if (blocked || !options) return
     setNotice(null); setEditor({ preset })
   }
+  /** 予約の詳細を開く（別の日なら、その日の予約表に移ってから開く） */
+  function openReservation(id: string, day: string) {
+    if (day === dateRef.current) setSelectedId(id)
+    else { wantedId.current = id; setDate(day) }
+  }
   function openClose(preset: SbClosePreset) {
     if (blocked || !options) return
     setNotice(null); setClosing(preset)
@@ -231,7 +236,7 @@ export function SbScreen() {
       {!pending.pending && !pending.error && online && <button className="sb-icon" aria-label="再読み込み" onClick={() => { void refresh(date); void loadOptions() }}><RefreshCw size={18} /></button>}
     </div>}
     {hpb && hpb.open > 0 && <div className="sb-alert" role="status"><span>HOT PEPPERのメールで確認が必要なものが{hpb.open}件あります。</span><button className="sb-secondary" onClick={() => setHpbOpen(true)}>確認する</button></div>}
-    {unacked.length > 0 && <NewAlert list={unacked} onAck={() => void ackNew()} />}
+    {unacked.length > 0 && <NewAlert list={unacked} onAck={() => void ackNew()} onOpen={openReservation} />}
     {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
       onNew={p => newBooking({ date, minutes: p.minutes, staffId: p.staffId })} onTransfer={() => setArchive('transfer')} />}
     <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />予約</span><span><i className="sb-dot sb-green" />来店済み</span><span><i className="sb-dot sb-gold-dot" />未転記</span></div>
@@ -250,7 +255,7 @@ export function SbScreen() {
     {pushNote && <SbModal title="予約のお知らせ" onClose={() => setPushNote(null)}><p className="sb-push-note">{pushNote}</p></SbModal>}
     {hpbOpen && <SbHotpepper list={hpb} actor={operator} disabled={!online} onClose={() => setHpbOpen(false)}
       onChanged={() => void refresh(dateRef.current)}
-      onOpen={(d, id) => { setHpbOpen(false); if (d === dateRef.current) setSelectedId(id); else { wantedId.current = id; setDate(d) } }} />}
+      onOpen={(d, id) => { setHpbOpen(false); openReservation(id, d) }} />}
     {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
     {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} actor={operator} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
@@ -326,7 +331,8 @@ function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onE
         {r.status === 'confirmed' && Date.parse(r.starts_at) <= openedAt && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'no_show' })}>不来店</button>}
         {r.status === 'confirmed' && <button className="sb-text-danger" disabled={blocked} onClick={() => setCancel(true)}>予約を取り消す</button>}</div>
       {!(r.source === 'hotpepper' && r.transfer_status === 'not_required') && <section className="sb-transfer"><h3>Salon Board <span>{TRANSFER[r.transfer_status]}</span></h3>
-        <button className="sb-secondary sb-grow" onClick={() => { void navigator.clipboard?.writeText(text).then(() => { setCopied(true); setCopyFallback(false) }).catch(() => setCopyFallback(true)); if (!navigator.clipboard) setCopyFallback(true) }}><Clipboard size={18} />{copied ? 'コピーしました' : '転記用テキストをコピー'}</button>
+        <CopyRows r={r} />
+        <button className="sb-secondary sb-grow" onClick={() => { void navigator.clipboard?.writeText(text).then(() => { setCopied(true); setCopyFallback(false) }).catch(() => setCopyFallback(true)); if (!navigator.clipboard) setCopyFallback(true) }}><Clipboard size={18} />{copied ? 'コピーしました' : 'まとめてコピー'}</button>
         {copyFallback && <textarea className="sb-copy-text" readOnly value={text} aria-label="Salon Board転記用テキスト" onFocus={e => e.target.select()} />}
         <div className="sb-transfer-controls">{(['pending', 'done', 'not_required'] as const).map(s => <button className="sb-secondary" aria-pressed={r.transfer_status === s} key={s} disabled={blocked || r.transfer_status === s} onClick={() => void onSend({ ...base, kind: 'transfer', transfer_status: s })}>{r.transfer_status === s ? <Check size={16} /> : <Circle size={16} />}{TRANSFER[s]}</button>)}</div>
       </section>}
@@ -348,16 +354,33 @@ function AiPause({ reservationId, actor, blocked }: { reservationId: string; act
     {error && <small className="sb-error">解除できませんでした。通信を確かめて、もう一度押してください。</small>}</p>
 }
 
+/** サロンボードに1項目ずつ貼れるように、項目ごとのコピー。行のどこを押してもコピー（電話番号は数字だけ） */
+function CopyRows({ r }: { r: SbReservation }) {
+  const [done, setDone] = useState<string | null>(null)
+  const rows: [string, string][] = ([
+    ['お名前', r.customer_name],
+    ['電話番号', (r.customer_phone ?? '').replace(/[^0-9]/g, '')],
+    ['日付', getJapanDateString(new Date(r.starts_at)).replace(/-/g, '/')],
+    ['時刻', `${jstTime(r.starts_at)}〜${jstTime(r.ends_at)}`],
+    ['メニュー', r.items.map(i => i.name).join(' / ')],
+    ['担当', r.nominated ? `${r.staff_name}（指名）` : '指名なし'],
+  ] as [string, string][]).filter(([, v]) => v)
+  const copy = (label: string, value: string) => { void navigator.clipboard?.writeText(value).then(() => setDone(label), () => setDone(null)) }
+  return <div className="sb-copy-rows">{rows.map(([label, value]) => <button type="button" className="sb-copy-row" key={label} aria-label={`${label}をコピー`} onClick={() => copy(label, value)}>
+    <span><small>{label}</small>{value}</span><b aria-live="polite">{done === label ? <><Check size={15} />コピー済み</> : <><Clipboard size={15} />コピー</>}</b></button>)}</div>
+}
+
 type AlertItem = { id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; rescheduled?: boolean }
 /** 新しい AI 予約・アプリでの取り消しの帯。日付も出す（明日以降の予約をサロンボードの今日に入れない）。中身に合わせて「入れました／消しました」 */
-function NewAlert({ list, onAck }: { list: AlertItem[]; onAck: () => void }) {
+/** 帯の予約を押すと詳細（項目ごとのコピー）が開く */
+function NewAlert({ list, onAck, onOpen }: { list: AlertItem[]; onAck: () => void; onOpen: (id: string, day: string) => void }) {
   const added = list.filter(r => r.kind !== 'cancel'), removed = list.filter(r => r.kind === 'cancel')
   const today = getJapanDateString()
   const day = (iso: string) => { const d = getJapanDateString(new Date(iso)); if (d === today) return '今日'; const [, m, dd] = d.split('-').map(Number); return `${m}/${dd}` }
   const title = [added.length ? `新しい予約 ${added.length}件` : '', removed.length ? `キャンセル ${removed.length}件` : ''].filter(Boolean).join('・')
   const label = !removed.length ? 'サロンボードに入れました' : !added.length ? 'サロンボードから消しました' : 'サロンボードに反映しました'
   return <div className={`sb-new-alert${removed.length ? ' is-cancel' : ''}`} role="alert"><Bell size={18} /><span><b>{title}</b>
-    {list.slice(0, 3).map(r => <small key={`${r.kind}:${r.id}`}>{r.kind === 'cancel' ? (r.rescheduled ? '日時変更（元の予約を消す） ' : '取消 ') : ''}{day(r.starts_at)} {jstTime(r.starts_at)} {r.customer_name}様（{r.staff_name}）</small>)}
+    {list.slice(0, 3).map(r => <button type="button" className="sb-alert-row" key={`${r.kind}:${r.id}`} onClick={() => onOpen(r.id, getJapanDateString(new Date(r.starts_at)))}>{r.kind === 'cancel' ? (r.rescheduled ? '日時変更（元の予約を消す） ' : '取消 ') : ''}{day(r.starts_at)} {jstTime(r.starts_at)} {r.customer_name}様（{r.staff_name}）<ChevronRight size={14} /></button>)}
     {list.length > 3 && <small>ほか {list.length - 3}件</small>}</span>
     <button className="sb-primary" onClick={onAck}>{label}</button></div>
 }
