@@ -16,7 +16,7 @@ import { matchMenu, type MenuOption } from './menuMatcher'
 import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
 import { isEmptyRequest, parseVisitRequest, parseYesNo, type VisitRequest } from './visitParser'
-import { forgetReservation, formatVisit, rememberReservation } from './nextReservation'
+import { forgetReservation, formatVisit, pickNext, rememberReservation } from './nextReservation'
 import type { AgentAnswer, AgentShown, AgentTurn } from './agentClient'
 import { useVoice } from './useVoice'
 import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvisor'
@@ -83,7 +83,7 @@ type Step =
   /** お知らせの枠が、もう押さえられていない（時間切れ・予約済み） */
   | { k: 'offerGone'; reason: 'expired' | 'booked' }
 
-interface PartyPrimary { menu: MenuOption; slot: Slot; staffId: string | null; req: VisitRequest }
+interface PartyPrimary { menu: MenuOption; slot: Slot; staffId: string | null; req: VisitRequest; replace?: CustomerReservation }
 
 /** お連れ様の予約（端末に覚えて、一覧・確認で「お連れ様」と出す） */
 const COMPANION_KEY = 'ginjiro_companion_reservations'
@@ -207,6 +207,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const couponPickRef = useRef<{ key: string; ids: string[] }>({ key: '', ids: [] })
   const turnsRef = useRef<AgentTurn[]>([{ role: 'assistant', text: 'いつのご来店をご希望ですか？' }])
   const [myReservations, setMyReservations] = useState<CustomerReservation[]>([])
+  // ご本人の予約は1つまで（お連れ様の予約は数えない）。新しく予約するときに本人の予約があれば「キャンセルしてこちらにしますか？」＝変更として確定する
+  const ownActive = useMemo(() => pickNext(myReservations.filter(r => !companionIds().includes(r.id))), [myReservations])
+  const ownActiveRef = useRef(ownActive)
+  useEffect(() => { ownActiveRef.current = ownActive }, [ownActive])
+  /** 確定のときに入れ替える予約（変更ならその予約、新規でも本人の予約があればそれ） */
+  const replaceOf = (s: { change?: CustomerReservation }) => s.change ?? ownActiveRef.current ?? undefined
   // 手持ちの券と、確認画面で選んだ券（key：その確認画面のメニューと時刻）
   const [myTickets, setMyTickets] = useState<TicketRow[]>([])
   const [couponPick, setCouponPick] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] })
@@ -530,6 +536,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       setStep({ k: 'ai', say: 'その時間は、ちょうど埋まってしまいました。ほかのご希望の日時をお聞かせください。', view: { kind: 'talk', handoff: false } })
       return
     }
+    if (s.primary.replace) {
+      try { await api.cancel(s.primary.replace.id); forgetReservation(s.primary.replace.id); clearCouponPlan(s.primary.replace.id) } catch { /* 取り消せなければ一覧に両方出る */ }
+    }
     rememberReservation(reservation)
     let companion: CustomerReservation | undefined
     try {
@@ -723,7 +732,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     // 確認画面の「はい」「いいえ」は、その場で決める（AI に聞かない）
     if (s.k === 'confirm' || s.k === 'confirmCancel') {
       const yes = parseYesNo(text)
-      if (yes === true) { if (s.k === 'confirm') void book(s.menu, s.slot, s.req, s.staffId ?? null, s.change); else void cancelReservation(s.reservation); return }
+      if (yes === true) { if (s.k === 'confirm') void book(s.menu, s.slot, s.req, s.staffId ?? null, replaceOf(s)); else void cancelReservation(s.reservation); return }
       if (yes === false) { declineConfirm(s.k === 'confirm' ? s.menu : undefined); return }
     }
     // 髪型の相談（日時・メニューの話が無いもの）だけは、相談用の AI に聞く
@@ -802,7 +811,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     if (s.k === 'confirm') {
       const yes = parseYesNo(text)
-      if (yes === true) { void book(s.menu, s.slot, s.req, s.staffId ?? null, s.change); return }
+      if (yes === true) { void book(s.menu, s.slot, s.req, s.staffId ?? null, replaceOf(s)); return }
       if (yes === false) { setStep({ k: 'askWhen', again: 'retry', menu: s.menu }); return }
       setStep({ ...s })
     }
@@ -950,10 +959,21 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
           listen: true,
         }
       }
-      case 'confirm': return {
+      case 'confirm': {
+        const rep = !step.change ? ownActive : null
+        if (rep) {
+          const names = rep.items.map(i => i.name).join('・')
+          return {
+            title: `現在、${visitLabel(rep.starts_at)}に${names}をご予約されています。キャンセルして、こちらをご予約しますか？`,
+            speech: `現在、${spokenVisit(rep.starts_at)}に${names}をご予約されています。ご予約はおひとり1つまでです。そちらをキャンセルして、${spokenVisit(step.slot.starts_at)}の${step.menu.name}をご予約しますか？`,
+            listen: true,
+          }
+        }
+        return {
         title: step.change ? 'この日時に変更しますか？' : 'この日時でお間違いないですか？',
         speech: `${step.say ?? `${spokenVisit(step.slot.starts_at)}、${step.menu.name}でお取りできます。この日時でお間違いないですか？`}${couponSpeech(step.change ? null : priceFor(step.menu.code, step.menu.price, step.slot.starts_at, []), step.change ? 0 : usableTickets(myTickets, step.slot.starts_at).length)}`,
         listen: true,
+        }
       }
       case 'booking': return { title: 'ご予約を確定しています' }
       case 'done': return step.companion || step.companionFailed
@@ -1030,7 +1050,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       {/* 中央：JOHNNY・質問・聞き取った言葉・選択肢 */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 20px 16px' }}>
         <div style={{ marginTop: 'min(4vh, 32px)', width: '100%', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ borderRadius: 24, overflow: 'hidden', background: '#000', boxShadow: '0 10px 30px rgba(70,52,24,0.12)' }}><JohnnyRider state={orb} width={compact ? 200 : 340} /></div>
+          <JohnnyRider state={orb} width={compact ? 200 : 340} />
         </div>
 
         <AnimatePresence mode="wait">
@@ -1140,7 +1160,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {(step.k === 'confirm' || step.k === 'booking') && (
               <Summary menu={step.menu} slot={step.slot} hidePrice={step.k === 'confirm' && !!confirmPrice}
                 staffName={step.k !== 'confirm' ? undefined : step.staffId ? options?.staff?.find(x => x.id === step.staffId)?.name ?? '指名あり' : step.staffChosen ? '指名なし' : undefined}
-                before={step.k === 'confirm' ? step.change : undefined} />
+                before={step.k === 'confirm' ? step.change ?? ownActive ?? undefined : undefined} />
             )}
 
             {step.k === 'companionMenu' && (
@@ -1234,9 +1254,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {voice.listen === 'listening' && (
               <p style={{ margin: '0 0 2px', fontSize: 13, color: C.secondary, textAlign: 'center' }}>「はい」「いいえ」と話しても進めます</p>
             )}
-            <PrimaryButton onClick={() => book(step.menu, step.slot, step.req, step.staffId ?? null, step.change)}>はい</PrimaryButton>
+            <PrimaryButton onClick={() => book(step.menu, step.slot, step.req, step.staffId ?? null, replaceOf(step))}>はい</PrimaryButton>
             {!step.change && (
-              <SecondaryButton onClick={() => setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req } })}>お連れ様を追加</SecondaryButton>
+              <SecondaryButton onClick={() => setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req, replace: ownActive ?? undefined } })}>お連れ様を追加</SecondaryButton>
             )}
             <SecondaryButton onClick={() => declineConfirm(step.menu)}>いいえ</SecondaryButton>
           </>
