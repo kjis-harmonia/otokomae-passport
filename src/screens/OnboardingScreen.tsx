@@ -7,7 +7,6 @@ import { getUserId, getMemberIssuedAt } from '../utils/userId'
 import { completeCustomerOnboarding } from '../utils/ticketStore'
 import { RpcError } from '../utils/staffSession'
 import { normalizePhone, saveContact } from '../utils/customerContact'
-import { DEFAULT_BGM_TRACK_SRC, registerBgmAudio, stopAllBgmAudio } from '../hooks/useBgm'
 
 type Step = 0 | 1 | 2
 
@@ -29,18 +28,6 @@ const slideVariants = {
 }
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
-
-function playIntroBgm() {
-  try {
-    stopAllBgmAudio()
-    const audio = registerBgmAudio(new Audio(DEFAULT_BGM_TRACK_SRC))
-    audio.volume = 0.28
-    audio.loop = false
-    void audio.play().catch(() => { /* Interrupted playback is optional. */ })
-  } catch {
-    // Audio is optional and must not block onboarding.
-  }
-}
 
 function onboardingErrorMessage(err: unknown): string {
   const code = err instanceof RpcError ? err.code : ''
@@ -193,7 +180,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   const trimmedName = name.trim()
 
   function handleStart() {
-    playIntroBgm()
+    // 音楽は自動で流さない（聞きたい人はホーム右上の♪から。10/24 慶一郎さん決定）
     setStep(1)
   }
 
@@ -363,7 +350,6 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                     animation: 'gjSplashShimmer 3s linear infinite',
                   }}
                 >
-                  ※「始める」を押すと音楽が流れます<br />
                   男前の準備をしてからお進みください。
                 </p>
               </div>
