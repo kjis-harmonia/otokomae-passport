@@ -2,7 +2,7 @@
 // 写真・カテゴリは今のスタイル図鑑のまま。値段は予約メニューの料金表（AI予約と同じ値段）、対応するメニューがないスタイルだけ手入力の値段。
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Sparkle } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
 import { resolveStyleLibraryImageUrl } from '../data/styleLibraryImages'
 import { UI_CATEGORIES } from '../data/styleCategories'
@@ -96,9 +96,10 @@ export function V2Home() {
       </AnimatePresence>
 
       <button type="button" className="v2-cta v2-glass" onClick={reserve}>
+        <span className="v2-cta-spark" aria-hidden="true"><Sparkle size={22} strokeWidth={1.6} /></span>
         <span className="v2-cta-text">
           <b>{selected ? 'この髪型でAI予約する' : 'AI予約（Johnny に相談）'}</b>
-          <small>{selected ? `${selected.title}・日時と担当をお聞きします` : '銀二郎専属AI Johnny が、日時と担当をお聞きします'}</small>
+          <small>{selected ? '最短で、最高の自分に。' : '銀二郎専属AI Johnny がお聞きします'}</small>
         </span>
         <span className="v2-cta-go" aria-hidden="true"><ArrowRight size={20} /></span>
       </button>

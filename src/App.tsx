@@ -447,7 +447,7 @@ function App() {
           <V2App activeTab={activeTab} setActiveTab={setActiveTab} ticketFilter={ticketInitialFilter} ticketKey={ticketRefreshKey} onModalChange={handleModalChange} />
 
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。クーポンのあと） */}
-          <InstallGuide autoAllowed={activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
+          <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (
