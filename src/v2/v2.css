@@ -157,6 +157,14 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
 }
 .v2-cta-go::before { content: ""; position: absolute; inset: 2px; border-radius: inherit; border: 1px solid rgba(255,255,255,.85); }
 
+/* Home, member QR and next booking are fixed screens: no page drag or rubber band.
+   If a small phone cannot fit the content, only the middle area scrolls (without bounce). */
+html:has(.v2-fixed), body:has(.v2-fixed) { height: 100%; overflow: hidden; overscroll-behavior: none; }
+.v2-fixed { position: fixed; inset: 0; height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; overscroll-behavior: none; }
+.v2-fixed .v2-head { position: relative; }
+.v2-fixed .v2-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scrollbar-width: none; }
+.v2-fixed .v2-main::-webkit-scrollbar { display: none; }
+
 /* Home is a fixed stage (no vertical scroll) over marble and gold ribbons.
    Controls are clear glass so the ribbons show through; the photo surround stays pearl. */
 html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; overflow: hidden; overscroll-behavior: none; }
@@ -175,7 +183,7 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
     url(/images/v2/marble-bg.webp) center / cover no-repeat, #f4f1eb;
 }
 .v2-home .v2-head { position: relative; background: none; }
-.v2-home .v2-main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 104px); }
+.v2-home .v2-main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 104px); }
 .v2-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .v2-home .v2-cats, .v2-home .v2-cards { touch-action: pan-x; }
 .v2-home .v2-cards { flex: 1; min-height: 0; align-items: center; }
