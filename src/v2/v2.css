@@ -1,330 +1,256 @@
-/* 銀二郎App V2.0：透明なガラスが浮かぶ空間。パールホワイト × 透明ガラス × シャンパンゴールド。
-   金は「選んだもの」と「AI予約」にだけ使う。背景の光の帯はゆっくり漂うだけ。視覚効果を減らす設定では動きを止める */
+/* Customer app only. Pearl glass, champagne metal, and readable ink.
+   Reflections stay still: depth comes from the rim and soft inset light. */
 .v2 {
-  --v2-bg: #f5f2ec;
-  --v2-ink: #1f1c18;
-  --v2-sub: #6b645a;
-  --v2-faint: #9a9288;
-  --v2-line: rgba(31, 28, 24, 0.08);
-  --v2-gold: #a8823f;
-  --v2-gold-deep: #8a6a2f;
-  --v2-gold-soft: rgba(168, 130, 63, 0.12);
-  --v2-glass: rgba(255, 255, 255, 0.62);
-  --v2-glass-strong: rgba(255, 255, 255, 0.82);
-  --v2-glass-line: rgba(255, 255, 255, 0.9);
-  --v2-shadow: 0 10px 30px rgba(70, 52, 24, 0.08), 0 1px 2px rgba(70, 52, 24, 0.06);
+  --v2-bg: #f4f1eb;
+  --v2-ink: #28231e;
+  --v2-sub: #62594e;
+  --v2-faint: #756b5f;
+  --v2-line: rgba(70, 55, 34, .10);
+  --v2-gold: #ae8950;
+  --v2-gold-deep: #785627;
+  --v2-gold-soft: rgba(168, 130, 63, .12);
+  --v2-glass: rgba(255, 255, 255, .62);
+  --v2-glass-strong: #f8f6f1;
+  --v2-glass-line: rgba(255, 255, 255, .92);
   --v2-serif: "Shippori Mincho", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
   --v2-sans: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
-  --v2-nav-h: 64px;
+  --v2-nav-h: 68px;
+  --lq-glass: radial-gradient(ellipse at 20% 0%, rgba(255,255,255,.88), transparent 68%),
+    linear-gradient(175deg, rgba(255,255,255,.60) 0%, rgba(255,255,255,.25) 48%, rgba(237,231,220,.25) 62%, rgba(255,255,255,.65) 100%);
+  --lq-champagne: radial-gradient(ellipse at 28% 8%, #fffdf4 0%, rgba(255,251,232,.25) 56%, transparent 72%),
+    linear-gradient(125deg, #b5945e 0%, #f8e6be 9%, #e2c590 28%, #f5e3bb 50%, #ceb17e 72%, #ead0a0 88%, #fff9e8 100%);
+  --lq-gold-rim: linear-gradient(125deg, #fff8e3 2%, #95703d 17%, #fef4d8 33%, #b58e56 54%, #fffbed 73%, #a58148 93%);
+  --lq-glass-shadow: 0 12px 26px -14px rgba(76,57,30,.30), 0 3px 7px -4px rgba(76,57,30,.17),
+    inset 0 2px 2px rgba(255,255,255,.95), inset 0 -2px 3px rgba(255,255,255,.85),
+    inset 2px 0 4px rgba(255,255,255,.48), inset -2px 0 4px rgba(191,171,137,.12);
+  --lq-gold-shadow: 0 10px 22px -12px rgba(120,83,31,.50),
+    inset 0 2px 2px rgba(255,255,255,.95), inset 0 -3px 5px rgba(145,104,46,.24),
+    inset 2px 0 4px rgba(255,255,255,.72), inset -2px 0 4px rgba(128,90,35,.16);
   min-height: 100dvh;
   color: var(--v2-ink);
   font-family: var(--v2-sans);
-  /* 大理石のような静かな白：やわらかい明暗だけ（模様・動きなし） */
-  background:
-    radial-gradient(120% 70% at 0% 0%, #ffffff 0%, rgba(255, 255, 255, 0) 60%),
-    radial-gradient(90% 60% at 100% 35%, #ece5d8 0%, rgba(236, 229, 216, 0) 62%),
-    radial-gradient(80% 50% at 10% 100%, #efe9df 0%, rgba(239, 233, 223, 0) 60%),
-    var(--v2-bg);
+  background: radial-gradient(ellipse at 14% 4%, #fff 0%, transparent 53%),
+    radial-gradient(ellipse at 100% 42%, #e9e1d2 0%, transparent 57%),
+    linear-gradient(155deg, #f8f6f2, var(--v2-bg) 60%, #eae3d7);
   background-attachment: fixed;
   isolation: isolate;
 }
-/* 背景：斜めに流れる透明なガラスの帯と、やわらかい光の粒（触れない・読む邪魔をしない薄さ） */
-.v2::before, .v2::after { content: ""; position: fixed; inset: -10%; z-index: -1; pointer-events: none; }
+/* Quiet, static refractions behind the content, rather than moving particles. */
 .v2::before {
-  background:
-    linear-gradient(118deg, rgba(255,255,255,0) 5%, rgba(196,170,124,0.32) 7%, rgba(255,255,255,0.95) 9%, rgba(232,210,166,0.55) 11.5%, rgba(255,255,255,0.9) 13.5%, rgba(196,170,124,0.28) 15.5%, rgba(255,255,255,0) 18%),
-    linear-gradient(118deg, rgba(255,255,255,0) 25%, rgba(255,255,255,0.7) 27.5%, rgba(205,182,140,0.2) 29%, rgba(255,255,255,0) 31%),
-    linear-gradient(118deg, rgba(255,255,255,0) 69%, rgba(196,170,124,0.26) 71%, rgba(255,255,255,0.9) 73.5%, rgba(232,210,166,0.5) 75.5%, rgba(255,255,255,0.85) 77%, rgba(196,170,124,0.22) 79%, rgba(255,255,255,0) 82%),
-    linear-gradient(62deg, rgba(255,255,255,0) 84%, rgba(255,255,255,0.8) 87.5%, rgba(205,182,140,0.22) 89%, rgba(255,255,255,0) 92%);
-  filter: blur(1.5px);
-  animation: v2-drift 26s ease-in-out infinite alternate;
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(120deg, transparent 7%, rgba(204,186,153,.18) 8%, rgba(255,255,255,.90) 8.5%, transparent 11%),
+    linear-gradient(120deg, transparent 72%, rgba(255,255,255,.90) 74%, rgba(199,176,134,.13) 75%, transparent 78%);
 }
-.v2::after {
-  background:
-    radial-gradient(circle at 14% 22%, rgba(255,246,222,0.95) 0 1.5px, rgba(255,246,222,0) 5px),
-    radial-gradient(circle at 82% 14%, rgba(255,255,255,0.95) 0 2px, rgba(255,255,255,0) 7px),
-    radial-gradient(circle at 70% 58%, rgba(255,240,210,0.9) 0 1.5px, rgba(255,240,210,0) 6px),
-    radial-gradient(circle at 26% 74%, rgba(255,255,255,0.9) 0 2px, rgba(255,255,255,0) 8px),
-    radial-gradient(circle at 92% 86%, rgba(255,244,218,0.85) 0 1.5px, rgba(255,244,218,0) 6px),
-    radial-gradient(40% 30% at 88% 8%, rgba(255,255,255,0.7), rgba(255,255,255,0) 70%),
-    radial-gradient(35% 25% at 6% 60%, rgba(255,252,244,0.6), rgba(255,252,244,0) 70%);
-  animation: v2-drift 34s ease-in-out infinite alternate-reverse;
-}
-@keyframes v2-drift { from { transform: translate3d(-1.5%, -1%, 0); } to { transform: translate3d(1.5%, 1%, 0); } }
+html:has(.v2), body:has(.v2) { background: #f4f1eb; }
 
-/* 透明なガラス：上が明るく下が透ける面＋ぼかし＋縁の光（上は白く、下はうっすら金）＋浮いた影 */
+/* One material shared by controls and surfaces; the border is an optical rim. */
 .v2-glass {
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.38) 55%, rgba(255, 255, 255, 0.5) 100%);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
-  backdrop-filter: blur(20px) saturate(1.6);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow:
-    0 18px 40px rgba(70, 52, 24, 0.1), 0 3px 8px rgba(70, 52, 24, 0.05),
-    inset 0 1.5px 0 rgba(255, 255, 255, 1), inset 0 -1px 0 rgba(168, 130, 63, 0.16),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.28), inset 0 0 18px rgba(255, 255, 255, 0.35);
+  position: relative;
+  border: 1px solid rgba(255,255,255,.90);
+  background: var(--lq-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.25);
+  box-shadow: var(--lq-glass-shadow);
 }
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .v2-glass { background: var(--v2-glass-strong); }
+.v2-glass::before {
+  content: ""; position: absolute; inset: 3px; border: 1px solid rgba(255,255,255,.42);
+  border-radius: inherit; pointer-events: none;
 }
+.v2 :is(button, a, summary) { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.v2 :is(button, a, summary, input):focus-visible { outline: 2px solid #725126; outline-offset: 4px; }
+.v2 :is(button, .v2-btn) { transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease; }
+.v2 button:disabled { cursor: default; opacity: .55; transform: none; }
+.v2 :is(.v2-round, .v2-cat, .v2-btn, .v2-pay, .v2-cta):not(:disabled):active { transform: scale(.98); }
 
-/* ── 上：ロゴと ☰ ── */
+/* Brand header. */
 .v2-head {
-  position: sticky; top: 0; z-index: 30;
-  display: grid; grid-template-columns: 44px 1fr 44px; align-items: center;
-  padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px 8px;
-  background: linear-gradient(180deg, rgba(245, 242, 236, 0.94) 0%, rgba(245, 242, 236, 0.7) 70%, rgba(245, 242, 236, 0) 100%);
+  position: sticky; top: 0; z-index: 30; display: grid;
+  grid-template-columns: 44px 1fr 44px; align-items: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 20px 10px;
+  background: linear-gradient(180deg, rgba(249,247,242,.96), rgba(249,247,242,.84) 65%, rgba(249,247,242,0));
 }
-.v2-logo { justify-self: center; height: 46px; width: auto; display: block; }
-.v2-round {
-  width: 44px; height: 44px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--v2-ink); cursor: pointer; -webkit-tap-highlight-color: transparent;
-}
-.v2-round:active { transform: scale(0.96); }
-
-/* ── 下：浮かぶガラスのタブ（3つ） ── */
-.v2-nav {
-  position: fixed; left: 16px; right: 16px; z-index: 40;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
-  max-width: 480px; margin: 0 auto; height: var(--v2-nav-h);
-  border-radius: 24px; display: grid; grid-template-columns: repeat(3, 1fr);
-}
-.v2-nav button {
-  border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  color: var(--v2-faint); font: 600 11px/1 var(--v2-sans); letter-spacing: 0.04em;
-}
-.v2-nav button[aria-current="page"] { color: var(--v2-gold-deep); }
-.v2-nav button[aria-current="page"]::after { content: ""; width: 16px; height: 2px; border-radius: 1px; background: var(--v2-gold); margin-top: 2px; }
-
-.v2-main { padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 28px); }
+.v2-logo { justify-self: center; height: 46px; max-width: 100%; width: auto; display: block; object-fit: contain; }
+.v2-round { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--v2-ink); cursor: pointer; }
+.v2-main { padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 32px); }
 .v2-main.has-cta { padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 124px); }
 .v2-page { max-width: 520px; margin: 0 auto; padding: 4px 20px 0; }
-.v2-title { font: 700 24px/1.35 var(--v2-serif); letter-spacing: 0.04em; margin: 8px 0 16px; }
+.v2-title { font: 700 24px/1.4 var(--v2-serif); letter-spacing: .04em; margin: 8px 0 18px; }
 
-/* ── カテゴリ（ガラスのチップ） ── */
-.v2-cats { display: flex; gap: 8px; overflow-x: auto; padding: 4px 20px 12px; scroll-padding-inline: 20px; scrollbar-width: none; scroll-snap-type: x proximity; }
-.v2-cats::-webkit-scrollbar { display: none; }
+/* Floating dock: selected destination is a gold lens, not just a colored icon. */
+.v2-nav {
+  position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  z-index: 40; max-width: 480px; margin: 0 auto; height: var(--v2-nav-h);
+  padding: 6px; border-radius: 36px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 5px;
+}
+.v2-nav button {
+  position: relative; border: 1px solid transparent; border-radius: 28px; background: transparent;
+  cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  color: var(--v2-sub); font: 600 11px/1.2 var(--v2-sans); letter-spacing: .02em;
+}
+.v2-nav button[aria-current="page"] {
+  background: var(--lq-champagne); border-color: #b79a67; color: #392b19; box-shadow: var(--lq-gold-shadow);
+}
+.v2-nav button[aria-current="page"]::before { content: ""; position: absolute; inset: 2px; border-radius: inherit; border: 1px solid rgba(255,255,255,.66); pointer-events: none; }
+
+/* Capsules: slight asymmetric reflections, a double rim and a gold selection dot. */
+.v2-cats { display: flex; gap: 10px; overflow-x: auto; padding: 10px 20px 22px; margin-bottom: -10px; scroll-padding-inline: 20px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.v2-cats::-webkit-scrollbar, .v2-cards::-webkit-scrollbar { display: none; }
 .v2-cat {
-  position: relative; flex: none; scroll-snap-align: start; height: 46px; padding: 0 20px; border-radius: 23px;
-  font: 600 15px/1 var(--v2-sans); color: #3a342c; letter-spacing: 0.04em; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: color 0.25s, box-shadow 0.25s, transform 0.2s;
+  flex: none; scroll-snap-align: start; min-height: 52px; padding: 0 22px; border-radius: 28px;
+  font: 600 14px/1.3 var(--v2-sans); color: #3a342c; letter-spacing: .04em; cursor: pointer;
+  text-shadow: 0 1px rgba(255,255,255,.75);
 }
-.v2-cat:active { transform: scale(0.97); }
-/* 選んだカテゴリ：シャンパンゴールドのガラス＋金の縁＋下に小さな点 */
-.v2-cat[aria-pressed="true"] {
-  color: var(--v2-ink); border-color: rgba(176, 138, 70, 0.75);
-  background: linear-gradient(165deg, rgba(255, 249, 236, 0.95) 0%, rgba(236, 214, 168, 0.85) 52%, rgba(250, 238, 212, 0.92) 100%);
-  box-shadow:
-    0 10px 24px rgba(168, 130, 63, 0.28), 0 2px 6px rgba(120, 90, 40, 0.12),
-    inset 0 1.5px 0 rgba(255, 255, 255, 1), inset 0 -2px 4px rgba(168, 130, 63, 0.25), inset 0 0 0 2px rgba(255, 250, 238, 0.55);
-}
-.v2-cat[aria-pressed="true"]::after { content: ""; position: absolute; left: 50%; bottom: 6px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--v2-gold-deep); }
+.v2-cat[aria-pressed="true"] { padding-top: 0; padding-bottom: 6px; color: #302719; border-color: #b59764; background: var(--lq-champagne); box-shadow: var(--lq-gold-shadow); }
+.v2-cat[aria-pressed="true"]::before { border-color: rgba(255,251,231,.85); }
+.v2-cat[aria-pressed="true"]::after { content: ""; position: absolute; left: calc(50% - 2.5px); bottom: 7px; width: 5px; height: 5px; border-radius: 50%; background: #876132; }
 
-/* ── 銀Pay（ホームのいちばん上） ── */
-.v2-pay { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 0 12px 0 10px; border-radius: 25px; cursor: pointer; text-align: left; color: var(--v2-ink); -webkit-tap-highlight-color: transparent; }
-.v2-pay:active { transform: scale(0.985); }
-.v2-pay-icon { flex: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; background: radial-gradient(circle at 35% 28%, rgba(255,246,225,0.95) 0%, rgba(206,172,112,0.95) 40%, #9c7838 100%); box-shadow: inset 0 1px 2px rgba(255,255,255,0.8), 0 2px 6px rgba(138,106,47,0.3); }
-.v2-pay-name { flex: none; font: 700 14px/1 var(--v2-serif); letter-spacing: 0.08em; }
-.v2-pay-bal { flex: 1; min-width: 0; font: 700 17px/1 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.v2-pay-bal.is-off { font: 500 12px/1.3 var(--v2-sans); color: var(--v2-sub); }
+/* Ginpay strip remains secondary to the hairstyle and booking. */
+.v2-pay { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px 12px 8px 10px; border-radius: 28px; cursor: pointer; text-align: left; color: var(--v2-ink); }
+.v2-pay-icon { flex: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #503b20; background: var(--lq-champagne); border: 1px solid #c1a36f; box-shadow: var(--lq-gold-shadow); }
+.v2-pay-name { flex: none; font: 700 14px/1 var(--v2-serif); letter-spacing: .08em; }
+.v2-pay-bal { flex: 1; min-width: 0; font: 700 17px/1.2 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-pay-bal.is-off { font: 500 12px/1.4 var(--v2-sans); color: var(--v2-sub); }
 .v2-pay-go { flex: none; display: flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 600; color: var(--v2-sub); }
-@media (max-width: 360px) { .v2-pay-go { font-size: 0; } }
 
-/* ── スタイルのカード（横にスワイプ） ── */
-.v2-cards { display: flex; gap: 14px; overflow-x: auto; padding: 4px 20px 8px; scroll-padding-inline: 20px; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
-.v2-cards::-webkit-scrollbar { display: none; }
-.v2-card { flex: none; width: min(78vw, 340px, calc((100dvh - 420px) * 0.8 + 16px)); min-width: 200px; scroll-snap-align: center; border-radius: 26px; overflow: hidden; padding: 8px; }
-/* 写真は 4:5 のまま切らない（髪型の名前が写真に入っているため）。画面が低い端末（iPhone SE など）ではカードの幅を細くして、AI予約のボタンと一緒に見えるように */
+/* Uncropped 4:5 photography with a clear glass surround. Shadow space stays in the rail. */
+.v2-cards { display: flex; gap: 14px; overflow-x: auto; padding: 6px 20px 40px; margin-bottom: -28px; scroll-padding-inline: 20px; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.v2-card { flex: none; width: min(78vw, 340px, calc((100dvh - 420px) * .8 + 16px)); min-width: 200px; scroll-snap-align: center; border-radius: 28px; overflow: hidden; padding: 9px; }
+.v2-card::before { inset: 3px; z-index: 1; border-color: rgba(255,255,255,.70); }
 .v2-card-photo { position: relative; aspect-ratio: 4 / 5; width: 100%; border-radius: 20px; overflow: hidden; background: #e9e4da; }
 .v2-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .v2-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; padding: 0; }
-.v2-card-body { padding: 14px 8px 8px; }
-.v2-card-name { font: 700 21px/1.35 var(--v2-serif); letter-spacing: 0.03em; margin: 0; }
-.v2-card-copy { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--v2-sub); }
-.v2-card-meta { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
-.v2-price { font: 700 20px/1 var(--v2-serif); color: var(--v2-gold-deep); }
-.v2-price-note { font-size: 12px; color: var(--v2-faint); }
 .v2-dots { display: flex; justify-content: center; gap: 6px; padding: 6px 0 4px; }
-.v2-dots i { width: 6px; height: 6px; border-radius: 3px; background: rgba(31, 28, 24, 0.14); transition: width 0.25s, background-color 0.25s; }
-.v2-dots i.on { width: 18px; background: var(--v2-gold); }
+.v2-dots i { width: 6px; height: 6px; border-radius: 3px; background: #bcb4a6; transition: width .25s, background-color .25s; }
+.v2-dots i.on { width: 18px; background: #876638; }
 
-/* ── この髪型でAI予約する（下のタブのすぐ上に固定） ── */
+/* Main CTA: a clear capsule with a continuous champagne rim and a raised lens. */
 .v2-cta {
   position: fixed; left: 16px; right: 16px; z-index: 39; max-width: 480px; margin: 0 auto;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--v2-nav-h) + 20px);
-  min-height: 76px; border-radius: 38px; padding: 0 10px 0 18px;
-  display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left;
-  border: 1.5px solid rgba(214, 186, 132, 0.9); -webkit-tap-highlight-color: transparent;
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 252, 245, 0.55) 55%, rgba(250, 242, 226, 0.7) 100%);
-  box-shadow:
-    0 20px 44px rgba(120, 90, 40, 0.18), 0 4px 10px rgba(120, 90, 40, 0.08), 0 0 0 4px rgba(255, 255, 255, 0.35),
-    inset 0 2px 0 rgba(255, 255, 255, 1), inset 0 -2px 6px rgba(168, 130, 63, 0.18), inset 0 0 22px rgba(255, 255, 255, 0.5);
-  transition: transform 0.15s;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--v2-nav-h) + 22px);
+  min-height: 82px; border-radius: 44px; padding: 10px 10px 10px 18px;
+  display: flex; align-items: center; gap: 10px; cursor: pointer; text-align: left;
+  border: 2px solid rgba(186,154,102,.75);
+  background: var(--lq-glass);
+  box-shadow: 0 18px 32px -16px rgba(107,77,32,.42), 0 3px 8px rgba(100,75,35,.12),
+    inset 0 3px 3px #fff, inset 0 -3px 3px rgba(255,251,239,.95), inset 0 -9px 14px -8px rgba(139,104,50,.38);
 }
-/* 内側にもう1本、細い金の縁（厚いガラスの見え方） */
-.v2-cta::before { content: ""; position: absolute; inset: 4px; border-radius: 34px; border: 1px solid rgba(214, 186, 132, 0.45); pointer-events: none; }
-.v2-cta:active { transform: scale(0.985); }
-.v2-cta-price { font: 700 15px/1 var(--v2-serif); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
-.v2-cta-spark { flex: none; color: var(--v2-gold); display: flex; }
+.v2-cta::before { inset: 3px; border: 1px solid rgba(177,142,85,.44); box-shadow: 0 0 0 1px rgba(255,255,255,.7); }
+.v2-cta::after { content: ""; position: absolute; inset: 5px 12px 48%; border-radius: 44px 44px 50% 50%; background: linear-gradient(180deg, rgba(255,255,255,.8), rgba(255,255,255,0)); pointer-events: none; }
+@supports (mask-composite: exclude) or (-webkit-mask-composite: xor) {
+  .v2-cta::before {
+    inset: -2px; padding: 2px; border: 0; background: var(--lq-gold-rim); box-shadow: none;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+  }
+}
+.v2-cta-text, .v2-cta-spark, .v2-cta-go { position: relative; z-index: 1; }
+.v2-cta-spark { flex: none; color: var(--v2-gold-deep); display: flex; }
 .v2-cta-text { flex: 1; min-width: 0; text-align: center; }
-.v2-cta-text b { display: block; font: 700 18px/1.3 var(--v2-serif); letter-spacing: 0.06em; color: var(--v2-ink); white-space: nowrap; }
-.v2-cta-text small { display: block; margin-top: 3px; font: 500 12px/1.4 var(--v2-serif); letter-spacing: 0.1em; color: var(--v2-gold-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 右：金色のガラス玉 */
+.v2-cta-text b { display: block; font: 700 clamp(16px, 4.5vw, 20px)/1.45 var(--v2-serif); letter-spacing: .035em; color: var(--v2-ink); overflow-wrap: anywhere; }
+.v2-cta-text small { display: block; margin-top: 3px; font: 500 12px/1.5 var(--v2-sans); color: var(--v2-sub); }
+.v2-cta-price { font: 700 15px/1.2 var(--v2-serif); letter-spacing: .02em; font-variant-numeric: tabular-nums; color: #6d4e24; }
 .v2-cta-go {
-  flex: none; width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff;
-  background: radial-gradient(circle at 35% 28%, rgba(255, 246, 225, 0.95) 0%, rgba(206, 172, 112, 0.95) 38%, #9c7838 100%);
-  border: 1.5px solid rgba(255, 248, 230, 0.9);
-  box-shadow: 0 6px 16px rgba(138, 106, 47, 0.35), inset 0 2px 3px rgba(255, 255, 255, 0.8), inset 0 -3px 6px rgba(110, 80, 30, 0.35);
+  flex: none; width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #574021;
+  border: 1px solid #b59964; background: var(--lq-champagne); box-shadow: var(--lq-gold-shadow);
 }
-@media (max-width: 360px) { .v2-cta-text b { font-size: 16px; } .v2-cta-spark { display: none; } }
+.v2-cta-go::before { content: ""; position: absolute; inset: 2px; border-radius: inherit; border: 1px solid rgba(255,255,255,.85); }
 
-/* ── 面（カード）・行・ボタン ── */
-.v2-panel { border-radius: 22px; padding: 18px; }
-.v2-label { font-size: 12px; letter-spacing: 0.12em; color: var(--v2-faint); margin: 0 0 6px; }
-.v2-big { font: 700 28px/1.3 var(--v2-serif); letter-spacing: 0.02em; margin: 0; }
-.v2-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 0 4px; border: 0; border-top: 1px solid var(--v2-line); background: none; color: var(--v2-ink); font: 500 16px/1.4 var(--v2-sans); text-align: left; text-decoration: none; cursor: pointer; }
+/* Panels, actions and sheets use the same materials without coating body text. */
+.v2-panel { border-radius: 26px; padding: 20px; }
+.v2-label { font-size: 12px; letter-spacing: .08em; color: var(--v2-faint); margin: 0 0 8px; }
+.v2-big { font: 700 28px/1.4 var(--v2-serif); letter-spacing: .02em; margin: 0; overflow-wrap: anywhere; }
+.v2-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 10px 4px; border: 0; border-top: 1px solid var(--v2-line); background: none; color: var(--v2-ink); font: 500 15px/1.5 var(--v2-sans); text-align: left; text-decoration: none; cursor: pointer; }
 .v2-row:first-child { border-top: 0; }
 .v2-row small { display: block; font-size: 12px; color: var(--v2-faint); font-weight: 400; }
 .v2-row svg { flex: none; color: var(--v2-gold-deep); }
-.v2-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; border-radius: 16px; border: 0; font: 700 16px/1 var(--v2-sans); cursor: pointer; text-decoration: none; }
-.v2-btn-gold { color: #fff; background: linear-gradient(160deg, #b8924d, #8a6a2f); }
+.v2-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 54px; padding: 14px 18px; border-radius: 28px; border: 1px solid transparent; font: 600 15px/1.5 var(--v2-sans); cursor: pointer; text-decoration: none; text-align: center; }
+.v2-btn-gold { color: #302719; background: var(--lq-champagne); border-color: #b59764; box-shadow: var(--lq-gold-shadow); text-shadow: 0 1px rgba(255,255,255,.65); }
 .v2-btn-quiet { color: var(--v2-ink); }
-.v2-note { font-size: 13px; line-height: 1.7; color: var(--v2-sub); }
+.v2-note { font-size: 13px; line-height: 1.8; color: var(--v2-sub); }
+.v2-back { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; border: 0; background: none; color: var(--v2-sub); font: 600 15px/1.3 var(--v2-sans); padding: 8px 0; cursor: pointer; }
+.v2-sheet-back { position: fixed; inset: 0; z-index: 60; background: rgba(40,34,26,.24); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+.v2-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-width: 520px; margin: 0 auto; border-radius: 32px 32px 0 0; padding: 10px 20px calc(env(safe-area-inset-bottom, 0px) + 20px); max-height: 86dvh; overflow-y: auto; background: rgba(249,247,242,.96); border: 1px solid rgba(255,255,255,.95); box-shadow: 0 -12px 48px rgba(70,52,24,.14), inset 0 2px 2px #fff; }
+.v2-grab { width: 36px; height: 4px; border-radius: 3px; background: #b5aa97; margin: 2px auto 16px; }
 
-/* ── ☰ のシート ── */
-.v2-sheet-back { position: fixed; inset: 0; z-index: 60; background: rgba(31, 28, 24, 0.28); }
-.v2-sheet {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; max-width: 520px; margin: 0 auto;
-  border-radius: 26px 26px 0 0; padding: 10px 20px calc(env(safe-area-inset-bottom, 0px) + 20px);
-  max-height: 86dvh; overflow-y: auto; background: rgba(250, 248, 244, 0.96);
-}
-.v2-grab { width: 40px; height: 5px; border-radius: 3px; background: rgba(31, 28, 24, 0.15); margin: 0 auto 12px; }
-
-/* ── ページ（チケット・ログインなど）の上の戻る ── */
-.v2-back { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; color: var(--v2-sub); font: 600 15px/1 var(--v2-sans); padding: 8px 0; cursor: pointer; }
-
-/* 本人確認の案内など、もとは黒い画面用の部品を白の上で読めるように */
-.v2 .customer-access h1 { color: var(--v2-ink); }
-.v2 .customer-access p, .v2 .customer-access .access-hint { color: var(--v2-sub); }
-.v2 .customer-access .access-primary { background: var(--v2-ink); color: #fff; }
-.v2 .customer-access .access-text { color: var(--v2-sub); }
-.v2 .customer-access summary { color: var(--v2-ink); }
-
-@media (prefers-reduced-motion: reduce) {
-  .v2::before, .v2::after, .v2 *, .v2 *::before, .v2 *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
-}
-
-/* V2.0 の画面では、ページの外（引っぱったときの余白など）も白に */
-html:has(.v2), body:has(.v2) { background: #f5f2ec; }
-
-/* ログインと引き継ぎ（白の面）：見出し・区切り線を白の上で読めるように */
+/* Existing account/verification components: readable on pearl instead of dark text tokens. */
 .v2 .customer-access { color: var(--v2-ink); }
-.v2 .customer-access h2 { color: var(--v2-ink); }
+.v2 .customer-access :is(h1,h2,summary) { color: var(--v2-ink); }
+.v2 .customer-access :is(p,.access-hint,.access-text) { color: var(--v2-sub); }
+.v2 .customer-access .access-error { color: #a23226; }
 .v2 .access-settings { border-top-color: var(--v2-line); }
+.v2 .customer-access .access-primary { border-radius: 28px; border: 1px solid #b59764; color: #302719; background: var(--lq-champagne); box-shadow: var(--lq-gold-shadow); }
+.v2 .customer-access .access-secondary { border-radius: 28px; border-color: #b4a58f; color: var(--v2-ink); background: var(--lq-glass); box-shadow: var(--lq-glass-shadow); }
+.v2 .customer-access :is(button,input):focus-visible { outline-color: #725126; }
 
-/* ══ リキッド・グラス × リキッド・ゴールド（最後に書いて上の面・ボタンを仕上げる） ══
-   ガラス：上半分に艶（ぷっくり）、縁に沿った細い光、下の縁に光の溜まり（厚み）、浮いた影。
-   金：ベタ塗りにせず、液体金属のように明→濃→明の帯で光を流し、上に艶を重ねる。 */
-.v2 {
-  --lq-gold: linear-gradient(172deg, #fff3d6 0%, #ecd29c 16%, #c99d55 38%, #8e6a2d 55%, #b48a45 70%, #e8cd94 86%, #fff1d0 100%);
-  --lq-champagne: linear-gradient(176deg, #fffbf2 0%, #f6e7c6 26%, #dfc28c 52%, #ecd6a8 74%, #fff6e2 100%);
-  --lq-glass-shadow:
-    0 22px 44px -12px rgba(80, 58, 24, 0.22), 0 6px 14px -4px rgba(80, 58, 24, 0.10),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.55),
-    inset 0 2px 1px rgba(255, 255, 255, 1),
-    inset 0 -2px 2px rgba(255, 255, 255, 0.85),
-    inset 0 -10px 18px -6px rgba(168, 130, 63, 0.10),
-    inset 0 10px 22px -10px rgba(255, 255, 255, 0.9);
+/* Shared legacy controls get this material only inside the customer V2 shell. */
+.v2 .push-toggle-action {
+  border: 1px solid rgba(255,255,255,.95) !important; border-radius: 22px !important;
+  color: var(--v2-ink) !important; background: var(--lq-glass) !important; box-shadow: var(--lq-glass-shadow);
 }
-.v2-glass {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.42) 46%, rgba(255, 255, 255, 0.24) 54%, rgba(255, 255, 255, 0.5) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  box-shadow: var(--lq-glass-shadow);
+.v2 .push-toggle-title { color: var(--v2-ink); }
+.v2 .push-toggle-description { color: var(--v2-sub) !important; }
+.v2 .push-toggle-indicator { color: var(--v2-gold-deep) !important; }
+.v2 .ticket-bind-backdrop { background: rgba(40,34,26,.28) !important; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.v2 .ticket-bind-dialog {
+  border-radius: 28px !important; background: #f8f5ef !important; border: 1px solid #fff !important;
+  box-shadow: 0 24px 64px -20px rgba(55,40,20,.32), inset 0 2px 2px #fff !important;
 }
+.v2 .ticket-bind-dialog :is(h2,p:not(.ticket-bind-error)) { color: var(--v2-ink) !important; }
+.v2 .ticket-bind-dialog .ticket-bind-error { color: #a23226 !important; }
+.v2 .ticket-bind-dialog .access-text { color: var(--v2-sub) !important; }
+.v2 .ticket-bind-dialog input { color: var(--v2-ink) !important; border-color: #ac9979 !important; background: #fffdf8 !important; }
+.v2 .ticket-bind-dialog input:focus-visible { outline: 2px solid #725126 !important; outline-offset: 4px; }
+.v2 .ticket-bind-action {
+  border-radius: 24px !important; color: var(--v2-ink) !important;
+  border-color: rgba(255,255,255,.95) !important; background: var(--lq-glass) !important; box-shadow: var(--lq-glass-shadow);
+}
+.v2 .ticket-bind-action.is-primary { border-color: #b59764 !important; background: var(--lq-champagne) !important; box-shadow: var(--lq-gold-shadow); }
 
-/* チップ：ぷっくりしたガラスの粒。文字は少し浮き彫り */
-.v2-cat { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); }
-.v2-cat[aria-pressed="true"] {
-  background: var(--lq-champagne);
-  border: 1px solid rgba(190, 150, 80, 0.85);
-  box-shadow:
-    0 12px 26px -8px rgba(150, 110, 45, 0.45), 0 3px 8px rgba(120, 90, 40, 0.15),
-    inset 0 0 0 1.5px rgba(255, 248, 230, 0.75),
-    inset 0 3px 2px rgba(255, 255, 255, 0.95),
-    inset 0 -3px 5px rgba(150, 110, 45, 0.30),
-    inset 0 -1px 0 rgba(255, 240, 205, 0.9);
-}
-
-/* AI予約：厚いガラスの棒。上に艶の帯、縁は金の二重線 */
-.v2-cta { overflow: hidden; }
-.v2-cta::after {
-  content: ""; position: absolute; left: 14px; right: 14px; top: 3px; height: 46%; border-radius: 34px 34px 60% 60% / 34px 34px 20px 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0)); pointer-events: none;
-}
-.v2-cta-text, .v2-cta-spark, .v2-cta-go { position: relative; z-index: 1; }
-/* 右の玉：透けるリキッド・ゴールドのガラス玉 */
-.v2-cta-go, .v2-pay-icon {
-  background:
-    radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0) 55%),
-    var(--lq-gold);
-  border: 1.5px solid rgba(255, 246, 222, 0.95);
-  box-shadow: 0 8px 18px -4px rgba(120, 88, 34, 0.5), inset 0 -3px 6px rgba(100, 72, 26, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
-  text-shadow: 0 1px 2px rgba(90, 64, 20, 0.5);
-}
-.v2-cta-go svg, .v2-pay-icon svg { filter: drop-shadow(0 1px 1px rgba(90, 64, 20, 0.45)); }
-
-/* 金のボタン（会員QR を表示する・AI予約する など） */
-.v2-btn-gold {
-  position: relative; overflow: hidden; color: #fff; text-shadow: 0 1px 2px rgba(80, 56, 18, 0.55);
-  background: var(--lq-gold);
-  border: 1px solid rgba(255, 240, 205, 0.9);
-  box-shadow: 0 14px 28px -10px rgba(120, 88, 34, 0.55), inset 0 2px 2px rgba(255, 255, 255, 0.75), inset 0 -3px 6px rgba(90, 64, 22, 0.35);
-}
-.v2-btn-gold::after { content: ""; position: absolute; left: 10px; right: 10px; top: 2px; height: 45%; border-radius: 14px 14px 40% 40%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0)); pointer-events: none; }
-.v2-btn:active, .v2-round:active { transform: scale(0.98); }
-
-/* 下のタブ：選んだタブの印をリキッド・ゴールドの小さな棒に */
-.v2-nav button[aria-current="page"]::after { width: 20px; height: 3px; border-radius: 2px; background: var(--lq-gold); box-shadow: 0 1px 3px rgba(140, 104, 40, 0.45); }
-.v2-dots i.on { background: var(--lq-gold); box-shadow: 0 1px 3px rgba(140, 104, 40, 0.4); }
-/* AI予約の棒は、共通のガラスより後ろで金の縁と厚みを付け直す */
-.v2-cta.v2-glass {
-  border: 1.5px solid rgba(206, 172, 112, 0.95);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 252, 244, 0.5) 48%, rgba(250, 240, 220, 0.42) 54%, rgba(255, 248, 232, 0.72) 100%);
-  box-shadow:
-    0 24px 46px -14px rgba(110, 80, 30, 0.32), 0 6px 14px -4px rgba(110, 80, 30, 0.12),
-    0 0 0 4px rgba(255, 255, 255, 0.45), 0 0 0 5px rgba(206, 172, 112, 0.35),
-    inset 0 2px 1px rgba(255, 255, 255, 1), inset 0 -3px 4px rgba(255, 246, 225, 0.9),
-    inset 0 -12px 20px -8px rgba(168, 130, 63, 0.18);
-}
-
-/* ══ チケット（白にそろえる）：券・クーポンの画像と黒いカードはそのまま（券そのものの絵柄）。
-   ページの地・見出し・3つのタブだけ白のリキッド・グラスに ══ */
+/* Wallet chrome matches the app; ticket art and the QR quiet zone keep their own colors. */
 .v2-wallet .ginjiro-luxury-bg { background: none !important; }
 .v2-wallet .ginjiro-luxury-bg::before, .v2-wallet .ginjiro-luxury-bg::after { display: none !important; }
 .v2-wallet .wallet-cut-special__title { color: var(--v2-ink); text-shadow: none; }
-.v2-wallet .wallet-cut-special__image-wrap { box-shadow: 0 18px 34px -12px rgba(70, 52, 24, 0.35); }
-.v2-wallet .wallet-chips { gap: 8px; padding: 6px 0 4px; }
+.v2-wallet .wallet-cut-special__image-wrap { box-shadow: 0 18px 34px -12px rgba(70,52,24,.35); }
+.v2-wallet .wallet-chips { gap: 8px; padding: 8px 0 10px; }
 .v2-wallet .wallet-chips::after { display: none; }
 .v2-wallet .wallet-chip {
-  min-height: 58px; border-radius: 22px; border: 1px solid rgba(255, 255, 255, 0.95);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.45) 46%, rgba(255, 255, 255, 0.26) 54%, rgba(255, 255, 255, 0.55) 100%);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5); backdrop-filter: blur(16px) saturate(1.5);
-  box-shadow: var(--lq-glass-shadow);
+  min-height: 60px; border-radius: 26px; border: 1px solid rgba(255,255,255,.95);
+  background: var(--lq-glass); -webkit-backdrop-filter: blur(18px) saturate(1.25); backdrop-filter: blur(18px) saturate(1.25); box-shadow: var(--lq-glass-shadow);
 }
-.v2-wallet .wallet-chip[aria-pressed='true'] {
-  min-height: 58px; border: 1px solid rgba(190, 150, 80, 0.85); background: var(--lq-champagne);
-  box-shadow:
-    0 12px 26px -8px rgba(150, 110, 45, 0.45), 0 3px 8px rgba(120, 90, 40, 0.15),
-    inset 0 0 0 1.5px rgba(255, 248, 230, 0.75), inset 0 3px 2px rgba(255, 255, 255, 0.95), inset 0 -3px 5px rgba(150, 110, 45, 0.30);
-}
+.v2-wallet .wallet-chip[aria-pressed='true'] { min-height: 60px; border-color: #b59764; background: var(--lq-champagne); box-shadow: var(--lq-gold-shadow); }
 .v2-wallet .wallet-chip[aria-pressed='true']::before { display: none; }
-.v2-wallet .wallet-chip-label, .v2-wallet .wallet-chip[aria-pressed='true'] .wallet-chip-label { color: var(--v2-ink); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9); }
+.v2-wallet .wallet-chip-label, .v2-wallet .wallet-chip[aria-pressed='true'] .wallet-chip-label { color: var(--v2-ink); text-shadow: 0 1px rgba(255,255,255,.75); }
 .v2-wallet .wallet-chip:nth-child(1) .wallet-chip-sub, .v2-wallet .wallet-chip[aria-pressed='true']:nth-child(1) .wallet-chip-sub { color: var(--v2-gold-deep); }
-.v2-wallet .wallet-chip-pill { left: 44%; right: 44%; bottom: 4px; height: 3px; background: var(--lq-gold); box-shadow: 0 1px 3px rgba(140, 104, 40, 0.45); }
+.v2-wallet .wallet-chip-pill { left: 46%; right: 46%; bottom: 4px; height: 4px; background: #876132; box-shadow: none; border-radius: 4px; }
 .v2-wallet .wallet-chip-pill::after { display: none; }
-/* 横にスワイプする列は、はみ出した影が下で切れて線に見えるので、影が消えきる余白を取る（見た目の間隔は同じ） */
-.v2-cards { padding-bottom: 44px; margin-bottom: -36px; }
 .v2-wallet .wallet-premium-coupon-list { padding-top: 24px; margin-top: -22px; padding-bottom: 56px; margin-bottom: -26px; }
-.v2-wallet .wallet-premium-image-card img { filter: drop-shadow(0 16px 20px rgba(70, 52, 24, 0.28)); }
+.v2-wallet .wallet-premium-image-card img { filter: drop-shadow(0 16px 20px rgba(70,52,24,.28)); }
+
+@media (hover: hover) {
+  .v2 :is(.v2-cat,.v2-btn,.v2-pay,.v2-round):not(:disabled):hover { box-shadow: 0 10px 20px -12px rgba(85,62,30,.3), inset 0 2px 3px #fff, inset 0 -2px 4px rgba(166,136,88,.18); }
+}
+@media (max-width: 380px) {
+  .v2-cta { padding-left: 14px; gap: 7px; }
+  .v2-cta-spark { display: none; }
+  .v2-cta-go { width: 48px; height: 48px; }
+  .v2-pay-go { font-size: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v2 *, .v2 *::before, .v2 *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  .v2 :is(.v2-round,.v2-cat,.v2-btn,.v2-pay,.v2-cta):not(:disabled):active { transform: none; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .v2-glass, .v2-wallet .wallet-chip { background: var(--v2-glass-strong); }
+  .v2-cat[aria-pressed="true"], .v2-wallet .wallet-chip[aria-pressed='true'] { background: var(--lq-champagne); }
+  .v2-cta { background: #f8f4eb; }
+}
+@media (prefers-contrast: more) {
+  .v2-glass { border-color: #8c7b60; }
+  .v2 { --v2-faint: #51483b; --v2-sub: #443c31; }
+}
+@media (forced-colors: active) {
+  .v2 :is(button,.v2-btn,.v2-glass) { border: 1px solid ButtonText; }
+  .v2 :is([aria-current="page"],[aria-pressed="true"]) { outline: 2px solid Highlight; }
+}

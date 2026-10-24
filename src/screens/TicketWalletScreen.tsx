@@ -26,6 +26,8 @@ import { WalletDetailSheet } from '../components/wallet/WalletDetailSheet'
 import { CARD_HEIGHT, CARD_STRIP } from '../components/wallet/WalletCardFace'
 import { SERIF, IVORY } from '../components/wallet/walletTheme'
 import '../components/wallet/wallet.css'
+import { formatVisit, forgetReservation, useNextReservation } from '../features/johnny/nextReservation'
+import { bookingAssistantApi, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
 
 const INK = '#1F1C18'
 const MAINTENANCE_LOCAL_KEY = 'ginjiro_maintenance_visits'
@@ -183,6 +185,9 @@ export function TicketWalletScreen({
   const pendingPremiumCallRef = useRef<{ card: PremiumCard; timer: number | null } | null>(null)
   const [cutReservationCoupon, setCutReservationCoupon] = useState<CutSpecialCoupon | null>(null)
   const [cutReservationNotice, setCutReservationNotice] = useState<CurrentReservation | null>(null)
+  // ご予約は1つ：お電話のクーポン予約を入れたとき、アプリの予約が残っていればキャンセルするか聞く
+  const aiNext = useNextReservation()
+  const [aiConflict, setAiConflict] = useState<CustomerReservation | null>(null)
   const pendingCutCallRef = useRef<{ coupon: CutSpecialCoupon; timer: number | null } | null>(null)
   const [transferTicket,    setTransferTicket]    = useState<TicketRow | null>(null)
   const [transferToken,     setTransferToken]     = useState<string | null>(null)
@@ -360,6 +365,7 @@ export function TicketWalletScreen({
     if (!reservation) return
     saveCurrentReservation(reservation)
     openPremiumQr(card)
+    if (aiNext) setAiConflict(aiNext)
   }
 
   function openPremiumQr(card: PremiumCard) {
@@ -377,6 +383,7 @@ export function TicketWalletScreen({
     saveCurrentReservation(reservation)
     setCutReservationCoupon(null)
     setCutReservationNotice(reservation)
+    if (aiNext) setAiConflict(aiNext)
   }
 
   async function handleTransfer(ticket: TicketRow) {
@@ -713,6 +720,13 @@ export function TicketWalletScreen({
             reservation={cutReservationNotice}
             onClose={() => setCutReservationNotice(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── アプリの予約も残っているとき（ご予約は1つ） ── */}
+      <AnimatePresence>
+        {aiConflict && !cutReservationNotice && !premiumQrItem && (
+          <AiConflictDialog reservation={aiConflict} onDone={() => setAiConflict(null)} />
         )}
       </AnimatePresence>
 
@@ -1381,6 +1395,40 @@ function CutReservationNotice({ reservation, onClose }: {
           style={{ width: '100%', minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #3d0608 0%, #6B0F12 60%, #8B1A1A 100%)', border: '1px solid rgba(201,162,74,0.44)', boxShadow: '0 4px 22px rgba(107,15,18,0.40)', color: INK, fontFamily: SERIF, fontSize: 14, fontWeight: 800, letterSpacing: '0.14em', cursor: 'pointer' }}
         >
           OK
+        </button>
+      </motion.div>
+    </div>
+  )
+}
+
+/** お電話のクーポン予約を入れたのに、アプリの予約も残っている：キャンセルするか聞く */
+function AiConflictDialog({ reservation, onDone }: { reservation: CustomerReservation; onDone: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const v = formatVisit(reservation.starts_at)
+  const cancel = async () => {
+    setBusy(true); setError(null)
+    try { await bookingAssistantApi().cancel(reservation.id); forgetReservation(reservation.id); onDone() }
+    catch { setError('キャンセルできませんでした。お手数ですが、お店にお電話ください。'); setBusy(false) }
+  }
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 310, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <motion.div role="dialog" aria-modal="true" aria-label="アプリのご予約" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
+        style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(70,52,24,0.22)', padding: '24px 20px 20px', textAlign: 'center' }}>
+        <p style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 700, color: INK, lineHeight: 1.5, marginBottom: 8 }}>アプリのご予約が残っています</p>
+        <p style={{ fontSize: 13, color: 'rgba(31,28,24,0.8)', lineHeight: 1.75, marginBottom: 14 }}>ご予約はおひとり1つまでです。お電話でご予約したので、こちらはキャンセルしますか？</p>
+        <div style={{ borderRadius: 16, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(201,162,74,0.18)', padding: '12px 14px', marginBottom: 16, textAlign: 'left' }}>
+          <p style={{ fontSize: 12, color: '#8A6A2F', marginBottom: 4 }}>{v.date} {v.time}〜</p>
+          <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: INK }}>{reservation.items.map(i => i.name).join('・')}</p>
+        </div>
+        {error && <p style={{ fontSize: 13, color: '#A3402F', marginBottom: 10 }}>{error}</p>}
+        <button type="button" className="wallet-cta" disabled={busy} onClick={() => void cancel()}
+          style={{ width: '100%', minHeight: 52, borderRadius: 14, marginBottom: 10, color: '#fff', fontWeight: 700, fontSize: 15, border: '1px solid rgba(255,240,205,0.9)', background: 'linear-gradient(172deg, #fff3d6 0%, #ecd29c 16%, #c99d55 38%, #8e6a2d 55%, #b48a45 70%, #e8cd94 86%, #fff1d0 100%)' }}>
+          {busy ? 'キャンセルしています…' : 'アプリの予約をキャンセルする'}
+        </button>
+        <button type="button" className="wallet-cta" disabled={busy} onClick={onDone}
+          style={{ width: '100%', minHeight: 48, borderRadius: 14, color: 'rgba(31,28,24,0.7)', fontSize: 14, border: '1px solid rgba(31,28,24,0.12)', background: 'rgba(255,255,255,0.7)' }}>
+          そのままにする
         </button>
       </motion.div>
     </div>
