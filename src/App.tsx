@@ -42,7 +42,8 @@ import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
 import { MEMBER_ISSUED_AT_KEY, USER_ID_KEY } from './utils/userId'
 import { useBgm } from './hooks/useBgm'
 import { seedDevData } from './utils/devSeed'
-import { InstallGuide } from './components/InstallGuide'
+import { InstallGate, InstallGuide } from './components/InstallGuide'
+import { needsInstallFirst } from './utils/installGuide'
 import { refreshPushIfGranted } from './utils/webPush'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -845,6 +846,8 @@ function App() {
   }, [])
 
   // ── Phase ─────────────────────────────────────────────────────────────────────
+  // iPhone の Safari では、登録の前にホーム画面へ追加してもらう（Safari とアプリで保存場所が別なので、二重登録になる）
+  const [installFirst, setInstallFirst] = useState(needsInstallFirst)
   const [phase, setPhase] = useState<AppPhase>(() => {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
     return done ? 'app' : 'onboarding'
@@ -1062,10 +1065,11 @@ function App() {
       {phase === 'onboarding' ? (
 
         /* StartScreen: standalone fullscreen, HomeScreen is NOT mounted */
+        installFirst ? <InstallGate onSkip={() => setInstallFirst(false)} /> : (
         <OnboardingScreen
           memberStatus={memberStatus}
           onDone={handleOnboardingDone}
-        />
+        />)
 
       ) : (
 
