@@ -548,7 +548,7 @@ Johnny でメンテナンスカット（30分・3,000円・銀二郎／テイテ
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_post_web_lockdown.sql"
 ```
 
-新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB22完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜21は開始時との不変比較を維持する。承認30人の集合は増減しない。
+新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB22完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜22は開始時との不変比較を維持する。承認30人の集合は増減しない。
 
 次へ：preflight_securityのDO検査にエラーがなく、履歴48件、data・予約設定・承認30人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
 
