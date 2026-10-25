@@ -7,3 +7,9 @@
 .access-offer{width:calc(100% - 40px);max-width:360px;margin:auto;padding:24px;border:1px solid #444;border-radius:16px;background:#1c1c1e}.access-offer::backdrop{background:rgb(0 0 0 / .75)}.access-offer .access-text{display:block;width:100%;margin-top:10px}
 
 .store-staff-approval{padding:18px;margin:0 0 14px;border:1px solid #c9c9c9;border-radius:12px;background:#fff;color:#202420;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}.store-staff-approval h2{font-size:17px;margin:0 0 8px}.store-staff-approval p{font-size:14px;line-height:1.7;margin:8px 0 14px}.store-staff-approval button{width:100%;min-height:48px;padding:12px;border:0;border-radius:8px;color:#fff;background:#242a27;font-size:15px;font-weight:600}.store-staff-approval button:disabled{opacity:.5}.store-staff-approval [role=alert]{color:#a12828}
+
+/* Keep login/recovery actions readable on narrow phones and with large text. */
+.access-actions{flex-wrap:wrap}.access-actions>*{flex:1 1 140px;min-width:0;white-space:normal}
+.access-welcome{min-height:100vh;min-height:100dvh;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+.access-welcome .access-radio{flex-wrap:wrap;gap:10px 20px}.access-welcome input[type=radio]{flex-shrink:0}
+.access-offer{max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain}

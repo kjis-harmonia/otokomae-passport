@@ -73,7 +73,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
         <button type="button" className="v2-round v2-glass" aria-label="メニュー" onClick={() => setMenu(true)}><Menu size={20} /></button>
       </header>
 
-      <main className={`v2-main${tab === 'home' && !pay ? ' has-cta' : ''}`}>
+      <main className={`v2-main${activeTab === 'home' && !pay ? ' has-cta' : ''}`}>
         {activeTab === 'mypage'
           ? <V2Account onBack={back} />
           : tab === 'home' && pay ? <V2Ginpay onBack={() => setPay(false)} onShowQr={() => go('qr')} />

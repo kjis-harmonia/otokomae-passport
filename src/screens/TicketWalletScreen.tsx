@@ -734,7 +734,7 @@ export function TicketWalletScreen({
       <AnimatePresence>
         {xferError && (
           <div
-            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+            className="customer-wallet-overlay" style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
             onClick={() => setXferError(null)}
           >
             <motion.div
@@ -759,7 +759,7 @@ export function TicketWalletScreen({
       {/* ── 譲渡 QR モーダル ── */}
       <AnimatePresence>
         {transferUrl && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="customer-wallet-overlay" style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
             <motion.div
               initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
               transition={{ duration: reduced ? 0 : 0.24 }}
@@ -1027,7 +1027,7 @@ function QrDialog({ eyebrow, title, amount, value, onClose }: {
   const reduced = useReducedMotion() ?? false
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      className="customer-wallet-overlay" style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onClose}
     >
       <motion.div
@@ -1113,7 +1113,7 @@ function MaintenanceCouponQrDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      className="customer-wallet-overlay" style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onClose}
     >
       <motion.div
@@ -1207,7 +1207,7 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
   const { today, maxDate, visitDate, setVisitDate, validDate } = useReservationDate()
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      className="customer-wallet-overlay" style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onNo}
     >
       <motion.div
@@ -1284,7 +1284,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
   const { today, maxDate, visitDate, setVisitDate, validDate } = useReservationDate()
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      className="customer-wallet-overlay" style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onNo}
     >
       <motion.div
@@ -1353,7 +1353,7 @@ function CutReservationNotice({ reservation, onClose }: {
   const reduced = useReducedMotion() ?? false
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
+      className="customer-wallet-overlay" style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}
       onClick={onClose}
     >
       <motion.div
@@ -1412,7 +1412,7 @@ function AiConflictDialog({ reservation, onDone }: { reservation: CustomerReserv
     catch { setError('キャンセルできませんでした。お手数ですが、お店にお電話ください。'); setBusy(false) }
   }
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 310, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div className="customer-wallet-overlay" style={{ position: 'fixed', inset: 0, zIndex: 310, background: 'rgba(40,30,18,0.42)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <motion.div role="dialog" aria-modal="true" aria-label="アプリのご予約" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
         style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(70,52,24,0.22)', padding: '24px 20px 20px', textAlign: 'center' }}>
         <p style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 700, color: INK, lineHeight: 1.5, marginBottom: 8 }}>アプリのご予約が残っています</p>
