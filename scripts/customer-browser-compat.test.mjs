@@ -28,12 +28,11 @@ function homeFixture(empty = false) {
     '../utils/styleStorage': { loadStyles: () => data.styles },
     '../data/styleLibraryImages': { resolveStyleLibraryImageUrl: () => '/local-photo.jpg' },
     '../data/styleCategories': { UI_CATEGORIES: data.categories },
-    '../data/reserveLinks': { getReserveUrl: () => '', getStyleMenuCode: () => 'perm-punch', MAINTENANCE_CUT_URL: '' },
+    '../data/reserveLinks': { getReserveUrl: () => '', getStyleMenuCode: () => 'perm-punch' },
     '../utils/bookingCoupons': { ensurePriceRules: async () => {}, menuPrice: () => ({ price: 8000, normal: 9000 }) },
     '../features/johnny/bookingIntent': { requestJohnny: () => {} },
-    '../features/johnny/welcome': { maintenanceDeadline: () => '明日まで' },
     './V2GinpayBar': { V2GinpayBar: 'ginpay' },
-    './usualPicks': { loadUsualPicks: async () => [] },
+    './usualPicks': { loadUsual: async () => null },
   }
   context.require = name => { assert.ok(modules[name], name); return modules[name] }
   vm.runInContext(compile(homeSource), context)

@@ -1,4 +1,4 @@
-// V2.0 のホーム：カテゴリ（来店したことがあれば先頭に「いつもの」＋4つ）→ そのカテゴリのスタイルの写真を大きく → 「この髪型でAI予約する」（下のタブのすぐ上に固定）。
+// V2.0 のホーム：カテゴリ（来店したことがあれば先頭に「いつもの」＝「漢は黙っていつもので」の1枚＋4つ）→ そのカテゴリのスタイルの写真を大きく → 「この髪型でAI予約する」（下のタブのすぐ上に固定）。
 // 写真・カテゴリは今のスタイル図鑑のまま。値段は予約メニューの料金表（AI予約と同じ値段）、対応するメニューがないスタイルだけ手入力の値段。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -6,13 +6,12 @@ import { ArrowRight, Sparkle } from 'lucide-react'
 import { loadStyles } from '../utils/styleStorage'
 import { resolveStyleLibraryImageUrl } from '../data/styleLibraryImages'
 import { UI_CATEGORIES } from '../data/styleCategories'
-import { getReserveUrl, getStyleMenuCode, MAINTENANCE_CUT_URL } from '../data/reserveLinks'
+import { getReserveUrl, getStyleMenuCode } from '../data/reserveLinks'
 import { ensurePriceRules, menuPrice } from '../utils/bookingCoupons'
 import { requestJohnny } from '../features/johnny/bookingIntent'
 import type { StyleCard } from '../data/styleCard'
-import { maintenanceDeadline } from '../features/johnny/welcome'
 import { V2GinpayBar } from './V2GinpayBar'
-import { loadUsualPicks, type UsualPick } from './usualPicks'
+import { loadUsual, type Usual } from './usualPicks'
 
 const yen = (n: number) => `¥${n.toLocaleString()}`
 
@@ -24,25 +23,23 @@ function stylePrice(style: StyleCard): { price: number; normal: number | null } 
 }
 
 const USUAL = 'いつもの'
+const USUAL_POSTER = '/assets/styles/itsumono.jpg'
 
-/** カードに並べるもの：スタイル（写真）か、「いつもの」のメンテナンスカット・写真の無いメニュー */
+/** カードに並べるもの：スタイルの写真か、「いつもの」のポスター（メニューは来店の記録で分かるときだけ） */
 type Item =
   | { key: string; kind: 'style'; style: StyleCard; code: string | null; label: string }
-  | { key: string; kind: 'menu'; code: string; label: string }
-  | { key: string; kind: 'maintenance'; left: number; days: number }
-  | { key: string; kind: 'consult' }
+  | { key: string; kind: 'usual'; code: string | null; label: string; title: string | null }
 
 function itemPrice(item: Item): { price: number; normal: number | null } | null {
   if (item.kind === 'style') return (item.code ? menuPrice(item.code) : null) ?? stylePrice(item.style)
-  if (item.kind === 'menu') return menuPrice(item.code)
-  return null
+  return item.code ? menuPrice(item.code) : null
 }
 
 export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const reduce = useReducedMotion()
   const styles = useMemo(() => loadStyles().filter(s => s.isPublished), [])
   const [cat, setCat] = useState<string>(UI_CATEGORIES[0].id)
-  const [usual, setUsual] = useState<UsualPick[]>([])
+  const [usual, setUsual] = useState<Usual>(null)
   const touched = useRef(false)
   const catsRail = useRef<HTMLDivElement>(null)
   const [index, setIndex] = useState(0)
@@ -54,26 +51,19 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   // 来店したことがあれば「いつもの」を先頭に出して、まだカテゴリを触っていなければそこを開く
   useEffect(() => {
     let alive = true
-    void loadUsualPicks().then(picks => {
-      if (!alive || picks.length === 0) return
-      setUsual(picks)
+    void loadUsual().then(u => {
+      if (!alive || !u) return
+      setUsual(u)
       if (!touched.current) { setCat(USUAL); setIndex(0) }
     })
     return () => { alive = false }
   }, [])
   // 先頭にチップが増えると、ブラウザは前に吸い付いていたチップ（昭和の漢）へ戻ろうとして「いつもの」が左に隠れる → 描いた直後に先頭へ
-  useLayoutEffect(() => { if (usual.length > 0) catsRail.current?.scrollTo({ left: 0 }) }, [usual])
-  const cats = useMemo(() => [...(usual.length > 0 ? [USUAL] : []), ...UI_CATEGORIES.map(c => c.id)], [usual])
+  useLayoutEffect(() => { if (usual) catsRail.current?.scrollTo({ left: 0 }) }, [usual])
+  const cats = useMemo(() => [...(usual ? [USUAL] : []), ...UI_CATEGORIES.map(c => c.id)], [usual])
 
   const list = useMemo((): Item[] => {
-    if (cat === USUAL && usual.length > 0) {
-      return usual.map((p): Item => {
-        if (p.kind === 'maintenance') return { key: 'maintenance', kind: 'maintenance', left: p.left, days: p.days }
-        if (p.kind === 'consult') return { key: 'consult', kind: 'consult' }
-        const style = p.title ? styles.find(s => s.title === p.title) : undefined
-        return style ? { key: 'usual-' + p.code, kind: 'style', style, code: p.code, label: p.name } : { key: 'usual-' + p.code, kind: 'menu', code: p.code, label: p.name }
-      })
-    }
+    if (cat === USUAL && usual) return [{ key: 'usual', kind: 'usual', code: usual.menu?.code ?? null, label: usual.menu?.name ?? '', title: usual.menu?.title ?? null }]
     const c = UI_CATEGORIES.find(x => x.id === cat) ?? UI_CATEGORIES[0]
     return c.titles.map(t => styles.find(s => s.title === t)).filter((s): s is StyleCard => !!s)
       .map((s): Item => ({ key: s.id, kind: 'style', style: s, code: getStyleMenuCode(s.title), label: s.title }))
@@ -94,14 +84,13 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   }
 
   const reserve = () => {
+    // いつものでメニューが分からないときは、メニューを決めずに Johnny（おかえりなさい から聞く）
     if (!selected) { requestJohnny({ menuCode: null, label: '' }); return }
-    // メンテナンスカットはアプリのメニューに無い（ホットペッパーのクーポン）。Johnny と同じくクーポンの予約へ
-    if (selected.kind === 'maintenance') { window.open(MAINTENANCE_CUT_URL, '_blank', 'noopener,noreferrer'); return }
-    if (selected.kind === 'consult') { requestJohnny({ menuCode: null, label: '' }); return }
     requestJohnny({ menuCode: selected.code, label: selected.label })
   }
   const price = selected ? itemPrice(selected) : null
-  const hpUrl = selected?.kind === 'style' ? getReserveUrl(selected.style.title) : undefined
+  const hpTitle = selected?.kind === 'style' ? selected.style.title : selected?.title ?? null
+  const hpUrl = hpTitle ? getReserveUrl(hpTitle) : undefined
 
   return (
     <>
@@ -124,22 +113,10 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
                   initial={reduce ? false : { opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.32, delay: reduce ? 0 : Math.min(i, 4) * 0.05, ease: [0.22, 1, 0.36, 1] }}>
                   {/* 写真が主役：髪型の名前は写真に入っているので、写真の上には何も載せない（名前・値段は読み上げ用。値段は下のAI予約ボタンに出す） */}
-                  {item.kind === 'style' ? (
-                    <div className="v2-card-photo">
-                      <img src={resolveStyleLibraryImageUrl(item.style)} alt="" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" />
-                      <h2 className="v2-sr">{item.label}{p ? `・${yen(p.price)}` : ''}</h2>
-                    </div>
-                  ) : (
-                    // 写真の無いもの（メンテナンスカット・写真の無いメニュー）：黒と金のポスター風
-                    <div className="v2-card-photo v2-usual-card">
-                      <span className="v2-usual-kicker">{item.kind === 'consult' ? 'AI JOHNNY' : 'いつもの'}</span>
-                      <h2 className="v2-usual-title" style={item.kind === 'menu' ? { whiteSpace: 'normal' } : undefined}>{item.kind === 'maintenance' ? <>メンテナンス<br />カット</> : item.kind === 'consult' ? <>ほかの<br />メニュー</> : item.label}</h2>
-                      {item.kind === 'maintenance'
-                        ? <p className="v2-usual-sub">前回のご来店から{item.days}日<br /><b>{maintenanceDeadline(item.left)}</b>使えます</p>
-                        : item.kind === 'consult' ? <p className="v2-usual-sub">パーマ・カット・カラー<br /><b>Johnny に相談して予約</b>できます</p>
-                        : <p className="v2-usual-sub">前回と同じメニューで</p>}
-                    </div>
-                  )}
+                  <div className="v2-card-photo">
+                    <img src={item.kind === 'style' ? resolveStyleLibraryImageUrl(item.style) : USUAL_POSTER} alt="" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" />
+                    <h2 className="v2-sr">{item.kind === 'usual' ? `いつもの${item.label ? '（' + item.label + '）' : ''}` : item.label}{p ? `・${yen(p.price)}` : ''}</h2>
+                  </div>
                 </motion.article>
               )
             })}
@@ -156,11 +133,10 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
       <button type="button" className="v2-cta v2-glass" onClick={reserve}>
         <span className="v2-cta-spark" aria-hidden="true"><Sparkle size={22} strokeWidth={1.6} /></span>
         <span className="v2-cta-text">
-          <b>{!selected ? 'AI予約（Johnny に相談）' : selected.kind === 'maintenance' ? 'メンテナンスを予約する' : selected.kind === 'consult' ? 'AI予約（Johnny に相談）' : cat === USUAL ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>
+          <b>{!selected ? 'AI予約（Johnny に相談）' : selected.kind === 'usual' ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>
           <small>{!selected ? '銀二郎専属AI Johnny がお聞きします'
-            : selected.kind === 'maintenance' ? `${maintenanceDeadline(selected.left)}使えます`
-            : selected.kind === 'consult' ? '銀二郎専属AI Johnny がお聞きします'
-            : price ? <><span className="v2-cta-price">{yen(price.price)}</span>{price.normal != null && price.normal !== price.price ? '　会員価格' : ''}</> : selected.label}</small>
+            : selected.kind === 'usual' && !selected.code ? '銀二郎専属AI Johnny がお聞きします'
+            : price ? <>{selected.kind === 'usual' ? selected.label + '　' : ''}<span className="v2-cta-price">{yen(price.price)}</span>{price.normal != null && price.normal !== price.price ? '　会員価格' : ''}</> : selected.label}</small>
         </span>
         <span className="v2-cta-go" aria-hidden="true"><ArrowRight size={20} /></span>
       </button>
