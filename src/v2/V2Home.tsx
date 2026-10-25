@@ -30,6 +30,7 @@ type Item =
   | { key: string; kind: 'style'; style: StyleCard; code: string | null; label: string }
   | { key: string; kind: 'menu'; code: string; label: string }
   | { key: string; kind: 'maintenance'; left: number; days: number }
+  | { key: string; kind: 'consult' }
 
 function itemPrice(item: Item): { price: number; normal: number | null } | null {
   if (item.kind === 'style') return (item.code ? menuPrice(item.code) : null) ?? stylePrice(item.style)
@@ -68,6 +69,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
     if (cat === USUAL && usual.length > 0) {
       return usual.map((p): Item => {
         if (p.kind === 'maintenance') return { key: 'maintenance', kind: 'maintenance', left: p.left, days: p.days }
+        if (p.kind === 'consult') return { key: 'consult', kind: 'consult' }
         const style = p.title ? styles.find(s => s.title === p.title) : undefined
         return style ? { key: 'usual-' + p.code, kind: 'style', style, code: p.code, label: p.name } : { key: 'usual-' + p.code, kind: 'menu', code: p.code, label: p.name }
       })
@@ -95,6 +97,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
     if (!selected) { requestJohnny({ menuCode: null, label: '' }); return }
     // メンテナンスカットはアプリのメニューに無い（ホットペッパーのクーポン）。Johnny と同じくクーポンの予約へ
     if (selected.kind === 'maintenance') { window.open(MAINTENANCE_CUT_URL, '_blank', 'noopener,noreferrer'); return }
+    if (selected.kind === 'consult') { requestJohnny({ menuCode: null, label: '' }); return }
     requestJohnny({ menuCode: selected.code, label: selected.label })
   }
   const price = selected ? itemPrice(selected) : null
@@ -129,10 +132,11 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
                   ) : (
                     // 写真の無いもの（メンテナンスカット・写真の無いメニュー）：黒と金のポスター風
                     <div className="v2-card-photo v2-usual-card">
-                      <span className="v2-usual-kicker">いつもの</span>
-                      <h2 className="v2-usual-title">{item.kind === 'maintenance' ? <>メンテナンス<br />カット</> : item.label}</h2>
+                      <span className="v2-usual-kicker">{item.kind === 'consult' ? 'AI JOHNNY' : 'いつもの'}</span>
+                      <h2 className="v2-usual-title" style={item.kind === 'menu' ? { whiteSpace: 'normal' } : undefined}>{item.kind === 'maintenance' ? <>メンテナンス<br />カット</> : item.kind === 'consult' ? <>ほかの<br />メニュー</> : item.label}</h2>
                       {item.kind === 'maintenance'
                         ? <p className="v2-usual-sub">前回のご来店から{item.days}日<br /><b>{maintenanceDeadline(item.left)}</b>使えます</p>
+                        : item.kind === 'consult' ? <p className="v2-usual-sub">パーマ・カット・カラー<br /><b>Johnny に相談して予約</b>できます</p>
                         : <p className="v2-usual-sub">前回と同じメニューで</p>}
                     </div>
                   )}
@@ -152,9 +156,10 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
       <button type="button" className="v2-cta v2-glass" onClick={reserve}>
         <span className="v2-cta-spark" aria-hidden="true"><Sparkle size={22} strokeWidth={1.6} /></span>
         <span className="v2-cta-text">
-          <b>{!selected ? 'AI予約（Johnny に相談）' : selected.kind === 'maintenance' ? 'メンテナンスを予約する' : cat === USUAL ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>
+          <b>{!selected ? 'AI予約（Johnny に相談）' : selected.kind === 'maintenance' ? 'メンテナンスを予約する' : selected.kind === 'consult' ? 'AI予約（Johnny に相談）' : cat === USUAL ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>
           <small>{!selected ? '銀二郎専属AI Johnny がお聞きします'
             : selected.kind === 'maintenance' ? `${maintenanceDeadline(selected.left)}使えます`
+            : selected.kind === 'consult' ? '銀二郎専属AI Johnny がお聞きします'
             : price ? <><span className="v2-cta-price">{yen(price.price)}</span>{price.normal != null && price.normal !== price.price ? '　会員価格' : ''}</> : selected.label}</small>
         </span>
         <span className="v2-cta-go" aria-hidden="true"><ArrowRight size={20} /></span>
