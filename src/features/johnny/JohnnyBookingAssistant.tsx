@@ -27,7 +27,7 @@ import { planCompanion } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { takeAiTurn } from './aiQuota'
 import { PushToggle } from '../../components/PushToggle'
-import { getUsualMenu, setUsualMenu } from './usualMenu'
+import { canBeUsual, getUsualMenu, setUsualMenu, usualMenuOrder } from './usualMenu'
 import { pushState } from '../../utils/webPush'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
@@ -214,6 +214,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const [step, setStep] = useState<Step>({ k: 'loading' })
   const [options, setOptions] = useState<AssistantOptions | null>(null)
   const [lastMenuCode, setLastMenuCode] = useState<string | null>(null)
+  /** メンテナンスカットのあと何日使えるか（14日以内でなければ null） */
+  const [maintLeft, setMaintLeft] = useState<number | null>(null)
   const [heard, setHeard] = useState('')
   // 質問・相談への答え（どの段階で答えたかを覚え、段階が変わったら出さない）
   const [answer, setAnswer] = useState<{ forStep: Step; text: string; menus: MenuOption[]; thinking?: boolean } | null>(null)
@@ -301,7 +303,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         const w0 = buildWelcome(lastVisit, list, opts.menus, Date.now(), visits)
         // 登録したいつものメニューがあれば、それを「いつもの」の先頭に
         const reg = getUsualMenu()
-        const regMenu = reg ? opts.menus.find(m => m.code === reg.code) : undefined
+        const regMenu = reg && canBeUsual(reg.code) ? opts.menus.find(m => m.code === reg.code) : undefined
+        setMaintLeft(w0?.maintenanceLeft ?? null)
         const w = w0 && regMenu ? { ...w0, usual: [regMenu, ...w0.usual.filter(m => m.code !== regMenu.code)].slice(0, 2) } : w0
         if (w) {
           turnsRef.current = [{ role: 'assistant', text: `おかえりなさい！${welcomeText(w).lines.join('')}ご予約はどうしますか？` }]
@@ -335,10 +338,20 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep({ k: 'ai', say: '承知しました。キャンセル待ちを外しておきますね。', view: { kind: 'talk', handoff: false } })
   }, [api])
 
+  // メンテナンスカット（code: maintenance）は、前回のご来店（QR の来店登録）から14日以内のお客様だけ予約メニューに出す
+  const maintenanceMenu = options?.menus.find(m => m.code === 'maintenance')
   const menus = useMemo(() => {
-    const list = options?.menus ?? []
+    const list = (options?.menus ?? []).filter(m => m.code !== 'maintenance' || maintLeft != null)
     return lastMenuCode ? [...list].sort((a, b) => (a.code === lastMenuCode ? -1 : b.code === lastMenuCode ? 1 : 0)) : list
-  }, [options, lastMenuCode])
+  }, [options, lastMenuCode, maintLeft])
+
+  /** 「メンテナンスで予約」：14日以内ならそのまま日時へ。過ぎていたら理由を伝える。メニューが無い環境（DB が古い）はホットペッパーのクーポンへ */
+  const startMaintenance = useCallback(() => {
+    if (!maintenanceMenu) { setStep({ k: 'ai', say: 'メンテナンスカットは、ホットペッパーのクーポンでご予約いただけます。下のボタンからどうぞ。', view: { kind: 'maintenance' } }); return }
+    if (maintLeft == null) { setStep({ k: 'ai', say: 'メンテナンスカットは、前回のご来店から14日以内にご利用いただけます。今回は、通常のメニューでご予約ください。', view: { kind: 'talk', handoff: false } }); return }
+    turnsRef.current = [{ role: 'user', text: 'メンテナンスカットで予約したい' }, { role: 'assistant', text: 'メンテナンスカットですね。いつのご来店をご希望ですか？' }]
+    setStep({ k: 'askWhen', again: 'menu', menu: maintenanceMenu })
+  }, [maintenanceMenu, maintLeft])
 
   // スタイルの「予約する」から来たとき：最初の場面（おかえり／日時）を、そのメニュー入りの「いつにしますか？」に差し替える（担当は確定の前に聞く）
   // メニューが無い髪型は、名前だけ会話に入れて「いつにしますか？」から（メニューはあとで聞く）。料金表を読み終える前には受け取らない
@@ -768,12 +781,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const maintenanceChoice = s.k === 'ai' && s.view.kind === 'maintenanceChoice'
     const info = infoRequest(text, maintenanceChoice)
     if (info) { void answerInfo(info); return true }
-    if (isMaintenanceBookingRequest(text, maintenanceChoice)) {
-      setStep({ k: 'ai', say: 'メンテナンスカットは、ホットペッパーのクーポンでご予約いただけます。下のボタンからどうぞ。', view: { kind: 'maintenance' } })
-      return true
-    }
+    if (isMaintenanceBookingRequest(text, maintenanceChoice)) { startMaintenance(); return true }
     return false
-  }, [answerInfo])
+  }, [answerInfo, startMaintenance])
 
   const handleText = useCallback((raw: string) => {
     const text = raw.trim()
@@ -798,7 +808,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     if (s.k === 'askUsual') {
       const menu = matchMenu(text, menus)
-      if (menu) { saveUsual(menu); setStep({ k: 'usualSaved', menu }); return }
+      if (menu && canBeUsual(menu.code)) { saveUsual(menu); setStep({ k: 'usualSaved', menu }); return }
+      if (menu) { setStep({ k: 'askUsual', note: `${menu.name}は、いつものメニューにはできません。カット・パーマ・カラーからお選びください。` }); return }
       setStep({ k: 'askUsual', note: 'すみません、メニューが分かりませんでした。下から選ぶか、もう一度お伝えください。' })
       return
     }
@@ -1132,7 +1143,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // いつものメニュー：予約が済んだら、そのメニューを登録するか聞く（変更の予約・今のいつものと同じメニューは聞かない）
   const usualNow = getUsualMenu()
   const doneCode = step.k === 'done' && !step.changedFrom ? step.reservation.items[0]?.menu_code : undefined
-  const doneMenu = doneCode ? menus.find(m => m.code === doneCode) : undefined
+  const doneMenu = doneCode && canBeUsual(doneCode) ? menus.find(m => m.code === doneCode) : undefined
   const doneUsual = doneMenu && (usualDone === doneMenu.code || usualNow?.code !== doneMenu.code) ? doneMenu : undefined
   const canTalk = ['pickStaff', 'welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'confirmParty', 'askUsual'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
@@ -1193,10 +1204,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {step.k === 'welcome' && (
               <List>
                 {step.w.maintenanceLeft != null && (
-                  <Row href={MAINTENANCE_CUT_URL} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
+                  <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
                 )}
                 {step.w.usual.map(m => m.code === 'maintenance' ? (
-                  <Row key={m.code} href={MAINTENANCE_CUT_URL} title="メンテナンスカットで予約" detail="ホットペッパー" note="いつもの" />
+                  <Row key={m.code} onClick={startMaintenance} title="メンテナンスカットで予約" detail={maintenanceMenu ? `${maintenanceMenu.duration_min}分・${yen(maintenanceMenu)}` : 'ホットペッパー'} note="いつもの" />
                 ) : (
                   <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={`${m.duration_min}分・${yen(m)}`} note="いつもの" />
                 ))}
@@ -1257,7 +1268,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {step.k === 'ai' && step.view.kind === 'maintenanceChoice' && (
               <List>
                 <Row onClick={() => { setHeard('次のメンテナンスの目安'); void answerInfo('maintenance') }} title="次のメンテナンスの目安" />
-                <Row onClick={() => handleText('メンテナンスカットを予約したい')} title="メンテナンスカットを予約" detail="ホットペッパー" />
+                <Row onClick={() => handleText('メンテナンスカットを予約したい')} title="メンテナンスカットを予約" detail={maintenanceMenu ? `${maintenanceMenu.duration_min}分・${yen(maintenanceMenu)}` : 'ホットペッパー'} />
               </List>
             )}
 
@@ -1291,7 +1302,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'askUsual' && (
               <List>
-                {menus.map(m => (
+                {usualMenuOrder(menus).map(m => (
                   <Row key={m.code} onClick={() => handleText(m.name)} title={m.name} detail={`${m.duration_min}分・${yen(m)}`} />
                 ))}
               </List>

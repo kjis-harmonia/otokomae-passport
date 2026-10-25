@@ -4,7 +4,7 @@
 //   来店も登録も無いお客様には出さない。予約のメニューで推測はしない。
 import { bookingAssistantApi, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
 import { buildWelcome, type VisitRecord } from '../features/johnny/welcome'
-import { getUsualMenu } from '../features/johnny/usualMenu'
+import { canBeUsual, getUsualMenu } from '../features/johnny/usualMenu'
 import { STYLE_MENU_CODES } from '../data/reserveLinks'
 import { UI_CATEGORIES } from '../data/styleCategories'
 
@@ -30,14 +30,14 @@ async function loadVisited(): Promise<{ visited: boolean; menu: UsualMenu | null
   ])
   const w = buildWelcome(lastVisit, list, opts.menus, Date.now(), visits)
   if (!w) return { visited: false, menu: null }
-  const m = w.usual.find(x => x.code !== 'maintenance') ?? (w.lastMenu && w.lastMenu.code !== 'maintenance' ? w.lastMenu : null)
+  const m = w.usual.find(x => canBeUsual(x.code)) ?? (w.lastMenu && canBeUsual(w.lastMenu.code) ? w.lastMenu : null)
   return { visited: true, menu: m ? { code: m.code, name: m.name, title: styleTitleFor(m.code, m.name) } : null }
 }
 
 /** 登録したいつものメニューは毎回読み直す（Johnny で登録した直後にも反映）。来店の記録は5分読み直さない */
 export async function loadUsual(): Promise<Usual> {
   const reg = getUsualMenu()
-  if (reg) return { menu: { ...reg, title: styleTitleFor(reg.code, reg.name) } }
+  if (reg && canBeUsual(reg.code)) return { menu: { ...reg, title: styleTitleFor(reg.code, reg.name) } }
   if (!cache || Date.now() - cache.at >= 5 * 60000) cache = { at: Date.now(), visited: loadVisited().catch(() => ({ visited: false, menu: null })) }
   const v = await cache.visited
   return v.visited ? { menu: v.menu } : null
