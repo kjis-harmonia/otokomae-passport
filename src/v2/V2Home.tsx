@@ -38,7 +38,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
     const c = UI_CATEGORIES.find(x => x.id === cat) ?? UI_CATEGORIES[0]
     return c.titles.map(t => styles.find(s => s.title === t)).filter((s): s is StyleCard => !!s)
   }, [cat, styles])
-  const selected = list.at(Math.min(index, list.length - 1)) ?? null
+  const selected = list[Math.min(index, list.length - 1)] ?? null
 
   const chooseCat = (id: string) => {
     setCat(id); setIndex(0)
