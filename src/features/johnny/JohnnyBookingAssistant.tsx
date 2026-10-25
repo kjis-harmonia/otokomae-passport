@@ -33,7 +33,7 @@ import { TICKET_TYPE_LABELS } from '../../data/ticket'
 import { clearCouponPlan, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
 import { suspendBgm } from '../../audio/bgm'
 import { observeVisibleViewport } from '../../utils/visibleViewport'
-import { infoRequest, type InfoRequest } from './infoRequest'
+import { infoRequest, isMaintenanceBookingRequest, type InfoRequest } from './infoRequest'
 import { getCustomerGinpayLedger } from '../../utils/ginpayApi'
 import { getDaysUntilRecommended, getNextRecommendedDate } from '../../utils/maintenanceSchedule'
 
@@ -106,6 +106,7 @@ type AiView =
   | { kind: 'reservations'; list: CustomerReservation[] }
   /** メンテナンスカット（ホットペッパーのクーポンで予約） */
   | { kind: 'maintenance' }
+  | { kind: 'maintenanceChoice' }
   /** キャンセル待ちに入れるか */
   | { kind: 'waitlist'; menu: MenuOption; staffId: string | null; date: string; from: string; to: string }
 
@@ -701,6 +702,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
   // 見るだけの頼みごと（V2.0）：会員QR を開く・使える券・銀Pay の残高・次のメンテナンス。答えるだけで、お金と券は動かさない
   const answerInfo = useCallback(async (kind: InfoRequest) => {
+    if (kind === 'maintenanceChoice') {
+      setStep({ k: 'ai', say: 'メンテナンスについて、どちらをご希望ですか？', view: { kind: 'maintenanceChoice' } })
+      return
+    }
     if (kind === 'qr') {
       if (onShowQr) { onShowQr(); return }
       setStep({ k: 'ai', say: '会員QRは、下の「会員QR」から開けます。', view: { kind: 'talk', handoff: false } })
@@ -729,22 +734,26 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep({ k: 'ai', say, view: { kind: 'talk', handoff: false } })
   }, [api, myTickets, onShowQr])
 
+  // 声と文字で同じ案内を使い、曖昧な一言を AI が勝手に予約へ進めないようにする。
+  const handleLocalRequest = useCallback((text: string, s: Step): boolean => {
+    if (!AI_STEPS.has(s.k) || s.k === 'confirm' || s.k === 'confirmCancel') return false
+    const maintenanceChoice = s.k === 'ai' && s.view.kind === 'maintenanceChoice'
+    const info = infoRequest(text, maintenanceChoice)
+    if (info) { void answerInfo(info); return true }
+    if (isMaintenanceBookingRequest(text, maintenanceChoice)) {
+      setStep({ k: 'ai', say: 'メンテナンスカットは、ホットペッパーのクーポンでご予約いただけます。下のボタンからどうぞ。', view: { kind: 'maintenance' } })
+      return true
+    }
+    return false
+  }, [answerInfo])
+
   const handleText = useCallback((raw: string) => {
     const text = raw.trim()
     if (!text) return
     setHeard(text)
     setVoiceNote(null)
     const s = stepRef.current
-    // 見るだけの頼みごと（予約の確認・担当選びの途中では受けない）
-    if (AI_STEPS.has(s.k) && s.k !== 'confirm' && s.k !== 'confirmCancel') {
-      const info = infoRequest(text)
-      if (info) { void answerInfo(info); return }
-    }
-    // メンテナンスカットはアプリのメニューではなくホットペッパーのクーポン：予約のボタンを出す
-    if (AI_STEPS.has(s.k) && s.k !== 'confirm' && s.k !== 'confirmCancel' && /メンテ|めんて/.test(text)) {
-      setStep({ k: 'ai', say: 'メンテナンスカットは、ホットペッパーのクーポンでご予約いただけます。下のボタンからどうぞ。', view: { kind: 'maintenance' } })
-      return
-    }
+    if (handleLocalRequest(text, s)) return
     // 担当を選ぶ段階（AI に聞かない）：担当の名前
     if (s.k === 'pickStaff') {
       const staff = optionsRef.current?.staff ?? []
@@ -784,7 +793,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const consultOnly = detectAsk(text, menus)?.kind === 'consult' && isEmptyRequest(parseVisitRequest(text)) && !matchMenu(text, menus)
     if (aiOnRef.current && AI_STEPS.has(s.k) && !consultOnly) { void viaAgent(text, s); return }
     legacyRef.current(text, s.k === 'ai' || s.k === 'confirmCancel' || s.k === 'welcome' ? { k: 'askWhen' } : s)
-  }, [answerInfo, book, bookParty, cancelReservation, chooseStaff, declineConfirm, menus, planParty, viaAgent])
+  }, [handleLocalRequest, book, bookParty, cancelReservation, chooseStaff, declineConfirm, menus, planParty, viaAgent])
 
   /** 決まった規則の JOHNNY（AI が使えないとき・デモ） */
   const handleLegacy = useCallback((text: string, s: Step) => {
@@ -885,9 +894,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     setHeard(r.heard)
     if (transcribeOnly) { stepRef.current = s; setStep(s); handleText(r.heard); return }
-    // 見るだけの頼みごと（QR・券・銀Pay・メンテ）は AI の答えを使わず、手元で答える
-    const info = AI_STEPS.has(s.k) && s.k !== 'confirm' && s.k !== 'confirmCancel' ? infoRequest(r.heard) : null
-    if (info) { stepRef.current = s; void answerInfo(info); return }
+    // 音声でも文字と同じ意図確認・案内を優先し、AI の誤った時刻候補を表示しない。
+    if (handleLocalRequest(r.heard, s)) { stepRef.current = s; return }
     const next = r.answer ? await stepFromAgent(r.answer) : null
     if (!r.answer || !next) {
       // 聞き取れたが AI が答えられなかった：決まった規則の JOHNNY で続ける
@@ -899,7 +907,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     turnsRef.current = [...history, { role: 'user' as const, text: r.heard }, { role: 'assistant' as const, text: r.answer.say }].slice(-20)
     setStep(next)
-  }, [answerInfo, api, handleText, stepFromAgent])
+  }, [handleLocalRequest, api, handleText, stepFromAgent])
   useEffect(() => { handleAudioRef.current = audio => { void handleAudio(audio) } }, [handleAudio])
 
   /** 答えに出したおすすめのメニューを選ぶ（今の段階に合わせて続ける） */
@@ -1198,6 +1206,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                   <Row key={r.id} onClick={() => handleText(`${visitLabel(r.starts_at)}の予約`)}
                     title={visitLabel(r.starts_at)} detail={`${r.items.map(i => i.name).join('・')}${companionIds().includes(r.id) ? '（お連れ様）' : ''}`} />
                 ))}
+              </List>
+            )}
+
+            {step.k === 'ai' && step.view.kind === 'maintenanceChoice' && (
+              <List>
+                <Row onClick={() => { setHeard('次のメンテナンスの目安'); void answerInfo('maintenance') }} title="次のメンテナンスの目安" />
+                <Row onClick={() => handleText('メンテナンスカットを予約したい')} title="メンテナンスカットを予約" detail="ホットペッパー" />
               </List>
             )}
 
