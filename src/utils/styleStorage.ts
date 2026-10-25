@@ -253,7 +253,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '港で映える、漁師の貫禄を宿した硬派な短髪スタイル。潮風に負けない清潔感と、無駄を削ぎ落とした男らしさで、飾らずに存在感を放つ。',
     price: 5000,
     durationMinutes: 30,
-    imageUrl: '/assets/styles/library-uminotoko.jpg',
+    imageUrl: '/assets/styles/library-uminotoko-v2.jpg',
     tags: ['海', '漁師', 'シンプル', '短髪', '男前'],
     stats: { intimidation: 5, sexiness: 3, popularity: 2, difficulty: 1, durability: 5 },
     isFeatured: false,
@@ -487,7 +487,7 @@ export function seedInitialStyles(): void {
     catchCopy: '潮風に負けん、漢の髪型。',
     description:
       '港で映える、漁師の貫禄を宿した硬派な短髪スタイル。潮風に負けない清潔感と、無駄を削ぎ落とした男らしさで、飾らずに存在感を放つ。',
-    imageUrl: '/assets/styles/library-uminotoko.jpg',
+    imageUrl: '/assets/styles/library-uminotoko-v2.jpg',
     tags: ['海', '漁師', 'シンプル', '短髪', '男前'],
   }
   let titleChanged = false
@@ -582,7 +582,8 @@ export function seedInitialStyles(): void {
     '/assets/ginpara.png':             '/assets/styles/ginpara-showcase.jpg',
     '/assets/styles/ginpara.png':      '/assets/styles/ginpara-showcase.jpg',
     '/assets/styles/kaigun.png':       '/assets/styles/kaigun-showcase.jpg',
-    '/assets/gokudo-bozu.png':         '/assets/styles/library-uminotoko.jpg',
+    '/assets/gokudo-bozu.png':         '/assets/styles/library-uminotoko-v2.jpg',
+    '/assets/styles/library-uminotoko.jpg': '/assets/styles/library-uminotoko-v2.jpg',
     // 4 images moved from /assets/ → /assets/styles/
     '/assets/shinsai-punch.png':       '/assets/styles/shinsai-punch.png',
     '/assets/kakusei.png':             '/assets/styles/kakusei.png',
