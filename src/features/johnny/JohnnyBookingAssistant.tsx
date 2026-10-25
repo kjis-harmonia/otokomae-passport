@@ -78,7 +78,7 @@ type Step =
   /** ホームの「いつもの」から来たが、いつものメニューが分からない：声かボタンで教えてもらって登録する */
   | { k: 'askUsual'; note?: string }
   /** いつものメニューを登録した：メンテナンスカットのお知らせも受け取るか → そのメニューで日時へ */
-  | { k: 'usualSaved'; menu: MenuOption }
+  | { k: 'usualSaved'; menu: MenuOption; failed?: boolean }
   | { k: 'confirmParty'; primary: PartyPrimary; companion: { menu: MenuOption; slot: Slot }; togetherAt: string | null }
   /** AI の返事（話す言葉と、出す一覧） */
   | { k: 'ai'; say: string; view: AiView }
@@ -186,7 +186,7 @@ type ConfirmStep = Extract<Step, { k: 'confirm' }>
 // 「指名なし」の言い方（指名なしは選べない。言われたら担当を選んでもらう）
 const ANY_STAFF = /どちら|どっち|おまかせ|お任せ|指名なし|しめいなし|指名しない|しめいしない|指名は(?:いい|大丈夫|なし)|なしで|誰でも|だれでも|どなたでも|フリー|空いて(?:いる|る)(?:方|ほう)|あいて(?:いる|る)(?:方|ほう)|早い(?:方|ほう)|はやい(?:方|ほう)/
 /** いつものメニューを登録する（1つだけ・入れ替え） */
-const saveUsual = (m: MenuOption) => setUsualMenu({ code: m.code, name: m.name })
+const saveUsual = (m: MenuOption): boolean => setUsualMenu({ code: m.code, name: m.name })
 
 const AI_STEPS = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel'])
 
@@ -808,7 +808,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     if (s.k === 'askUsual') {
       const menu = matchMenu(text, menus)
-      if (menu && canBeUsual(menu.code)) { saveUsual(menu); setStep({ k: 'usualSaved', menu }); return }
+      if (menu && canBeUsual(menu.code)) { setStep({ k: 'usualSaved', menu, failed: !saveUsual(menu) }); return }
       if (menu) { setStep({ k: 'askUsual', note: `${menu.name}は、いつものメニューにはできません。カット・パーマ・カラーからお選びください。` }); return }
       setStep({ k: 'askUsual', note: 'すみません、メニューが分かりませんでした。下から選ぶか、もう一度お伝えください。' })
       return
@@ -1030,7 +1030,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       case 'askUsual': return step.note
         ? { title: step.note, speech: step.note, listen: true }
         : { title: 'まだいつものメニューが登録されていません', sub: 'いつものメニューを、声で教えてください。', speech: 'まだいつものメニューが登録されていません。いつものメニューを、声で教えてください。', listen: true }
-      case 'usualSaved': return pushAsk
+      case 'usualSaved': return step.failed
+        ? { title: `${step.menu.name}を、いつものメニューに登録できませんでした`, sub: 'この端末では保存できませんでした。予約はこのまま続けられます。', speech: `すみません、この端末では、いつものメニューを保存できませんでした。予約は${step.menu.name}で、このまま続けられます。` }
+        : pushAsk
         ? { title: `${step.menu.name}を、いつものメニューに登録しました`, sub: '14日以内なら、メンテナンスカットのお知らせもできます。', speech: `ありがとうございます。${step.menu.name}を、いつものメニューに登録しますね。14日以内だと、メンテナンスカットのお知らせもできます。こちらも登録しますか？` }
         : { title: `${step.menu.name}を、いつものメニューに登録しました`, sub: '次回からは、ホームの「いつもの」で予約できます。', speech: `ありがとうございます。${step.menu.name}を、いつものメニューに登録しますね。次回からは、いつもので予約ができますよ。` }
       case 'confirmParty': {
@@ -1307,7 +1309,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                 ))}
               </List>
             )}
-            {step.k === 'usualSaved' && <PushToggle tone="mono" />}
+            {step.k === 'usualSaved' && !step.failed && <PushToggle tone="mono" />}
 
             {step.k === 'companionMenu' && (
               <List>
@@ -1347,7 +1349,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                   : <><b>✓ 銀Pay 仮支払い済み {yenOf(step.ginpay)}</b><br /><span style={{ color: C.secondary, fontSize: 13 }}>ご来店時にレジで会員QRを読むと、お支払いが確定します。</span></>}
               </p>
             )}
-            {step.k === 'done' && doneUsual && (usualDone === doneUsual.code
+            {step.k === 'done' && doneUsual && usualDone === 'failed' && (
+              <p role="alert" style={{ width: '100%', margin: '10px 0 0', padding: '12px 14px', borderRadius: 14, background: C.fill, fontSize: 14, lineHeight: 1.6, color: C.text }}>
+                この端末では、いつものメニューを保存できませんでした。ご予約はお取りできています。
+              </p>
+            )}
+            {step.k === 'done' && doneUsual && usualDone !== 'failed' && (usualDone === doneUsual.code
               ? <p style={{ width: '100%', margin: '10px 0 0', padding: '12px 14px', borderRadius: 14, background: C.fill, fontSize: 14, lineHeight: 1.6, color: C.text }}>
                   <b>✓ {doneUsual.name}を、いつものメニューに登録しました</b><br />
                   <span style={{ color: C.secondary, fontSize: 13 }}>次回は、ホームの「いつもの」で予約ができますよ。14日以内なら、メンテナンスカットのお知らせもできます。</span>
@@ -1355,7 +1362,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               : <div style={{ width: '100%', margin: '10px 0 0', padding: '12px 14px', borderRadius: 14, background: C.fill }}>
                   <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: C.text }}>{doneUsual.name}を、いつものメニューに登録しますか？</p>
                   <p style={{ margin: '2px 0 10px', fontSize: 12, lineHeight: 1.6, color: C.secondary }}>{usualNow ? `今のいつものメニュー（${usualNow.name}）と入れ替わります。` : '次回から、ホームの「いつもの」で予約できます。'}</p>
-                  <button type="button" onClick={() => { saveUsual(doneUsual); setUsualDone(doneUsual.code) }} style={{ minHeight: 44, padding: '0 18px', borderRadius: 12, border: 'none', background: C.text, color: C.bg, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>登録する</button>
+                  <button type="button" onClick={() => setUsualDone(saveUsual(doneUsual) ? doneUsual.code : 'failed')} style={{ minHeight: 44, padding: '0 18px', borderRadius: 12, border: 'none', background: C.text, color: C.bg, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>登録する</button>
                 </div>)}
             {step.k === 'done' && <PushToggle tone="mono" />}
             {step.k === 'done' && step.companion && <ReservationSummary r={step.companion} companion />}
