@@ -17,7 +17,7 @@ const REGISTRY: Array<{ key: string } & StyleImageDef> = [
   { key: '海の男専用',         src: '/assets/styles/library-uminotoko-v2.jpg', position: '50% 38%' },
   { key: '昭和のアイパー',     src: '/assets/styles/showa-aipar.png',   position: '50% 30%' },
   { key: 'リーゼントパンチ',   src: '/assets/styles/rejent-punch2.png', position: '50% 30%' },
-  { key: 'ジャマイカンアフロ', src: '/assets/jamaican-afro.png',         position: '50% 30%' },
+  { key: 'ジャマイカンアフロ', src: '/assets/styles/jamaican-afro-v2.jpg', position: '50% 30%' },
   { key: 'スペインパーマ',     src: '/assets/spain-parm.jpeg',          position: '50% 30%' },
   { key: 'トラック野郎御用達', src: '/assets/truck-yaro.png',            position: '50% 50%' },
   { key: 'シンサイパンチ',     src: '/assets/styles/shinsai-punch.png', position: '50% 30%' },

@@ -193,7 +193,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '天然のうねりを最大限に活かし、自由奔放な存在感を発揮するアフロスタイル。セット不要で毎朝ノーストレス。個性的でありながら親しみやすく、どんな場所でも「あいつ、いいな」と思わせる不思議な魅力を持つ。',
     price: 9000,
     durationMinutes: 45,
-    imageUrl: '/assets/jamaican-afro.png',
+    imageUrl: '/assets/styles/jamaican-afro-v2.jpg',
     tags: ['アフロ', 'ナチュラル', '個性', 'カジュアル', 'メンテフリー'],
     stats: { intimidation: 3, sexiness: 3, popularity: 4, difficulty: 1, durability: 5 },
     isFeatured: false,
@@ -584,6 +584,7 @@ export function seedInitialStyles(): void {
     '/assets/styles/kaigun.png':       '/assets/styles/kaigun-showcase-v2.jpg',
     '/assets/styles/kaigun-showcase.jpg': '/assets/styles/kaigun-showcase-v2.jpg',
     '/assets/hero-natsu-niguro.jpg':   '/assets/styles/aki-niguro.jpg',
+    '/assets/jamaican-afro.png':       '/assets/styles/jamaican-afro-v2.jpg',
     '/assets/gokudo-bozu.png':         '/assets/styles/library-uminotoko-v2.jpg',
     '/assets/styles/library-uminotoko.jpg': '/assets/styles/library-uminotoko-v2.jpg',
     // 4 images moved from /assets/ → /assets/styles/

@@ -7,7 +7,7 @@ const STYLE_LIBRARY_IMAGES: ReadonlyArray<{ key: string; src: string }> = [
   { key: 'テイテイ刈り', src: '/assets/styles/library-teitei.jpg' },
   { key: '昭和のアイパー', src: '/assets/styles/library-showa-aipar.jpg' },
   { key: '昭和ヘアスタイル', src: '/assets/styles/library-showa-hair.jpg' },
-  { key: 'ジャマイカンアフロ', src: '/assets/styles/library-jamaican-afro.jpg' },
+  { key: 'ジャマイカンアフロ', src: '/assets/styles/jamaican-afro-v2.jpg' },
   { key: 'トラック野郎御用達', src: '/assets/styles/library-truck-yaro.jpg' },
   { key: '海の男専用', src: '/assets/styles/library-uminotoko-v2.jpg' },
   { key: 'シンサイ刈り', src: '/assets/styles/library-shinsaigari.jpg' },
