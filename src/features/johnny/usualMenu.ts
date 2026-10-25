@@ -26,6 +26,8 @@ export function usualMenuOrder<T extends { code: string }>(menus: readonly T[]):
   return menus.filter(m => canBeUsual(m.code)).map((m, i) => ({ m, i })).sort((a, b) => rank(a.m.code) - rank(b.m.code) || a.i - b.i).map(x => x.m)
 }
 
-export function setUsualMenu(menu: UsualMenu): void {
+/** 保存できたか（プライベートブラウズ・容量いっぱいなどで保存できないと false） */
+export function setUsualMenu(menu: UsualMenu): boolean {
   setStoredValue(USUAL_MENU_KEY, { code: menu.code, name: menu.name })
+  return getUsualMenu()?.code === menu.code
 }

@@ -60,6 +60,14 @@ const MIGRATION_ORDER = [
   '20261019000200_checkout_safety.sql',
   '20261019000300_finalize_sale_ticket_alias.sql',
   '20261019000400_app_private_helper_grants.sql',
+  '20261023000000_ai_booking_penalty.sql',
+  '20261023000100_staff_push.sql',
+  '20261023000200_staff_push_ack.sql',
+  '20261023000300_staff_push_final.sql',
+  '20261023000400_staff_push_cancel.sql',
+  '20261023000500_staff_alert_fallback.sql',
+  '20261024000000_sb_close_time.sql',
+  '20261024000100_ginpay_hold.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
@@ -288,6 +296,8 @@ function walkRepo(visit) {
   function walk(dir) {
     for (const entry of readdirSync(dir)) {
       if (skipDirs.has(entry)) continue
+      // supabase/rollout/out_*：migration 本文をそのまま写した生成物（git 管理外）。本文のコメントと同じく対象外
+      if (entry.startsWith('out_') && dir.endsWith('rollout')) continue
       const full = join(dir, entry)
       const stat = statSync(full)
       if (stat.isDirectory()) { walk(full); continue }
