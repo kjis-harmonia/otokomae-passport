@@ -27,7 +27,7 @@ import { planCompanion } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { takeAiTurn } from './aiQuota'
 import { PushToggle } from '../../components/PushToggle'
-import { getUsualMenu, setUsualMenu } from './usualMenu'
+import { canBeUsual, getUsualMenu, setUsualMenu, usualMenuOrder } from './usualMenu'
 import { pushState } from '../../utils/webPush'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
@@ -301,7 +301,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         const w0 = buildWelcome(lastVisit, list, opts.menus, Date.now(), visits)
         // 登録したいつものメニューがあれば、それを「いつもの」の先頭に
         const reg = getUsualMenu()
-        const regMenu = reg ? opts.menus.find(m => m.code === reg.code) : undefined
+        const regMenu = reg && canBeUsual(reg.code) ? opts.menus.find(m => m.code === reg.code) : undefined
         const w = w0 && regMenu ? { ...w0, usual: [regMenu, ...w0.usual.filter(m => m.code !== regMenu.code)].slice(0, 2) } : w0
         if (w) {
           turnsRef.current = [{ role: 'assistant', text: `おかえりなさい！${welcomeText(w).lines.join('')}ご予約はどうしますか？` }]
@@ -798,7 +798,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     if (s.k === 'askUsual') {
       const menu = matchMenu(text, menus)
-      if (menu) { saveUsual(menu); setStep({ k: 'usualSaved', menu }); return }
+      if (menu && canBeUsual(menu.code)) { saveUsual(menu); setStep({ k: 'usualSaved', menu }); return }
+      if (menu) { setStep({ k: 'askUsual', note: `${menu.name}は、いつものメニューにはできません。カット・パーマ・カラーからお選びください。` }); return }
       setStep({ k: 'askUsual', note: 'すみません、メニューが分かりませんでした。下から選ぶか、もう一度お伝えください。' })
       return
     }
@@ -1132,7 +1133,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // いつものメニュー：予約が済んだら、そのメニューを登録するか聞く（変更の予約・今のいつものと同じメニューは聞かない）
   const usualNow = getUsualMenu()
   const doneCode = step.k === 'done' && !step.changedFrom ? step.reservation.items[0]?.menu_code : undefined
-  const doneMenu = doneCode ? menus.find(m => m.code === doneCode) : undefined
+  const doneMenu = doneCode && canBeUsual(doneCode) ? menus.find(m => m.code === doneCode) : undefined
   const doneUsual = doneMenu && (usualDone === doneMenu.code || usualNow?.code !== doneMenu.code) ? doneMenu : undefined
   const canTalk = ['pickStaff', 'welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'confirmParty', 'askUsual'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
@@ -1291,7 +1292,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'askUsual' && (
               <List>
-                {menus.map(m => (
+                {usualMenuOrder(menus).map(m => (
                   <Row key={m.code} onClick={() => handleText(m.name)} title={m.name} detail={`${m.duration_min}分・${yen(m)}`} />
                 ))}
               </List>
