@@ -8,7 +8,7 @@
 
 ## 事前条件と停止条件
 
-- ①発券画面のローカル確認はPR #8で完了。②の実iPhone確認、④のrelease PR、⑤の関数・設定・cron、公開当日の全体手順が完了していること。③だけで公開しない。
+- ①発券画面のローカル確認はPR #8で完了。②の実iPhone確認、④のrelease PR、⑤の関数・設定・cronの手順と公開当日の全体手順を読み終えていること（⑤の実行はこのDB手順の後。ここで⑤の完了は求めない）。③だけで公開しない。
 - 店舗操作・発券・会計・予約の受付を止める時間を確保する。DB先行中は古い画面の発券が止まる。古いタブを開いたまま営業を再開しない。
 - エラー、想定外の件数・照合値、会員・会計・券などの既存データの変化が1つでもあれば停止。次を実行しない。履歴を消す、SQLを作り直して押し通す、db push、無条件再実行をしない。
 - SQLは各1トランザクション。失敗した1本はロールバックするが、すでに成功した別の工程は元に戻らない。復旧方針を確認するまで営業再開しない。
@@ -328,7 +328,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 
 SQL：check_acl.sqlはpg_class・has_table_privilege・has_any_column_privilege・has_function_privilegeで13表と旧RPCを検査する。
 
-次へ：NOTICE legacy record writes locked ok、verification.acl.tables_found=13、writes_closed=true、legacy_functions=3、legacy_closed=true、履歴33件、既存dataと予約設定は0-2と同じ。SELECT権限と認証付きRPCの保存は適用SQL内でも検査する。1つでも違えば停止。
+次へ：NOTICE legacy record writes locked ok、verification.acl.tables_found=13、writes_closed=true、legacy_functions=3、legacy_closed=true、履歴39件、既存dataと予約設定は0-2と同じ。SELECT権限と認証付きRPCの保存は適用SQL内でも検査する。1つでも違えば停止。
 
 ### 14-B. 承認済みの32人を読み取りで再照合
 
@@ -353,7 +353,7 @@ SQL：check_acl.sqlはpg_class・has_table_privilege・has_any_column_privilege�
 
 SQL：check_bulk.sqlはcustomer_store_verificationsとcustomersを結合して承認数・対象集合の照合値・一括ラベル件数、権限、既存dataを返す。
 
-次へ：NOTICE store records bulk verification ok、reviewed_candidates=verified_candidates=32。verification.approvals.approved=32と上記照合値が一致する。新規分verified_byは「一括（店の記録あり）」、既存承認者・日時は保持する。履歴は33件のまま、既存data・設定も同じ。1つでも違えば停止。ここでは15番を履歴へ追加しない。
+次へ：NOTICE store records bulk verification ok、reviewed_candidates=verified_candidates=32。verification.approvals.approved=32と上記照合値が一致する。新規分verified_byは「一括（店の記録あり）」、既存承認者・日時は保持する。履歴は39件のまま、既存data・設定も同じ。1つでも違えば停止。ここでは15番を履歴へ追加しない。
 
 ### 15. customer_store_access
 
@@ -539,6 +539,14 @@ Johnny でメンテナンスカット（30分・3,000円・銀二郎／テイテ
 
 慶一郎さんが新しい画面で「店舗確認→Face ID設定→同じ会員ID・券でログイン」を確認し、店舗操作を止めていることが前提。まだなら停止する。
 
+**B直前の読み取り（先に必ず貼る）：**
+```powershell
+! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_final.sql"
+```
+
+新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB22完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜22は開始時との不変比較を維持する。承認32人の集合は増減しない。
+
+閉鎖B：
 ```powershell
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/post_web_security_lockdown.sql"
 ```
@@ -547,8 +555,6 @@ Johnny でメンテナンスカット（30分・3,000円・銀二郎／テイテ
 ```powershell
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_post_web_lockdown.sql"
 ```
-
-新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB22完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜22は開始時との不変比較を維持する。承認32人の集合は増減しない。
 
 次へ：preflight_securityのDO検査にエラーがなく、履歴48件、data・予約設定・承認32人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
 

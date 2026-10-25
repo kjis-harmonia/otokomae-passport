@@ -1,4 +1,4 @@
-# 15番直前：記録表の権限閉鎖と30人の一括承認
+# 15番直前：記録表の権限閉鎖と32人の一括承認
 
 対象本番：`ufyzynpmkxytnhebombq`。SQL作成・ローカル検証まで完了。本番・Stagingへの書き込みはしていない。
 
@@ -30,7 +30,7 @@
 |---|---|
 | production_lock_legacy_record_writes.sql | 一般向けの表・列書き込みと認証なしの旧更新RPCを閉じる |
 | production_store_verification_candidates.sql | 人数・内訳・照合値の読み取り。BEGIN READ ONLY |
-| production_seed_store_verifications.sql | 権限閉鎖を確認し、承認済み30人のうち未承認の人だけ登録 |
+| production_seed_store_verifications.sql | 権限閉鎖を確認し、承認済み32人のうち未承認の人だけ登録 |
 
 権限閉鎖の対象13表：
 `visit_log`、`maintenance_visits`、`ticket_usage_logs`、`tickets`、`accounting_sessions`、`accounting_session_items`、`accounting_items`、`ticket_issue_logs`、`ticket_transfers`、`maintenance_coupon_tokens`、`customers`、`customer_user_aliases`、`customer_recovery_logs`。
@@ -64,7 +64,7 @@ main `848679f` と staging `ca4c923` の顧客・店舗コードで、対象表�
 1. 本番対応・Web修正・最終チェックを完了し、全体の公開手順を確認する。`docs/release-runbook.md` と併用する。
 2. 本番DBの1〜14番を1本ずつ実行・確認する。
 3. 権限閉鎖SQLを実行し、13表と旧RPCの権限閉鎖が成功したことを確認する。
-4. 読み取りSQLで30人・上記照合値を再確認する。違えば止め、更新した対象を慶一郎さんへ見せ直す。
+4. 読み取りSQLで32人・照合値 82c2e35ad55d2e36c2256e6b3d11e42e を再確認する。違えば止め、更新した対象を慶一郎さんへ見せ直す。
 5. 一括登録SQLを実行する。内部でも1〜14番、15番未適用、権限閉鎖、対象集合を再確認する。
 6. 登録件数と既存承認の保持を読み取りで確認してから15番へ。15番の成功時に通常のrolloutで履歴を残す。
 
