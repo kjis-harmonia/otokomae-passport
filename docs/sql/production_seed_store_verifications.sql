@@ -101,9 +101,9 @@ begin
     E'\n' order by customer_id, user_id), ''))
   into actual_count, actual_fingerprint
   from pg_temp.ginjiro_store_seed_candidates;
-  if actual_count <> 30
-     or actual_fingerprint is distinct from 'c4824d0dc827cb5ab3f9979455ccede8' then
-    raise exception 'reviewed candidate set changed: expected 30 / c4824d0dc827cb5ab3f9979455ccede8, got % / %; stop and preview again',
+  if actual_count <> 32
+     or actual_fingerprint is distinct from '82c2e35ad55d2e36c2256e6b3d11e42e' then
+    raise exception 'reviewed candidate set changed: expected 32 / 82c2e35ad55d2e36c2256e6b3d11e42e, got % / %; stop and preview again',
       actual_count, actual_fingerprint;
   end if;
 end;
@@ -133,7 +133,7 @@ begin
       (customer_id, verified_by, staff_session_hash)
     select candidate.customer_id, '一括（店の記録あり）',
       -- Auditable one-off marker, deliberately NOT a live staff-session token/hash.
-      'bulk-store-records:ufyzynpmkxytnhebombq:c4824d0dc827cb5ab3f9979455ccede8'
+      'bulk-store-records:ufyzynpmkxytnhebombq:82c2e35ad55d2e36c2256e6b3d11e42e'
     from pg_temp.ginjiro_store_seed_candidates candidate
     on conflict (customer_id) do nothing
     returning customer_id
@@ -160,8 +160,8 @@ begin
      or has_table_privilege('authenticated', 'app_private.customer_store_verifications', 'DELETE') then
     raise exception 'verification table is not private';
   end if;
-  raise notice 'store records bulk verification ok: targets=30, inserted=%, preserved=%',
-    inserted_count, 30 - inserted_count;
+  raise notice 'store records bulk verification ok: targets=32, inserted=%, preserved=%',
+    inserted_count, 32 - inserted_count;
 end;
 $seed$;
 

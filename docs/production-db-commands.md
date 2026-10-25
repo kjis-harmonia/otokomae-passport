@@ -2,7 +2,7 @@
 
 対象は **ufyzynpmkxytnhebombq**。休業中に慶一郎さんが1ブロックずつ実行する。Codexは本番へ書き込まない。今は公開作業の許可ではない。
 
-**指定のDB手順の通し検証は完了。本番公開は保留。** 2026-10-20に明示的な取得許可を受け、最新本番バックアップをDesktop/otokomae-backups/20261020-044459へ保存。コピーで20工程＋権限閉鎖＋30人の一括承認が成功した。会員59人・券130枚・会計23件の検査対象列は不変。30人・照合値 c4824d0dc827cb5ab3f9979455ccede8 も一致した。
+**指定のDB手順の通し検証は完了。本番公開は保留。** 2026-10-20に明示的な取得許可を受け、最新本番バックアップをDesktop/otokomae-backups/20261020-044459へ保存。コピーで20工程＋権限閉鎖＋30人の一括承認が成功した。会員59人・券130枚・会計23件の検査対象列は不変。30人・照合値 c4824d0dc827cb5ab3f9979455ccede8（10/20時点の記録） も一致した。
 
 **追加の必須工程を発見：20工程だけではセキュリティ閉鎖Bが抜ける。** 会員表などの一般向け読み取りと、日報・商品・旧LIVE/営業状態の書き込み権限が残る。新しいWebの公開・会員引継ぎ確認後、営業を再開する前に、このファイル末尾の「公開後の閉鎖B」を実行する順番とする。20工程のループに自動追加していない。閉鎖Bはコピー上のrollback試験で検査済み、本番には未適用。
 
@@ -330,7 +330,7 @@ SQL：check_acl.sqlはpg_class・has_table_privilege・has_any_column_privilege�
 
 次へ：NOTICE legacy record writes locked ok、verification.acl.tables_found=13、writes_closed=true、legacy_functions=3、legacy_closed=true、履歴33件、既存dataと予約設定は0-2と同じ。SELECT権限と認証付きRPCの保存は適用SQL内でも検査する。1つでも違えば停止。
 
-### 14-B. 承認済みの30人を読み取りで再照合
+### 14-B. 承認済みの32人を読み取りで再照合
 
 ```powershell
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/production_store_verification_candidates.sql"
@@ -338,7 +338,7 @@ SQL：check_acl.sqlはpg_class・has_table_privilege・has_any_column_privilege�
 
 読み取りSQL：チェックイン／完了会計／使用済み券を現在の会員IDに結び、自己申告has_visited_beforeを使わずcountとmd5を返す。
 
-次へ：candidate_customers=30、candidate_fingerprint=c4824d0dc827cb5ab3f9979455ccede8。会員全体は読み取り時59人だが、固定するのは承認済み対象の人数とcustomer_id:user_idの集合。対象が変われば、新しい名簿を店側が確認するまで停止する。既存の「30人全員でOK」は取得済み。
+次へ：candidate_customers=32、candidate_fingerprint=82c2e35ad55d2e36c2256e6b3d11e42e。会員全体は2026-10-25夜の読み取りで71人だが、固定するのは承認済み対象の人数とcustomer_id:user_idの集合。対象が変われば、新しい名簿を店側が確認するまで停止する。10/19の「30人全員でOK」に加え、10/25夜の名簿（元の30人から外れた人0、追加は10/23来店の2人）で慶一郎さんが「2人ともOK」と承認済み。
 
 ### 14-C. 未承認の人だけ一括登録
 
@@ -353,7 +353,7 @@ SQL：check_acl.sqlはpg_class・has_table_privilege・has_any_column_privilege�
 
 SQL：check_bulk.sqlはcustomer_store_verificationsとcustomersを結合して承認数・対象集合の照合値・一括ラベル件数、権限、既存dataを返す。
 
-次へ：NOTICE store records bulk verification ok、reviewed_candidates=verified_candidates=30。verification.approvals.approved=30と上記照合値が一致する。新規分verified_byは「一括（店の記録あり）」、既存承認者・日時は保持する。履歴は33件のまま、既存data・設定も同じ。1つでも違えば停止。ここでは15番を履歴へ追加しない。
+次へ：NOTICE store records bulk verification ok、reviewed_candidates=verified_candidates=32。verification.approvals.approved=32と上記照合値が一致する。新規分verified_byは「一括（店の記録あり）」、既存承認者・日時は保持する。履歴は33件のまま、既存data・設定も同じ。1つでも違えば停止。ここでは15番を履歴へ追加しない。
 
 ### 15. customer_store_access
 
@@ -372,7 +372,7 @@ SQL：check_bulk.sqlはcustomer_store_verificationsとcustomersを結合して�
 select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce(name,''), E'\n' order by version),'')) as history_key from supabase_migrations.schema_migrations;
 ```
 
-次へ：エラーなし、verification.history_count=40、履歴照合値=258e2888afd9dc45dad508675c813770（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。この工程で未承認客の予約が制限される。承認30人の事前登録がなければ適用SQL自体が停止する。違えば停止する。
+次へ：エラーなし、verification.history_count=40、履歴照合値=258e2888afd9dc45dad508675c813770（SQL内で自動照合）、dataとapp_booking_enabledは0-2と同じ。この工程で未承認客の予約が制限される。承認32人の事前登録がなければ適用SQL自体が停止する。違えば停止する。
 
 ### 16. waitlist
 
@@ -519,7 +519,7 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_final.sql"
 ```
 
-次へ：履歴47件（公開前の26件＋新規21件、03は復元のみ）、既存data・予約設定不変、13表の書き込み閉鎖と旧RPC閉鎖を維持、承認30人・照合値一致、ginpay_consistent="true"。
+次へ：履歴47件（公開前の26件＋新規21件、03は復元のみ）、既存data・予約設定不変、13表の書き込み閉鎖と旧RPC閉鎖を維持、承認32人・照合値一致、ginpay_consistent="true"。
 
 ## 最後の読み取り確認のあと：メンテナンスカットを予約メニューに足す（データ1行）
 
@@ -548,11 +548,11 @@ Johnny でメンテナンスカット（30分・3,000円・銀二郎／テイテ
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/supabase/rollout/out_release/check_post_web_lockdown.sql"
 ```
 
-新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB22完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜22は開始時との不変比較を維持する。承認30人の集合は増減しない。
+新Webの実機確認後、B直前にcheck_final.sqlを再取得し、そのdataをB前後の比較基準にする。DB22完了時からの差分は記録した実機操作に由来するものだけか確認し、不明な差分なら停止。③の01〜22は開始時との不変比較を維持する。承認32人の集合は増減しない。
 
-次へ：preflight_securityのDO検査にエラーがなく、履歴48件、data・予約設定・承認30人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
+次へ：preflight_securityのDO検査にエラーがなく、履歴48件、data・予約設定・承認32人の照合値が閉鎖B直前と同じ。会員表・券・会計などの直接アクセスを閉じ、商品の公開読み取りは店販・販売中・表示用の列に制限される。
 
-閉鎖BのSQL・履歴の記録・読み取り確認もコピーでrollback試験済み。16私有表にanon/authenticatedの表・列権限がないこと、商品の最低在庫列は読めず公開表示列は読めること、承認30人の予約オプション取得を確認した。セキュリティ・来店確認・パスキー・会計・GINPayの5検査も閉鎖Bを含めて成功。実行後はアプリ・店舗端末・本部・SBの実機を再確認し、失敗時は営業再開を止める。読み取り権限を無条件に開き直さない。
+閉鎖BのSQL・履歴の記録・読み取り確認もコピーでrollback試験済み。16私有表にanon/authenticatedの表・列権限がないこと、商品の最低在庫列は読めず公開表示列は読めること、承認32人の予約オプション取得を確認した。セキュリティ・来店確認・パスキー・会計・GINPayの5検査も閉鎖Bを含めて成功。実行後はアプリ・店舗端末・本部・SBの実機を再確認し、失敗時は営業再開を止める。読み取り権限を無条件に開き直さない。
 
 ## リハーサルの再実行方法（本番には接続しない）
 
