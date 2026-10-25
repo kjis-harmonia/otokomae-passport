@@ -32,6 +32,7 @@ import type { TicketRow } from '../../data/ticket'
 import { TICKET_TYPE_LABELS } from '../../data/ticket'
 import { clearCouponPlan, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
 import { suspendBgm } from '../../audio/bgm'
+import { observeVisibleViewport } from '../../utils/visibleViewport'
 import { infoRequest, type InfoRequest } from './infoRequest'
 import { getCustomerGinpayLedger } from '../../utils/ginpayApi'
 import { getDaysUntilRecommended, getNextRecommendedDate } from '../../utils/maintenanceSchedule'
@@ -193,6 +194,10 @@ const pausedStep = (s?: AiBookingStatus | null): Step => ({ k: 'ai', say: paused
 const BUSINESS_ERRORS = new Set(['slot_taken', 'too_late', 'date_not_open', 'invalid_starts_at', 'menu_not_available', 'hold_expired', 'hold_not_found'])
 
 export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null, initialLabel = null }: Props) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (viewportRef.current) return observeVisibleViewport(viewportRef.current)
+  }, [])
   const api = useMemo(() => bookingAssistantApi(), [])
   const [step, setStep] = useState<Step>({ k: 'loading' })
   const [options, setOptions] = useState<AssistantOptions | null>(null)
@@ -1084,6 +1089,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
   return (
     <motion.div
+      ref={viewportRef}
+      className="customer-johnny"
       role="dialog"
       aria-modal="true"
       aria-label="予約アシスタント"
@@ -1092,13 +1099,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
       style={{
-        position: 'fixed', inset: 0, zIndex: 10030, background: C.bg, color: C.text, fontFamily: FONT,
-        display: 'flex', flexDirection: 'column',
+        position: 'fixed', left: 0, right: 0, top: 'var(--customer-visual-top, 0px)', height: 'var(--customer-visual-height, 100%)', zIndex: 10030, background: C.bg, color: C.text, fontFamily: FONT,
+        display: 'flex', flexDirection: 'column', minHeight: 0, boxSizing: 'border-box',
         paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)',
       }}
     >
       {/* 上：閉じる・読み上げ */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 8px 0' }}>
+      <div style={{ display: 'flex', flexShrink: 0, justifyContent: 'space-between', padding: '8px 8px 0' }}>
         <IconButton label="閉じる" onClick={onClose}><X size={22} strokeWidth={2} /></IconButton>
         <IconButton label={voice.muted ? '読み上げをオンにする' : '読み上げをオフにする'} onClick={() => voice.setMuted(!voice.muted)}>
           {voice.muted ? <VolumeX size={20} strokeWidth={1.8} /> : <Volume2 size={20} strokeWidth={1.8} />}
@@ -1106,8 +1114,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       </div>
 
       {/* 中央：JOHNNY・質問・聞き取った言葉・選択肢 */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 20px 16px' }}>
-        <div style={{ marginTop: 'min(4vh, 32px)', width: '100%', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 20px 16px' }}>
+        <div className="johnny-rider-wrap" style={{ marginTop: 'min(4vh, 32px)', width: '100%', display: 'flex', justifyContent: 'center' }}>
           <JohnnyRider state={orb} width={compact ? 200 : 340} />
         </div>
 
@@ -1121,7 +1129,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
           >
             {prompt.title && (
-              <h1 style={{ margin: '20px 0 0', fontSize: step.k === 'ai' && prompt.title.length > 24 ? 20 : 26, fontWeight: 600, lineHeight: 1.3, textAlign: 'center', letterSpacing: '-0.01em' }}>
+              <h1 className="johnny-question-title" style={{ margin: '20px 0 0', fontSize: step.k === 'ai' && prompt.title.length > 24 ? 20 : 26, fontWeight: 600, lineHeight: 1.3, textAlign: 'center', letterSpacing: '-0.01em' }}>
                 {prompt.title}
               </h1>
             )}
@@ -1305,7 +1313,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       </div>
 
       {/* 下：操作 */}
-      <div style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'stretch', maxWidth: 460, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+      <div style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column', flexShrink: 0, maxHeight: '70%', overflowY: 'auto', overscrollBehavior: 'contain', gap: 10, alignItems: 'stretch', maxWidth: 460, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
         {step.k === 'pickStaff' && (
           <>
             {(options?.staff ?? []).map(st => step.avail?.[st.id] === false
@@ -1383,7 +1391,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         )}
 
         {canTalk && step.k !== 'confirm' && step.k !== 'confirmCancel' && step.k !== 'confirmParty' && (typing || voiceOff) && (
-          <form onSubmit={e => { e.preventDefault(); submitDraft() }} style={{ display: 'flex', gap: 8 }}>
+          <form onSubmit={e => { e.preventDefault(); submitDraft() }} style={{ display: 'flex', gap: 8, width: '100%', minWidth: 0 }}>
             <input
               value={draft}
               onChange={e => setDraft(e.target.value)}
@@ -1392,12 +1400,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               placeholder={step.k === 'askMenu' ? 'メニュー名' : '明日の15時'}
               aria-label="ご希望を入力"
               style={{
-                flex: 1, height: 48, borderRadius: 24, border: 'none', outline: 'none', padding: '0 18px',
+                flex: 1, minWidth: 0, height: 48, borderRadius: 24, border: 'none', outline: 'none', padding: '0 18px',
                 background: C.fill, color: C.text, fontSize: 17, fontFamily: FONT,
               }}
             />
             <button type="submit" aria-label="送信" disabled={!draft.trim()} style={{
-              width: 48, height: 48, borderRadius: 24, border: 'none', background: draft.trim() ? C.text : C.fill,
+              width: 48, height: 48, flexShrink: 0, borderRadius: 24, border: 'none', background: draft.trim() ? C.text : C.fill,
               color: draft.trim() ? C.bg : C.tertiary, display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <ArrowUp size={22} strokeWidth={2.2} />

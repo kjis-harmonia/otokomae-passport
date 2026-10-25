@@ -28,7 +28,7 @@ export function V2Account({ onBack }: { onBack: () => void }) {
         <p className="v2-label">端末変更・データ削除のときの復旧コード</p>
         {recovery === undefined ? <p className="v2-note">…</p>
           : recovery ? <>
-            <p style={{ font: '700 26px/1.2 var(--v2-serif)', letterSpacing: '0.14em', color: 'var(--v2-gold-deep)', textAlign: 'center', margin: '8px 0', whiteSpace: 'nowrap' }}>{recovery}</p>
+            <p className="v2-recovery-code">{recovery}</p>
             <p className="v2-note" style={{ margin: 0 }}>スタッフにこのコードを伝えると、会員情報を戻せます。スクリーンショットで保存してください。</p>
           </>
           : <p className="v2-note" style={{ margin: 0 }}>初回ご来店時に、スタッフが発行します。</p>}

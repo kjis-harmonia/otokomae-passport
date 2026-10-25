@@ -66,7 +66,7 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
           style={{ position: 'fixed', inset: 0, zIndex: 10020, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
         >
           <motion.div
-            role="dialog" aria-modal="true" aria-label="ホーム画面に追加"
+            className="customer-install-sheet" role="dialog" aria-modal="true" aria-label="ホーム画面に追加"
             initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} transition={{ duration: 0.25, ease: 'easeOut' }}
             onClick={e => e.stopPropagation()}
             style={{

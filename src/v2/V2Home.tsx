@@ -59,7 +59,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
 
   return (
     <>
-      <div style={{ padding: '2px 20px 10px' }}><V2GinpayBar onOpen={onGinpay} /></div>
+      <div className="v2-pay-wrap"><V2GinpayBar onOpen={onGinpay} /></div>
       <div className="v2-cats" role="tablist" aria-label="スタイルのカテゴリ">
         {UI_CATEGORIES.map(c => (
           <button key={c.id} type="button" role="tab" className="v2-cat v2-glass" aria-pressed={cat === c.id} aria-selected={cat === c.id} onClick={() => chooseCat(c.id)}>{c.id}</button>

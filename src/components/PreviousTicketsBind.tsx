@@ -1,6 +1,6 @@
 import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
 import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { getUserId } from '../utils/userId'
 import {
@@ -8,6 +8,7 @@ import {
   CUSTOMER_AUTH_REQUIRED_EVENT, type CustomerAuthRequiredDetail,
 } from '../utils/customerSession'
 import { callRpc, isMissingRpc, RpcError } from '../utils/staffSession'
+import { observeVisibleViewport } from '../utils/visibleViewport'
 
 // 以前のチケットを引き継ぐ（既存会員の端末に顧客セッションを発行する）。
 // 仕組みは従来どおり：店頭でスタッフが発行する6桁コード（10分有効・1回限り）→ customer_bind_with_code。
@@ -144,6 +145,10 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
   zIndex?: number
 }) {
   const reduced = useReducedMotion() ?? false
+  const viewportRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (viewportRef.current) return observeVisibleViewport(viewportRef.current)
+  }, [])
   const [step, setStep] = useState<Step>(CUSTOMER_ACCESS_ENABLED ? 'ask' : startWithCode ? 'code' : 'ask')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -166,8 +171,9 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
 
   return (
     <div
+      ref={viewportRef}
       className="ticket-bind-backdrop"
-      style={{ position: 'fixed', inset: 0, zIndex, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
+      style={{ position: 'fixed', left: 0, right: 0, top: 'var(--customer-visual-top, 0px)', height: 'var(--customer-visual-height, 100%)', zIndex, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
       onClick={step === 'done' ? onClose : onLater}
     >
       <motion.div
