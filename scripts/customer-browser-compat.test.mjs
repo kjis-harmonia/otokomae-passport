@@ -21,17 +21,19 @@ function homeFixture(empty = false) {
        categories: [{id:'昭和の漢',titles:['パンチパーマ']}] })`, context)
   const jsx = (type, props) => ({ type, props })
   const modules = {
-    'react': { useMemo: fn => fn(), useEffect: () => {}, useState: value => [value, () => {}], useRef: () => ({ current: null }) },
+    'react': { useMemo: fn => fn(), useEffect: () => {}, useLayoutEffect: () => {}, useState: value => [value, () => {}], useRef: () => ({ current: null }) },
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     'framer-motion': { motion: { div: 'div', article: 'article' }, AnimatePresence: 'presence', useReducedMotion: () => true },
     'lucide-react': { ArrowRight: 'arrow', Sparkle: 'spark' },
     '../utils/styleStorage': { loadStyles: () => data.styles },
     '../data/styleLibraryImages': { resolveStyleLibraryImageUrl: () => '/local-photo.jpg' },
     '../data/styleCategories': { UI_CATEGORIES: data.categories },
-    '../data/reserveLinks': { getReserveUrl: () => '', getStyleMenuCode: () => 'perm-punch' },
+    '../data/reserveLinks': { getReserveUrl: () => '', getStyleMenuCode: () => 'perm-punch', MAINTENANCE_CUT_URL: '' },
     '../utils/bookingCoupons': { ensurePriceRules: async () => {}, menuPrice: () => ({ price: 8000, normal: 9000 }) },
     '../features/johnny/bookingIntent': { requestJohnny: () => {} },
+    '../features/johnny/welcome': { maintenanceDeadline: () => '明日まで' },
     './V2GinpayBar': { V2GinpayBar: 'ginpay' },
+    './usualPicks': { loadUsualPicks: async () => [] },
   }
   context.require = name => { assert.ok(modules[name], name); return modules[name] }
   vm.runInContext(compile(homeSource), context)

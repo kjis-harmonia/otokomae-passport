@@ -394,3 +394,15 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
   .v2 :is(button,.v2-btn,.v2-glass) { border: 1px solid ButtonText; }
   .v2 :is([aria-current="page"],[aria-pressed="true"]) { outline: 2px solid Highlight; }
 }
+
+/* ホームの「いつもの」：写真の無いもの（メンテナンスカットなど）は黒と金のポスター風。写真カードと同じ 4:5 */
+.v2-usual-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px;
+  background: radial-gradient(120% 80% at 50% 0%, #3a2c18 0%, #16120c 55%, #0b0a08 100%); color: #f3e6c8;
+}
+.v2-usual-card::after { content: ""; position: absolute; inset: 12px; border-radius: 14px; border: 1px solid rgba(214,176,108,.45); pointer-events: none; }
+.v2-usual-kicker { font: 600 12px/1 var(--v2-sans); letter-spacing: .3em; color: #c9a464; }
+.v2-usual-title { margin: 0; font: 700 clamp(30px, 11cqw, 44px)/1.25 var(--v2-serif); letter-spacing: .08em;
+  background: linear-gradient(180deg, #fff3d6 0%, #e2bd72 48%, #a87b35 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.v2-usual-sub { margin: 0; font: 500 13px/1.8 var(--v2-sans); color: rgba(243,230,200,.82); }
+.v2-usual-sub b { color: #f0cf8a; font-weight: 700; }
