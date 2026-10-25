@@ -66,7 +66,7 @@
 ! npx --yes vercel@54.18.0 env ls production --cwd "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/.qa/production-platform" --scope kjis-harmonias-projects
 ```
 
-次へ：同じproject ID。ProductionにVITE_SUPABASE_URL・VITE_SUPABASE_ANON_KEY・VITE_APP_ENVがある。値は管理画面で本番project URL・本番公開キー・productionと確認する。秘密のキーをVITE_に設定しない。CLIの一覧で値を検証したことにはしない。既存の接続先や他の変数をこの工程で変更しない。不一致なら停止する。
+次へ：同じproject ID。ProductionにVITE_SUPABASE_URL・VITE_SUPABASE_ANON_KEYがある。値は管理画面で本番project URL・本番公開キーと確認する。VITE_APP_ENVは未登録でよい（未登録ならアプリはproductionとして動く。stagingが入っていれば停止）。秘密のキーをVITE_に設定しない。CLIの一覧で値を検証したことにはしない。既存の接続先や他の変数をこの工程で変更しない。不一致なら停止する。
 
 ## C. 関数を1本ずつ（DB成功後、フラグ・cron開始前）
 
