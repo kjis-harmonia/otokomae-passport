@@ -161,10 +161,10 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
 /* Home, member QR and next booking are fixed screens: no page drag or rubber band.
    If a small phone cannot fit the content, only the middle area scrolls (without bounce). */
 html:has(.v2-fixed), body:has(.v2-fixed) { height: 100%; overflow: hidden; overscroll-behavior: none; }
-body:has(.v2-fixed) #root { height: 100dvh; overflow: hidden; }
+body:has(.v2-fixed) #root { height: 100vh; height: 100dvh; overflow: hidden; }
 /* not position:fixed — iPhone cannot read the page colour for the status bar through a fixed full-screen layer and paints it black */
-.v2-fixed { position: relative; height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; overscroll-behavior: none; }
-.v2-fixed .v2-head { position: relative; }
+.v2-fixed { position: relative; height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; overscroll-behavior: none; }
+.v2-fixed .v2-head { position: relative; flex: none; }
 .v2-fixed .v2-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scrollbar-width: none; }
 .v2-fixed .v2-main::-webkit-scrollbar { display: none; }
 /* Reserve the dock outside the scrollport: content cannot sit underneath its buttons.
@@ -191,7 +191,8 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
     url(/images/v2/marble-bg.webp) center / cover no-repeat, #f4f1eb;
 }
 .v2-home .v2-head { position: relative; background: none; }
-.v2-home .v2-main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 104px); }
+.v2-home .v2-main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 16px); }
+.v2-home .v2-main > :not(.v2-stage) { flex: none; }
 .v2-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .v2-home .v2-cats, .v2-home .v2-cards { touch-action: pan-x; }
 .v2-home .v2-cards { flex: 1; min-height: 0; align-items: center; }
@@ -205,6 +206,11 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
   -webkit-backdrop-filter: blur(1.5px) saturate(1.2); backdrop-filter: blur(1.5px) saturate(1.2);
 }
 .v2-home :is(.v2-pay, .v2-nav) { background: linear-gradient(rgba(255,255,255,.22), rgba(255,255,255,.22)), var(--lq-clear); }
+/* Keep the same information on narrow phones: wrap instead of hiding labels or money. */
+.v2-home .v2-pay { flex-wrap: wrap; row-gap: 6px; }
+.v2-home .v2-pay-bal { min-width: 64px; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.v2-home .v2-pay-go { font-size: 12px; letter-spacing: normal; margin-left: auto; }
+.v2-home .v2-cta-spark { display: flex; }
 .v2-home .v2-cat { min-height: 44px; padding: 0 20px; font: 500 15px/1.3 var(--v2-sans); color: #2f2a24; letter-spacing: .05em; text-shadow: 0 1px rgba(255,255,255,.9); }
 .v2-home .v2-cat:not([aria-pressed="true"])::after {
   content: ""; position: absolute; top: 3px; left: 14px; right: 38%; height: 40%; border-radius: 999px;
@@ -238,7 +244,8 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 }
 
 .v2-home .v2-cta {
-  min-height: 72px; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--v2-nav-h) + 16px);
+  position: relative; left: auto; right: auto; bottom: auto;
+  width: calc(100% - 32px); flex: none; margin: 12px auto 0; min-height: 72px;
   border: 1.5px solid rgba(186,154,102,.8);
   background: radial-gradient(70% 130% at 50% 50%, rgba(255,238,204,.34), rgba(255,238,204,0) 70%), var(--lq-clear);
   box-shadow: 0 16px 30px -16px rgba(107,77,32,.45), 0 2px 6px rgba(100,75,35,.10),
@@ -247,6 +254,12 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-home .v2-cta::after { opacity: .7; }
 .v2-home .v2-cta-text b { font-weight: 600; font-size: clamp(16px, 4.6vw, 20px); color: #26201a; }
 .v2-home .v2-cta-go { width: 48px; height: 48px; }
+/* Landscape and very short browser windows retain all content via the middle scrollport. */
+@media (max-height: 560px) {
+  .v2-home { touch-action: auto; }
+  .v2-home .v2-main { display: block; overflow-y: auto; overscroll-behavior: none; }
+  .v2-home .v2-stage { height: 280px; min-height: 280px; }
+}
 
 /* Panels, actions and sheets use the same materials without coating body text. */
 .v2-panel { border-radius: 26px; padding: 20px; }
