@@ -54,7 +54,7 @@ select count(*) from public.customers;                        -- 当てる前と
 
 [人が1本ずつ貼る⑤のコマンド一覧](production-platform-commands.md)を使う。旧い「既存ジョブを消して即開始するSQL」は使わない。
 
-DB01〜22の成功（15番の来店確認を含む）→ソース・Secrets・Vercel本番対象を確認→johnny-notify→johnny-agent→hq-johnny→customer-passkeys→johnny-style-adviceを1本ずつ確認→両フラグON→毎分ジョブを停止状態で作成、の順。新Web・閉鎖B・古いアプリの実機確認のあとで、人が毎分ジョブを開始する。
+DB01〜22の成功（15番の来店確認を含む）→メンテナンスカットの予約メニュー追加（production_maintenance_menu.sql）→ソース・Secrets・Vercel本番対象を確認→johnny-notify→johnny-agent→hq-johnny→customer-passkeys→johnny-style-adviceを1本ずつ確認→両フラグON→毎分ジョブを停止状態で作成、の順。新Web・閉鎖B・古いアプリの実機確認のあとで、人が毎分ジョブを開始する。
 
 本部の「お知らせOFF」はキャンセル待ちの毎分処理を止めない。⑤の準備SQLはactive=falseでcommitし、公開前の仮押さえ・送信を防ぐ。「送信を始める」を自動でONにする工程はない。
 

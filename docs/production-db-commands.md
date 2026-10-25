@@ -521,6 +521,16 @@ select count(*) as history_count, md5(coalesce(string_agg(version||':'||coalesce
 
 次へ：履歴47件（公開前の26件＋新規21件、03は復元のみ）、既存data・予約設定不変、13表の書き込み閉鎖と旧RPC閉鎖を維持、承認30人・照合値一致、ginpay_consistent="true"。
 
+## 最後の読み取り確認のあと：メンテナンスカットを予約メニューに足す（データ1行）
+
+Johnny でメンテナンスカット（30分・3,000円・銀二郎／テイテイ）を予約できるようにする。表の形は変えず、service_menus に code=maintenance の行と担当2人を足すだけ（22工程でできる列を使うので、必ず22工程と最後の読み取り確認の後）。14日以内のお客様だけに出すのはアプリと johnny-agent 側。履歴・9表のdataは変わらない。
+
+```powershell
+! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output table --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/docs/sql/production_maintenance_menu.sql"
+```
+
+次へ：最後の表が maintenance／メンテナンスカット／30／3000／true／true／true／テイテイ・銀二郎 の1行。エラー（銀二郎・テイテイ が見つかりません など）なら何も書き込まれていないので停止して相談。
+
 **ここで先行DB作業を止める。** [⑤の手順](production-platform-commands.md)に従い5関数のデプロイと設定、停止状態のキャンセル待ちcron、レビュー済みrelease PRの公開、実機確認へ進む。johnny-agentの新しい来店確認ガードはDB15番より前に本番へ出さない。当日の順番と中断時の扱いは[⑥の時刻表](release-day-timetable.md)を参照。新しい画面と引継ぎが確認できたら次の閉鎖Bへ進み、閉鎖B後の再確認を終えるまで営業を再開しない。
 
 ## 新しいWebを公開・確認した後：セキュリティ閉鎖B
