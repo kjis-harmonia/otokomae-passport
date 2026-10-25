@@ -43,5 +43,5 @@ try{
  }
  file('check_final.sql');report.status='PASS';report.after=snapshot();report.history=manifest.final
  writeFileSync(join(logs,'report.json'),JSON.stringify(report,null,2)+'\n')
- console.log('PASS full release: 21 steps + ACL closure + reviewed bulk verification; history '+manifest.final)
+ console.log('PASS full release: '+manifest.entries.length+' steps + ACL closure + reviewed bulk verification; history '+manifest.final)
 }catch(error){report.status='STOPPED';report.error=error.message;writeFileSync(join(logs,'report.json'),JSON.stringify(report,null,2)+'\n');console.error(error.message);process.exitCode=1}

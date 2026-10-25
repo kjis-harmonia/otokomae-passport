@@ -28,7 +28,7 @@
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/docs/sql/production_platform_ready.sql"
 ```
 
-次へ：history_count=46、*_readyがすべてtrue、daily_job_count=1、waitlist_job_count=0。notify_enabledとapp_booking_enabledは③で保存した値と同じ。今の本番は履歴26（SB のお知らせ5本とクローズを先行適用済み）で来店確認・パスキー・キャンセル待ちが未適用なので、この段階で止まる。**15番適用前にjohnny-agent／johnny-style-adviceを出さない。**
+次へ：history_count=47、*_readyがすべてtrue、daily_job_count=1、waitlist_job_count=0。notify_enabledとapp_booking_enabledは③で保存した値と同じ。今の本番は履歴26（SB のお知らせ5本とクローズを先行適用済み）で来店確認・パスキー・キャンセル待ちが未適用なので、この段階で止まる。**15番適用前にjohnny-agent／johnny-style-adviceを出さない。**
 
 ```powershell
 ! npx --yes supabase@2.121.0 secrets list --project-ref ufyzynpmkxytnhebombq
@@ -224,7 +224,7 @@ PR #11の公開は別のレビュー済み工程で行う。この⑤にmainへ�
 
 ## G. 公開と閉鎖Bの確認後、営業再開前に毎分cronを開始
 
-前提：Cの新notifyを含む5関数確認済み、Dの両フラグ確認済み、Fの新Web・閉鎖B・古いアプリの引継ぎを実機で確認済み。実際の待ち通知を開始してよい段になったときだけ、人が実行する。SQLは履歴47・閉鎖B・想定どおりの停止ジョブを再確認するが、Webや実機の完了までは自動判定できない。
+前提：Cの新notifyを含む5関数確認済み、Dの両フラグ確認済み、Fの新Web・閉鎖B・古いアプリの引継ぎを実機で確認済み。実際の待ち通知を開始してよい段になったときだけ、人が実行する。SQLは履歴48（閉鎖B後）・想定どおりの停止ジョブを再確認するが、Webや実機の完了までは自動判定できない。
 
 ```powershell
 ! npx --yes supabase@2.121.0 db query --linked --project-ref ufyzynpmkxytnhebombq --output json --file "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/docs/sql/production_waitlist_activate.sql"

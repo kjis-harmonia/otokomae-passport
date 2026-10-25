@@ -21,9 +21,9 @@ Claude は週の利用制限が近いため、ここから先は Codex が引き
 
 ## 1. 本番 DB に入れる（1本ずつ・結果を見てから次へ）
 
-順番は supabase/rollout/release_prod_order.txt。**人が実行するコマンドの正本は[本番DBコマンド一覧](production-db-commands.md)**。③は[最新コピーの記録](production-db-rehearsal.md)のとおり20工程と30人の一括承認まで成功。ただし閉鎖Bが公開計画から抜けていたため、本番公開は保留する。新しいWebの確認後に閉鎖Bを適用する工程もコマンド一覧へ追加した。
+順番は supabase/rollout/release_prod_order.txt。**人が実行するコマンドの正本は[本番DBコマンド一覧](production-db-commands.md)**。③は[最新コピーの記録](production-db-rehearsal.md)のとおり、その時点の20工程と30人の一括承認まで成功（記録は当時のもの。21 ai_booking_penalty・22 ginpay_hold はそのあとに追加し、生成器で22工程・履歴26→47を確認済み）。ただし閉鎖Bが公開計画から抜けていたため、本番公開は保留する。新しいWebの確認後に閉鎖Bを適用する工程もコマンド一覧へ追加した。
 
-最新バックアップ→履歴と既存データの読み取り→01〜14→権限閉鎖→承認対象再照合→一括承認→15〜20の順。新しい scripts/prepare-production-db-release.mjs で、前後の履歴照合付きSQLと各工程の読み取り確認を生成する。旧いbash生成器の出力で上書きしない。各工程は1トランザクション、1本でも失敗したら停止する。本番へ書き込むのは休業中に慶一郎さんが1ブロックずつ実行する ! コマンドだけ。
+最新バックアップ→履歴と既存データの読み取り→01〜14→権限閉鎖→承認対象再照合→一括承認→15〜22→最後の読み取り確認→メンテナンスカットのメニュー追加（データ1行）の順。新しい scripts/prepare-production-db-release.mjs で、前後の履歴照合付きSQLと各工程の読み取り確認を生成する。旧いbash生成器の出力で上書きしない。各工程は1トランザクション、1本でも失敗したら停止する。本番へ書き込むのは休業中に慶一郎さんが1ブロックずつ実行する ! コマンドだけ。
 
 | # | 中身 | 担当 |
 |---|---|---|
@@ -39,13 +39,16 @@ Claude は週の利用制限が近いため、ここから先は Codex が引き
 | 18 | checkout_safety | Codex |
 | 19 | finalize_sale の ticket 別名修正 | Claude |
 | 20 | app_private ヘルパー関数の PUBLIC 実行権を外す（セキュリティ） | Claude |
+| 21 | ai_booking_penalty（当日キャンセル・無断キャンセルのあと AI 予約を止める） | Claude |
+| 22 | ginpay_hold（銀Pay の仮支払い） | Claude |
+| 追加 | production_maintenance_menu.sql（メンテナンスカットを予約メニューに。データ1行・履歴は増えない） | Claude |
 
 注意：**15 を入れた瞬間から、来店確認の済んでいないお客様はアプリで予約できなくなる**。
 慶一郎さんは、店の記録がある既存客30人の名簿を確認し「30人全員でOK」と承認済み。14番のあと、15番の前に **旧記録表の書き込み権限閉鎖 → 対象集合の再確認 → 30人のうち未承認の人だけ登録** を挟む。具体的なSQLと停止条件は [一括承認の手順](sql/production_store_verification_backfill.md) を参照する。自己申告の来店歴は使わず、対象の人数・会員IDが変わっていれば止める。
 
 確認（読み取りのみ）：
 ```sql
-select version from supabase_migrations.schema_migrations where version >= '20261004' order by 1;  -- 03は関数復元のみで履歴を増やさない。他19工程が未適用なら19件増加
+select version from supabase_migrations.schema_migrations where version >= '20261004' order by 1;  -- 03は関数復元のみで履歴を増やさない。他21工程が未適用なら21件増加（26→47）
 select (app_private.ginpay_reconcile_json())->>'consistent';  -- true
 select count(*) from public.customers;                        -- 当てる前と同じ
 ```

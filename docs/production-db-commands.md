@@ -32,7 +32,7 @@
 ! node "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/prepare-production-db-release.mjs"
 ```
 
-成功条件：21 rollout files、history 26 -> 46、No database connection made。生成先はsupabase/rollout/out_release。既存のbuild_accounting_rollout.shで上書きしない。この一覧用の生成器は工程前後の履歴照合を追加している。Git対象外のmanifest.jsonにSQLと元migrationのSHA256を保存する。
+成功条件：22 rollout files、history 26 -> 47、No database connection made。生成先はsupabase/rollout/out_release。既存のbuild_accounting_rollout.shで上書きしない。この一覧用の生成器は工程前後の履歴照合を追加している。Git対象外のmanifest.jsonにSQLと元migrationのSHA256を保存する。
 
 ## 0-2. 本番の実行前状態を読み取る
 
@@ -562,6 +562,6 @@ Johnny でメンテナンスカット（30分・3,000円・銀二郎／テイテ
 node "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport/scripts/rehearse-production-release.mjs" "C:/Users/user/.codex/worktrees/hq-sb-board/otokomae-passport" "postgresql://postgres@127.0.0.1:55433/release_rehearsal_YYYYMMDD"
 ```
 
-このスクリプトは外部URL、別ポート、任意のDB名、接続URLのqueryを拒否する。01〜14→権限閉鎖→対象の読み取り→一括承認→15〜20→最終確認の順。閉鎖Bは自動実行しない。1本でも失敗すれば終了し、次へ進まない。各工程の既存dataの照合値と予約設定を検査する。ログは終了状態・SQLSTATEだけで、標準出力・エラー本文は保存しない。会員名・認証情報・バックアップの内容をGit・PR・ログへ出さない。練習後は専用DB・抽出SQL・データファイルのコピーを削除し、日時フォルダーのバックアップ本体は残す。
+このスクリプトは外部URL、別ポート、任意のDB名、接続URLのqueryを拒否する。01〜14→権限閉鎖→対象の読み取り→一括承認→15〜22→最終確認の順（メンテナンスカットのメニュー追加 production_maintenance_menu.sql は自動では流さない。最終確認の後に人が実行する）。閉鎖Bは自動実行しない。1本でも失敗すれば終了し、次へ進まない。各工程の既存dataの照合値と予約設定を検査する。ログは終了状態・SQLSTATEだけで、標準出力・エラー本文は保存しない。会員名・認証情報・バックアップの内容をGit・PR・ログへ出さない。練習後は専用DB・抽出SQL・データファイルのコピーを削除し、日時フォルダーのバックアップ本体は残す。
 
 参考：[Supabase公式のバックアップと復元](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore)、[PostgreSQL 17 pg_dump](https://www.postgresql.org/docs/17/app-pgdump.html)。
