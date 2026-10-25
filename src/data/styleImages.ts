@@ -9,9 +9,9 @@ export interface StyleImageDef {
 
 const REGISTRY: Array<{ key: string } & StyleImageDef> = [
   { key: '濡れパン',           src: '/assets/hero-nurepan.jpg',          position: '50% 35%' },
-  { key: 'カールアイパー',     src: '/assets/hero-curl-iper.jpg',        position: '50% 30%' },
+  { key: 'カールアイパー',     src: '/assets/styles/curl-iper-v2.jpg',        position: '50% 30%' },
   { key: '秋ニグロ',           src: '/assets/styles/aki-niguro.jpg',     position: '50% 32%' },
-  { key: 'パンチパーマ',       src: '/assets/hero-punch-perm.jpg',       position: '50% 35%' },
+  { key: 'パンチパーマ',       src: '/assets/styles/punch-perm-v2.jpg',       position: '50% 35%' },
   { key: '銀パラ',             src: '/assets/styles/ginpara-showcase.jpg', position: '50% 34%' },
   { key: 'テイテイ刈り',       src: '/assets/teitei-gari.png',           position: '50% 24%', detailTopOpacity: 0.30 },
   { key: '海の男専用',         src: '/assets/styles/library-uminotoko-v2.jpg', position: '50% 38%' },
@@ -25,7 +25,7 @@ const REGISTRY: Array<{ key: string } & StyleImageDef> = [
   { key: 'ギリギリパーマ',     src: '/assets/styles/ri-man-parm.png',   position: '50% 28%' },
   { key: '昭和ヘアスタイル',   src: '/assets/styles/showa-hair.png',    position: '50% 28%' },
   { key: 'サイドバックアイパー', src: '/assets/styles/sidebuck.png',     position: '50% 30%' },
-  { key: 'ヤンキーパンチ',     src: '/assets/styles/yanki-punch.png',   position: '50% 30%' },
+  { key: 'ヤンキーパンチ',     src: '/assets/styles/yanki-punch-v2.jpg',   position: '50% 30%' },
   { key: 'ニグロパーマ',       src: '/assets/styles/nigro.png',          position: '50% 30%' },
   { key: '海軍御用達',         src: '/assets/styles/kaigun-showcase-v2.jpg',  position: '50% 30%' },
   { key: 'シンサイ刈り',       src: '/assets/styles/shinsaigari.png',   position: '50% 30%' },

@@ -17,9 +17,9 @@ const STYLE_LIBRARY_IMAGES: ReadonlyArray<{ key: string; src: string }> = [
   { key: 'ニグロパーマ', src: '/assets/styles/library-nigro.jpg' },
   { key: 'サイドバックアイパー', src: '/assets/styles/library-sideback-aipar.jpg' },
   { key: 'リーゼントパンチ', src: '/assets/styles/library-rejent-punch.jpg' },
-  { key: 'ヤンキーパンチ', src: '/assets/styles/library-yanki-punch.jpg' },
-  { key: 'バチバチパンチパーマ', src: '/assets/styles/library-punch-perm.jpg' },
-  { key: 'カールアイパー', src: '/assets/styles/library-curl-iper.jpg' },
+  { key: 'ヤンキーパンチ', src: '/assets/styles/yanki-punch-v2.jpg' },
+  { key: 'バチバチパンチパーマ', src: '/assets/styles/punch-perm-v2.jpg' },
+  { key: 'カールアイパー', src: '/assets/styles/curl-iper-v2.jpg' },
 ]
 
 export function resolveStyleLibraryImageUrl(style: Pick<StyleCard, 'title' | 'imageUrl'>): string {
