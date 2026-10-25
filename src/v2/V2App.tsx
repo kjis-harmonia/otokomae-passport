@@ -62,8 +62,11 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   }
 
 
+  // ホーム・会員QR・次回予約は1画面に収めて固定（上下にスワイプしない）
+  const isHome = tab === 'home' && !pay && activeTab !== 'mypage'
+  const fixed = isHome || (activeTab !== 'mypage' && (tab === 'qr' || tab === 'next'))
   return (
-    <div className="v2">
+    <div className={isHome ? 'v2 v2-fixed v2-home' : fixed ? 'v2 v2-fixed' : 'v2'}>
       <header className="v2-head">
         <span />
         <img className="v2-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" />

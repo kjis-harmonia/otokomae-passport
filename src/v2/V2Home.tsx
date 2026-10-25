@@ -38,7 +38,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
     const c = UI_CATEGORIES.find(x => x.id === cat) ?? UI_CATEGORIES[0]
     return c.titles.map(t => styles.find(s => s.title === t)).filter((s): s is StyleCard => !!s)
   }, [cat, styles])
-  const selected = list.at(Math.min(index, list.length - 1)) ?? null
+  const selected = list[Math.min(index, list.length - 1)] ?? null
 
   const chooseCat = (id: string) => {
     setCat(id); setIndex(0)
@@ -67,7 +67,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={cat}
+        <motion.div key={cat} className="v2-stage"
           initial={reduce ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? undefined : { opacity: 0, y: -8 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
           <div className="v2-cards" ref={rail} onScroll={onScroll} aria-label={`${cat}のスタイル`}>

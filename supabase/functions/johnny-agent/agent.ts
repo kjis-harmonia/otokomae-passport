@@ -176,7 +176,7 @@ function shownText(ctx: AgentContext): string {
   const sh = ctx.shown
   if (!sh) return ''
   const name = (c?: string) => ctx.menus.find(m => m.code === c)?.name ?? c
-  const staff = (id?: string | null) => (id ? ctx.staff.find(s => s.id === id)?.name ?? id : '指名なし')
+  const staff = (id?: string | null) => (id ? ctx.staff.find(s => s.id === id)?.name ?? id : '担当はこれから選ぶ')
   const parts: string[] = []
   if (sh.times?.length) parts.push(`時刻の候補（${name(sh.menu_code)}・${staff(sh.staff_id)}）：${sh.times.map((t, i) => `${i + 1}つ目 ${jstParts(t).date} ${jstParts(t).time}`).join('、')}`)
   if (sh.confirm) parts.push(`確認中の予約案：${jstParts(sh.confirm.starts_at).date} ${jstParts(sh.confirm.starts_at).time}・${name(sh.confirm.menu_code)}（${sh.confirm.menu_code}）・${staff(sh.confirm.staff_id)}`)
@@ -212,7 +212,7 @@ ${week}
 - 「〜してもいい？」「〜できる？」のような聞き方でも、メニューや日時が入っていれば予約したいと受け取って空きを案内する。
 - 「前回と同じ」「いつもの」 → 表で「前回」のメニュー。
 - 「カット」「髪切りたい」だけなら通常カット。「顔剃り」は顔そり男性。
-- 担当の指名（「テイテイさんで」など） → staff の id を slots / next_slots の staff_id に入れて確かめ、ui にも staff_id を入れる。指名が無ければ staff_id は null。日が決まっていなければ next_slots で近い日から探す。
+- 担当の指名（「テイテイさんで」など） → staff の id を slots / next_slots の staff_id に入れて確かめ、ui にも staff_id を入れる。指名が無ければ staff_id は null（担当は確定の前にアプリがお客様に選んでもらう。「指名なし」の予約は無いので、指名なしを勧めたり「どちらでも」で決めたりしない）。日が決まっていなければ next_slots で近い日から探す。
 - 「2つ目で」「さっきの11時で」「一番最初の」「最後の」 → 画面に出ている候補（shown）の中から選ぶ（画面に候補があるときの「一番最初」は、候補の1つ目）。
 - 確認画面（shown.confirm）が出ているときの「16時にして」「メニューはスキンフェードで」「テイテイさんで」は、その予約案の一部を変えるだけ。変えたところを slots で確かめて、ui: confirm_booking を出し直す。このときの「ずらして」「遅らせて」は予約の変更ではないので my_reservations は呼ばない。
 - 予約一覧の wd・label で読む：「日曜の予約」「来週の日曜のやつ」はその曜日の予約（日付の読みより予約一覧が先）。今ある予約の日時を変える話は confirm_booking ではなく confirm_change。「両方キャンセル」は1つずつ（近い方から confirm_cancel）。

@@ -17,13 +17,19 @@ function requireStorage(){
 }
 async function request<T>(action:string,input:Record<string,unknown>={}):Promise<T>{
   if(!CUSTOMER_ACCESS_ENABLED)throw new Error('現在この機能の準備中です。')
-  const response=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json',apikey:import.meta.env.VITE_SUPABASE_ANON_KEY??''},body:JSON.stringify({action,...input}),signal:AbortSignal.timeout(20000)})
-  const result=await response.json()
-  if(!response.ok){
-    if(result.error==='customer_auth_required'&&input.session===getCustomerSession()){clearCustomerSession();window.dispatchEvent(new Event('ginjiro:customer-session-changed'))}
-    throw new PasskeyError(result.error??'unavailable',result.message??'通信できませんでした。もう一度お試しください。')
+  const controller=new AbortController()
+  const timer=setTimeout(()=>controller.abort(),20000)
+  try{
+    const response=await fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json',apikey:import.meta.env.VITE_SUPABASE_ANON_KEY??''},body:JSON.stringify({action,...input}),signal:controller.signal})
+    const result=await response.json()
+    if(!response.ok){
+      if(result.error==='customer_auth_required'&&input.session===getCustomerSession()){clearCustomerSession();window.dispatchEvent(new Event('ginjiro:customer-session-changed'))}
+      throw new PasskeyError(result.error??'unavailable',result.message??'通信できませんでした。もう一度お試しください。')
+    }
+    return result as T
+  }finally{
+    clearTimeout(timer)
   }
-  return result as T
 }
 export function adoptMember(member:MemberIdentity){
   requireStorage()

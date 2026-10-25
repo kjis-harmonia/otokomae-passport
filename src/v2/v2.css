@@ -109,6 +109,7 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
 .v2-pay-icon { flex: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #503b20; background: var(--lq-champagne); border: 1px solid #c1a36f; box-shadow: var(--lq-gold-shadow); }
 .v2-pay-name { flex: none; font: 700 14px/1 var(--v2-serif); letter-spacing: .08em; }
 .v2-pay-bal { flex: 1; min-width: 0; font: 700 17px/1.2 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v2-pay-held { display: block; margin-top: 2px; font: 600 10.5px/1.2 var(--v2-sans); color: var(--v2-sub); letter-spacing: 0; }
 .v2-pay-bal.is-off { font: 500 12px/1.4 var(--v2-sans); color: var(--v2-sub); }
 .v2-pay-go { flex: none; display: flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 600; color: var(--v2-sub); }
 
@@ -156,6 +157,109 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
   border: 1px solid #b59964; background: var(--lq-champagne); box-shadow: var(--lq-gold-shadow);
 }
 .v2-cta-go::before { content: ""; position: absolute; inset: 2px; border-radius: inherit; border: 1px solid rgba(255,255,255,.85); }
+
+/* Home, member QR and next booking are fixed screens: no page drag or rubber band.
+   If a small phone cannot fit the content, only the middle area scrolls (without bounce). */
+html:has(.v2-fixed), body:has(.v2-fixed) { height: 100%; overflow: hidden; overscroll-behavior: none; }
+body:has(.v2-fixed) #root { height: 100vh; height: 100dvh; overflow: hidden; }
+/* not position:fixed — iPhone cannot read the page colour for the status bar through a fixed full-screen layer and paints it black */
+.v2-fixed { position: relative; height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; display: flex; flex-direction: column; overscroll-behavior: none; }
+.v2-fixed .v2-head { position: relative; flex: none; }
+.v2-fixed .v2-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: none; scrollbar-width: none; }
+.v2-fixed .v2-main::-webkit-scrollbar { display: none; }
+/* Reserve the dock outside the scrollport: content cannot sit underneath its buttons.
+   An 8px gap remains above the dock; short content does not gain a blank scroll tail. */
+.v2-fixed:not(.v2-home) .v2-main {
+  margin-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 18px);
+  padding-bottom: 0;
+}
+
+/* Home is a fixed stage (no vertical scroll) over marble and gold ribbons.
+   Controls are clear glass so the ribbons show through; the photo surround stays pearl. */
+html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; overflow: hidden; overscroll-behavior: none; }
+.v2-home {
+  --lq-clear: radial-gradient(90% 80% at 18% 0%, rgba(255,255,255,.70) 0%, rgba(255,255,255,0) 42%),
+    linear-gradient(180deg, rgba(255,255,255,.20) 0%, rgba(255,255,255,.04) 56%, rgba(255,255,255,.18) 100%);
+  --lq-clear-shadow: 0 8px 18px -10px rgba(70,52,26,.30), 0 1px 2px rgba(70,52,26,.08),
+    inset 0 1.5px 1px rgba(255,255,255,.98), inset 0 -1.5px 2px rgba(255,255,255,.75),
+    inset 0 -8px 12px -8px rgba(120,96,60,.20);
+  touch-action: pan-x;
+}
+.v2-home::before {
+  /* top fades into the status-bar colour so there is no seam where the marble starts */
+  background: linear-gradient(180deg, #f9f8f3 0, #f9f8f3 env(safe-area-inset-top, 0px), rgba(249,248,243,.62) calc(env(safe-area-inset-top, 0px) + 96px), rgba(248,246,241,.30) 26%, rgba(248,246,241,.20) 60%, rgba(248,246,241,.30) 100%),
+    url(/images/v2/marble-bg.webp) center / cover no-repeat, #f4f1eb;
+}
+.v2-home .v2-head { position: relative; background: none; }
+.v2-home .v2-main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding-bottom: calc(var(--v2-nav-h) + env(safe-area-inset-bottom, 0px) + 16px); }
+.v2-home .v2-main > :not(.v2-stage) { flex: none; }
+.v2-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.v2-home .v2-cats, .v2-home .v2-cards { touch-action: pan-x; }
+.v2-home .v2-cards { flex: 1; min-height: 0; align-items: center; }
+@supports (container-type: size) {
+  .v2-home .v2-cards { container-type: size; }
+  .v2-home .v2-card { width: min(84vw, 380px, calc((100cqh - 18px) * .8 + 18px)); min-width: 0; }
+}
+
+.v2-home :is(.v2-cat, .v2-cta, .v2-pay, .v2-nav, .v2-round) {
+  background: var(--lq-clear); box-shadow: var(--lq-clear-shadow);
+  -webkit-backdrop-filter: blur(1.5px) saturate(1.2); backdrop-filter: blur(1.5px) saturate(1.2);
+}
+.v2-home :is(.v2-pay, .v2-nav) { background: linear-gradient(rgba(255,255,255,.22), rgba(255,255,255,.22)), var(--lq-clear); }
+/* Keep the same information on narrow phones: wrap instead of hiding labels or money. */
+.v2-home .v2-pay { flex-wrap: wrap; row-gap: 6px; }
+.v2-home .v2-pay-bal { min-width: 64px; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.v2-home .v2-pay-go { font-size: 12px; letter-spacing: normal; margin-left: auto; }
+.v2-home .v2-cta-spark { display: flex; }
+.v2-home .v2-cat { min-height: 44px; padding: 0 20px; font: 500 15px/1.3 var(--v2-sans); color: #2f2a24; letter-spacing: .05em; text-shadow: 0 1px rgba(255,255,255,.9); }
+.v2-home .v2-cat:not([aria-pressed="true"])::after {
+  content: ""; position: absolute; top: 3px; left: 14px; right: 38%; height: 40%; border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,255,255,.75), rgba(255,255,255,0)); pointer-events: none;
+}
+/* Selected capsule: clear champagne glass (ribbons show through), metallic rim, top specular and bottom thickness. */
+.v2-home .v2-cat[aria-pressed="true"] {
+  border-color: transparent; font-weight: 600; color: #2e2416;
+  background:
+    radial-gradient(48% 40% at 32% 14%, rgba(255,255,255,.92) 0%, rgba(255,255,255,0) 72%),
+    radial-gradient(40% 40% at 82% 88%, rgba(255,252,240,.75) 0%, rgba(255,252,240,0) 70%),
+    linear-gradient(180deg, rgba(255,236,196,.42) 0%, rgba(214,176,108,.22) 55%, rgba(240,212,160,.40) 100%);
+  box-shadow: 0 9px 18px -9px rgba(122,86,32,.50), 0 2px 4px -1px rgba(122,86,32,.18),
+    inset 0 2px 2px rgba(255,255,255,.95), inset 0 -4px 7px -1px rgba(168,124,56,.38),
+    inset 0 -1px 0 rgba(255,248,226,.95), inset 3px 0 6px -3px rgba(255,255,255,.8), inset -3px 0 6px -3px rgba(150,108,45,.25);
+}
+@supports (mask-composite: exclude) or (-webkit-mask-composite: xor) {
+  .v2-home .v2-cat[aria-pressed="true"]::before {
+    inset: -1px; padding: 1.5px; border: 0; background: var(--lq-gold-rim);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude;
+  }
+}
+.v2-home .v2-cat[aria-pressed="true"] { padding-bottom: 0; }
+.v2-home .v2-cat[aria-pressed="true"]::after { content: none; }
+/* Clear capsules get the same bottom thickness so they read as puffed glass. */
+.v2-home .v2-cat:not([aria-pressed="true"]) {
+  box-shadow: 0 9px 18px -10px rgba(70,52,26,.32), 0 1px 2px rgba(70,52,26,.08),
+    inset 0 2px 2px rgba(255,255,255,.98), inset 0 -4px 7px -2px rgba(130,104,66,.22),
+    inset 0 -1px 0 rgba(255,255,255,.95), inset 3px 0 6px -3px rgba(255,255,255,.8);
+}
+
+.v2-home .v2-cta {
+  position: relative; left: auto; right: auto; bottom: auto;
+  width: calc(100% - 32px); flex: none; margin: 12px auto 0; min-height: 72px;
+  border: 1.5px solid rgba(186,154,102,.8);
+  background: radial-gradient(70% 130% at 50% 50%, rgba(255,238,204,.34), rgba(255,238,204,0) 70%), var(--lq-clear);
+  box-shadow: 0 16px 30px -16px rgba(107,77,32,.45), 0 2px 6px rgba(100,75,35,.10),
+    inset 0 2px 2px rgba(255,255,255,.95), inset 0 0 0 4px rgba(255,255,255,.30), inset 0 0 0 5px rgba(190,156,100,.55);
+}
+.v2-home .v2-cta::after { opacity: .7; }
+.v2-home .v2-cta-text b { font-weight: 600; font-size: clamp(16px, 4.6vw, 20px); color: #26201a; }
+.v2-home .v2-cta-go { width: 48px; height: 48px; }
+/* Landscape and very short browser windows retain all content via the middle scrollport. */
+@media (max-height: 560px) {
+  .v2-home { touch-action: auto; }
+  .v2-home .v2-main { display: block; overflow-y: auto; overscroll-behavior: none; }
+  .v2-home .v2-stage { height: 280px; min-height: 280px; }
+}
 
 /* Panels, actions and sheets use the same materials without coating body text. */
 .v2-panel { border-radius: 26px; padding: 20px; }
@@ -235,6 +339,9 @@ html:has(.v2), body:has(.v2) { background: #f4f1eb; }
   .v2-cta { padding-left: 14px; gap: 7px; }
   .v2-cta-spark { display: none; }
   .v2-cta-go { width: 48px; height: 48px; }
+  .v2-pay-go { font-size: 11px; letter-spacing: -.02em; }
+}
+@media (max-width: 359px) {
   .v2-pay-go { font-size: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
