@@ -20,7 +20,7 @@ export const RESERVE_LINKS: Readonly<Record<string, string>> = {
   'カールアイパー':       CURL_IPER_URL,
   'バチバチパンチパーマ': PUNCH_PERM_URL,
   '銀パラ':               GINPARA_URL,
-  '夏ニグロ':             NATSU_URL,
+  '秋ニグロ':             NATSU_URL,
   // TryOnScreen short names (subset of above)
   '濡れパン':             NUREPAN_URL,
   'パンチパーマ':         PUNCH_PERM_URL,
@@ -65,7 +65,7 @@ export const STYLE_MENU_CODES: Readonly<Record<string, string>> = {
   'リーゼントパンチ': 'perm-punch',
   'シンサイパンチ': 'perm-punch',
   'ニグロパーマ': 'perm-negro',
-  '夏ニグロ': 'perm-negro',
+  '秋ニグロ': 'perm-negro',
   'ジャマイカンアフロ': 'perm-afro',
   '銀パラ': 'perm-ginpara-curly',
   'スペインパーマ': 'perm-spain',

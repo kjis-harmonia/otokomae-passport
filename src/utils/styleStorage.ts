@@ -21,7 +21,7 @@ export const STYLES_STORAGE_KEY = 'ginjiro_cms_styles'
 // Incremental additions (new styles, price tweaks) do NOT need a bump —
 // the diff-based migration below handles those automatically.
 export const STYLES_VERSION_KEY = 'ginjiro_cms_version'
-export const STYLES_DATA_VERSION = 2
+export const STYLES_DATA_VERSION = 3
 
 /* ── Internal helpers ──────────────────────────────────────────── */
 
@@ -201,15 +201,15 @@ const SEED_DRAFTS: StyleCardDraft[] = [
     sortOrder: 5,
   },
   {
-    title: '夏ニグロ',
+    title: '秋ニグロ',
     category: 'seasonal',
-    catchCopy: '夏の熱気に負けない。潔さが男を際立たせる。',
+    catchCopy: '紅葉より熱く。深まる秋に、男の色気を。',
     description:
-      '夏に映える短めスタイルを銀二郎流に昇華。暑さを味方につけた爽快感と刈り上げラインの美しさが生む清潔感は、真夏のどんな場所でも男を輝かせる。ナイトプールでも海でも視線を独り占めにする夏限定の男前。',
+      '秋に映える短めスタイルを銀二郎流に昇華。刈り上げラインの美しさと引き締まったシルエットが、ジャケットやレザーの季節に男の渋さを際立たせる。夜風が冷たくなるほど視線を集める秋限定の男前。',
     price: 9000,
     durationMinutes: 45,
-    imageUrl: '/assets/hero-natsu-niguro.jpg',
-    tags: ['夏', 'シーズナル', 'さっぱり', 'モテ', '刈り上げ'],
+    imageUrl: '/assets/styles/aki-niguro.jpg',
+    tags: ['秋', 'シーズナル', '渋さ', 'モテ', '刈り上げ'],
     stats: { intimidation: 3, sexiness: 4, popularity: 4, difficulty: 2, durability: 4 },
     isFeatured: false,
     isPublished: true,
@@ -403,7 +403,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '鍛え上げられた男が纏う、清潔感と威圧感の極致。海軍が認めた硬派なショートスタイルは、無駄を一切省いた男の美学そのもの。見るだけで姿勢が正したくなる。',
     price: 5000,
     durationMinutes: 40,
-    imageUrl: '/assets/styles/kaigun-showcase.jpg',
+    imageUrl: '/assets/styles/kaigun-showcase-v2.jpg',
     tags: ['ショート', '威圧', '清潔感', '硬派', '軍隊'],
     stats: { intimidation: 5, sexiness: 3, popularity: 2, difficulty: 1, durability: 5 },
     isFeatured: false,
@@ -549,7 +549,7 @@ export function seedInitialStyles(): void {
 
   // Migrate prices to current values
   const PRICE_UPDATES: Record<string, number> = {
-    '夏ニグロ':             9000,
+    '秋ニグロ':             9000,
     'トラック野郎御用達':   3500,
     'カールアイパー':       8000,
     'ジャマイカンアフロ':   9000,
@@ -581,7 +581,9 @@ export function seedInitialStyles(): void {
     '/assets/hero-ginpara.jpg':        '/assets/styles/ginpara-showcase.jpg',
     '/assets/ginpara.png':             '/assets/styles/ginpara-showcase.jpg',
     '/assets/styles/ginpara.png':      '/assets/styles/ginpara-showcase.jpg',
-    '/assets/styles/kaigun.png':       '/assets/styles/kaigun-showcase.jpg',
+    '/assets/styles/kaigun.png':       '/assets/styles/kaigun-showcase-v2.jpg',
+    '/assets/styles/kaigun-showcase.jpg': '/assets/styles/kaigun-showcase-v2.jpg',
+    '/assets/hero-natsu-niguro.jpg':   '/assets/styles/aki-niguro.jpg',
     '/assets/gokudo-bozu.png':         '/assets/styles/library-uminotoko-v2.jpg',
     '/assets/styles/library-uminotoko.jpg': '/assets/styles/library-uminotoko-v2.jpg',
     // 4 images moved from /assets/ → /assets/styles/
