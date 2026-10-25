@@ -37,7 +37,7 @@ try{
    if(entry.step==='15'){
      file('production_lock_legacy_record_writes.sql');file('check_acl.sql');unchanged('ACL closure');record('ACL closure / existing data preserved')
      const candidates=file('production_store_verification_candidates.sql');writeFileSync(join(logs,'candidate-counts.txt'),candidates);record('read-only candidate preview')
-     file('production_seed_store_verifications.sql');file('check_bulk.sql');unchanged('bulk verification');record('reviewed 30 approvals / existing data preserved')
+     file('production_seed_store_verifications.sql');file('check_bulk.sql');unchanged('bulk verification');record('reviewed approvals (32) / existing data preserved')
    }
    file(entry.file);file('check_'+entry.step+'.sql');unchanged('step '+entry.step);record('step '+entry.step+' / history '+entry.history+' / existing data preserved')
  }
