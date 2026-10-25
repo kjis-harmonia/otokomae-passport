@@ -86,7 +86,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const reserve = () => {
     // いつものでメニューが分からないときは、メニューを決めずに Johnny（おかえりなさい から聞く）
     if (!selected) { requestJohnny({ menuCode: null, label: '' }); return }
-    requestJohnny({ menuCode: selected.code, label: selected.label })
+    requestJohnny({ menuCode: selected.code, label: selected.label, usual: selected.kind === 'usual' })
   }
   const price = selected ? itemPrice(selected) : null
   const hpTitle = selected?.kind === 'style' ? selected.style.title : selected?.title ?? null

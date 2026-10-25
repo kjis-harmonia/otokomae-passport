@@ -1,15 +1,18 @@
-// V2 ホームの「いつもの」：来店したことがあるお客様だけに出す1枚（「漢は黙っていつもので」のポスター）。
-//   メニューは来店の記録でいちばん多いもの（Johnny の「おかえりなさい」と同じ数え方・buildWelcome）。
-//   記録にメニューが無い（QR の来店登録だけ）ときはメニューを決めずに Johnny を開く（おかえりなさい から聞く）。予約のメニューで推測はしない。
+// V2 ホームの「いつもの」：「漢は黙っていつもので」のポスター1枚。
+//   メニューは、登録した「いつものメニュー」（Johnny で登録・この端末）→ 来店の記録でいちばん多いもの（Johnny の「おかえりなさい」と同じ数え方）。
+//   どちらも無いがご来店はある（QR の来店登録だけ）ときはメニューを決めずに Johnny へ（Johnny がいつものメニューを聞いて登録する）。
+//   来店も登録も無いお客様には出さない。予約のメニューで推測はしない。
 import { bookingAssistantApi, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
 import { buildWelcome, type VisitRecord } from '../features/johnny/welcome'
+import { getUsualMenu } from '../features/johnny/usualMenu'
 import { STYLE_MENU_CODES } from '../data/reserveLinks'
 import { UI_CATEGORIES } from '../data/styleCategories'
 
-/** null = 来店したことが無い（「いつもの」を出さない）。menu が null = 来店はあるがメニューが分からない */
-export type Usual = { menu: { code: string; name: string; title: string | null } | null } | null
+type UsualMenu = { code: string; name: string; title: string | null }
+/** null = 出さない。menu が null = ご来店はあるがメニューが分からない */
+export type Usual = { menu: UsualMenu | null } | null
 
-let cache: { at: number; usual: Promise<Usual> } | null = null
+let cache: { at: number; visited: Promise<{ visited: boolean; menu: UsualMenu | null }> } | null = null
 
 /** ホットペッパーのリンク用のスタイル：そのメニューのスタイルのうち、メニュー名を含むもの（パンチパーマ → バチバチパンチパーマ）、無ければ最初のもの */
 function styleTitleFor(code: string, name: string): string | null {
@@ -17,7 +20,7 @@ function styleTitleFor(code: string, name: string): string | null {
   return titles.find(t => t.includes(name)) ?? titles[0] ?? null
 }
 
-async function load(): Promise<Usual> {
+async function loadVisited(): Promise<{ visited: boolean; menu: UsualMenu | null }> {
   const api = bookingAssistantApi()
   const [opts, list, lastVisit, visits] = await Promise.all([
     api.options(),
@@ -26,15 +29,16 @@ async function load(): Promise<Usual> {
     api.recentVisits().catch(() => [] as VisitRecord[]),
   ])
   const w = buildWelcome(lastVisit, list, opts.menus, Date.now(), visits)
-  if (!w) return null
+  if (!w) return { visited: false, menu: null }
   const m = w.usual.find(x => x.code !== 'maintenance') ?? (w.lastMenu && w.lastMenu.code !== 'maintenance' ? w.lastMenu : null)
-  return { menu: m ? { code: m.code, name: m.name, title: styleTitleFor(m.code, m.name) } : null }
+  return { visited: true, menu: m ? { code: m.code, name: m.name, title: styleTitleFor(m.code, m.name) } : null }
 }
 
-/** 5分はホームを開き直しても読み直さない。読めなかったら null */
-export function loadUsual(): Promise<Usual> {
-  if (cache && Date.now() - cache.at < 5 * 60000) return cache.usual
-  const usual = load().catch(() => null)
-  cache = { at: Date.now(), usual }
-  return usual
+/** 登録したいつものメニューは毎回読み直す（Johnny で登録した直後にも反映）。来店の記録は5分読み直さない */
+export async function loadUsual(): Promise<Usual> {
+  const reg = getUsualMenu()
+  if (reg) return { menu: { ...reg, title: styleTitleFor(reg.code, reg.name) } }
+  if (!cache || Date.now() - cache.at >= 5 * 60000) cache = { at: Date.now(), visited: loadVisited().catch(() => ({ visited: false, menu: null })) }
+  const v = await cache.visited
+  return v.visited ? { menu: v.menu } : null
 }
