@@ -394,3 +394,4 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
   .v2 :is(button,.v2-btn,.v2-glass) { border: 1px solid ButtonText; }
   .v2 :is([aria-current="page"],[aria-pressed="true"]) { outline: 2px solid Highlight; }
 }
+

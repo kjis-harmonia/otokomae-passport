@@ -21,7 +21,7 @@ export const STYLES_STORAGE_KEY = 'ginjiro_cms_styles'
 // Incremental additions (new styles, price tweaks) do NOT need a bump —
 // the diff-based migration below handles those automatically.
 export const STYLES_VERSION_KEY = 'ginjiro_cms_version'
-export const STYLES_DATA_VERSION = 2
+export const STYLES_DATA_VERSION = 3
 
 /* ── Internal helpers ──────────────────────────────────────────── */
 
@@ -148,7 +148,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '銀二郎最高峰の技が生み出す究極のパンチパーマ。バチバチに締まったカールの密度と均一性は職人の魂が宿る芸術品。着こなせる男を選ぶが故に、持つ者の格を何倍にも押し上げる。覚悟ある男だけに許された一手。',
     price: 8000,
     durationMinutes: 120,
-    imageUrl: '/assets/hero-punch-perm.jpg',
+    imageUrl: '/assets/styles/punch-perm-v2.jpg',
     tags: ['パンチパーマ', '個性', '威圧', 'プレミアム', '覚悟'],
     stats: { intimidation: 5, sexiness: 4, popularity: 3, difficulty: 5, durability: 4 },
     isFeatured: true,
@@ -178,7 +178,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       'アイロンパーマで生み出した均一なカールが、男の色気を最大限に引き出す。昭和の男たちが愛した伝統技法を現代に昇華した、銀二郎の職人技が光る一手。',
     price: 8000,
     durationMinutes: 75,
-    imageUrl: '/assets/hero-curl-iper.jpg',
+    imageUrl: '/assets/styles/curl-iper-v2.jpg',
     tags: ['アイパー', 'クラシック', 'カール', '色気', '職人技'],
     stats: { intimidation: 4, sexiness: 4, popularity: 3, difficulty: 4, durability: 4 },
     isFeatured: false,
@@ -193,7 +193,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '天然のうねりを最大限に活かし、自由奔放な存在感を発揮するアフロスタイル。セット不要で毎朝ノーストレス。個性的でありながら親しみやすく、どんな場所でも「あいつ、いいな」と思わせる不思議な魅力を持つ。',
     price: 9000,
     durationMinutes: 45,
-    imageUrl: '/assets/jamaican-afro.png',
+    imageUrl: '/assets/styles/jamaican-afro-v2.jpg',
     tags: ['アフロ', 'ナチュラル', '個性', 'カジュアル', 'メンテフリー'],
     stats: { intimidation: 3, sexiness: 3, popularity: 4, difficulty: 1, durability: 5 },
     isFeatured: false,
@@ -201,15 +201,15 @@ const SEED_DRAFTS: StyleCardDraft[] = [
     sortOrder: 5,
   },
   {
-    title: '夏ニグロ',
+    title: '秋ニグロ',
     category: 'seasonal',
-    catchCopy: '夏の熱気に負けない。潔さが男を際立たせる。',
+    catchCopy: '紅葉より熱く。深まる秋に、男の色気を。',
     description:
-      '夏に映える短めスタイルを銀二郎流に昇華。暑さを味方につけた爽快感と刈り上げラインの美しさが生む清潔感は、真夏のどんな場所でも男を輝かせる。ナイトプールでも海でも視線を独り占めにする夏限定の男前。',
+      '秋に映える短めスタイルを銀二郎流に昇華。刈り上げラインの美しさと引き締まったシルエットが、ジャケットやレザーの季節に男の渋さを際立たせる。夜風が冷たくなるほど視線を集める秋限定の男前。',
     price: 9000,
     durationMinutes: 45,
-    imageUrl: '/assets/hero-natsu-niguro.jpg',
-    tags: ['夏', 'シーズナル', 'さっぱり', 'モテ', '刈り上げ'],
+    imageUrl: '/assets/styles/aki-niguro.jpg',
+    tags: ['秋', 'シーズナル', '渋さ', 'モテ', '刈り上げ'],
     stats: { intimidation: 3, sexiness: 4, popularity: 4, difficulty: 2, durability: 4 },
     isFeatured: false,
     isPublished: true,
@@ -223,7 +223,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '銀二郎が誇る特製パーマ。艶感と自然な動きのバランスが絶妙で、どんな角度から見ても隙のない存在感を放つ。ナイトシーンからビジネスまで一貫した品格を保つ、本物の男前のための一手。',
     price: 15000,
     durationMinutes: 90,
-    imageUrl: '/assets/styles/ginpara-showcase.jpg',
+    imageUrl: '/assets/styles/ginpara-v2.jpg',
     tags: ['パーマ', '艶', '色気', 'プレミアム', '経営者'],
     stats: { intimidation: 3, sexiness: 5, popularity: 4, difficulty: 2, durability: 4 },
     isFeatured: true,
@@ -253,7 +253,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '港で映える、漁師の貫禄を宿した硬派な短髪スタイル。潮風に負けない清潔感と、無駄を削ぎ落とした男らしさで、飾らずに存在感を放つ。',
     price: 5000,
     durationMinutes: 30,
-    imageUrl: '/assets/styles/library-uminotoko.jpg',
+    imageUrl: '/assets/styles/library-uminotoko-v2.jpg',
     tags: ['海', '漁師', 'シンプル', '短髪', '男前'],
     stats: { intimidation: 5, sexiness: 3, popularity: 2, difficulty: 1, durability: 5 },
     isFeatured: false,
@@ -313,7 +313,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '常識という名の檻を、色で壊す。銀二郎が提案する大胆なカラーリングは、あなたの中に眠る野性を目覚めさせる。見た瞬間に空気が変わる——覚悟した男だけに許された一手。',
     price: 14500,
     durationMinutes: 90,
-    imageUrl: '/assets/styles/kakusei.png',
+    imageUrl: '/assets/styles/kakusei-v2.jpg',
     tags: ['カラー', '個性', '覚醒', 'モテ', '大胆'],
     stats: { intimidation: 4, sexiness: 5, popularity: 4, difficulty: 3, durability: 3 },
     isFeatured: true,
@@ -373,7 +373,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '昭和のストリートを生きた男たちが誇るパンチパーマ。バチッと渦巻くカールが纏う男の気迫は、時代を超えて圧倒的な存在感を放ち続ける。着こなせる者だけが持つ、本物の威圧感。',
     price: 8000,
     durationMinutes: 120,
-    imageUrl: '/assets/styles/yanki-punch.png',
+    imageUrl: '/assets/styles/yanki-punch-v2.jpg',
     tags: ['パンチパーマ', 'ヤンキー', '昭和', '威圧', '硬派'],
     stats: { intimidation: 5, sexiness: 3, popularity: 2, difficulty: 4, durability: 4 },
     isFeatured: false,
@@ -403,7 +403,7 @@ const SEED_DRAFTS: StyleCardDraft[] = [
       '鍛え上げられた男が纏う、清潔感と威圧感の極致。海軍が認めた硬派なショートスタイルは、無駄を一切省いた男の美学そのもの。見るだけで姿勢が正したくなる。',
     price: 5000,
     durationMinutes: 40,
-    imageUrl: '/assets/styles/kaigun-showcase.jpg',
+    imageUrl: '/assets/styles/kaigun-showcase-v2.jpg',
     tags: ['ショート', '威圧', '清潔感', '硬派', '軍隊'],
     stats: { intimidation: 5, sexiness: 3, popularity: 2, difficulty: 1, durability: 5 },
     isFeatured: false,
@@ -487,7 +487,7 @@ export function seedInitialStyles(): void {
     catchCopy: '潮風に負けん、漢の髪型。',
     description:
       '港で映える、漁師の貫禄を宿した硬派な短髪スタイル。潮風に負けない清潔感と、無駄を削ぎ落とした男らしさで、飾らずに存在感を放つ。',
-    imageUrl: '/assets/styles/library-uminotoko.jpg',
+    imageUrl: '/assets/styles/library-uminotoko-v2.jpg',
     tags: ['海', '漁師', 'シンプル', '短髪', '男前'],
   }
   let titleChanged = false
@@ -549,7 +549,7 @@ export function seedInitialStyles(): void {
 
   // Migrate prices to current values
   const PRICE_UPDATES: Record<string, number> = {
-    '夏ニグロ':             9000,
+    '秋ニグロ':             9000,
     'トラック野郎御用達':   3500,
     'カールアイパー':       8000,
     'ジャマイカンアフロ':   9000,
@@ -578,14 +578,26 @@ export function seedInitialStyles(): void {
   // Migrate outdated or empty imageUrls
   const STALE_PATHS: Record<string, string> = {
     '/assets/hero-teitei-gari.jpg':    '/assets/teitei-gari.png',
-    '/assets/hero-ginpara.jpg':        '/assets/styles/ginpara-showcase.jpg',
-    '/assets/ginpara.png':             '/assets/styles/ginpara-showcase.jpg',
-    '/assets/styles/ginpara.png':      '/assets/styles/ginpara-showcase.jpg',
-    '/assets/styles/kaigun.png':       '/assets/styles/kaigun-showcase.jpg',
-    '/assets/gokudo-bozu.png':         '/assets/styles/library-uminotoko.jpg',
+    '/assets/hero-ginpara.jpg':        '/assets/styles/ginpara-v2.jpg',
+    '/assets/ginpara.png':             '/assets/styles/ginpara-v2.jpg',
+    '/assets/styles/ginpara.png':      '/assets/styles/ginpara-v2.jpg',
+    '/assets/styles/kaigun.png':       '/assets/styles/kaigun-showcase-v2.jpg',
+    '/assets/styles/kaigun-showcase.jpg': '/assets/styles/kaigun-showcase-v2.jpg',
+    '/assets/hero-natsu-niguro.jpg':   '/assets/styles/aki-niguro.jpg',
+    '/assets/jamaican-afro.png':       '/assets/styles/jamaican-afro-v2.jpg',
+    '/assets/styles/kakusei.png': '/assets/styles/kakusei-v2.jpg',
+    '/assets/styles/ginpara-showcase.jpg': '/assets/styles/ginpara-v2.jpg',
+    '/assets/styles/yanki-punch.png': '/assets/styles/yanki-punch-v2.jpg',
+    '/assets/styles/library-yanki-punch.jpg': '/assets/styles/yanki-punch-v2.jpg',
+    '/assets/hero-punch-perm.jpg': '/assets/styles/punch-perm-v2.jpg',
+    '/assets/styles/library-punch-perm.jpg': '/assets/styles/punch-perm-v2.jpg',
+    '/assets/hero-curl-iper.jpg': '/assets/styles/curl-iper-v2.jpg',
+    '/assets/styles/library-curl-iper.jpg': '/assets/styles/curl-iper-v2.jpg',
+    '/assets/gokudo-bozu.png':         '/assets/styles/library-uminotoko-v2.jpg',
+    '/assets/styles/library-uminotoko.jpg': '/assets/styles/library-uminotoko-v2.jpg',
     // 4 images moved from /assets/ → /assets/styles/
     '/assets/shinsai-punch.png':       '/assets/styles/shinsai-punch.png',
-    '/assets/kakusei.png':             '/assets/styles/kakusei.png',
+    '/assets/kakusei.png':             '/assets/styles/kakusei-v2.jpg',
     '/assets/ri-man-parm.png':         '/assets/styles/ri-man-parm.png',
     '/assets/showa-hair.png':          '/assets/styles/showa-hair.png',
     // existing styles updated to new photos in /assets/styles/

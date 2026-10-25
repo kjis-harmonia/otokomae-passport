@@ -21,7 +21,7 @@ function homeFixture(empty = false) {
        categories: [{id:'昭和の漢',titles:['パンチパーマ']}] })`, context)
   const jsx = (type, props) => ({ type, props })
   const modules = {
-    'react': { useMemo: fn => fn(), useEffect: () => {}, useState: value => [value, () => {}], useRef: () => ({ current: null }) },
+    'react': { useMemo: fn => fn(), useEffect: () => {}, useLayoutEffect: () => {}, useState: value => [value, () => {}], useRef: () => ({ current: null }) },
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'fragment' },
     'framer-motion': { motion: { div: 'div', article: 'article' }, AnimatePresence: 'presence', useReducedMotion: () => true },
     'lucide-react': { ArrowRight: 'arrow', Sparkle: 'spark' },
@@ -32,6 +32,7 @@ function homeFixture(empty = false) {
     '../utils/bookingCoupons': { ensurePriceRules: async () => {}, menuPrice: () => ({ price: 8000, normal: 9000 }) },
     '../features/johnny/bookingIntent': { requestJohnny: () => {} },
     './V2GinpayBar': { V2GinpayBar: 'ginpay' },
+    './usualPicks': { loadUsual: async () => null },
   }
   context.require = name => { assert.ok(modules[name], name); return modules[name] }
   vm.runInContext(compile(homeSource), context)
