@@ -17,7 +17,7 @@ export type WalletFilter   = 'cut' | 'premium' | 'other'
 
 export const WALLET_FILTERS: { id: WalletFilter; label: string }[] = [
   { id: 'cut',     label: 'GINJIRO CUT' },
-  { id: 'premium', label: '漢前Premiumパーマ' },
+  // 漢前Premiumパーマ（会員価格のクーポン）は 2026-10-26 にやめた（慶一郎さん）。タブを出さない
   { id: 'other',   label: '割引チケット' },
 ]
 

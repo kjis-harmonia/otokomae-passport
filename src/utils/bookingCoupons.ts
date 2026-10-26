@@ -76,10 +76,8 @@ export function premiumFor(menuCode: string, startsAt: string): PremiumApplied |
     if (!def) return null
     return { def, normalPrice: menu.normal_price, memberPrice: menu.price, eligible }
   }
-  const def = PREMIUM_BY_MENU[menuCode]
-  const price = def?.prices[0]
-  if (!def || !price?.normalPrice) return null
-  return { def, normalPrice: price.normalPrice, memberPrice: price.memberPrice, eligible }
+  // 料金表を読めないときに端末の料金で会員価格を出していたが、会員価格は 2026-10-26 にやめたので出さない
+  return null
 }
 
 /** 予約の日に使える割引券・漢トク券（未使用・期限内・譲渡中でない。Welcome は平日だけ） */
