@@ -2,7 +2,7 @@ import { pendingIssuance, prepareIssuance, resolveIssuance, withIssuanceLock, ty
 import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
 import {StaffStoreApproval} from '../features/customerAccess/StoreVerification'
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { playCue } from '../audio/cue'
 import { TERMINAL_OPERATORS } from './staffOperators'
 import { getStoredValue, setStoredValue } from '../utils/storage'
@@ -96,6 +96,13 @@ const STAFF_TICKET_COLORS: Record<TicketType, { bg: string; border: string; text
 const QR_EL_ID          = 'gj-qr-reader'
 const QR_RECOVERY_EL_ID = 'gj-qr-reader-recovery'
 
+// QR だけを探す（既定はバーコード全種類を毎回試すので遅い）。端末が対応していれば OS の読み取り機能を使う
+const QR_SCAN_OPTIONS = {
+  formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+  experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+  verbose: false,
+}
+
 async function haltScanner(scanner: Html5Qrcode): Promise<void> {
   try { if (scanner.isScanning) await scanner.stop(); scanner.clear() } catch { /* ignore */ }
 }
@@ -144,17 +151,18 @@ export function QrCameraScanner({
   const start = useCallback(async () => {
     if (scannerRef.current) return
     let scanner: Html5Qrcode
-    try { scanner = new Html5Qrcode(elId) }
+    try { scanner = new Html5Qrcode(elId, QR_SCAN_OPTIONS) }
     catch { onCameraError('カメラを初期化できません。'); return }
     scannerRef.current = scanner
     try {
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
+        { fps: 15, qrbox: { width: 240, height: 240 } },
         (decoded) => {
           const s = claimScanner(); if (!s) return
           playCue('qr') // 「QRコードを読み込みました！」
-          setActiveState(false); void haltScanner(s).then(() => onScan(decoded))
+          // カメラを止め終わるのを待たずに読み取り結果へ進む（止めるのは裏で）
+          setActiveState(false); onScan(decoded); void haltScanner(s)
         },
         undefined,
       )

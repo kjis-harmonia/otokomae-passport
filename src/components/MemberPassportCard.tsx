@@ -217,7 +217,7 @@ export function MemberPassportCard({ name, userId }: Props) {
                   <QRCodeSVG
                     value={qrPayload}
                     size={96}
-                    level="H"
+                    level="M"
                     marginSize={2}
                     fgColor="#000000"
                     bgColor="#FFFFFF"

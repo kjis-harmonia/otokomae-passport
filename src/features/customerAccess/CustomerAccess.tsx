@@ -57,7 +57,7 @@ export function PasskeyEnrollmentOffer({onClose}:{onClose:()=>void}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('')
   useEffect(()=>{const element=dialog.current;if(!element)return;element.showModal();return()=>element.close()},[])
   return createPortal(<dialog ref={dialog} className="customer-access access-offer" aria-labelledby="passkey-offer-title" onCancel={event=>{event.preventDefault();if(!busy)onClose()}}>
-    <h2 id="passkey-offer-title">Face IDでかんたんログイン</h2><p>Face IDなどを設定すると、会員情報を自分で引き継げます。</p>
+    <h2 id="passkey-offer-title">Face IDでかんたんログイン</h2><p>Face IDなどを設定すると、機種変更のときも会員情報を自分で引き継げます。あとからでも ☰ の「ログインと引き継ぎ」で設定できます。</p>
     <button type="button" className="access-primary" disabled={busy} onClick={()=>{setBusy(true);setError('');void enrollPasskey().then(onClose).catch(e=>setError(passkeyMessage(e))).finally(()=>setBusy(false))}}>{busy?'設定しています…':'Face IDなどを設定'}</button>
     <button type="button" className="access-text" disabled={busy} onClick={onClose}>あとで</button>{error&&<p role="alert" className="access-error">{error}</p>}
   </dialog>,document.body)

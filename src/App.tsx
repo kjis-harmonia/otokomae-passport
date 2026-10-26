@@ -325,8 +325,9 @@ function App() {
   const [ticketRefreshKey, setTicketRefreshKey] = useState(0)
   const [hasOpenModal, setHasOpenModal] = useState(false)
   // Existing signed-in members also need a first setup entry; never enroll from a display-only member ID.
+  // 登録したばかり（店頭確認の前）の方にも1回だけ出す（10/26 慶一郎さん：最初にログインと引き継ぎを案内）。セッションが有効と確かめられてから
   useEffect(()=>{
-    if(!CUSTOMER_ACCESS_ENABLED || storeAccess.mode!=='verified' || phase!=='app' || appLoading || activeTab!=='home' || welcomeCouponDialog || hasOpenModal || !customerAccessSession || !supportsPasskeys())return
+    if(!CUSTOMER_ACCESS_ENABLED || (storeAccess.mode!=='verified' && storeAccess.mode!=='unverified') || phase!=='app' || appLoading || activeTab!=='home' || welcomeCouponDialog || hasOpenModal || !customerAccessSession || !supportsPasskeys())return
     let alive=true
     void passkeyStatus().then(status=>{
       if(alive && getCustomerSession()===customerAccessSession && !status.registered && getStoredValue<string|null>(PASSKEY_SETUP_PROMPT_KEY,null)!==status.user_id)setPasskeyOffer(true)
@@ -418,7 +419,7 @@ function App() {
     saveMemberStatus(nextStatus)
     setMemberStatus(nextStatus)
     setPhase('app')
-    // Face ID is offered after the first store verification, not on self-registration.
+    // Face ID の案内はクーポンのあと、ホームで1回だけ出る（上の useEffect）。店頭確認のあとにも、未設定ならもう一度出る
     if (payload?.welcomeCouponIssued && payload.ticket) {
       setWelcomeCouponDialog({ name: nextStatus.memberName, ticket: payload.ticket })
     }
