@@ -56,7 +56,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   if (paid) {
     return (
       <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: 'rgba(36,107,82,0.06)', border: '1px solid rgba(36,107,82,0.35)' }}>
-        <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#246b52', marginBottom: 6 }}>PAID</p>
+        <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#246b52', marginBottom: 6 }}>完了</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
           <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#1c1f1d' }}>お会計済み（{PAYMENT_LABEL[paid.payment_method ?? ''] ?? paid.payment_method}）</span>
           <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#1c1f1d' }}>{yen(paid.total)}</span>
