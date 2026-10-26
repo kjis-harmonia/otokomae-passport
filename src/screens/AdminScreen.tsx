@@ -751,7 +751,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 30%, #97732b 50%, rgba(151,115,43,0.45) 70%, transparent)', marginBottom: 12 }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <p style={{ fontSize: 10, letterSpacing: '0.32em', color: '#6b716d', marginBottom: 4 }}>STAFF TERMINAL</p>
+            <p style={{ fontSize: 10, letterSpacing: '0.32em', color: '#6b716d', marginBottom: 4 }}>二代目銀二郎</p>
             <h1 style={{ fontSize: 26, fontWeight: 700, color: '#1c1f1d', fontFamily: SERIF, letterSpacing: '0.06em', lineHeight: 1.15 }}>
               {mode === 'recovery' ? '会員復旧' : '店舗端末'}
             </h1>
@@ -927,7 +927,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 <div style={{ padding: '16px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#1c1f1d', marginBottom: 4 }}>CUSTOMER</p>
+                      <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#1c1f1d', marginBottom: 4 }}>お客様</p>
                       <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.06em', marginBottom: 3, lineHeight: 1.1 }}>
                         {scannedData.name}
                         <span style={{ fontSize: 14, marginLeft: 4, color: '#1c1f1d' }}>様</span>
@@ -1073,7 +1073,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   />
                   {/* 次にやること */}
                   <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: '#f8f7f4', border: '1px solid rgba(151,115,43,0.28)' }}>
-                    <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>NEXT STEP</p>
+                    <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>次にやること</p>
                     {[
                       '来店チェックインは完了しています',
                       '割引券を選んで「お会計に進む」を押してください。券は会計確定時に使用されます',
@@ -1393,7 +1393,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           <div>
             {ticketQrExpired ? (
               <div style={{ borderRadius: 18, background: 'linear-gradient(135deg, rgba(178,58,58,0.06), rgba(178,58,58,0.06))', border: '1px solid rgba(178,58,58,0.3)', padding: '28px 22px', textAlign: 'center', marginBottom: 16 }}>
-                <p style={{ fontSize: 9, letterSpacing: '0.3em', color: '#b23a3a', marginBottom: 12 }}>QR EXPIRED</p>
+                <p style={{ fontSize: 9, letterSpacing: '0.3em', color: '#b23a3a', marginBottom: 12 }}>QRの期限切れ</p>
                 <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#b23a3a', marginBottom: 10 }}>QRコードの有効期限が切れています</p>
                 <p style={{ fontSize: 12, color: '#b23a3a', lineHeight: 1.6 }}>お客様に再度「使用する」を押していただいてください。</p>
               </div>
@@ -1417,7 +1417,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             <div style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(160deg, #ffffff 0%, #ffffff 100%)', border: '1px solid rgba(36,107,82,0.38)', boxShadow: '0 0 25px rgba(36,107,82,0.12), 0 14px 44px rgba(28,31,29,0.4)', marginBottom: 16, animation: 'gj-slot-in 0.52s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(36,107,82,0.4) 30%, #246b52 50%, rgba(36,107,82,0.4) 70%, transparent)' }} />
               <div style={{ padding: '16px 20px' }}>
-                <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#246b52', marginBottom: 4 }}>MAINTENANCE COUPON</p>
+                <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#246b52', marginBottom: 4 }}>メンテナンスクーポン</p>
                 <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.06em', marginBottom: 6, lineHeight: 1.1 }}>
                   {maintCouponPreview?.customer_name ?? maintCouponData.name ?? 'お客様'}<span style={{ fontSize: 14, marginLeft: 4, color: '#1c1f1d' }}>様</span>
                 </h2>
@@ -1525,7 +1525,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             <div style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(160deg, #ffffff 0%, #ffffff 100%)', border: `1px solid ${premiumCouponExpired ? 'rgba(178,58,58,0.38)' : 'rgba(151,115,43,0.42)'}`, boxShadow: '0 0 25px rgba(151,115,43,0.12), 0 14px 44px rgba(28,31,29,0.4)', marginBottom: 16, animation: 'gj-slot-in 0.52s cubic-bezier(0.34,1.56,0.64,1) both' }}>
               <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 25%, #97732b 50%, rgba(151,115,43,0.45) 75%, transparent)' }} />
               <div style={{ padding: '16px 20px' }}>
-                <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(151,115,43,0.9)', marginBottom: 4 }}>PREMIUM COUPON</p>
+                <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(151,115,43,0.9)', marginBottom: 4 }}>プレミアムクーポン</p>
                 <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.06em', marginBottom: 6, lineHeight: 1.1 }}>
                   {premiumCouponData.name}<span style={{ fontSize: 14, marginLeft: 4, color: '#1c1f1d' }}>様</span>
                 </h2>
@@ -1593,7 +1593,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             {recoveryStep === 'search' && (
               <div>
                 <div style={{ marginBottom: 20, borderRadius: 18, background: 'linear-gradient(155deg, #ffffff 0%, #ffffff 100%)', border: '1px solid rgba(151,115,43,0.14)', padding: '16px 18px' }}>
-                  <p style={{ fontSize: 8, letterSpacing: '0.32em', color: '#1c1f1d', marginBottom: 8 }}>MEMBER RECOVERY</p>
+                  <p style={{ fontSize: 8, letterSpacing: '0.32em', color: '#1c1f1d', marginBottom: 8 }}>会員の復旧</p>
                   <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#1c1f1d', marginBottom: 6, letterSpacing: '0.04em' }}>会員データ復旧</p>
                   <p style={{ fontSize: 11, color: '#1c1f1d', lineHeight: 1.7 }}>
                     お客様の名前で旧会員データを検索し、<br />新端末へ移管します。
@@ -1672,7 +1672,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 <div style={{ borderRadius: 18, background: 'linear-gradient(155deg, #ffffff 0%, #ffffff 100%)', border: '1px solid rgba(151,115,43,0.32)', overflow: 'hidden', marginBottom: 18 }}>
                   <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 30%, #97732b 50%, rgba(151,115,43,0.45) 70%, transparent)' }} />
                   <div style={{ padding: '18px 20px' }}>
-                    <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#1c1f1d', marginBottom: 6 }}>CUSTOMER</p>
+                    <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#1c1f1d', marginBottom: 6 }}>お客様</p>
                     <p style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: '#1c1f1d', marginBottom: 16 }}>
                       {selectedCustomer.name} <span style={{ fontSize: 14, color: '#1c1f1d' }}>様</span>
                     </p>
@@ -1861,7 +1861,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           >
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 30%, #97732b 50%, rgba(151,115,43,0.45) 70%, transparent)' }} />
             <div style={{ padding: '28px 26px 24px' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 10, textAlign: 'center' }}>CONFIRM RECOVERY</p>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 10, textAlign: 'center' }}>復旧の確認</p>
               <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#1c1f1d', textAlign: 'center', marginBottom: 22 }}>
                 会員データを復旧します
               </p>
@@ -1953,7 +1953,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           >
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 30%, #97732b 50%, rgba(151,115,43,0.45) 70%, transparent)' }} />
             <div style={{ padding: '28px 26px 24px' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 10, textAlign: 'center' }}>CONFIRM ISSUE</p>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 10, textAlign: 'center' }}>発行の確認</p>
               <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#1c1f1d', textAlign: 'center', marginBottom: 22 }}>
                 {currentTab.autoTitle}を発行します
               </p>
@@ -2012,7 +2012,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             <div style={{ width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px', background: 'radial-gradient(circle, rgba(151,115,43,0.18) 0%, rgba(28,31,29,0.12) 60%, transparent 100%)', border: '1.5px solid rgba(151,115,43,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px rgba(151,115,43,0.38), 0 0 64px rgba(151,115,43,0.18)' }}>
               <span style={{ fontSize: 38, color: '#97732b', lineHeight: 1 }}>✓</span>
             </div>
-            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: '#1c1f1d', marginBottom: 14 }}>ISSUED</p>
+            <p style={{ fontSize: 10, letterSpacing: '0.44em', color: '#1c1f1d', marginBottom: 14 }}>発行しました</p>
             <p style={{ fontFamily: SERIF, fontSize: 40, fontWeight: 700, color: '#97732b', letterSpacing: '0.14em', marginBottom: 20, lineHeight: 1.1, textShadow: '0 0 40px rgba(151,115,43,0.55), 0 0 80px rgba(28,31,29,0.12), 0 2px 6px rgba(28,31,29,0.45)' }}>
               発行完了
             </p>
@@ -2036,7 +2036,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 500, background: 'linear-gradient(180deg, #0D0403 0%, #0A0302 100%)', border: '1px solid rgba(151,115,43,0.32)', borderRadius: 22, boxShadow: '0 32px 80px rgba(28,31,29,0.42)', overflow: 'hidden' }}>
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 30%, #97732b 50%, rgba(151,115,43,0.45) 70%, transparent)' }} />
             <div style={{ padding: '22px 24px 18px', textAlign: 'center', borderBottom: '1px solid rgba(151,115,43,0.1)' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 6 }}>STAFF SELECTION</p>
+              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 6 }}>担当者を選ぶ</p>
               <h2 style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.08em' }}>担当者を選んでください</h2>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '18px 18px 14px' }}>
