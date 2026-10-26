@@ -350,7 +350,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   <QRCodeSVG
                     value={qrPayload}
                     size={108}
-                    level="H"
+                    level="M"
                     marginSize={2}
                     fgColor="#000000"
                     bgColor="#FFFFFF"
@@ -523,7 +523,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
           <QRCodeSVG
             value={qrPayload}
             size={272}
-            level="H"
+            level="M"
             marginSize={4}
             fgColor="#000000"
             bgColor="#FFFFFF"
