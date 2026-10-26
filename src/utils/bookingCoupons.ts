@@ -8,6 +8,7 @@ import type { TicketRow } from '../data/ticket'
 import { GINJIRO_CLASSICS, GINPARA, SPECIAL_PERM, type CouponDefinition } from '../data/wallet'
 import { isWelcomeCouponTicket } from './welcomeCoupon'
 import { supabase } from '../lib/supabase'
+import { callCustomerRpc, hasCustomerSession } from './customerSession'
 
 /** プレミアムクーポンの対象メニュー（アプリのメニューの code） */
 const PREMIUM_BY_MENU: Record<string, CouponDefinition> = {
@@ -33,8 +34,31 @@ const COUPON_BY_LABEL: Record<string, CouponDefinition> = { [GINJIRO_CLASSICS.ti
 let rules: PriceRules | null = null
 let loading: Promise<void> | null = null
 
-/** サーバーの料金表を読む（1回だけ。失敗したら次に呼ばれたときにもう一度） */
+// ── お客様ごとの「いつもの」料金（店で最後に払った、券を引く前のメニューの金額）。払ったことのあるメニューだけ ──
+let personal: Map<string, number> | null = null
+let personalLoading: Promise<void> | null = null
+function ensurePersonalPrices(): Promise<void> {
+  // ログインしていない人には聞かない（聞くとログインの案内が出てしまう）
+  if (personal || !hasCustomerSession()) return Promise.resolve()
+  personalLoading ??= (async () => {
+    try {
+      const list = await callCustomerRpc<{ menu_code: string; price: number }[]>('customer_personal_prices')
+      if (Array.isArray(list)) personal = new Map(list.map(x => [x.menu_code, x.price]))
+    } catch { /* 読めなければメニューの料金のまま */ }
+    finally { personalLoading = null }
+  })()
+  return personalLoading
+}
+/** そのお客様の「いつもの」料金（払ったことが無ければ null） */
+export function personalPrice(code: string): number | null {
+  return personal?.get(code) ?? null
+}
+
+/** サーバーの料金表（とお客様ごとの料金）を読む（1回だけ。失敗したら次に呼ばれたときにもう一度） */
 export function ensurePriceRules(): Promise<void> {
+  return Promise.all([ensureRules(), ensurePersonalPrices()]).then(() => {})
+}
+function ensureRules(): Promise<void> {
   if (rules) return Promise.resolve()
   loading ??= (async () => {
     try {
@@ -100,9 +124,11 @@ export interface PriceBreakdown {
 
 /** お会計：メニューの料金（menuPrice＝アプリの料金）・プレミアム・選んだ券から */
 export function priceFor(menuCode: string, menuPrice: number | null, startsAt: string, selected: readonly TicketRow[]): PriceBreakdown | null {
-  const premium = premiumFor(menuCode, startsAt)
+  // そのお客様が払ったことのあるメニューは、その人の料金
+  const mine = personalPrice(menuCode)
+  const premium = mine != null ? null : premiumFor(menuCode, startsAt)
   // プレミアム対象で使えない時間帯は、ふつうの料金
-  const base = premium ? (premium.eligible ? premium.memberPrice : premium.normalPrice) : menuPrice
+  const base = mine ?? (premium ? (premium.eligible ? premium.memberPrice : premium.normalPrice) : menuPrice)
   if (base == null) return null
   const ticketsTotal = selected.reduce((a, t) => a + t.amount, 0)
   return { normal: premium?.eligible ? premium.normalPrice : null, base, premium, ticketsTotal, total: Math.max(0, base - ticketsTotal) }
@@ -146,6 +172,8 @@ export const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`
 
 /** 予約メニューの値段（サーバーの料金表）。price＝会員価格、normal＝通常価格（あれば）。読めていなければ null */
 export function menuPrice(code: string): { price: number; normal: number | null } | null {
+  const mine = personalPrice(code)
+  if (mine != null) return { price: mine, normal: null }
   const m = rules?.menus.find(x => x.code === code)
   return m && m.price != null ? { price: m.price, normal: m.normal_price } : null
 }
