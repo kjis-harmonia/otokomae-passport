@@ -1217,6 +1217,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               </List>
             )}
 
+            {/* メニューが決まったとき（「いつもの」など）、前回のご来店から14日以内ならメンテナンスカットにも切り替えられる。過ぎていたら出さない */}
+            {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.menu.code !== 'maintenance' && maintLeft != null && maintenanceMenu && (
+              <List>
+                <Row onClick={startMaintenance} title="メンテナンスカット" detail={`${maintLeft === 0 ? '今日まで' : `あと${maintLeft}日`}・${yen(maintenanceMenu)}`} />
+              </List>
+            )}
+
             {step.k === 'askMenu' && (
               <List>
                 {menus.map(m => (
