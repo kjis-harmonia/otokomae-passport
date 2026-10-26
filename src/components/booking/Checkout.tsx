@@ -41,6 +41,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   quick?: boolean
 }) {
   const [detail, setDetail] = useState(!quick)
+  const [personal, setPersonal] = useState<ReadonlyMap<string, number>>(() => new Map())
   const [ctx, setCtx] = useState<CheckoutContext | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [client, setClient] = useState<{ id: string; name: string } | null | undefined>(undefined)
@@ -85,8 +86,15 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     const resume = saved && sameCheckout(saved, reservationId, clientId) ? saved : null
     api.context(resume?.input.reservation_id ?? reservationId, resume ? resume.input.client_id ?? null : reservationId ? null : clientId).then(async c => {
       const codes = c.reservation?.items.flatMap(item => item.menu_code ? [item.menu_code] : []) ?? []
-      const quoted = c.reservation && !resume ? reservationSaleLines(c.reservation.items, codes.length ? await api.quote(codes, c.reservation.starts_at) : null) : null
+      // お客様ごとの「いつもの」料金（店で最後に払った金額）。払ったことのあるメニューはその金額で始める
+      const mine = c.client && api.clientMenuPrices ? await api.clientMenuPrices(c.client.id).catch(() => []) : []
+      const personalOf = new Map(mine.map(p => [p.menu_code, p.price]))
+      const quoted = c.reservation && !resume
+        ? reservationSaleLines(c.reservation.items, codes.length ? await api.quote(codes, c.reservation.starts_at) : null)
+            .map(l => l.ref_id && personalOf.has(l.ref_id) ? { ...l, unit_price: personalOf.get(l.ref_id)! } : l)
+        : null
       if (!alive) return
+      setPersonal(personalOf)
       setCtx(c)
       if (!c.reservation && clientId && c.client) setClient(c.client)
       if (initialTicketIds?.length) {
@@ -141,7 +149,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
 
   function update(key: number, patch: Partial<SaleLine>) { setLines(ls => ls.map(l => l.key === key ? { ...l, ...patch } : l)) }
   function addItem(src: SaleLine['source'], item: CatalogItem) {
-    setLines(ls => [...ls, { key: ++keySeq, source: src, ref_id: item.id, name: item.name, category: item.category, unit_price: item.price, quantity: 1, discount: 0 }])
+    const price = src === 'service_menu' ? personal.get(item.id) ?? item.price : item.price
+    setLines(ls => [...ls, { key: ++keySeq, source: src, ref_id: item.id, name: item.name, category: item.category, unit_price: price, quantity: 1, discount: 0 }])
     setAdding(false)
   }
   function toggleTicket(id: string, type: string) {
@@ -286,7 +295,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     )}
                   </div>
                 ))}
-                {!detail && lines.length === 0 ? <QuickMenuSelect api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={item => addItem('service_menu', item)} />
+                {!detail && lines.length === 0 ? <QuickMenuSelect api={api} startsAt={ctx.reservation?.starts_at ?? null} personal={personal} onPick={item => addItem('service_menu', item)} />
                   : adding ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
                   : detail ? <button type="button" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button> : null}
               </div>
@@ -423,7 +432,7 @@ function ClientPicker({ customers, onPick }: { customers: CustomerApi; onPick: (
 }
 
 /** 短い会計で予約が無いとき：メニューを1つ選ぶ（長い一覧の代わりに選択欄1つ。旧会計メニュー・店販・手入力は「メニューの追加・値引き」から） */
-function QuickMenuSelect({ api, startsAt, onPick }: { api: CheckoutApi; startsAt: string | null; onPick: (item: CatalogItem) => void }) {
+function QuickMenuSelect({ api, startsAt, personal, onPick }: { api: CheckoutApi; startsAt: string | null; personal: ReadonlyMap<string, number>; onPick: (item: CatalogItem) => void }) {
   const [items, setItems] = useState<CatalogItem[] | null>(null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -441,7 +450,7 @@ function QuickMenuSelect({ api, startsAt, onPick }: { api: CheckoutApi; startsAt
           <option value="">{items ? 'メニューを選ぶ' : '読み込み中…'}</option>
           {groups.map(g => (
             <optgroup key={g} label={g}>
-              {items!.filter(i => (i.group ?? 'メニュー') === g).map(i => <option key={i.id} value={i.id}>{`${i.name}（${yen(i.price)}${i.price_from ? '〜' : ''}）`}</option>)}
+              {items!.filter(i => (i.group ?? 'メニュー') === g).map(i => <option key={i.id} value={i.id}>{`${i.name}（${yen(personal.get(i.id) ?? i.price)}${i.price_from ? '〜' : ''}）`}</option>)}
             </optgroup>
           ))}
         </select>
