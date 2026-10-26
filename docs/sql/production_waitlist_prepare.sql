@@ -2,7 +2,8 @@
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
-lock table cron.job in share row exclusive mode;
+-- 10/26 修正: postgres は cron.job の UPDATE 権限がなく LOCK TABLE が 42501 になるため、この3本どうしを勧告ロックで直列化する
+do $lk$ begin perform pg_advisory_xact_lock(hashtext('ginjiro:johnny-waitlist-cron')); end $lk$;
 do $$
 declare
   d record;
