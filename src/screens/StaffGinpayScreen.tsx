@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { playCue } from '../audio/cue'
 import { ChevronRight, QrCode, Search, X } from 'lucide-react'
 import { GinpayPanel } from '../components/ginpay/GinpayPanel'
@@ -67,9 +67,10 @@ export function StaffGinpayScreen() {
     // カメラの枠が描かれてから起動する
     await new Promise(r => requestAnimationFrame(r))
     try {
-      const s = new Html5Qrcode(CAMERA_ID)
+      // QR だけを探す・対応端末は OS の読み取り機能を使う（店舗端末の読み取りと同じ設定）
+      const s = new Html5Qrcode(CAMERA_ID, { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false })
       scanner.current = s
-      await s.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 220, height: 220 } }, text => { void scanned(text) }, undefined)
+      await s.start({ facingMode: 'environment' }, { fps: 15, qrbox: { width: 240, height: 240 } }, text => { void scanned(text) }, undefined)
     } catch {
       await stopCamera()
       setError('カメラを使えません。名前か電話番号で探してください。')
