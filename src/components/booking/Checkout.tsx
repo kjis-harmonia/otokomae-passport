@@ -50,7 +50,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const [editing, setEditing] = useState<number | null>(null)
   const [ticketIds, setTicketIds] = useState<string[]>([])
   const [manual, setManual] = useState<{ amount: string; label: string } | null>(null)
-  const [method, setMethod] = useState<PaymentMethod | null>(null)
+  // 短い会計は銀Pay だけで払う（10/26 慶一郎さん）。最初から GINPay を選んでおく
+  const [method, setMethod] = useState<PaymentMethod | null>(quick ? 'ginpay' : null)
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [ginpayAccountId, setGinpayAccountId] = useState<string | null>(null)
@@ -197,7 +198,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     try {
       await startNextCheckout(attempt.input.idempotency_key)
       setError(null); setSaleKey(idempotencyKey('checkout'))
-      setLines([]); setManual(null); setMethod(null); setTicketIds([]); setReload(n => n + 1)
+      setLines([]); setManual(null); setMethod(quick ? 'ginpay' : null); setTicketIds([]); setReload(n => n + 1)
     } catch (err) { setError(err instanceof Error ? err.message : '前の会計を確認できません。') }
   }
 
@@ -343,7 +344,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               )}
               <Row label="支払方法">
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {METHODS.filter(m => m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => setMethod(m.id)}>{m.label}</Choice>)}
+                  {METHODS.filter(m => quick ? m.id === 'ginpay' : m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => setMethod(m.id)}>{m.label}</Choice>)}
                 </span>
               </Row>
               {/* 銀Pay は口座の持ち主（お客様）を選んだ会計だけ。選んでいないときに「無い」と迷わないよう一言 */}
