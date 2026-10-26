@@ -241,14 +241,17 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
 
               {/* 明細 */}
               <div style={{ marginTop: 16, borderTop: `1px solid ${C.text}` }}>
-                {lines.length === 0 && <p style={{ padding: '14px 0', fontSize: 14, color: C.mute }}>メニュー・商品を追加してください</p>}
+                {detail && lines.length === 0 && <p style={{ padding: '14px 0', fontSize: 14, color: C.mute }}>メニュー・商品を追加してください</p>}
                 {!detail ? lines.map(l => (
-                  <label key={l.key} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
-                    <span style={{ fontSize: 15 }}>{l.name}{l.quantity > 1 ? <span style={{ color: C.sub }}>{` ×${l.quantity}`}</span> : null}</span>
+                  <div key={l.key} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 15 }}>{l.name}{l.quantity > 1 ? <span style={{ color: C.sub }}>{` ×${l.quantity}`}</span> : null}</span>
+                      {!ctx.reservation && lines.length === 1 && <button type="button" onClick={() => setLines([])} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>変える</button>}
+                    </span>
                     <input value={String(l.unit_price)} inputMode="numeric" aria-label={`${l.name}の金額`}
                       onChange={e => { const v = parseInt(e.target.value.replace(/\D/g, '') || '0', 10); update(l.key, { unit_price: v, discount: Math.min(l.discount, v * l.quantity) }) }}
                       style={{ ...inputStyle, fontSize: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
-                  </label>
+                  </div>
                 )) : lines.map(l => (
                   <div key={l.key} style={{ borderBottom: `1px solid ${C.line}` }}>
                     <button type="button" onClick={() => setEditing(editing === l.key ? null : l.key)} aria-expanded={editing === l.key}
@@ -282,7 +285,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     )}
                   </div>
                 ))}
-                {adding || (!detail && lines.length === 0) ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
+                {!detail && lines.length === 0 ? <QuickMenuSelect api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={item => addItem('service_menu', item)} />
+                  : adding ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
                   : detail ? <button type="button" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button> : null}
               </div>
 
@@ -414,6 +418,34 @@ function ClientPicker({ customers, onPick }: { customers: CustomerApi; onPick: (
       ))}
       <button type="button" onClick={() => onPick(null)} style={{ ...linkStyle, marginTop: 4 }}>顧客を選ばずに会計（匿名）</button>
     </div>
+  )
+}
+
+/** 短い会計で予約が無いとき：メニューを1つ選ぶ（長い一覧の代わりに選択欄1つ。旧会計メニュー・店販・手入力は「メニューの追加・値引き」から） */
+function QuickMenuSelect({ api, startsAt, onPick }: { api: CheckoutApi; startsAt: string | null; onPick: (item: CatalogItem) => void }) {
+  const [items, setItems] = useState<CatalogItem[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let alive = true
+    api.catalog(startsAt).then(c => { if (alive) setItems(c.service_menus) }).catch(() => { if (alive) setFailed(true) })
+    return () => { alive = false }
+  }, [api, startsAt])
+  const groups = items ? [...new Set(items.map(i => i.group ?? 'メニュー'))] : []
+  return (
+    <label style={{ display: 'block', padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
+      <span style={smallLabel}>メニュー</span>
+      {failed ? <span role="alert" style={{ fontSize: 14, color: C.danger }}>メニューを読み込めませんでした。「メニューの追加・値引き」から入れてください。</span> : (
+        <select value="" disabled={!items} onChange={e => { const item = items?.find(i => i.id === e.target.value); if (item) onPick(item) }}
+          style={{ ...inputStyle, fontSize: 16 }}>
+          <option value="">{items ? 'メニューを選ぶ' : '読み込み中…'}</option>
+          {groups.map(g => (
+            <optgroup key={g} label={g}>
+              {items!.filter(i => (i.group ?? 'メニュー') === g).map(i => <option key={i.id} value={i.id}>{`${i.name}（${yen(i.price)}${i.price_from ? '〜' : ''}）`}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      )}
+    </label>
   )
 }
 
