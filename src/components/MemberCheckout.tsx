@@ -1,7 +1,7 @@
 // 店舗端末：会員QR → 来店チェックイン → そのままお会計（銀Pay・現金・カードほか）。
 //   今日の予約があれば予約から会計（メニュー・担当・料金を引き継ぎ、確定で予約は完了）、無ければ顧客を選んだ店頭会計。
 //   会員QRでお客様が選んだ券は、会計の中で最初から選んでおく（確定のときに使用済みになる）。
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Checkout } from './booking/Checkout'
 import { createStaffCheckoutApi, PAYMENT_LABEL, type Sale } from '../utils/checkoutApi'
 import { createStaffCustomerApi } from '../utils/customerApi'
@@ -48,6 +48,11 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
     }
   }
 
+  // 会員QRを読んだら、そのまま金額を入れる会計を出す（10/26 慶一郎さん：担当で料金が変わるので、店で金額を入れて確定）
+  // 開いたときに1回だけ顧客台帳を読む（担当者を選び直したら、下の「お会計に進む」から）
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  useEffect(() => { if (staffName.trim()) void open() }, [])
+
   if (paid) {
     return (
       <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: 'rgba(36,107,82,0.06)', border: '1px solid rgba(36,107,82,0.35)' }}>
@@ -57,6 +62,22 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
           <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#1c1f1d' }}>{yen(paid.total)}</span>
         </div>
       </div>
+    )
+  }
+
+  if (target) {
+    return (
+      <Checkout
+        quick
+        api={api}
+        customers={customers}
+        reservationId={target.reservationId}
+        clientId={target.clientId}
+        initialTicketIds={ticketIds}
+        ensureActor={() => !!readActor().trim()}
+        onClose={() => setTarget(null)}
+        onDone={sale => { setTarget(null); setPaid(sale); onPaid(sale) }}
+      />
     )
   }
 
@@ -79,18 +100,6 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         </span>
       </button>
       {error && <p role="alert" style={{ marginTop: 8, fontSize: 13, color: '#b23a3a', textAlign: 'left' }}>{error}</p>}
-      {target && (
-        <Checkout
-          api={api}
-          customers={customers}
-          reservationId={target.reservationId}
-          clientId={target.clientId}
-          initialTicketIds={ticketIds}
-          ensureActor={() => !!readActor().trim()}
-          onClose={() => setTarget(null)}
-          onDone={sale => { setTarget(null); setPaid(sale); onPaid(sale) }}
-        />
-      )}
     </>
   )
 }
