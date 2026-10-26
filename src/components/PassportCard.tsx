@@ -131,23 +131,14 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
         <div style={{
           position: 'relative',
           borderRadius: 24,
-          background: [
-            'linear-gradient(158deg,',
-            '  #080102 0%,',
-            '  #120208 18%,',
-            '  #1C060C 36%,',
-            '  #240710 50%,',
-            '  #1C060C 66%,',
-            '  #0E0202 84%,',
-            '  #080102 100%)',
-          ].join(''),
-          border: '1px solid rgba(201,162,74,0.32)',
+          // 白大理石（ホームと同じ素材）に金の縁（10/26 慶一郎さん：赤茶のカードはアプリの世界観と合わない）
+          background: 'linear-gradient(158deg, rgba(255,255,255,0.74) 0%, rgba(255,255,255,0.5) 55%, rgba(255,255,255,0.68) 100%), url(/images/v2/marble-bg.webp) center / cover no-repeat, #f4f1eb',
+          border: '1px solid rgba(176,138,58,0.55)',
           boxShadow: [
-            '0 28px 72px rgba(0,0,0,0.92)',
-            '0 0 0 0.5px rgba(201,162,74,0.08)',
-            'inset 0 1px 0 rgba(201,162,74,0.22)',
-            'inset 0 -1px 0 rgba(201,162,74,0.05)',
-            '0 0 48px rgba(100,5,25,0.22)',
+            '0 18px 44px rgba(60,48,24,0.18)',
+            '0 2px 8px rgba(60,48,24,0.10)',
+            'inset 0 1px 0 rgba(255,255,255,0.9)',
+            'inset 0 0 0 3px rgba(255,255,255,0.35)',
           ].join(', '),
           overflow: 'hidden',
           padding: '22px 20px 18px',
@@ -158,7 +149,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
             position: 'absolute',
             top: '20%', left: '10%',
             width: '80%', height: '65%',
-            background: 'radial-gradient(ellipse at 50% 50%, rgba(130,8,34,0.38) 0%, rgba(85,5,20,0.16) 45%, transparent 70%)',
+            background: 'radial-gradient(ellipse at 50% 50%, rgba(255,246,214,0.35) 0%, transparent 70%)',
             animation: 'gjAura 9s ease-in-out infinite',
             pointerEvents: 'none', zIndex: 0,
           }} />
@@ -193,7 +184,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
               '  transparent  0%,',
               '  transparent 38%,',
               '  rgba(255,255,255,0.03) 44%,',
-              '  rgba(255,255,255,0.08) 50%,',
+              '  rgba(255,255,255,0.45) 50%,',
               '  rgba(255,255,255,0.03) 56%,',
               '  transparent 62%,',
               '  transparent 100%)',
@@ -223,7 +214,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
           <div aria-hidden style={{
             position: 'absolute',
             top: 0, left: 0, right: 0, height: 2,
-            background: 'linear-gradient(90deg, transparent 0%, rgba(201,162,74,0.44) 15%, rgba(255,240,195,0.96) 50%, rgba(201,162,74,0.44) 85%, transparent 100%)',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(176,138,58,0.5) 15%, rgba(214,178,92,0.95) 50%, rgba(176,138,58,0.5) 85%, transparent 100%)',
             zIndex: 4,
           }} />
 
@@ -233,10 +224,10 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
             {/* Header */}
             <p className="passport-card-label" style={{
               fontSize: 12, fontWeight: 700, letterSpacing: '0.18em',
-              color: 'rgba(230,210,140,0.88)', fontFamily: 'monospace',
+              color: '#9a7a2e', fontFamily: 'monospace',
               marginBottom: 16, whiteSpace: 'nowrap', overflow: 'hidden',
             }}>
-              GINJIRO OFFICIAL MEMBER CARD
+              二代目銀二郎 会員証
             </p>
 
             {/* Main row */}
@@ -250,15 +241,10 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   fontFamily: SERIF,
                   fontSize: 'clamp(26px, 7.2vw, 34px)',
                   fontWeight: 700,
-                  color: '#f5f5f7',
+                  color: '#1c1f1d',
                   lineHeight: 1.15,
                   letterSpacing: '0.06em',
-                  // 強めの drop shadow で背景の赤フレアに負けない
-                  textShadow: [
-                    '0 1px 0 rgba(0,0,0,0.98)',
-                    '0 2px 10px rgba(0,0,0,0.92)',
-                    '0 0 32px rgba(0,0,0,0.70)',
-                  ].join(', '),
+                  textShadow: '0 1px 0 rgba(255,255,255,0.8)',
                   marginBottom: 6,
                 }}>
                   {memberName}
@@ -266,7 +252,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   <span style={{
                     fontSize: 'clamp(14px, 3.6vw, 18px)',
                     fontWeight: 300,
-                    color: 'rgba(200,200,212,0.68)',
+                    color: 'rgba(28,31,29,0.5)',
                     marginLeft: '0.30em',
                     verticalAlign: 'baseline',
                   }}>
@@ -278,19 +264,19 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                 <p style={{
                   fontFamily: 'monospace',
                   fontSize: 'clamp(12px, 3.0vw, 14px)',
-                  color: 'rgba(230,202,101,0.95)',
+                  color: '#8a6a22',
                   letterSpacing: '0.16em',
                   lineHeight: 1.4,
                   marginBottom: 12,
                   whiteSpace: 'nowrap',
                 }}>
-                  ID · {displayId}
+                  会員番号 {displayId}
                 </p>
 
                 {/* Divider */}
                 <div style={{
                   height: 1,
-                  background: 'linear-gradient(90deg, rgba(201,162,74,0.38) 0%, rgba(201,162,74,0.10) 70%, transparent 100%)',
+                  background: 'linear-gradient(90deg, rgba(176,138,58,0.55) 0%, rgba(176,138,58,0.15) 70%, transparent 100%)',
                   marginBottom: 10,
                 }} />
 
@@ -298,25 +284,23 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                 <div>
                   <p style={{
                     fontSize: 13, letterSpacing: '0.18em',
-                    color: 'rgba(201,162,74,0.92)',
+                    color: '#9a7a2e',
                     fontFamily: 'monospace', marginBottom: 5,
                   }}>
-                    LAST VISIT
+                    前回のご来店
                   </p>
                   <p style={{
                     fontFamily: SERIF,
                     // 細いスマホでも右が切れないよう、点区切りで小さめに（344px 幅でも収まる）
                     fontSize: 'clamp(16px, 4.6vw, 24px)',
                     fontWeight: 700,
-                    color: lastVisitDate ? '#f5f5f7' : 'rgba(242,230,200,0.16)',
+                    color: lastVisitDate ? '#1c1f1d' : 'rgba(28,31,29,0.3)',
                     letterSpacing: '0.04em',
                     lineHeight: 1,
                     whiteSpace: 'nowrap',
-                    textShadow: lastVisitDate
-                      ? '0 1px 0 rgba(0,0,0,0.98), 0 2px 10px rgba(0,0,0,0.88)'
-                      : 'none',
+                    textShadow: 'none',
                   }}>
-                    {lastVisitFmt ?? 'YYYY.MM.DD'}
+                    {lastVisitFmt ?? '—'}
                   </p>
                 </div>
               </div>
@@ -335,14 +319,8 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                     background: '#FFFFFF',
                     borderRadius: 12,
                     // 埋め込み感：外側 drop shadow + 内側 inset
-                    border: '1px solid rgba(201,162,74,0.42)',
-                    boxShadow: [
-                      '0 6px 20px rgba(0,0,0,0.68)',
-                      '0 2px 6px rgba(0,0,0,0.55)',
-                      'inset 0 2px 4px rgba(0,0,0,0.28)',
-                      'inset 0 -1px 2px rgba(255,255,255,0.10)',
-                      '0 0 0 0.5px rgba(201,162,74,0.22)',
-                    ].join(', '),
+                    border: '1px solid rgba(176,138,58,0.45)',
+                    boxShadow: '0 4px 14px rgba(60,48,24,0.16)',
                     cursor: 'pointer',
                     position: 'relative',
                   }}
@@ -371,7 +349,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
             {/* Bottom divider */}
             <div style={{
               height: 1,
-              background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.24) 25%, rgba(201,162,74,0.24) 75%, transparent)',
+              background: 'linear-gradient(90deg, transparent, rgba(176,138,58,0.4) 25%, rgba(176,138,58,0.4) 75%, transparent)',
               marginTop: 18, marginBottom: 10,
             }} />
 
@@ -380,34 +358,33 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                 marginBottom: 12,
                 borderRadius: 14,
                 padding: '10px 12px',
-                background: 'rgba(10,6,4,0.62)',
-                border: '1px solid rgba(201,162,74,0.22)',
-                boxShadow: 'inset 0 1px 0 rgba(255,238,190,0.06)',
+                background: 'rgba(255,255,255,0.72)',
+                border: '1px solid rgba(176,138,58,0.35)',
               }}>
                 <p style={{
                   fontSize: 8,
                   letterSpacing: '0.24em',
-                  color: 'rgba(201,162,74,0.72)',
+                  color: '#9a7a2e',
                   marginBottom: 5,
                   fontFamily: 'monospace',
                 }}>
-                  CURRENT RESERVATION
+                  ご予約
                 </p>
                 <p style={{
                   fontFamily: SERIF,
                   fontSize: 13,
                   fontWeight: 700,
-                  color: '#F2E6C8',
+                  color: '#1c1f1d',
                   lineHeight: 1.45,
                   letterSpacing: '0.05em',
                 }}>
                   {shownReservation.title}
-                  {shownReservation.price != null && <span style={{ color: '#C9A24A', marginLeft: 8 }}>
+                  {shownReservation.price != null && <span style={{ color: '#8a6a22', marginLeft: 8 }}>
                     ¥{shownReservation.price.toLocaleString()}
                   </span>}
                 </p>
-                <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.72)', marginTop: 2, letterSpacing: '0.04em' }}>{shownReservation.when}</p>
-                {aiNext && prepaid != null && <p style={{ fontSize: 13, fontWeight: 700, color: '#E6CA65', marginTop: 6, letterSpacing: '0.04em' }}>✓ 銀Pay 仮支払い済み ¥{prepaid.toLocaleString()}</p>}
+                <p style={{ fontSize: 12, color: 'rgba(28,31,29,0.7)', marginTop: 2, letterSpacing: '0.04em' }}>{shownReservation.when}</p>
+                {aiNext && prepaid != null && <p style={{ fontSize: 13, fontWeight: 700, color: '#8a6a22', marginTop: 6, letterSpacing: '0.04em' }}>✓ 銀Pay 仮支払い済み ¥{prepaid.toLocaleString()}</p>}
               </div>
             )}
 
@@ -416,9 +393,8 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
               textAlign: 'center',
               fontSize: 15,
               letterSpacing: '0.26em',
-              color: 'rgba(230,202,101,0.88)',
+              color: '#8a6a22',
               fontFamily: SERIF,
-              textShadow: '0 1px 8px rgba(0,0,0,0.65)',
             }}>
               男前を、維持する。
             </p>
@@ -504,7 +480,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
           color: 'rgba(201,162,74,0.82)',
           marginBottom: 20, fontFamily: 'monospace',
         }}>
-          GINJIRO MEMBER QR — TAP TO CLOSE
+          会員QR（タップで閉じる）
         </p>
 
         <div style={{
@@ -545,7 +521,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
             fontSize: 13, color: 'rgba(230,202,101,0.90)',
             letterSpacing: '0.12em', fontFamily: 'monospace',
           }}>
-            ID · {userId.slice(0, 24)}
+            会員番号 {userId.slice(0, 24)}
           </p>
           {shownReservation && (
             <div style={{
