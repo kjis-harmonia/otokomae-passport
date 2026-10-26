@@ -157,7 +157,7 @@ function WelcomeCouponDialog({
             textTransform: 'uppercase',
           }}
         >
-          Welcome Coupon
+          ウェルカムクーポン
         </p>
         <h2
           style={{

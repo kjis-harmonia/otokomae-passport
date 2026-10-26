@@ -132,8 +132,8 @@ function WalletFilterText({ filter }: { filter: WalletFilter }) {
   if (filter === 'cut') {
     return (
       <span className="wallet-chip-label">
-        <span className="wallet-chip-main">GINJIRO</span>
-        <span className="wallet-chip-sub">CUT</span>
+        <span className="wallet-chip-main">カット</span>
+        <span className="wallet-chip-sub">クーポン</span>
       </span>
     )
   }
@@ -570,7 +570,7 @@ export function TicketWalletScreen({
         <header className="px-5">
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
             <p style={{ fontSize: 10, letterSpacing: '0.3em', color: 'rgba(138,106,47,0.9)', fontFamily: 'ui-monospace, monospace' }}>
-              TICKET WALLET
+              二代目銀二郎
             </p>
             <p style={{ fontSize: 12, letterSpacing: '0.06em', color: 'rgba(31,28,24,0.72)' }}>{todayLabel}</p>
           </div>
@@ -1125,7 +1125,7 @@ function MaintenanceCouponQrDialog({ onClose }: { onClose: () => void }) {
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 360, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.88)', padding: '28px 24px 24px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 10, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>MAINTENANCE COUPON</p>
+        <p style={{ fontSize: 10, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>メンテナンスクーポン</p>
         <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: INK, lineHeight: 1.4, marginBottom: 4 }}>銀二郎Only メンテナンスカット</p>
         <p style={{ fontFamily: SERIF, marginBottom: 16, display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 8 }}>
           <span style={{ fontSize: 13, color: 'rgba(31,28,24,0.67)', textDecoration: 'line-through' }}>¥3,000</span>
@@ -1219,7 +1219,7 @@ function PremiumReservationDialog({ card, onYes, onNo }: {
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>PHONE RESERVATION</p>
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>電話予約</p>
         <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: INK, lineHeight: 1.45, marginBottom: 8 }}>
           予約済みですか？
         </p>
@@ -1296,7 +1296,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.36)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '26px 22px 22px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>PHONE RESERVATION</p>
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>電話予約</p>
         <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: INK, lineHeight: 1.45, marginBottom: 8 }}>
           予約済みですか？
         </p>
@@ -1365,7 +1365,7 @@ function CutReservationNotice({ reservation, onClose }: {
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 372, borderRadius: 24, background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F2E8 100%)', border: '1px solid rgba(201,162,74,0.34)', boxShadow: '0 24px 64px rgba(0,0,0,0.86)', padding: '28px 22px 22px', textAlign: 'center' }}
       >
-        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 12 }}>RESERVATION UPDATED</p>
+        <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 12 }}>予約を変更しました</p>
         <p style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 700, color: INK, lineHeight: 1.5, marginBottom: 10 }}>
           下タブのQRへ反映しました
         </p>

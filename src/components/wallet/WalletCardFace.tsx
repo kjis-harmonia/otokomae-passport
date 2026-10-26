@@ -107,7 +107,7 @@ export function WalletCardFace({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: 24 }}>
           {isWelcome ? (
             <p style={{ minWidth: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.12em', color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              WELCOME COUPON
+              ウェルカムクーポン
             </p>
           ) : (
             <p style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, fontSize: 11, letterSpacing: '0.16em', whiteSpace: 'nowrap' }}>
