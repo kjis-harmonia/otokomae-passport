@@ -1,7 +1,7 @@
 // 予約アシスタントが使うお客様用の予約 RPC（顧客セッション必須）。空き枠・仮押さえ・確定はすべて DB の予約エンジンが決める。
 // 開発用のデモ（?johnny=demo、開発ビルドのときだけ）は通信せず、端末の中だけで動く。
 import { callCustomerRpc } from '../../utils/customerSession'
-import { ensurePriceRules } from '../../utils/bookingCoupons'
+import { ensurePriceRules, personalPrice } from '../../utils/bookingCoupons'
 import { RpcError } from '../../utils/staffSession'
 import { fetchContact, normalizePhone, saveContact, type CustomerContact } from '../../utils/customerContact'
 import type { MenuOption } from './menuMatcher'
@@ -91,7 +91,11 @@ export interface BookingAssistantApi {
 
 export const customerBookingApi: BookingAssistantApi = {
   // 料金表（会員価格・通常価格・祝日）も一緒に読む：確認画面の料金がサーバーと同じ計算になるように
-  options: async () => { const [o] = await Promise.all([callCustomerRpc<AssistantOptions>('customer_booking_options'), ensurePriceRules()]); return o },
+  // メニューの料金は、そのお客様が払ったことのあるものはその人の料金（いつもの料金）に置き換える
+  options: async () => {
+    const [o] = await Promise.all([callCustomerRpc<AssistantOptions>('customer_booking_options'), ensurePriceRules()])
+    return { ...o, menus: o.menus.map(m => { const mine = personalPrice(m.code); return mine != null ? { ...m, price: mine } : m }) }
+  },
   slots: (date, menuCode) => callCustomerRpc<Slot[]>('customer_available_slots', { p_date: date, p_menu_codes: [menuCode], p_staff_id: null }),
   staffSlots: (date, menuCode, staffId) => callCustomerRpc<Slot[]>('customer_available_slots', { p_date: date, p_menu_codes: [menuCode], p_staff_id: staffId }),
   dayOverview: date => callCustomerRpc<DayOverview>('customer_day_overview', { p_date: date }),
