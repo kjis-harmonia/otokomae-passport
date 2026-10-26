@@ -507,6 +507,10 @@
 .sb-hpb-row strong { font-weight: 600; }
 .sb-hpb-row span small { font-size: 12px; color: var(--sb-muted); line-height: 1.5; }
 .sb-hpb-row .sb-hpb-review { color: var(--sb-red); }
+/* AI 予約の停止（当日キャンセル・無断キャンセル）と解除 */
+.sb-ai-pause { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 4px 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(176, 42, 42, 0.07); color: var(--sb-red); font-size: 13px; font-weight: 600; }
+.sb-ai-pause .sb-secondary { min-height: 34px; padding: 0 12px; font-size: 13px; }
+.sb-ai-pause .sb-error { flex-basis: 100%; font-weight: 400; }
 /* 予約のお知らせ（ベル） */
 .sb-bell[aria-pressed="true"] { color: var(--sb-ink); }
 .sb-bell[aria-pressed="false"] { color: var(--sb-muted); }

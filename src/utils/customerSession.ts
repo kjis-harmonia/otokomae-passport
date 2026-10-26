@@ -59,8 +59,11 @@ export async function callCustomerRpc<T>(fn: string, params: Record<string, unkn
     return await callRpc<T>(fn, { p_session: session, ...params })
   } catch (err) {
     if (err instanceof RpcError && err.message.includes('customer_auth_required')) {
-      clearCustomerSession()
-      notifyAuthRequired('action')
+      // 送信後にFace IDや店頭確認で取得した新しいセッションは消さない。
+      if (getCustomerSession() === session) {
+        clearCustomerSession()
+        notifyAuthRequired('action')
+      }
       throw new RpcError('customer_auth_required', AUTH_REQUIRED_MESSAGE, err)
     }
     throw err

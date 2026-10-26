@@ -1,11 +1,13 @@
 // 予約と一緒に使うクーポン（JOHNNY の確認画面で選び、店では QR を読むだけでお会計が出る）。
 //   プレミアムクーポン（GINJIRO CLASSICS・SPECIAL PERM・GINPARA）：対象メニューで、平日は終日・土日祝は 17:00〜19:00 開始なら
-//     自動で会員価格（9,000 → 8,000 など）。アプリのメニューの料金は会員価格、ふつうの料金はクーポンの normalPrice
+//     自動で会員価格（9,000 → 8,000 など）。料金の正本はサーバー（menu_price_rules：price＝会員価格・normal_price＝通常価格・祝日）。
+//     サーバーの料金表を読むまでは、wallet.ts の料金で代わりに計算する（表示が空にならないように）
 //   割引券・漢トク券：何枚でも、種類をまたいでも使える（2026-10-17 お店の決定）。メンテナンスカットのときは使えない
 //   選んだ券は端末に覚え、予約の日の会員 QR に入れる（店舗端末が読み取って選んだ状態にする。使用の確定は店舗端末）
 import type { TicketRow } from '../data/ticket'
 import { GINJIRO_CLASSICS, GINPARA, SPECIAL_PERM, type CouponDefinition } from '../data/wallet'
 import { isWelcomeCouponTicket } from './welcomeCoupon'
+import { supabase } from '../lib/supabase'
 
 /** プレミアムクーポンの対象メニュー（アプリのメニューの code） */
 const PREMIUM_BY_MENU: Record<string, CouponDefinition> = {
@@ -22,8 +24,31 @@ const HOLIDAYS = new Set([
   '2027-07-19', '2027-08-11', '2027-09-20', '2027-09-23', '2027-10-11', '2027-11-03', '2027-11-23',
 ])
 
+// ── サーバーの料金表（menu_price_rules）。読めたら、プレミアムの料金と祝日はこちらを使う ──
+interface PriceRules {
+  menus: { code: string; price: number | null; normal_price: number | null; member_label: string | null }[]
+  holidays: string[]
+}
+const COUPON_BY_LABEL: Record<string, CouponDefinition> = { [GINJIRO_CLASSICS.title]: GINJIRO_CLASSICS, [SPECIAL_PERM.title]: SPECIAL_PERM, [GINPARA.title]: GINPARA }
+let rules: PriceRules | null = null
+let loading: Promise<void> | null = null
+
+/** サーバーの料金表を読む（1回だけ。失敗したら次に呼ばれたときにもう一度） */
+export function ensurePriceRules(): Promise<void> {
+  if (rules) return Promise.resolve()
+  loading ??= (async () => {
+    try {
+      const { data, error } = await supabase.rpc('menu_price_rules')
+      if (!error && data && Array.isArray((data as PriceRules).menus)) rules = data as PriceRules
+    } catch { /* 代わりの料金で計算を続ける */ }
+    finally { loading = null }
+  })()
+  return loading
+}
+if (typeof window !== 'undefined') void ensurePriceRules()
+
 const jst = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3600000); return { date: d.toISOString().slice(0, 10), dow: d.getUTCDay(), min: d.getUTCHours() * 60 + d.getUTCMinutes() } }
-const isWeekendOrHoliday = (iso: string) => { const j = jst(iso); return j.dow === 0 || j.dow === 6 || HOLIDAYS.has(j.date) }
+const isWeekendOrHoliday = (iso: string) => { const j = jst(iso); return j.dow === 0 || j.dow === 6 || (rules ? rules.holidays.includes(j.date) : HOLIDAYS.has(j.date)) }
 
 export interface PremiumApplied {
   def: CouponDefinition
@@ -33,13 +58,27 @@ export interface PremiumApplied {
   eligible: boolean
 }
 
+/** プレミアムクーポンの料金（サーバーの料金表を読めていればそちら。クーポン名＝member_label で照らし合わせる） */
+export function livePremiumPrice(def: CouponDefinition): { normalPrice: number; memberPrice: number } | null {
+  const m = rules?.menus.find(x => x.member_label === def.title && x.normal_price != null && x.price != null)
+  return m ? { normalPrice: m.normal_price as number, memberPrice: m.price as number } : null
+}
+
 /** そのメニュー・日時のプレミアムクーポン（対象外なら null） */
 export function premiumFor(menuCode: string, startsAt: string): PremiumApplied | null {
+  const m = jst(startsAt).min
+  const eligible = !isWeekendOrHoliday(startsAt) || (m >= 17 * 60 && m <= 19 * 60)
+  if (rules) {
+    // サーバーの料金表：通常価格（normal_price）があるメニューだけがプレミアム
+    const menu = rules.menus.find(x => x.code === menuCode)
+    if (!menu || menu.normal_price == null || menu.price == null) return null
+    const def = (menu.member_label && COUPON_BY_LABEL[menu.member_label]) || PREMIUM_BY_MENU[menuCode]
+    if (!def) return null
+    return { def, normalPrice: menu.normal_price, memberPrice: menu.price, eligible }
+  }
   const def = PREMIUM_BY_MENU[menuCode]
   const price = def?.prices[0]
   if (!def || !price?.normalPrice) return null
-  const m = jst(startsAt).min
-  const eligible = !isWeekendOrHoliday(startsAt) || (m >= 17 * 60 && m <= 19 * 60)
   return { def, normalPrice: price.normalPrice, memberPrice: price.memberPrice, eligible }
 }
 
@@ -106,3 +145,9 @@ export function couponPlanForQr(): string[] | undefined {
 }
 
 export const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`
+
+/** 予約メニューの値段（サーバーの料金表）。price＝会員価格、normal＝通常価格（あれば）。読めていなければ null */
+export function menuPrice(code: string): { price: number; normal: number | null } | null {
+  const m = rules?.menus.find(x => x.code === code)
+  return m && m.price != null ? { price: m.price, normal: m.normal_price } : null
+}

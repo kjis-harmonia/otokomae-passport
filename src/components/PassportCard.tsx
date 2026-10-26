@@ -1,3 +1,5 @@
+import {useStoreAccess,useStoreRequest} from '../features/customerAccess/storeAccess'
+import {StoreRequestNotice} from '../features/customerAccess/StoreVerification'
 import { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { getUserId } from '../utils/userId'
@@ -6,6 +8,9 @@ import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customer
 import type { CustomerRow } from '../utils/customerStore'
 import { couponPlanForQr } from '../utils/bookingCoupons'
 import { PushToggle } from './PushToggle'
+import { formatVisit, useNextReservation } from '../features/johnny/nextReservation'
+import { heldFor, useGinpayHolds } from '../features/ginpay/holds'
+import { CustomerAccessSettings } from '../features/customerAccess/CustomerAccess'
 import { canShowInstallGuide, SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 import {
   CURRENT_RESERVATION_CHANGED_EVENT,
@@ -45,7 +50,10 @@ function fmtLastVisit(dateStr: string): string {
   return `${y}.${m}.${day}`
 }
 
-export function PassportCard() {
+/** compact：V2.0 の会員QR。会員証と来店時の本人確認の案内だけ（お知らせ・ログイン設定・復旧コードは別の画面） */
+export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
+  const storeAccess=useStoreAccess()
+  const storeRequest=useStoreRequest(storeAccess.mode!=='verified'&&storeAccess.mode!=='error')
   const memberStatus = loadMemberStatus()
   const userId = getUserId()
 
@@ -53,6 +61,15 @@ export function PassportCard() {
   const [qrEnlarged, setQrEnlarged] = useState(false)
   const [customerData, setCustomerData] = useState<CustomerRow | null | undefined>(undefined)
   const [currentReservation, setCurrentReservation] = useState(() => loadCurrentReservation())
+  // カードに出す予約は「次回予約」と同じもの（ご予約は1つ）：アプリの予約があればそれ、無ければお電話のクーポン予約（予約日つき）
+  const aiNext = useNextReservation()
+  // 銀Pay の仮支払い（その予約に付いていれば「仮支払い済み」。レジで会員QR を読むと確定）
+  const prepaid = heldFor(useGinpayHolds(), aiNext?.id)
+  const shownReservation = aiNext
+    ? (() => { const v = formatVisit(aiNext.starts_at); return { title: aiNext.items.map(i => i.name).join('・'), when: `${v.date} ${v.time}〜`, price: aiNext.total_price } })()
+    : currentReservation
+      ? { title: currentReservation.title, when: `${Number(currentReservation.visitDate.slice(5, 7))}月${Number(currentReservation.visitDate.slice(8, 10))}日・お電話のご予約`, price: currentReservation.memberPrice }
+      : null
 
   useEffect(() => {
     // 最終来店日はサーバー（get_my_last_visit RPC）。通信できない場合のみ端末内の旧データで表示
@@ -95,6 +112,7 @@ export function PassportCard() {
 
   const qrPayload = JSON.stringify({
     type: 'ginjiro-member',
+    a: storeRequest.request?.id,
     userId,   // 完全 ID を必ず保持
     name: memberName,
     reservation: toCurrentReservationQrPayload(currentReservation),
@@ -213,7 +231,7 @@ export function PassportCard() {
           <div style={{ position: 'relative', zIndex: 5 }}>
 
             {/* Header */}
-            <p style={{
+            <p className="passport-card-label" style={{
               fontSize: 12, fontWeight: 700, letterSpacing: '0.18em',
               color: 'rgba(230,210,140,0.88)', fontFamily: 'monospace',
               marginBottom: 16, whiteSpace: 'nowrap', overflow: 'hidden',
@@ -222,7 +240,7 @@ export function PassportCard() {
             </p>
 
             {/* Main row */}
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <div className="passport-main" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
 
               {/* Left column */}
               <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -304,9 +322,14 @@ export function PassportCard() {
               </div>
 
               {/* ── QR code — embedded look ── */}
-              <div style={{ flexShrink: 0 }}>
+              <div className="passport-qr-column" style={{ flexShrink: 0 }}>
                 <div
+                  className="passport-qr-thumb"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="会員QRを拡大"
                   onClick={() => setQrEnlarged(true)}
+                  onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setQrEnlarged(true) } }}
                   style={{
                     padding: 7,
                     background: '#FFFFFF',
@@ -352,7 +375,7 @@ export function PassportCard() {
               marginTop: 18, marginBottom: 10,
             }} />
 
-            {currentReservation && (
+            {shownReservation && (
               <div style={{
                 marginBottom: 12,
                 borderRadius: 14,
@@ -378,11 +401,13 @@ export function PassportCard() {
                   lineHeight: 1.45,
                   letterSpacing: '0.05em',
                 }}>
-                  {currentReservation.title}
-                  <span style={{ color: '#C9A24A', marginLeft: 8 }}>
-                    ¥{currentReservation.memberPrice.toLocaleString()}
-                  </span>
+                  {shownReservation.title}
+                  {shownReservation.price != null && <span style={{ color: '#C9A24A', marginLeft: 8 }}>
+                    ¥{shownReservation.price.toLocaleString()}
+                  </span>}
                 </p>
+                <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.72)', marginTop: 2, letterSpacing: '0.04em' }}>{shownReservation.when}</p>
+                {aiNext && prepaid != null && <p style={{ fontSize: 13, fontWeight: 700, color: '#E6CA65', marginTop: 6, letterSpacing: '0.04em' }}>✓ 銀Pay 仮支払い済み ¥{prepaid.toLocaleString()}</p>}
               </div>
             )}
 
@@ -400,6 +425,10 @@ export function PassportCard() {
           </div>
         </div>
       </div>
+
+      <StoreRequestNotice mode={storeAccess.mode} error={storeRequest.error} onRefresh={storeRequest.refresh}/>
+      {!compact && <>
+      <div style={{ marginTop: 16 }}><CustomerAccessSettings /></div>
 
       {/* ── JOHNNY のお知らせ・ホーム画面に追加 ── */}
       <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
@@ -449,23 +478,29 @@ export function PassportCard() {
           </div>
         )}
       </div>
+      </>}
     </div>
 
     {/* ── QR 拡大モーダル ── */}
     {qrEnlarged && (
       <div
+        className="customer-member-qr-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label="拡大した会員QR"
         onClick={() => setQrEnlarged(false)}
         style={{
           position: 'fixed', inset: 0, zIndex: 500,
           background: 'rgba(0,0,0,0.95)',
           display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          padding: '32px',
+          alignItems: 'center', justifyContent: 'flex-start', overflowY: 'auto',
+          padding: 'max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))',
           WebkitTapHighlightColor: 'transparent',
         }}
       >
+        <div style={{ width: '100%', maxWidth: 360, margin: 'auto 0', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <p style={{
-          fontSize: 12, letterSpacing: '0.20em',
+          fontSize: 11, letterSpacing: '0.08em', textAlign: 'center',
           color: 'rgba(201,162,74,0.82)',
           marginBottom: 20, fontFamily: 'monospace',
         }}>
@@ -473,6 +508,7 @@ export function PassportCard() {
         </p>
 
         <div style={{
+          width: 'min(100%, 299px)', flexShrink: 0,
           padding: 12,
           background: '#FFFFFF',
           borderRadius: 18,
@@ -491,7 +527,7 @@ export function PassportCard() {
             marginSize={4}
             fgColor="#000000"
             bgColor="#FFFFFF"
-            style={{ display: 'block' }}
+            style={{ display: 'block', width: '100%', height: 'auto' }}
           />
         </div>
 
@@ -511,7 +547,7 @@ export function PassportCard() {
           }}>
             ID · {userId.slice(0, 24)}
           </p>
-          {currentReservation && (
+          {shownReservation && (
             <div style={{
               marginTop: 16,
               borderRadius: 14,
@@ -524,22 +560,23 @@ export function PassportCard() {
                 現在の予約
               </p>
               <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#F2E6C8', lineHeight: 1.5 }}>
-                {currentReservation.title}
+                {shownReservation.title}
               </p>
               <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.64)', lineHeight: 1.6 }}>
-                {currentReservation.menuLabel} / ¥{currentReservation.memberPrice.toLocaleString()}
+                {shownReservation.when}{shownReservation.price != null ? ` / ¥${shownReservation.price.toLocaleString()}` : ''}
               </p>
             </div>
           )}
         </div>
 
-        <p style={{
+        <button type="button" onClick={() => setQrEnlarged(false)} style={{
           marginTop: 28, fontSize: 13,
           color: 'rgba(242,230,200,0.68)',
-          letterSpacing: '0.14em',
+          letterSpacing: '0.14em', minHeight: 44, padding: '10px 20px', border: 0, borderRadius: 22, background: 'rgba(255,255,255,.06)', cursor: 'pointer',
         }}>
-          タップして閉じる
-        </p>
+          閉じる
+        </button>
+        </div>
       </div>
     )}
     </>

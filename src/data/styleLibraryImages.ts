@@ -7,9 +7,9 @@ const STYLE_LIBRARY_IMAGES: ReadonlyArray<{ key: string; src: string }> = [
   { key: 'テイテイ刈り', src: '/assets/styles/library-teitei.jpg' },
   { key: '昭和のアイパー', src: '/assets/styles/library-showa-aipar.jpg' },
   { key: '昭和ヘアスタイル', src: '/assets/styles/library-showa-hair.jpg' },
-  { key: 'ジャマイカンアフロ', src: '/assets/styles/library-jamaican-afro.jpg' },
+  { key: 'ジャマイカンアフロ', src: '/assets/styles/jamaican-afro-v2.jpg' },
   { key: 'トラック野郎御用達', src: '/assets/styles/library-truck-yaro.jpg' },
-  { key: '海の男専用', src: '/assets/styles/library-uminotoko.jpg' },
+  { key: '海の男専用', src: '/assets/styles/library-uminotoko-v2.jpg' },
   { key: 'シンサイ刈り', src: '/assets/styles/library-shinsaigari.jpg' },
   { key: 'シンサイパンチ', src: '/assets/styles/library-shinsai-punch.jpg' },
   { key: 'サラリーマン専用 ギリギリパーマ', src: '/assets/styles/library-ri-man-parm.jpg' },
@@ -17,9 +17,9 @@ const STYLE_LIBRARY_IMAGES: ReadonlyArray<{ key: string; src: string }> = [
   { key: 'ニグロパーマ', src: '/assets/styles/library-nigro.jpg' },
   { key: 'サイドバックアイパー', src: '/assets/styles/library-sideback-aipar.jpg' },
   { key: 'リーゼントパンチ', src: '/assets/styles/library-rejent-punch.jpg' },
-  { key: 'ヤンキーパンチ', src: '/assets/styles/library-yanki-punch.jpg' },
-  { key: 'バチバチパンチパーマ', src: '/assets/styles/library-punch-perm.jpg' },
-  { key: 'カールアイパー', src: '/assets/styles/library-curl-iper.jpg' },
+  { key: 'ヤンキーパンチ', src: '/assets/styles/yanki-punch-v2.jpg' },
+  { key: 'バチバチパンチパーマ', src: '/assets/styles/punch-perm-v2.jpg' },
+  { key: 'カールアイパー', src: '/assets/styles/curl-iper-v2.jpg' },
 ]
 
 export function resolveStyleLibraryImageUrl(style: Pick<StyleCard, 'title' | 'imageUrl'>): string {

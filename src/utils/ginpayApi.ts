@@ -13,6 +13,8 @@ export interface GinpayAccount {
   status: 'active' | 'suspended' | 'closed'
   currency: 'JPY'
   balance: number
+  /** 残高のうち特典分（チャージの特典の残り） */
+  bonus_balance?: number
   ledger_balance: number
   consistent: boolean
   created_at: string
@@ -26,6 +28,8 @@ export interface GinpayTransaction {
   client_name: string | null
   root_client_id: string | null
   amount: number
+  /** この取引のうち特典分（チャージは特典の額、支払いは按分した特典の額） */
+  bonus_amount?: number
   type: GinpayTransactionType
   status: GinpayTransactionStatus
   accounting_session_id: string | null
@@ -62,9 +66,16 @@ export interface GinpayReconcileResult {
   checked_at: string
   total_cached_balance: number
   total_ledger_balance: number
+  /** 預かっている現金の残り（未使用残高） */
+  total_cash_balance?: number
+  /** 特典の残り */
+  total_bonus_balance?: number
   consistent: boolean
   accounts: GinpayAccount[]
 }
+
+/** 店頭の段階チャージ（現金 → 特典）。正はサーバー（staff_ginpay_charge_tiers） */
+export interface GinpayChargeTier { cash: number; bonus: number }
 
 export type GinpayResult<T = GinpayTransaction> = { ok: true; value: T } | { ok: false; error: string }
 
@@ -73,6 +84,9 @@ export interface GinpayClientApi {
   openAccount?(clientId: string): Promise<GinpayLedger>
   /** idempotencyKey はチャージの確認ごとに1つ（再送しても二重にチャージしない）。口座が複数あるときは accountId が必要 */
   chargeStore?(input: { clientId: string; amount: number; paymentMethod: 'cash' | 'credit' | 'qr' | 'other'; memo?: string; accountId?: string; idempotencyKey?: string }): Promise<GinpayResult>
+  chargeTiers?(): Promise<GinpayChargeTier[]>
+  /** 段階チャージ（現金）。特典はサーバーが段階の表から足す */
+  chargeTier?(input: { clientId: string; cash: number; memo?: string; accountId?: string; idempotencyKey?: string }): Promise<GinpayResult>
   refund?(input: { transactionId: string; amount: number; reason: string }): Promise<GinpayResult>
   void?(input: { transactionId: string; reason: string }): Promise<GinpayResult>
   adjustment?(input: { clientId: string; amount: number; reason: string; accountId?: string }): Promise<GinpayResult>
@@ -91,6 +105,7 @@ export const GINPAY_ERROR_MESSAGE: Record<string, string> = {
   idempotency_conflict: '同じ操作が別の内容で記録済みです。画面を開き直してください。',
   insufficient_balance: '残高が不足しています。',
   invalid_amount: '金額が正しくありません。',
+  invalid_charge_tier: 'チャージの金額を選び直してください。',
   invalid_payment_method: '支払方法が正しくありません。',
   invalid_transaction: 'この取引は対象外です。',
   invalid_value: '入力内容が正しくありません。',
@@ -147,6 +162,15 @@ export function createStaffGinpayApi(actor: () => string): GinpayClientApi {
       p_staff_name: actor(),
       p_memo: input.memo ?? null,
       p_idempotency_key: input.idempotencyKey ?? idempotencyKey('staff-store-charge'),
+      p_account_id: input.accountId ?? null,
+    })),
+    chargeTiers: () => callStaffRpc<GinpayChargeTier[]>('staff_ginpay_charge_tiers'),
+    chargeTier: (input) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_charge_tier', {
+      p_client_id: input.clientId,
+      p_cash: input.cash,
+      p_staff_name: actor(),
+      p_memo: input.memo ?? null,
+      p_idempotency_key: input.idempotencyKey ?? idempotencyKey('staff-tier-charge'),
       p_account_id: input.accountId ?? null,
     })),
     refund: (input) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_refund', {

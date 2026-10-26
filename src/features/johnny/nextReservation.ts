@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { bookingAssistantApi, type CustomerReservation } from './bookingAssistantApi'
 import { hasCustomerSession } from '../../utils/customerSession'
+import { getStoredValue } from '../../utils/storage'
+import { USER_ID_KEY } from '../../utils/userId'
 
 const KEY = 'ginjiro_next_reservation'
 const EVENT = 'ginjiro:reservation-changed'
@@ -12,16 +14,32 @@ function isUpcoming(r: CustomerReservation, now = Date.now()): boolean {
   return ACTIVE.includes(r.status) && new Date(r.ends_at).getTime() > now
 }
 
+// 端末の覚えは「誰の予約か」を一緒に保存し、今の会員と同じで、ログイン中のときだけ表示する（別の人の予約を出さない）
+function currentOwner(): string | null {
+  return hasCustomerSession() ? getStoredValue<string | null>(USER_ID_KEY, null) : null
+}
+
 function readCached(): CustomerReservation | null {
   try {
+    const owner = currentOwner()
     const v = localStorage.getItem(KEY)
-    const r = v ? (JSON.parse(v) as CustomerReservation) : null
-    return r && typeof r.starts_at === 'string' && isUpcoming(r) ? r : null
+    const saved = v ? (JSON.parse(v) as { owner?: string; r?: CustomerReservation }) : null
+    const r = saved?.r
+    if (!owner || !r || saved.owner !== owner) return null
+    return typeof r.starts_at === 'string' && isUpcoming(r) ? r : null
   } catch { return null }
 }
 
+function writeCached(r: CustomerReservation | null): void {
+  try {
+    const owner = currentOwner()
+    if (r && owner) localStorage.setItem(KEY, JSON.stringify({ owner, r }))
+    else localStorage.removeItem(KEY)
+  } catch { /* 表示用なので保存できなくても続ける */ }
+}
+
 export function rememberReservation(r: CustomerReservation): void {
-  try { localStorage.setItem(KEY, JSON.stringify(r)) } catch { /* 表示用なので保存できなくても続ける */ }
+  writeCached(r)
   window.dispatchEvent(new Event(EVENT))
 }
 
@@ -42,13 +60,14 @@ export function useNextReservation(): CustomerReservation | null {
           if (!alive) return
           const n = pickNext(list)
           setNext(n)
-          try { if (n) localStorage.setItem(KEY, JSON.stringify(n)); else localStorage.removeItem(KEY) } catch { /* ignore */ }
+          writeCached(n)
         })
         .catch(() => { /* 通信できないときは覚えている予約のまま */ })
     }
     load()
     window.addEventListener(EVENT, load)
-    return () => { alive = false; window.removeEventListener(EVENT, load) }
+    window.addEventListener('ginjiro:customer-session-changed', load)
+    return () => { alive = false; window.removeEventListener(EVENT, load); window.removeEventListener('ginjiro:customer-session-changed', load) }
   }, [])
   return next
 }
@@ -72,7 +91,7 @@ export function formatVisit(iso: string): { date: string; time: string; relative
 export function forgetReservation(id: string): void {
   try {
     const v = localStorage.getItem(KEY)
-    if (v && (JSON.parse(v) as CustomerReservation).id === id) localStorage.removeItem(KEY)
+    if (v && (JSON.parse(v) as { r?: CustomerReservation }).r?.id === id) localStorage.removeItem(KEY)
   } catch { /* ignore */ }
   window.dispatchEvent(new Event(EVENT))
 }

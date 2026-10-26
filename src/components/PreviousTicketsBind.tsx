@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
+import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { getUserId } from '../utils/userId'
 import {
@@ -6,6 +8,7 @@ import {
   CUSTOMER_AUTH_REQUIRED_EVENT, type CustomerAuthRequiredDetail,
 } from '../utils/customerSession'
 import { callRpc, isMissingRpc, RpcError } from '../utils/staffSession'
+import { observeVisibleViewport } from '../utils/visibleViewport'
 
 // 以前のチケットを引き継ぐ（既存会員の端末に顧客セッションを発行する）。
 // 仕組みは従来どおり：店頭でスタッフが発行する6桁コード（10分有効・1回限り）→ customer_bind_with_code。
@@ -142,7 +145,11 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
   zIndex?: number
 }) {
   const reduced = useReducedMotion() ?? false
-  const [step, setStep] = useState<Step>(startWithCode ? 'code' : 'ask')
+  const viewportRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (viewportRef.current) return observeVisibleViewport(viewportRef.current)
+  }, [])
+  const [step, setStep] = useState<Step>(CUSTOMER_ACCESS_ENABLED ? 'ask' : startWithCode ? 'code' : 'ask')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -164,10 +171,13 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
+      ref={viewportRef}
+      className="ticket-bind-backdrop"
+      style={{ position: 'fixed', left: 0, right: 0, top: 'var(--customer-visual-top, 0px)', height: 'var(--customer-visual-height, 100%)', zIndex, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
       onClick={step === 'done' ? onClose : onLater}
     >
       <motion.div
+        className="ticket-bind-dialog"
         role="dialog"
         aria-modal="true"
         aria-label="以前のチケットを引き継ぐ"
@@ -180,7 +190,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
           boxShadow: '0 20px 56px rgba(0,0,0,0.8)',
         }}
       >
-        {step === 'done' ? (
+        {CUSTOMER_ACCESS_ENABLED&&step==='ask'?<><h2 style={{color:IVORY,fontSize:20,marginBottom:16}}>会員情報で続ける</h2><PasskeyLoginButton onSignedIn={()=>{onBound?.();onClose()}}/><button type="button" onClick={()=>setStep('code')} className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}}>別の方法で引き継ぐ</button><button type="button" className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}} onClick={onLater}>あとで</button></>:step === 'done' ? (
           <>
             <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: IVORY, marginBottom: 16 }}>引き継ぎが完了しました</p>
             <DialogButton primary onClick={onClose}>閉じる</DialogButton>
@@ -218,7 +228,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
                     fontFamily: 'ui-monospace, monospace', fontSize: 20, letterSpacing: '0.24em', outline: 'none',
                   }}
                 />
-                {error && <p style={{ fontSize: 12, color: '#F0A8A0', marginTop: 8, lineHeight: 1.6 }}>{error}</p>}
+                {error && <p className="ticket-bind-error" style={{ fontSize: 12, color: '#F0A8A0', marginTop: 8, lineHeight: 1.6 }}>{error}</p>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
                   <DialogButton onClick={onLater}>あとで</DialogButton>
                   <DialogButton primary disabled={busy || code.length !== 6} onClick={() => { void submit() }}>
@@ -243,6 +253,7 @@ function DialogButton({ children, primary, disabled, onClick }: {
   return (
     <button
       type="button"
+      className={primary ? 'ticket-bind-action is-primary' : 'ticket-bind-action'}
       disabled={disabled}
       onClick={onClick}
       style={{

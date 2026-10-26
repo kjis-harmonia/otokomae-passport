@@ -1,4 +1,3 @@
-import { isStaging } from '../../utils/env'
 import { useState } from 'react'
 import { ClientList } from '../../components/booking/ClientList'
 import { C, SANS, linkStyle } from '../../components/booking/ledgerTheme'
@@ -23,7 +22,7 @@ export function HqClientsScreen() {
   }
   return (
     <div style={{ background: C.bg }}>
-      <ClientList api={hqCustomerApi} ginpayApi={isStaging() ? hqGinpayApi : undefined} ensureActor={() => true} />
+      <ClientList api={hqCustomerApi} ginpayApi={hqGinpayApi} ensureActor={() => true} />
       <div style={{ maxWidth: 1180, margin: '0 auto', padding: '0 16px 24px' }}>
         <button type="button" onClick={() => setLegacy(true)} style={{ ...linkStyle, fontSize: 13 }}>旧・顧客カルテ（App会員のみ）を開く</button>
       </div>

@@ -20,7 +20,7 @@ export const RESERVE_LINKS: Readonly<Record<string, string>> = {
   'カールアイパー':       CURL_IPER_URL,
   'バチバチパンチパーマ': PUNCH_PERM_URL,
   '銀パラ':               GINPARA_URL,
-  '夏ニグロ':             NATSU_URL,
+  '秋ニグロ':             NATSU_URL,
   // TryOnScreen short names (subset of above)
   '濡れパン':             NUREPAN_URL,
   'パンチパーマ':         PUNCH_PERM_URL,
@@ -65,7 +65,7 @@ export const STYLE_MENU_CODES: Readonly<Record<string, string>> = {
   'リーゼントパンチ': 'perm-punch',
   'シンサイパンチ': 'perm-punch',
   'ニグロパーマ': 'perm-negro',
-  '夏ニグロ': 'perm-negro',
+  '秋ニグロ': 'perm-negro',
   'ジャマイカンアフロ': 'perm-afro',
   '銀パラ': 'perm-ginpara-curly',
   'スペインパーマ': 'perm-spain',
@@ -75,6 +75,8 @@ export const STYLE_MENU_CODES: Readonly<Record<string, string>> = {
   'シンサイ刈り': 'cut-skin-fade',
   'トラック野郎御用達': 'cut-regular',
   'ちょい悪オヤジ専用 昭和ヘアスタイル': 'cut-regular',
+  'テイテイ刈り': 'store-teitei-gari',
+  // 覚醒の色：予約メニューに対応するものが無い → Johnny には髪型の名前だけ伝える（メニューはJohnnyが聞く）
 }
 
 export function getStyleMenuCode(styleTitle: string): string | null {

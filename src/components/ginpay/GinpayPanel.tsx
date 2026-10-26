@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   GINPAY_TYPE_LABEL,
+  type GinpayChargeTier,
   type GinpayClientApi,
   type GinpayLedger,
   type GinpayTransaction,
@@ -12,28 +13,22 @@ import { rpcErrorMessage } from '../../utils/staffSession'
 import { C, SANS, inputStyle, linkStyle } from '../booking/ledgerTheme'
 import { Field, PrimaryButton, SecondaryButton } from '../booking/ledgerUi'
 
-const STORE_PAYMENT_METHODS = [
-  { id: 'cash', label: '現金' },
-  { id: 'credit', label: 'カード' },
-  { id: 'qr', label: 'QR' },
-  { id: 'other', label: 'その他' },
-] as const
-
-type StorePaymentMethod = (typeof STORE_PAYMENT_METHODS)[number]['id']
-
-export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = true }: {
+export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = true, startCharging = false }: {
   clientId: string
   api: GinpayClientApi
   ensureActor: () => boolean
   showAccountDetail?: boolean
+  /** 開いた時点でチャージの段階選びを出す（銀Payチャージ画面） */
+  startCharging?: boolean
 }) {
   const [ledger, setLedger] = useState<GinpayLedger | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [chargeOpen, setChargeOpen] = useState(false)
-  const [amount, setAmount] = useState('')
-  const [method, setMethod] = useState<StorePaymentMethod>('cash')
+  // 店頭チャージは現金で、決まった段階から選ぶ（特典はサーバーが足す）
+  const [tiers, setTiers] = useState<GinpayChargeTier[] | null>(null)
+  const [cash, setCash] = useState<number | null>(null)
   const [memo, setMemo] = useState('')
   const [confirmingCharge, setConfirmingCharge] = useState(false)
   // チャージの確認ごとに1つのキー（通信の再試行で二重にチャージしない）
@@ -51,19 +46,28 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
   }, [api, clientId])
 
   useEffect(() => { void load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { if (startCharging) void openCharge() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const parsedAmount = useMemo(() => parseYenInput(amount), [amount])
-  const canCharge = !!api.chargeStore
+  const tier = useMemo(() => tiers?.find(t => t.cash === cash) ?? null, [tiers, cash])
+  const canCharge = !!api.chargeTier
+  const bonusBalance = ledger?.accounts.reduce((sum, a) => sum + (a.bonus_balance ?? 0), 0) ?? 0
+
+  async function openCharge() {
+    setChargeOpen(true)
+    setMessage(null)
+    if (tiers || !api.chargeTiers) return
+    try { setTiers(await api.chargeTiers()) } catch (err) { setMessage(rpcErrorMessage(err, 'チャージの金額を読み込めませんでした。')) }
+  }
   // 統合された顧客で口座が複数あるときは、チャージ先を選ぶ（自動で決めない）
   const activeAccounts = ledger?.accounts.filter(a => a.status === 'active') ?? []
   const needsAccountChoice = activeAccounts.length > 1
   const chargeAccount = activeAccounts.find(a => a.id === chargeAccountId) ?? null
 
   async function submitCharge() {
-    if (!api.chargeStore || !parsedAmount || (needsAccountChoice && !chargeAccount)) return
+    if (!api.chargeTier || !tier || (needsAccountChoice && !chargeAccount)) return
     if (!confirmingCharge) {
       setConfirmingCharge(true)
-      setChargeKey(idempotencyKey('staff-store-charge'))
+      setChargeKey(idempotencyKey('staff-tier-charge'))
       setMessage(null)
       return
     }
@@ -71,21 +75,21 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
     setLoading(true)
     setMessage(null)
     try {
-      const res = await api.chargeStore({
-        clientId, amount: parsedAmount, paymentMethod: method, memo: memo.trim() || undefined,
+      const res = await api.chargeTier({
+        clientId, cash: tier.cash, memo: memo.trim() || undefined,
         accountId: needsAccountChoice ? chargeAccount?.id : undefined, idempotencyKey: chargeKey ?? undefined,
       })
       if (!res.ok) {
         setMessage(ginpayErrorMessage(res.error))
         return
       }
-      setAmount('')
+      setCash(null)
       setMemo('')
       setConfirmingCharge(false)
       setChargeKey(null)
       setChargeAccountId(null)
       setChargeOpen(false)
-      setMessage('チャージしました。')
+      setMessage(`現金 ${yen(tier.cash)} を受け取り、${yen(tier.cash + tier.bonus)} をチャージしました。`)
       await load()
     } catch (err) {
       setMessage(rpcErrorMessage(err, 'チャージに失敗しました。'))
@@ -125,7 +129,10 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
     <section style={{ marginTop: 28, marginBottom: 28 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, borderBottom: `1px solid ${C.text}`, paddingBottom: 8 }}>
         <h2 style={{ fontSize: 13, fontWeight: 600, color: C.sub }}>GINPay</h2>
-        {ledger && <strong style={{ marginLeft: 'auto', fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{yen(ledger.balance)}</strong>}
+        {ledger && <span style={{ marginLeft: 'auto', textAlign: 'right' }}>
+          <strong style={{ display: 'block', fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{yen(ledger.balance)}</strong>
+          {bonusBalance > 0 && <small style={{ display: 'block', fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>うち特典 {yen(bonusBalance)}</small>}
+        </span>}
       </div>
 
       {error ? <p style={msgStyle(C.danger)}>{error}</p> : !ledger ? <p style={msgStyle(C.sub)}>読み込み中…</p> : (
@@ -154,7 +161,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
           {canCharge && (
             <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
               {!chargeOpen ? (
-                <button type="button" onClick={() => { setChargeOpen(true); setMessage(null) }} style={linkStyle}>チャージ</button>
+                <button type="button" onClick={() => void openCharge()} style={linkStyle}>チャージ</button>
               ) : (
                 <div style={{ maxWidth: 520 }}>
                   {needsAccountChoice && (
@@ -170,32 +177,37 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                       </div>
                     </Field>
                   )}
-                  <Field label="金額">
-                    <input value={amount} onChange={e => { setAmount(e.target.value.replace(/[^\d]/g, '')); setConfirmingCharge(false) }}
-                      inputMode="numeric" placeholder="0" style={inputStyle} />
-                  </Field>
-                  <Field label="支払方法">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                      {STORE_PAYMENT_METHODS.map((m) => (
-                        <button key={m.id} type="button" onClick={() => { setMethod(m.id); setConfirmingCharge(false) }} style={{
-                          minHeight: 42, borderRadius: 8, border: `1px solid ${method === m.id ? C.text : C.lineStrong}`,
-                          background: method === m.id ? C.text : C.bg, color: method === m.id ? C.bg : C.text,
-                          fontFamily: SANS, fontSize: 13, cursor: 'pointer',
-                        }}>{m.label}</button>
-                      ))}
-                    </div>
+                  <Field label="受け取る現金">
+                    {!tiers ? <p style={msgStyle(C.sub)}>読み込み中…</p> : (
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {tiers.map((t) => {
+                          const on = cash === t.cash
+                          return (
+                            <button key={t.cash} type="button" aria-pressed={on} onClick={() => { setCash(t.cash); setConfirmingCharge(false) }} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                              minHeight: 52, padding: '0 16px', borderRadius: 10, border: `1px solid ${on ? C.text : C.lineStrong}`,
+                              background: on ? C.text : C.bg, color: on ? C.bg : C.text,
+                              fontFamily: SANS, fontSize: 15, fontVariantNumeric: 'tabular-nums', cursor: 'pointer',
+                            }}>
+                              <span style={{ fontWeight: 600 }}>{yen(t.cash)}</span>
+                              <span>→ {yen(t.cash + t.bonus)}<small style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>特典 +{yen(t.bonus)}</small></span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </Field>
                   <Field label="メモ">
                     <input value={memo} onChange={e => setMemo(e.target.value)} maxLength={200} style={inputStyle} />
                   </Field>
                   {confirmingCharge && (
                     <p style={{ marginTop: 10, fontSize: 14, lineHeight: 1.7 }}>
-                      {needsAccountChoice && chargeAccount && !chargeAccount.is_current_client ? `${chargeAccount.client_name ?? '統合元'} の口座` : ledger.client_name ?? 'この顧客'}に {yen(parsedAmount)} をチャージします。内容を確認してください。
+                      {needsAccountChoice && chargeAccount && !chargeAccount.is_current_client ? `${chargeAccount.client_name ?? '統合元'} の口座` : ledger.client_name ?? 'この顧客'}から現金 {yen(tier?.cash)} を受け取り、{yen(tier ? tier.cash + tier.bonus : null)} をチャージします（特典 +{yen(tier?.bonus)}）。
                     </p>
                   )}
                   <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
                     <SecondaryButton onClick={() => { setChargeOpen(false); setConfirmingCharge(false); setMessage(null) }} disabled={loading}>やめる</SecondaryButton>
-                    <PrimaryButton onClick={() => void submitCharge()} disabled={loading || !parsedAmount || (needsAccountChoice && !chargeAccount)} style={{ flex: 2 }}>
+                    <PrimaryButton onClick={() => void submitCharge()} disabled={loading || !tier || (needsAccountChoice && !chargeAccount)} style={{ flex: 2 }}>
                       {loading ? '処理中…' : confirmingCharge ? 'チャージ確定' : '確認へ'}
                     </PrimaryButton>
                   </div>
@@ -273,6 +285,7 @@ function TransactionRow({ tx, canReverse, onReverse }: {
           {tx.operator_name ? ` / ${tx.operator_name}` : ''}
           {saleLinked ? '　会計' : ''}
           {tx.stripe_payment_intent_id ? '　Stripe' : ''}
+          {tx.bonus_amount ? '　うち特典 ' + yen(Math.abs(tx.bonus_amount)) : ''}
         </span>
       </span>
       <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: amountColor }}>

@@ -37,16 +37,16 @@ export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWh
   const gold = tone === 'gold'
   return (
     <div style={{ width: '100%', marginTop: gold ? 0 : 16 }}>
-      <button type="button" onClick={() => void act()} disabled={busy || state === 'denied'} style={{
+      <button type="button" className="push-toggle-action" onClick={() => void act()} disabled={busy || state === 'denied'} style={{
         width: '100%', padding: '15px 18px', borderRadius: 14, textAlign: 'left', cursor: state === 'denied' ? 'default' : 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         background: gold ? 'rgba(0,0,0,0.3)' : '#1C1C1E', border: gold ? '1px solid rgba(201,162,74,0.28)' : 'none', color: gold ? '#F2E6C8' : '#FFFFFF',
       }}>
         <span>
-          <span style={{ display: 'block', fontFamily: gold ? SERIF : undefined, fontSize: 15, fontWeight: 700, letterSpacing: gold ? '0.04em' : undefined }}>{busy ? '設定しています…' : title}</span>
-          <span style={{ display: 'block', fontSize: 12, marginTop: 4, color: gold ? 'rgba(242,230,200,0.5)' : 'rgba(235,235,245,0.6)', lineHeight: 1.5 }}>{sub}</span>
+          <span className="push-toggle-title" style={{ display: 'block', fontFamily: gold ? SERIF : undefined, fontSize: 15, fontWeight: 700, letterSpacing: gold ? '0.04em' : undefined }}>{busy ? '設定しています…' : title}</span>
+          <span className="push-toggle-description" style={{ display: 'block', fontSize: 12, marginTop: 4, color: gold ? 'rgba(242,230,200,0.5)' : 'rgba(235,235,245,0.6)', lineHeight: 1.5 }}>{sub}</span>
         </span>
-        {state !== 'denied' && <span aria-hidden="true" style={{ color: gold ? '#C9A24A' : 'rgba(235,235,245,0.6)', fontSize: 18 }}>{state === 'on' ? '✓' : '›'}</span>}
+        {state !== 'denied' && <span className="push-toggle-indicator" aria-hidden="true" style={{ color: gold ? '#C9A24A' : 'rgba(235,235,245,0.6)', fontSize: 18 }}>{state === 'on' ? '✓' : '›'}</span>}
       </button>
       {error && <p role="alert" style={{ margin: '8px 4px 0', fontSize: 12, color: '#E06060' }}>{error}</p>}
     </div>

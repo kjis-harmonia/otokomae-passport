@@ -1,3 +1,4 @@
+import {checkJohnnyStoreAccess} from '../_shared/johnny-store-access.ts'
 // JOHNNY の予約 AI の入口（Edge Function）。お客様アプリの予約アシスタントから呼ぶ。
 //   入力：{ session: 顧客セッション, message: お客様の言葉（300字まで）, history: 直前の会話（10往復まで）, shown: 画面に出している候補 }
 //         声で話したときは message の代わりに audio（録音の base64）と mime。transcribe_only なら文字にするだけ（確認画面の「はい」など）
@@ -132,6 +133,8 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json(400, { error: 'invalid_request' }) }
   const session = str(body.session, 200)
+  const denied=await checkJohnnyStoreAccess(SUPABASE_URL,ANON_KEY,session)
+  if(denied)return json(denied.status,{error:denied.error})
   // JOHNNY の声：OpenAI の音声をそのまま流す（アプリは届いた分から再生する）
   const speakText = str(body.speak, 300)
   if (speakText) {
@@ -156,11 +159,17 @@ Deno.serve(async (req) => {
   try {
     // セッションの確認と、予約できるメニュー・スタッフを一度に
     // 「いつもの」用に、これまでの予約も同時に読む（いちばん新しい過去の予約のメニュー）
-    const [opts, past, visits] = await Promise.all([
+    const [allOpts, past, visits, lastVisit] = await Promise.all([
       rpc<{ menus: MenuInfo[]; staff: StaffInfo[] }>('customer_booking_options', session),
       rpc<CustomerReservation[]>('customer_list_reservations', session).catch(() => [] as CustomerReservation[]),
-      rpc<{ menu_code: string | null }[] | null>('customer_recent_visits', session).catch(() => null),
+      rpc<{ visit_date?: string; menu_code: string | null }[] | null>('customer_recent_visits', session).catch(() => null),
+      rpc<string | null>('customer_get_last_visit', session).catch(() => null),
     ])
+    // メンテナンスカット（maintenance）は、前回のご来店（QR の来店登録）から14日以内のお客様だけ（アプリの画面と同じ）
+    const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+    const visited = [lastVisit, ...(visits ?? []).map(v => v.visit_date)].filter((d): d is string => typeof d === 'string').map(d => d.slice(0, 10)).filter(d => d <= today).sort().pop()
+    const maintOk = !!visited && (Date.parse(today + 'T00:00:00Z') - Date.parse(visited + 'T00:00:00Z')) / 86400000 <= 14
+    const opts = { ...allOpts, menus: allOpts.menus.filter(m => m.code !== 'maintenance' || maintOk) }
     const t = tools(session, opts.staff)
     let heard: string | undefined
     if (audio) {

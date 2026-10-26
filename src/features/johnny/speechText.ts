@@ -39,8 +39,20 @@ function minuteReading(n: number): string | null {
   return `${h}${MIN_TENS[tens]}${MIN_ONES[ones]}`
 }
 
+// お店の言葉の読み（声の AI は「漢」を「かん」と読む）：漢トク券＝おとくけん、漢前＝おとこまえ
+const SHOP_WORDS: [RegExp, string][] = [[/漢トク券/g, 'おとくけん'], [/漢トク/g, 'おとく'], [/漢前/g, 'おとこまえ'], [/銀Pay/gi, 'ぎんペイ']]
+
+// 曜日：「（水）」を「みず」と読まれるので、ようびの読みにする。土日祝＝どにちしゅく
+const WEEKDAY: Record<string, string> = { 月: 'げつようび', 火: 'かようび', 水: 'すいようび', 木: 'もくようび', 金: 'きんようび', 土: 'どようび', 日: 'にちようび', 祝: 'しゅくじつ' }
+function weekdays(t: string): string {
+  return t
+    .replace(/\(([月火水木金土日祝](?:[・･][月火水木金土日祝])*)\)/g, (_all, w: string) => w.split(/[・･]/).map(x => WEEKDAY[x]).join('、'))
+    .replace(/土日祝/g, 'どにちしゅく').replace(/土日/g, 'どにち')
+    .replace(/([月火水木金土日])曜日?/g, (_all, w: string) => WEEKDAY[w])
+}
+
 export function toSpeech(text: string): string {
-  return text.normalize('NFKC')
+  return weekdays(SHOP_WORDS.reduce((t, [re, to]) => t.replace(re, to), text.normalize('NFKC')))
     .replace(/(\d{1,2})時(?!間)(半)?(?:(\d{1,2})分)?/g, (all, h: string, half: string | undefined, m: string | undefined) => {
       const hr = hourReading(Number(h))
       if (!hr) return all

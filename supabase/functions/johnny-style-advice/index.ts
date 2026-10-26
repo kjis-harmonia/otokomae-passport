@@ -1,3 +1,4 @@
+import {checkJohnnyStoreAccess} from '../_shared/johnny-store-access.ts'
 // JOHNNY：髪型の相談だけ AI（OpenAI）に聞く Edge Function。お客様アプリの予約アシスタントから呼ぶ。
 //   入力：お客様の顧客セッション・相談の文（300字まで）・メニュー表（コード・名前・時間・料金、80件まで）
 //   出力：{ reply: 返事（100字くらい）, menu_codes: おすすめ（メニュー表の中から最大3つ） }
@@ -61,6 +62,8 @@ Deno.serve(async (req) => {
   try { body = await req.json() } catch { return json(400, { error: 'invalid_request' }) }
   const message = typeof body.message === 'string' ? body.message.trim().slice(0, 300) : ''
   const session = typeof body.session === 'string' ? body.session : ''
+  const denied=await checkJohnnyStoreAccess(SUPABASE_URL,ANON_KEY,session)
+  if(denied)return json(denied.status,{error:denied.error})
   const menus = cleanMenus(body.menus)
   if (!message) return json(400, { error: 'invalid_request' })
   if (!(await validSession(session))) return json(401, { error: 'customer_auth_required' })

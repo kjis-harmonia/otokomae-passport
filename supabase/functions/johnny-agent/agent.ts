@@ -40,6 +40,7 @@ export type AgentUi =
   | { type: 'confirm_change'; reservation_id: string; menu_code: string; staff_id: string | null; starts_at: string }
   | { type: 'reservations'; ids: string[] }
   | { type: 'handoff' }
+  | { type: 'waitlist'; menu_code: string; staff_id: string | null; date: string; from: string; to: string }
 
 export interface AgentReply { say: string; ui: AgentUi; tool_calls: number }
 
@@ -175,7 +176,7 @@ function shownText(ctx: AgentContext): string {
   const sh = ctx.shown
   if (!sh) return ''
   const name = (c?: string) => ctx.menus.find(m => m.code === c)?.name ?? c
-  const staff = (id?: string | null) => (id ? ctx.staff.find(s => s.id === id)?.name ?? id : '指名なし')
+  const staff = (id?: string | null) => (id ? ctx.staff.find(s => s.id === id)?.name ?? id : '担当はこれから選ぶ')
   const parts: string[] = []
   if (sh.times?.length) parts.push(`時刻の候補（${name(sh.menu_code)}・${staff(sh.staff_id)}）：${sh.times.map((t, i) => `${i + 1}つ目 ${jstParts(t).date} ${jstParts(t).time}`).join('、')}`)
   if (sh.confirm) parts.push(`確認中の予約案：${jstParts(sh.confirm.starts_at).date} ${jstParts(sh.confirm.starts_at).time}・${name(sh.confirm.menu_code)}（${sh.confirm.menu_code}）・${staff(sh.confirm.staff_id)}`)
@@ -211,12 +212,14 @@ ${week}
 - 「〜してもいい？」「〜できる？」のような聞き方でも、メニューや日時が入っていれば予約したいと受け取って空きを案内する。
 - 「前回と同じ」「いつもの」 → 表で「前回」のメニュー。
 - 「カット」「髪切りたい」だけなら通常カット。「顔剃り」は顔そり男性。
-- 担当の指名（「テイテイさんで」など） → staff の id を slots / next_slots の staff_id に入れて確かめ、ui にも staff_id を入れる。指名が無ければ staff_id は null。日が決まっていなければ next_slots で近い日から探す。
+- 担当の指名（「テイテイさんで」など） → staff の id を slots / next_slots の staff_id に入れて確かめ、ui にも staff_id を入れる。指名が無ければ staff_id は null（担当は確定の前にアプリがお客様に選んでもらう。「指名なし」の予約は無いので、指名なしを勧めたり「どちらでも」で決めたりしない）。日が決まっていなければ next_slots で近い日から探す。
 - 「2つ目で」「さっきの11時で」「一番最初の」「最後の」 → 画面に出ている候補（shown）の中から選ぶ（画面に候補があるときの「一番最初」は、候補の1つ目）。
 - 確認画面（shown.confirm）が出ているときの「16時にして」「メニューはスキンフェードで」「テイテイさんで」は、その予約案の一部を変えるだけ。変えたところを slots で確かめて、ui: confirm_booking を出し直す。このときの「ずらして」「遅らせて」は予約の変更ではないので my_reservations は呼ばない。
 - 予約一覧の wd・label で読む：「日曜の予約」「来週の日曜のやつ」はその曜日の予約（日付の読みより予約一覧が先）。今ある予約の日時を変える話は confirm_booking ではなく confirm_change。「両方キャンセル」は1つずつ（近い方から confirm_cancel）。
 - キャンセル・変更・「予約いつだっけ」 → my_reservations で確かめる。予約が1つなら ui: confirm_cancel / 変更なら新しい日時を確かめて ui: confirm_change。複数あって分からなければ ui: reservations で選んでもらう。
 - 料金や時間の質問は表の数字で答え、予約の話に戻す。
+- お客様が「キャンセル待ち」「空いたら教えて」と言ったら、必ず ui: waitlist（いま空きがあっても、お客様が望むならそのまま入れてよい）。
+- キャンセル待ち：希望の日・時間が埋まっていて、お客様がその日（その時間）を希望するとき、近い候補を断ったとき、「キャンセル待ちして」と言われたときは、「キャンセル待ちに入れときましょうか？空いたらすぐスマホにお知らせして、10分間お取りします」と言い、ui: waitlist（date・menu_code・staff_id・from_time〜to_time＝希望の時間帯。時間の希望が無ければ from_time・to_time は書かない）。埋まっているときは、まず近い時刻や次の日の候補（slots）を出してから聞く。
 - 2人（「わしと息子で」など）は、いつも通りまずご本人の分を進める（日時やメニューが分かれば slots / confirm_booking）。「確認画面の『お連れ様を追加』で、お連れ様もこの時間から一番早い時間で一緒にお取りできます」と短く添える。3人以上はお電話（ui: handoff）。
 
 # メニュー表（code・名前・種類・時間・料金）
@@ -239,7 +242,7 @@ const TOOLS = [
       say: { type: 'string' },
       ui: { type: 'object', additionalProperties: false, required: ['type'], description: 'type に必要な欄だけ書く（ほかは書かない）',
         properties: {
-          type: { type: 'string', enum: ['none', 'menus', 'slots', 'confirm_booking', 'confirm_cancel', 'confirm_change', 'reservations', 'handoff'] },
+          type: { type: 'string', enum: ['none', 'menus', 'slots', 'confirm_booking', 'confirm_cancel', 'confirm_change', 'reservations', 'handoff', 'waitlist'] },
           menu_codes: { type: 'array', items: { type: 'string' }, description: 'menus のとき：特におすすめのメニューを3つまで（空きのあるメニューの一覧はこちらで全部出す）' },
           date: { type: ['string', 'null'], description: 'menus のときの日付' },
           menu_code: { type: ['string', 'null'] },
@@ -248,6 +251,8 @@ const TOOLS = [
           starts_at: { type: ['string', 'null'], description: 'confirm_booking / confirm_change のとき（YYYY-MM-DDTHH:MM:00+09:00）' },
           reservation_id: { type: ['string', 'null'] },
           reservation_ids: { type: 'array', items: { type: 'string' } },
+          from_time: { type: ['string', 'null'], description: 'waitlist のとき：希望の時間帯の始め（HH:MM）' },
+          to_time: { type: ['string', 'null'], description: 'waitlist のとき：希望の時間帯の終わり（HH:MM）' },
         } },
     } } } },
 ] as const
@@ -354,7 +359,9 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
   const pre: { name: string; args: Record<string, unknown>; run: () => Promise<unknown> }[] = []
   for (const d of dates.slice(0, 2)) pre.push({ name: 'day_overview', args: { date: d.date }, run: async () => { const o = await tools.dayOverview(d.date); overviews.set(o.date, o); o.groups.forEach(g => g.codes.forEach(c => remember(c, g.slots))); return describeOverview(o, ctx) } })
   const aboutReservation = !ctx.shown?.confirm && /キャンセル|取り消|取消|予約.{0,12}(?:やめ|変|ずら|遅|早|いつ|何時|日にち|担当|メニュー)|(?:やめ|変|ずら|遅らせ|早め).{0,6}予約|次の予約|行けん|行けな|いけな|のやつを|なしにし|無しにし|ずらせ|ずらし|ずらす|予約[、,を]?.{0,14}に(?:し|でき|変|ずら|$)/.test(utterance)
-  const cancelTalk = aboutReservation && /キャンセル|取り消|取消|やめ|なしにし|無しにし/.test(utterance)
+  // キャンセル待ちの依頼（「キャンセル待ちにして」「空いたら教えて」）。予約のキャンセル・お断りとは別
+  const waitlistTalk = /キャンセル待ち|キャン待ち|空いたら(?:教えて|連絡|知らせ|お知らせ)|空きが出たら/.test(utterance)
+  const cancelTalk = aboutReservation && !waitlistTalk && /キャンセル|取り消|取消|やめ|なしにし|無しにし/.test(utterance)
   // 取り消しの話：日付の読み（「日曜」＝明日）とその日の空きは使わず、予約一覧から合う予約を選ばせる
   if (cancelTalk) {
     pre.splice(0, pre.length, ...pre.filter(p => p.name !== 'day_overview'))
@@ -413,7 +420,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
       let args: Record<string, unknown> = {}
       try { args = JSON.parse(call.function.arguments || '{}') } catch { /* 空のまま */ }
       if (call.function.name === 'respond') {
-        const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, declined: !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), pickIndex: pickIndexOf(utterance, ctx.shown?.times?.length ?? 0), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects === 0, 2 - rejects++)
+        const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, waitlist: waitlistTalk, declined: !waitlistTalk && !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), pickIndex: pickIndexOf(utterance, ctx.shown?.times?.length ?? 0), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects === 0, 2 - rejects++)
         if (checked.ok) return { say: checked.say, ui: checked.ui, tool_calls: toolCalls }
         // 道具に無い時刻・予約を出そうとした：理由を返して、もう一度考えさせる
         if (DEBUG) console.error(`[reject] ${checked.error} :: ${JSON.stringify(args.ui)}`)
@@ -450,7 +457,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
 
 type Checked = { ok: true; say: string; ui: AgentUi } | { ok: false; error: string }
 
-interface Heard { pickIndex: number | null; menu: string | null; said: boolean; staffId: string | null; time: string | null; aboutReservation: boolean; cancel: boolean; declined: boolean; dates: string[]; picking: boolean }
+interface Heard { waitlist: boolean; pickIndex: number | null; menu: string | null; said: boolean; staffId: string | null; time: string | null; aboutReservation: boolean; cancel: boolean; declined: boolean; dates: string[]; picking: boolean }
 
 function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: Map<string, Set<string>>, reservations: Reservation[] | null, overviews: Map<string, DayOverview>, heard: Heard, strict: boolean, rejectsLeft = 0): Checked {
   const mentioned = heard.menu
@@ -520,6 +527,9 @@ function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: M
   if (strict && !heard.aboutReservation && !mentioned && u.type === 'none' && heard.dates.some(d => (overviews.get(d)?.groups.length ?? 0) > 0)) {
     return { ok: false, error: '聞き返さずに、その日（時刻）に入れられるメニューを ui: menus（date つき）で出してください' }
   }
+  if (strict && heard.waitlist && u.type !== 'waitlist') {
+    return { ok: false, error: 'お客様はキャンセル待ちを頼んでいます。ui: waitlist（date＝希望の日・menu_code・staff_id、時間の希望があれば from_time・to_time）を出してください' }
+  }
   switch (u.type) {
     case 'none': case 'handoff': return { ok: true, say, ui: { type: u.type } }
     case 'menus': {
@@ -560,6 +570,18 @@ function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: M
     case 'confirm_cancel':
       if (!resOk(u.reservation_id)) return { ok: false, error: '取り消す予約が my_reservations にありません。my_reservations で確かめてください' }
       return { ok: true, say, ui: { type: 'confirm_cancel', reservation_id: u.reservation_id as string } }
+    case 'waitlist': {
+      if (!menuOk(u.menu_code)) return { ok: false, error: 'waitlist の menu_code がメニュー表にありません' }
+      const today = jstParts(ctx.now).date
+      const date = typeof u.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(u.date) ? u.date : heard.dates[0]
+      if (!date || date < today || date > addDays(today, 60)) return { ok: false, error: 'waitlist の date（YYYY-MM-DD、今日から60日以内）を書いてください' }
+      if (!staffOk(u.staff_id)) return { ok: false, error: 'staff_id がスタッフ表にありません' }
+      const hm = (v: unknown) => (typeof v === 'string' && /^\d{2}:\d{2}$/.test(v) ? v : null)
+      const from = hm(u.from_time) ?? '00:00'
+      const to = hm(u.to_time) ?? '23:59'
+      if (from >= to) return { ok: false, error: 'waitlist の from_time は to_time より前にしてください' }
+      return { ok: true, say, ui: { type: 'waitlist', menu_code: u.menu_code, staff_id: staffOf(u.staff_id), date, from, to } }
+    }
     case 'reservations': {
       const ids = (Array.isArray(u.reservation_ids) ? u.reservation_ids : []).filter(resOk) as string[]
       if (ids.length === 0) return { ok: false, error: 'reservation_ids が my_reservations にありません' }
