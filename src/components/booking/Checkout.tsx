@@ -23,7 +23,7 @@ const METHODS: { id: PaymentMethod; label: string }[] = [
 type Line = SaleLine & { key: number }
 let keySeq = 0
 
-export function Checkout({ api, customers, reservationId, clientId = null, initialTicketIds, ensureActor, onClose, onDone }: {
+export function Checkout({ api, customers, reservationId, clientId = null, initialTicketIds, ensureActor, onClose, onDone, quick = false }: {
   api: CheckoutApi
   /** 予約なしの会計で顧客を探す */
   customers?: CustomerApi
@@ -36,7 +36,11 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   ensureActor: () => boolean
   onClose: () => void
   onDone: (sale: Sale) => void
+  /** 店舗端末で会員QRを読んだあと：画面の中に出す短い会計。メニューごとの金額をその場で入れて確定する（担当で料金が変わるため）。
+   *  メニューの追加・値引きは「メニューの追加・値引き」から（ふつうの会計と同じ内容に広がる） */
+  quick?: boolean
 }) {
+  const [detail, setDetail] = useState(!quick)
   const [ctx, setCtx] = useState<CheckoutContext | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [client, setClient] = useState<{ id: string; name: string } | null | undefined>(undefined)
@@ -198,13 +202,15 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="会計" style={{ position: 'fixed', inset: 0, zIndex: 950, background: C.bg, color: C.text, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px', borderBottom: `1px solid ${C.line}` }}>
+    <div {...(quick ? { 'aria-label': 'お会計' } : { role: 'dialog', 'aria-modal': true, 'aria-label': '会計' })}
+      style={quick ? { marginTop: 16, padding: 16, borderRadius: 14, background: C.bg, color: C.text, fontFamily: SANS, textAlign: 'left', border: `1px solid ${C.line}` }
+        : { position: 'fixed', inset: 0, zIndex: 950, background: C.bg, color: C.text, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
+      {!quick && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px', borderBottom: `1px solid ${C.line}` }}>
         <button type="button" disabled={busy} onClick={() => { if (!submitting.current) onClose() }} style={{ ...linkStyle, textDecoration: 'none', color: C.text, fontSize: 15 }}>‹ 戻る</button>
         <span style={{ fontSize: 13, color: C.mute }}>{ctx?.reservation ? '会計' : '店頭会計'}</span>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 20px 24px' }}>
+      </div>}
+      <div style={quick ? undefined : { flex: 1, overflowY: 'auto' }}>
+        <div style={quick ? undefined : { maxWidth: 640, margin: '0 auto', padding: '20px 20px 24px' }}>
           {attemptError ? <p role="alert" style={{ color: C.danger }}>{attemptError}</p> : attempt ? (
             <section aria-label="前の会計の確認">
               <h1 style={{ fontSize: 22, fontWeight: 600 }}>{attempt.result ? '前回のお会計' : '会計の完了を確認'}</h1>
@@ -236,7 +242,14 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               {/* 明細 */}
               <div style={{ marginTop: 16, borderTop: `1px solid ${C.text}` }}>
                 {lines.length === 0 && <p style={{ padding: '14px 0', fontSize: 14, color: C.mute }}>メニュー・商品を追加してください</p>}
-                {lines.map(l => (
+                {!detail ? lines.map(l => (
+                  <label key={l.key} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
+                    <span style={{ fontSize: 15 }}>{l.name}{l.quantity > 1 ? <span style={{ color: C.sub }}>{` ×${l.quantity}`}</span> : null}</span>
+                    <input value={String(l.unit_price)} inputMode="numeric" aria-label={`${l.name}の金額`}
+                      onChange={e => { const v = parseInt(e.target.value.replace(/\D/g, '') || '0', 10); update(l.key, { unit_price: v, discount: Math.min(l.discount, v * l.quantity) }) }}
+                      style={{ ...inputStyle, fontSize: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
+                  </label>
+                )) : lines.map(l => (
                   <div key={l.key} style={{ borderBottom: `1px solid ${C.line}` }}>
                     <button type="button" onClick={() => setEditing(editing === l.key ? null : l.key)} aria-expanded={editing === l.key}
                       style={{ ...lineBtn, borderBottom: 'none' }}>
@@ -269,8 +282,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     )}
                   </div>
                 ))}
-                {adding ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
-                  : <button type="button" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button>}
+                {adding || (!detail && lines.length === 0) ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
+                  : detail ? <button type="button" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button> : null}
               </div>
 
               {/* クーポン（App 会員）・値引き */}
@@ -290,7 +303,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   })}
                 </div>
               )}
-              {manual ? (
+              {!detail ? (
+                <button type="button" onClick={() => setDetail(true)} style={{ ...linkStyle, display: 'flex' }}>メニューの追加・値引き</button>
+              ) : manual ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px auto', gap: 10, alignItems: 'end', padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
                   <label><span style={smallLabel}>値引きの理由</span><input value={manual.label} onChange={e => setManual({ ...manual, label: e.target.value })} maxLength={40} style={inputStyle} /></label>
                   <label><span style={smallLabel}>金額</span><input value={manual.amount} onChange={e => setManual({ ...manual, amount: e.target.value.replace(/\D/g, '') })} inputMode="numeric" style={inputStyle} /></label>
@@ -365,8 +380,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
         </div>
       </div>
       {(ctx || attempt) && !attemptError && (
-        <div style={{ flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
-          <div style={{ maxWidth: 640, margin: '0 auto' }}>
+        <div style={quick ? { marginTop: 16 } : { flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
+          <div style={quick ? undefined : { maxWidth: 640, margin: '0 auto' }}>
             <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
