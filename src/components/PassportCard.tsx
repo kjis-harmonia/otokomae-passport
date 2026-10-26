@@ -227,7 +227,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
               color: '#9a7a2e', fontFamily: 'monospace',
               marginBottom: 16, whiteSpace: 'nowrap', overflow: 'hidden',
             }}>
-              GINJIRO OFFICIAL MEMBER CARD
+              二代目銀二郎 会員証
             </p>
 
             {/* Main row */}
@@ -270,7 +270,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   marginBottom: 12,
                   whiteSpace: 'nowrap',
                 }}>
-                  ID · {displayId}
+                  会員番号 {displayId}
                 </p>
 
                 {/* Divider */}
@@ -287,7 +287,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                     color: '#9a7a2e',
                     fontFamily: 'monospace', marginBottom: 5,
                   }}>
-                    LAST VISIT
+                    前回のご来店
                   </p>
                   <p style={{
                     fontFamily: SERIF,
@@ -368,7 +368,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   marginBottom: 5,
                   fontFamily: 'monospace',
                 }}>
-                  CURRENT RESERVATION
+                  ご予約
                 </p>
                 <p style={{
                   fontFamily: SERIF,
@@ -480,7 +480,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
           color: 'rgba(201,162,74,0.82)',
           marginBottom: 20, fontFamily: 'monospace',
         }}>
-          GINJIRO MEMBER QR — TAP TO CLOSE
+          会員QR（タップで閉じる）
         </p>
 
         <div style={{
@@ -521,7 +521,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
             fontSize: 13, color: 'rgba(230,202,101,0.90)',
             letterSpacing: '0.12em', fontFamily: 'monospace',
           }}>
-            ID · {userId.slice(0, 24)}
+            会員番号 {userId.slice(0, 24)}
           </p>
           {shownReservation && (
             <div style={{

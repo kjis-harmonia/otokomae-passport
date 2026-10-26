@@ -131,7 +131,7 @@ export function MemberPassportCard({ name, userId }: Props) {
               fontSize: 12, fontWeight: 700, letterSpacing: '0.18em',
               color: 'rgba(230,210,140,0.88)', fontFamily: 'monospace', marginBottom: 16,
             }}>
-              GINJIRO OFFICIAL MEMBER CARD
+              二代目銀二郎 会員証
             </p>
 
             {/* Main row */}
