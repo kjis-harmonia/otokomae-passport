@@ -1,4 +1,4 @@
-// 2回目以降のお客様への最初のひとこと（「おかえりなさい！前回のパンチパーマから13日。明日までメンテナンスカットが使えます」）。
+// 2回目以降のお客様への最初のひとこと（執事の口調：「おかえりなさいませ。前回のご来店から13日でございます。…それとも、またパンチパーマになさいますか？」）。
 //   来店の履歴：来店の記録（QR の来店登録ごと・メニューつき、customer_recent_visits）＋記録の無い日の過去の予約。新しい方から5回
 //   最後の来店日：QR で来店登録した日（customer_get_last_visit）と、履歴のいちばん新しい日の新しい方
 //   前回のメニュー：その日のメニュー（分かるときだけ）
@@ -67,13 +67,21 @@ export function maintenanceDeadline(left: number, now = Date.now()): string {
   return `あと${left}日（${d.getUTCMonth() + 1}月${d.getUTCDate()}日まで）`
 }
 
-/** 画面と読み上げの言葉 */
-export function welcomeText(w: Welcome): { lines: string[]; speech: string } {
-  const since = w.days === 0 ? '今日はご来店ありがとうございました！'
-    : `前回の${w.lastMenu ? w.lastMenu.name : 'ご来店'}から${w.days}日経ちました。`
-  const lines = [since]
-  if (w.maintenanceLeft != null) lines.push(`${maintenanceDeadline(w.maintenanceLeft)}、メンテナンスカットが使えます！`)
-  else if (w.usual[0]) lines.push(`いつもの${w.usual[0].name}はいかがですか？`)
-  const ask = 'ご予約はどうしますか？'
-  return { lines, speech: `おかえりなさい！${lines.join('')}${ask}` }
+/** 画面と読み上げの言葉。来店したことのあるお客様には執事の口調で（10/27 慶一郎さん）
+ *  例：「おかえりなさいませ。前回のご来店から13日でございます。まもなくメンテナンスカットのご予約ができなくなります（10月28日まで）。それとも、またパンチパーマになさいますか？」 */
+export function welcomeText(w: Welcome, now = Date.now()): { title: string; lines: string[]; speech: string } {
+  const title = 'おかえりなさいませ。'
+  const lines = [w.days === 0 ? '本日はご来店ありがとうございました。' : `前回のご来店から${w.days}日でございます。`]
+  const usual = w.usual.find(m => m.code !== MAINTENANCE_MENU.code)
+  if (w.maintenanceLeft != null) {
+    const left = w.maintenanceLeft
+    const end = new Date(now + 9 * 3600000 + left * 86400000)
+    const until = `${end.getUTCMonth() + 1}月${end.getUTCDate()}日`
+    lines.push(left === 0 ? 'メンテナンスカットのご予約は、本日までとなります。'
+      : left <= 3 ? `まもなくメンテナンスカットのご予約ができなくなります（${left === 1 ? '明日' : until}まで）。`
+      : `メンテナンスカットのご予約は、${until}までお取りできます。`)
+    lines.push(usual ? `それとも、また${usual.name}になさいますか？` : 'メンテナンスカットでお取りいたしましょうか？')
+  } else if (usual) lines.push(`また${usual.name}になさいますか？`)
+  else lines.push('ご予約はいかがいたしましょう？')
+  return { title, lines, speech: `${title}${lines.join('')}` }
 }
