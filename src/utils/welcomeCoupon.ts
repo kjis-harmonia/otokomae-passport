@@ -1,9 +1,11 @@
 import type { TicketRow } from '../data/ticket'
 
-export const WELCOME_COUPON_TITLE = '特殊パーマ Welcomeクーポン'
+export const WELCOME_COUPON_TITLE = 'パーマ Welcomeクーポン'
+/** 10/27 までの名前（配ってある券もこの名前のことがある） */
+export const WELCOME_COUPON_LEGACY_TITLE = '特殊パーマ Welcomeクーポン'
 export const WELCOME_COUPON_AMOUNT = 2000
 export const WELCOME_COUPON_ISSUED_BY = 'system-welcome'
-export const WELCOME_COUPON_MEMO = '対象: 特殊パーマ / 平日のみ（土日利用不可） / 新規のお客様限定'
+export const WELCOME_COUPON_MEMO = '対象: パーマ全種類（パーマのセットを含む） / 平日のみ（土日利用不可） / 新規のお客様限定'
 export const WELCOME_COUPON_WEEKEND_MESSAGE =
   'Welcomeクーポンは平日のみ利用できます。土日は利用できません。'
 
@@ -12,7 +14,7 @@ export function isWelcomeCouponTicket(
 ): boolean {
   return (
     ticket.issued_by === WELCOME_COUPON_ISSUED_BY ||
-    (ticket.title === WELCOME_COUPON_TITLE && ticket.amount === WELCOME_COUPON_AMOUNT)
+    ((ticket.title === WELCOME_COUPON_TITLE || ticket.title === WELCOME_COUPON_LEGACY_TITLE) && ticket.amount === WELCOME_COUPON_AMOUNT)
   )
 }
 
