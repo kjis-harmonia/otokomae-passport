@@ -1213,6 +1213,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                 ) : (
                   <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={`${m.duration_min}分・${yen(m)}`} note="いつもの" />
                 ))}
+                {/* いつもの・メンテナンスカットだけしか選べないと思われないように（10/27 慶一郎さん） */}
+                <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true } })} title="ほかのメニューから選ぶ" detail="カット・パーマ・カラーなど" />
                 <Row onClick={() => setStep({ k: 'askWhen' })} title="日時を伝えて予約する" muted />
               </List>
             )}
