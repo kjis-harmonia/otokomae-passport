@@ -12,6 +12,7 @@ import {
 import { PrimaryButton } from './ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
 import { playCue } from '../../audio/cue'
+import { Banknote, Wallet } from 'lucide-react'
 import { isWelcomeCouponTicket } from '../../utils/welcomeCoupon'
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
@@ -158,7 +159,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const ginpayAccount = ginpayAccounts.length === 1 ? ginpayAccounts[0] : ginpayAccounts.find(a => a.id === ginpayAccountId) ?? null
   const ginpayShort = method === 'ginpay' && !!ginpayAccount && ginpayAccount.balance < totals.total
   const ginpayOk = method !== 'ginpay' || (!!ginpayAccount && totals.total > 0 && !ginpayShort)
-  const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && !!method && totals.total >= 0
+  const optionsReady = lines.every(l => l.source !== 'manual' || (l.name.trim() !== '' && l.unit_price > 0))
+  const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && optionsReady && !!method && totals.total >= 0
     && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy
 
   function update(key: number, patch: Partial<SaleLine>) { setLines(ls => ls.map(l => l.key === key ? { ...l, ...patch } : l)) }
@@ -167,12 +169,28 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     setLines(ls => [...ls, { key: ++keySeq, source: src, ref_id: item.id, name: item.name, category: item.category, unit_price: price, quantity: 1, discount: 0 }])
     setAdding(false)
   }
+  // 券で引けるのは料金（ほかの値引きを引いたあと）まで。5,000円の会計に 6,000円分は使えない（10/28 慶一郎さん）
+  const ticketRoom = Math.max(0, totals.subtotal - lines.reduce((n, l) => n + l.discount, 0) - manualAmount)
+  const ticketSum = chosenTickets.reduce((n, t) => n + t.amount, 0)
+  const ticketFits = (t: { id: string; amount: number; type: string }) =>
+    ticketIds.includes(t.id) || (t.type === 'coupon' ? t.amount <= ticketRoom : ticketSum - chosenTickets.filter(x => x.type === 'coupon').reduce((n, x) => n + x.amount, 0) + t.amount <= ticketRoom)
   function toggleTicket(id: string, type: string) {
+    const t = tickets.find(x => x.id === id)
+    if (t && !ticketFits(t)) return
     // 割引券・漢トク券は何枚でも種類をまたいでも使える。メンテナンスクーポンだけはほかの券と一緒に使えない
     setTicketIds(ids => ids.includes(id) ? ids.filter(x => x !== id)
       : type === 'coupon' ? [id]
       : [...ids.filter(x => tickets.find(t => t.id === x)?.type !== 'coupon'), id])
   }
+  // メニューが入っていて、選んだ券が料金を超えたら（QR で選んできた券・料金を下げたとき）、選んだ順に入るところまで残す
+  const overKey = lines.length > 0 && ticketSum > ticketRoom ? `${ticketRoom}:${ticketIds.join(',')}` : ''
+  useEffect(() => {
+    if (!overKey) return
+    let sum = 0
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTicketIds(ids => ids.filter(id => { const a = tickets.find(t => t.id === id)?.amount ?? 0; if (sum + a > ticketRoom) return false; sum += a; return true }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overKey])
 
   // 予約の会計：銀Pay の仮支払いを読み込む
   const holdReservationId = ctx?.reservation?.id ?? null
@@ -292,10 +310,18 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 {detail && lines.length === 0 && <p style={{ padding: '14px 0', fontSize: 14, color: C.mute }}>メニュー・商品を追加してください</p>}
                 {!detail ? lines.map(l => (
                   <div key={l.key} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
-                    <span style={{ minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 15 }}>{l.name}{l.quantity > 1 ? <span style={{ color: C.sub }}>{` ×${l.quantity}`}</span> : null}</span>
-                      {!ctx.reservation && lines.length === 1 && <button type="button" onClick={() => setLines([])} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>変える</button>}
-                    </span>
+                    {l.source === 'manual' ? (
+                      <span style={{ minWidth: 0 }}>
+                        <input value={l.name} onChange={e => update(l.key, { name: e.target.value.slice(0, 40) })} placeholder="オプションの名前（例：鼻毛抜き）" aria-label="オプションの名前"
+                          style={{ ...inputStyle, fontSize: 15 }} />
+                        <button type="button" onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>消す</button>
+                      </span>
+                    ) : (
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 15 }}>{l.name}{l.quantity > 1 ? <span style={{ color: C.sub }}>{` ×${l.quantity}`}</span> : null}</span>
+                        {!ctx.reservation && lines.filter(x => x.source !== 'manual').length === 1 && <button type="button" onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>変える</button>}
+                      </span>
+                    )}
                     <input value={String(l.unit_price)} inputMode="numeric" aria-label={`${l.name}の金額`}
                       onChange={e => { const v = parseInt(e.target.value.replace(/\D/g, '') || '0', 10); update(l.key, { unit_price: v, discount: Math.min(l.discount, v * l.quantity) }) }}
                       style={{ ...inputStyle, fontSize: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
@@ -333,7 +359,12 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     )}
                   </div>
                 ))}
-                {!detail && lines.length === 0 ? <QuickMenuSelect api={api} startsAt={ctx.reservation?.starts_at ?? null} personal={personal} onPick={item => addItem('service_menu', item)} />
+                {/* メニュー以外のもの（鼻毛抜きなど）を金額を入れて足す（10/28 慶一郎さん） */}
+                {!detail && lines.some(l => l.source !== 'manual') && (
+                  <button type="button" onClick={() => setLines(ls => [...ls, { key: ++keySeq, source: 'manual', ref_id: '', name: '', category: 'option', unit_price: 0, quantity: 1, discount: 0 }])}
+                    style={{ ...linkStyle, display: 'flex', minHeight: 40 }}>＋ オプション（金額を入れる）</button>
+                )}
+                {!detail && !lines.some(l => l.source !== 'manual') ? <QuickMenuSelect api={api} startsAt={ctx.reservation?.starts_at ?? null} personal={personal} onPick={item => addItem('service_menu', item)} />
                   : adding ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
                   : detail ? <button type="button" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button> : null}
               </div>
@@ -344,12 +375,13 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   {tickets.map(t => {
                     const on = ticketIds.includes(t.id)
                     const permOnly = !hasPerm && welcomeIds.includes(t.id)
-                    const off = !!t.blocked || permOnly
+                    const over = !on && lines.length > 0 && !ticketFits(t)
+                    const off = !!t.blocked || permOnly || over
                     return (
                       <button key={t.id} type="button" disabled={off} onClick={() => toggleTicket(t.id, t.type)} aria-pressed={on} style={{ ...lineBtn, opacity: off ? 0.55 : 1, cursor: off ? 'default' : 'pointer' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                           <span aria-hidden="true" style={{ width: 18, height: 18, flexShrink: 0, boxSizing: 'border-box', borderRadius: 4, border: `1.5px solid ${on ? C.text : C.lineStrong}`, background: on ? C.text : 'transparent', color: C.bg, fontSize: 13, lineHeight: '15px', textAlign: 'center', fontWeight: 700 }}>{on ? '✓' : ''}</span>
-                          <span style={{ fontSize: 14 }}>{t.title}{t.blocked ? <span style={{ fontSize: 12, color: C.mute }}>{` ${TICKET_BLOCK_LABEL[t.blocked]}`}</span> : permOnly && <span style={{ fontSize: 12, color: C.mute }}> パーマのときだけ使えます</span>}</span>
+                          <span style={{ fontSize: 14 }}>{t.title}{t.blocked ? <span style={{ fontSize: 12, color: C.mute }}>{` ${TICKET_BLOCK_LABEL[t.blocked]}`}</span> : permOnly ? <span style={{ fontSize: 12, color: C.mute }}> パーマのときだけ使えます</span> : over && <span style={{ fontSize: 12, color: C.mute }}> 料金を超えるので使えません</span>}</span>
                         </span>
                         <span style={{ fontSize: 14, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{t.amount ? `−${yen(t.amount)}` : ''}</span>
                       </button>
@@ -369,41 +401,56 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
 
               {/* 合計。QR を読んだあとの短い会計は、券を引いたあとの「お受け取り金額」を大きく（現金でいくら受け取るか迷わないように・10/27 慶一郎さん） */}
               {quick ? (() => {
-                const ticketSum = chosenTickets.reduce((n, t) => n + t.amount, 0)
                 const otherDiscount = totals.discount - ticketSum
-                const row = { display: 'flex', justifyContent: 'space-between', fontSize: 15, lineHeight: 1.9, fontVariantNumeric: 'tabular-nums' } as const
                 const viaGinpay = method === 'ginpay'
-                const heading = lines.length === 0 ? 'メニューを選ぶと金額が出ます' : !method ? 'お支払い方法を確かめています…' : viaGinpay ? '銀Payで支払う金額（現金は受け取りません）' : '現金でお受け取り'
+                const ready = lines.length > 0 && !!method
+                const gold = '#c9a45c'
+                const accent = viaGinpay ? '#7fc4a4' : gold
+                const title = !lines.length ? 'お会計' : !method ? 'お支払い方法を確かめています…' : viaGinpay ? (hold ? '銀Pay 仮支払い済み' : '銀Pay で支払い') : '現金でのお支払い'
+                const note = !ready ? 'メニューを選ぶと金額が出ます'
+                  : viaGinpay
+                    ? hold ? `予約のときに ${yen(hold.amount)} を仮支払いしています。現金は受け取りません。${totals.total > hold.amount ? `差額 ${yen(totals.total - hold.amount)} も銀Pay の残高から。` : ''}` : '銀Pay の残高から支払います。現金は受け取りません。'
+                    : '銀Pay の仮支払いはありません。現金で受け取ってから確定してください。'
+                const totalLabel = !ready ? '' : viaGinpay ? '銀Payで支払う金額' : '現金でお受け取り'
+                const Icon = viaGinpay ? Wallet : Banknote
+                const row = { display: 'flex', alignItems: 'baseline', gap: 10, fontSize: 14, lineHeight: 2, fontVariantNumeric: 'tabular-nums' } as const
+                const leader = { flex: 1, borderBottom: '1px dotted rgba(255,255,255,0.22)', transform: 'translateY(-4px)' } as const
                 return (
-                  <>
-                  {method && lines.length > 0 && (
-                    <div role="status" style={{ marginTop: 14, padding: '12px 16px', borderRadius: 14, lineHeight: 1.6,
-                      background: viaGinpay ? 'rgba(36,107,82,0.10)' : 'rgba(168,130,63,0.14)', border: `2px solid ${viaGinpay ? '#246b52' : '#a8823f'}` }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: viaGinpay ? '#246b52' : '#7a5a1f' }}>
-                        {viaGinpay ? (hold ? '銀Pay 仮支払い済み' : '銀Pay で支払い') : '現金でのお支払い'}
-                      </div>
-                      <div style={{ fontSize: 14, color: C.text }}>
-                        {viaGinpay
-                          ? hold
-                            ? <>予約のときに {yen(hold.amount)} を仮支払いしています。現金は受け取りません。「会計を確定」でお支払いが完了します。{totals.total > hold.amount && <><br /><b>差額 {yen(totals.total - hold.amount)}</b> も銀Pay の残高から支払います。</>}</>
-                            : <>銀Pay の残高から支払います（仮支払いはありません）。現金は受け取りません。</>
-                          : <>銀Pay の仮支払いはありません。下の金額を<b>現金で受け取ってから</b>「会計を確定」を押してください。</>}
+                  <div role="status" aria-label={`${title} ${totalLabel} ${ready ? yen(Math.max(0, totals.total)) : ''}`} style={{
+                    marginTop: 16, borderRadius: 18, overflow: 'hidden', color: '#f4efe4',
+                    background: 'linear-gradient(160deg, #2b2e2c 0%, #161817 100%)', border: `1px solid ${gold}66`,
+                    boxShadow: '0 10px 30px rgba(20,22,21,0.28), inset 0 1px 0 rgba(255,255,255,0.06)',
+                  }}>
+                    {/* 上：支払い方法（いちばん大事なので色つきで） */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: `1px solid ${gold}33`,
+                      background: ready ? `linear-gradient(90deg, ${accent}26, transparent)` : 'transparent' }}>
+                      <span style={{ width: 38, height: 38, borderRadius: 19, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: ready ? `${accent}22` : 'rgba(255,255,255,0.06)', border: `1px solid ${ready ? accent : 'rgba(255,255,255,0.18)'}` }}>
+                        <Icon size={19} strokeWidth={1.8} color={ready ? accent : 'rgba(255,255,255,0.6)'} />
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: '"Shippori Mincho","Noto Serif JP",serif', fontSize: 19, fontWeight: 700, letterSpacing: '0.06em', color: ready ? accent : '#f4efe4' }}>{title}</div>
+                        <div style={{ fontSize: 12, lineHeight: 1.6, color: 'rgba(244,239,228,0.72)' }}>{note}</div>
                       </div>
                     </div>
-                  )}
-                  <div role="status" aria-label={`${heading} ${yen(Math.max(0, totals.total))}`} style={{ marginTop: 14, padding: '14px 18px 16px', borderRadius: 16, background: C.text, color: C.bg }}>
-                    {(totals.discount > 0) && (
-                      <div style={{ paddingBottom: 8, marginBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.25)' }}>
-                        <div style={row}><span>料金</span><span>{yen(totals.subtotal)}</span></div>
-                        {chosenTickets.map(t => <div key={t.id} style={row}><span>{t.title}</span><span>−{yen(t.amount)}</span></div>)}
-                        {otherDiscount > 0 && <div style={row}><span>値引き</span><span>−{yen(otherDiscount)}</span></div>}
+                    {ready && (
+                      <div style={{ padding: '12px 18px 18px' }}>
+                        {totals.discount > 0 && (
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={row}><span>料金</span><span style={leader} /><span>{yen(totals.subtotal)}</span></div>
+                            {chosenTickets.map(t => <div key={t.id} style={{ ...row, color: gold }}><span>{t.title}</span><span style={leader} /><span>−{yen(t.amount)}</span></div>)}
+                            {otherDiscount > 0 && <div style={{ ...row, color: gold }}><span>値引き</span><span style={leader} /><span>−{yen(otherDiscount)}</span></div>}
+                          </div>
+                        )}
+                        <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${gold}, transparent)`, margin: '2px 0 12px' }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+                          <span style={{ fontSize: 13, letterSpacing: '0.12em', color: 'rgba(244,239,228,0.78)', whiteSpace: 'nowrap' }}>{totalLabel}</span>
+                          <span style={{ fontFamily: '"Shippori Mincho","Noto Serif JP",serif', fontSize: 52, fontWeight: 700, lineHeight: 1.1, letterSpacing: '0.02em', fontVariantNumeric: 'tabular-nums', textAlign: 'right',
+                            background: 'linear-gradient(180deg, #fff6df 0%, #e2c27f 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>{yen(Math.max(0, totals.total))}</span>
+                        </div>
                       </div>
                     )}
-                    <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.85 }}>{heading}</div>
-                    {/* メニューが無いときに ¥0 と出すと「0円で会計」と見えてしまう（10/28） */}
-                    <div style={{ fontSize: 46, fontWeight: 700, lineHeight: 1.15, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: totals.total < 0 ? '#ff9b9b' : C.bg }}>{lines.length === 0 ? '—' : yen(Math.max(0, totals.total))}</div>
                   </div>
-                  </>
                 )
               })() : (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.text}` }}>
