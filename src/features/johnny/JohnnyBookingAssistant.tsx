@@ -1022,7 +1022,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const confirmPrice = useMemo((): { key: string; usable: TicketRow[]; selected: TicketRow[]; price: PriceBreakdown } | null => {
     if (step.k !== 'confirm' || step.change) return null
     const key = `${step.menu.code}|${step.slot.starts_at}`
-    const usable = usableTickets(myTickets, step.slot.starts_at)
+    const usable = usableTickets(myTickets, step.slot.starts_at, step.menu.code)
     const ids = couponPick.key === key ? couponPick.ids : []
     const selected = usable.filter(t => ids.includes(t.id))
     const price = priceFor(step.menu.code, step.menu.price, step.slot.starts_at, selected)
@@ -1148,7 +1148,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         }
         return {
         title: step.change ? 'この日時に変更しますか？' : 'この日時でお間違いないですか？',
-        speech: `${step.say ?? `${spokenVisit(step.slot.starts_at)}、${step.menu.name}でお取りできます。この日時でお間違いないですか？`}${couponSpeech(step.change ? null : priceFor(step.menu.code, step.menu.price, step.slot.starts_at, []), step.change ? 0 : usableTickets(myTickets, step.slot.starts_at).length)}`,
+        speech: `${step.say ?? `${spokenVisit(step.slot.starts_at)}、${step.menu.name}でお取りできます。この日時でお間違いないですか？`}${couponSpeech(step.change ? null : priceFor(step.menu.code, step.menu.price, step.slot.starts_at, []), step.change ? 0 : usableTickets(myTickets, step.slot.starts_at, step.menu.code).length)}`,
         listen: true,
         }
       }

@@ -150,6 +150,7 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   mixed_types: 'メンテナンスクーポンは、ほかの券と一緒に使えません。',
   transfer_pending: '譲渡中のクーポンは使えません。',
   welcome_weekend: 'Welcomeクーポンは平日のみ使えます。',
+  welcome_perm_only: 'Welcomeクーポンはパーマのメニューのときだけ使えます。',
   daily_rule: '本日はすでに別の割引を利用済みです。',
   stylist_required: '担当を選んでください。',
   invalid_payment_method: '支払方法を選んでください。',
