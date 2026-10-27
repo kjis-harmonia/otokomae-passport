@@ -12,6 +12,7 @@ import {
 import { PrimaryButton } from './ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
 import { playCue } from '../../audio/cue'
+import { isWelcomeCouponTicket } from '../../utils/welcomeCoupon'
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
 // 「会計を確定」で初めて売上になる（確定は DB の1トランザクション。予約は完了になる）。毎日何十回も使うので、文字と金額だけで構成する。
@@ -55,8 +56,11 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   useEffect(() => { latestInitial.current = initialTicketIds }, [initialTicketIds])
   const initialKey = (initialTicketIds ?? []).join(',')
   const [manual, setManual] = useState<{ amount: string; label: string } | null>(null)
-  // 短い会計は銀Pay だけで払う（10/26 慶一郎さん）。最初から GINPay を選んでおく
-  const [method, setMethod] = useState<PaymentMethod | null>(quick ? 'ginpay' : null)
+  // 短い会計：予約のときに銀Pay で仮支払いしていれば銀Pay、していなければ現金を自動で選ぶ（10/27 慶一郎さん：どちらか分からなかった）
+  //   仮支払いを確かめるまでは選ばない。スタッフが選び直したら、そのまま
+  const [method, setMethod] = useState<PaymentMethod | null>(null)
+  const methodPicked = useRef(false)
+  const [holdChecked, setHoldChecked] = useState(false)
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [ginpayAccountId, setGinpayAccountId] = useState<string | null>(null)
@@ -175,7 +179,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   useEffect(() => {
     if (!holdReservationId || !api.ginpayHold) return
     let alive = true
-    api.ginpayHold(holdReservationId).then(h => { if (alive) setHold(h) }).catch(() => {})
+    api.ginpayHold(holdReservationId).then(h => { if (alive) { setHold(h); setHoldChecked(true) } }).catch(() => { if (alive) setHoldChecked(true) })
     return () => { alive = false }
   }, [holdReservationId, api])
   // 仮支払いがお会計以内なら、最初の1回だけ GINPay とその口座を選んでおく（スタッフが変えたら戻さない）
@@ -186,6 +190,26 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     setMethod(m => m ?? 'ginpay')
     setGinpayAccountId(id => id ?? hold.account_id)
   }, [hold, holdCovers])
+
+  // 短い会計の自動の支払い方法（仮支払いを確かめ終わってから1回だけ）
+  const holdKnown = !!ctx && (!holdReservationId || holdChecked)
+  useEffect(() => {
+    if (!quick || !holdKnown || methodPicked.current) return
+    methodPicked.current = true
+    setMethod(hold && clientInfo ? 'ginpay' : 'cash') // 仮支払いを確かめ終わったときに1回だけ
+    if (hold) setGinpayAccountId(id => id ?? hold.account_id) // eslint-disable-line react-hooks/set-state-in-effect
+  }, [quick, holdKnown, hold, clientInfo])
+  function pickMethod(m: PaymentMethod) { methodPicked.current = true; setMethod(m) }
+
+  // Welcomeクーポン（初回パーマ 2,000円引き）はパーマ（セットを含む）のときだけ（10/27 慶一郎さん：カットでも使えていた）
+  const hasPerm = lines.some(l => !!l.ref_id && /^(perm|set)-/.test(l.ref_id))
+  const welcomeIds = tickets.filter(t => isWelcomeCouponTicket({ title: t.title, amount: t.amount, issued_by: '' })).map(t => t.id)
+  const welcomeKey = hasPerm ? '' : welcomeIds.filter(id => ticketIds.includes(id)).join(',')
+  useEffect(() => {
+    if (!welcomeKey) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTicketIds(ids => ids.filter(id => !welcomeKey.split(',').includes(id)))
+  }, [welcomeKey])
 
   async function confirm() {
     if (submitting.current || attemptError || !ensureActor()) return
@@ -217,7 +241,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     try {
       await startNextCheckout(attempt.input.idempotency_key)
       setError(null); setSaleKey(idempotencyKey('checkout'))
-      setLines([]); setManual(null); setMethod(quick ? 'ginpay' : null); setTicketIds([]); setReload(n => n + 1)
+      setLines([]); setManual(null); setMethod(null); methodPicked.current = false; setTicketIds([]); setReload(n => n + 1)
     } catch (err) { setError(err instanceof Error ? err.message : '前の会計を確認できません。') }
   }
 
@@ -315,11 +339,13 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 <div style={{ marginTop: 8 }}>
                   {tickets.map(t => {
                     const on = ticketIds.includes(t.id)
+                    const permOnly = !hasPerm && welcomeIds.includes(t.id)
+                    const off = !!t.blocked || permOnly
                     return (
-                      <button key={t.id} type="button" disabled={!!t.blocked} onClick={() => toggleTicket(t.id, t.type)} aria-pressed={on} style={{ ...lineBtn, opacity: t.blocked ? 0.55 : 1, cursor: t.blocked ? 'default' : 'pointer' }}>
+                      <button key={t.id} type="button" disabled={off} onClick={() => toggleTicket(t.id, t.type)} aria-pressed={on} style={{ ...lineBtn, opacity: off ? 0.55 : 1, cursor: off ? 'default' : 'pointer' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                           <span aria-hidden="true" style={{ width: 18, height: 18, flexShrink: 0, boxSizing: 'border-box', borderRadius: 4, border: `1.5px solid ${on ? C.text : C.lineStrong}`, background: on ? C.text : 'transparent', color: C.bg, fontSize: 13, lineHeight: '15px', textAlign: 'center', fontWeight: 700 }}>{on ? '✓' : ''}</span>
-                          <span style={{ fontSize: 14 }}>{t.title}{t.blocked && <span style={{ fontSize: 12, color: C.mute }}>{` ${TICKET_BLOCK_LABEL[t.blocked]}`}</span>}</span>
+                          <span style={{ fontSize: 14 }}>{t.title}{t.blocked ? <span style={{ fontSize: 12, color: C.mute }}>{` ${TICKET_BLOCK_LABEL[t.blocked]}`}</span> : permOnly && <span style={{ fontSize: 12, color: C.mute }}> パーマのときだけ使えます</span>}</span>
                         </span>
                         <span style={{ fontSize: 14, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{t.amount ? `−${yen(t.amount)}` : ''}</span>
                       </button>
@@ -342,8 +368,26 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 const ticketSum = chosenTickets.reduce((n, t) => n + t.amount, 0)
                 const otherDiscount = totals.discount - ticketSum
                 const row = { display: 'flex', justifyContent: 'space-between', fontSize: 15, lineHeight: 1.9, fontVariantNumeric: 'tabular-nums' } as const
+                const viaGinpay = method === 'ginpay'
+                const heading = !method ? 'お支払い方法を確かめています…' : viaGinpay ? '銀Payで支払う金額（現金は受け取りません）' : '現金でお受け取り'
                 return (
-                  <div role="status" aria-label={`お受け取り金額 ${yen(Math.max(0, totals.total))}`} style={{ marginTop: 14, padding: '14px 18px 16px', borderRadius: 16, background: C.text, color: C.bg }}>
+                  <>
+                  {method && (
+                    <div role="status" style={{ marginTop: 14, padding: '12px 16px', borderRadius: 14, lineHeight: 1.6,
+                      background: viaGinpay ? 'rgba(36,107,82,0.10)' : 'rgba(168,130,63,0.14)', border: `2px solid ${viaGinpay ? '#246b52' : '#a8823f'}` }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: viaGinpay ? '#246b52' : '#7a5a1f' }}>
+                        {viaGinpay ? (hold ? '銀Pay 仮支払い済み' : '銀Pay で支払い') : '現金でのお支払い'}
+                      </div>
+                      <div style={{ fontSize: 14, color: C.text }}>
+                        {viaGinpay
+                          ? hold
+                            ? <>予約のときに {yen(hold.amount)} を仮支払いしています。現金は受け取りません。「会計を確定」でお支払いが完了します。{totals.total > hold.amount && <><br /><b>差額 {yen(totals.total - hold.amount)}</b> も銀Pay の残高から支払います。</>}</>
+                            : <>銀Pay の残高から支払います（仮支払いはありません）。現金は受け取りません。</>
+                          : <>銀Pay の仮支払いはありません。下の金額を<b>現金で受け取ってから</b>「会計を確定」を押してください。</>}
+                      </div>
+                    </div>
+                  )}
+                  <div role="status" aria-label={`${heading} ${yen(Math.max(0, totals.total))}`} style={{ marginTop: 14, padding: '14px 18px 16px', borderRadius: 16, background: C.text, color: C.bg }}>
                     {(totals.discount > 0) && (
                       <div style={{ paddingBottom: 8, marginBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.25)' }}>
                         <div style={row}><span>料金</span><span>{yen(totals.subtotal)}</span></div>
@@ -351,9 +395,10 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                         {otherDiscount > 0 && <div style={row}><span>値引き</span><span>−{yen(otherDiscount)}</span></div>}
                       </div>
                     )}
-                    <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.85 }}>お受け取り金額</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.85 }}>{heading}</div>
                     <div style={{ fontSize: 46, fontWeight: 700, lineHeight: 1.15, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: totals.total < 0 ? '#ff9b9b' : C.bg }}>{yen(Math.max(0, totals.total))}</div>
                   </div>
+                  </>
                 )
               })() : (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.text}` }}>
@@ -370,7 +415,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               </div>
               )}
 
-              {hold && (
+              {hold && !quick && (
                 <div role="status" style={{ margin: '0 0 10px', padding: '12px 14px', borderRadius: 12, lineHeight: 1.6, fontSize: 14,
                   background: totals.total <= hold.amount ? 'rgba(168,130,63,0.12)' : 'rgba(214,82,82,0.08)',
                   border: totals.total <= hold.amount ? '1px solid rgba(168,130,63,0.5)' : '1px solid rgba(214,82,82,0.45)' }}>
@@ -382,7 +427,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               )}
               <Row label="支払方法">
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {METHODS.filter(m => quick ? m.id === 'ginpay' : m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => setMethod(m.id)}>{m.label}</Choice>)}
+                  {METHODS.filter(m => quick ? m.id === 'ginpay' || m.id === 'cash' : m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => pickMethod(m.id)}>{quick && m.id === 'ginpay' ? '銀Pay' : m.label}</Choice>)}
                 </span>
               </Row>
               {/* 銀Pay は口座の持ち主（お客様）を選んだ会計だけ。選んでいないときに「無い」と迷わないよう一言 */}
@@ -425,7 +470,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       {(ctx || attempt) && !attemptError && (
         <div style={quick ? { marginTop: 16 } : { flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div style={quick ? undefined : { maxWidth: 640, margin: '0 auto' }}>
-            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : quick && method === 'cash' ? `現金 ${yen(Math.max(0, totals.total))} を受け取って会計を確定` : quick && method === 'ginpay' ? `銀Payで会計を確定 ${yen(Math.max(0, totals.total))}` : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
       )}
