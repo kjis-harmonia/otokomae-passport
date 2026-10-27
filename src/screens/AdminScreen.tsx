@@ -1138,7 +1138,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               </p>
               {!ticketsLoading && activeTickets.length > 0 && (
                 <p style={{ fontSize: 11, color: '#1c1f1d', marginBottom: 10, lineHeight: 1.6 }}>
-                  使用する割引券をタップして選択し、下の「使用確定」でまとめて使用します（同じ種別のみ）。
+                  使う券をタップして選ぶと、上のお会計の「お受け取り金額」から差し引かれ、「会計を確定」を押したときに使用済みになります（割引券と漢トク券は一緒に使えます。メンテナンスクーポンだけは単独）。
                 </p>
               )}
               {ticketsLoading ? (

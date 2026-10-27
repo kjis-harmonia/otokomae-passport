@@ -200,6 +200,10 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     if (hold) setGinpayAccountId(id => id ?? hold.account_id) // eslint-disable-line react-hooks/set-state-in-effect
   }, [quick, holdKnown, hold, clientInfo])
   function pickMethod(m: PaymentMethod) { methodPicked.current = true; setMethod(m) }
+  // 券で全額まかなえた（お支払い 0円）：銀Pay は 0円では払えないので現金（0円）で確定する（10/27：漢トク券だけで会計できなかった）
+  useEffect(() => {
+    if (quick && method === 'ginpay' && totals.total <= 0 && lines.length > 0) setMethod('cash') // eslint-disable-line react-hooks/set-state-in-effect
+  }, [quick, method, totals.total, lines.length])
 
   // Welcomeクーポン（初回パーマ 2,000円引き）はパーマ（セットを含む）のときだけ（10/27 慶一郎さん：カットでも使えていた）
   const hasPerm = lines.some(l => !!l.ref_id && /^(perm|set)-/.test(l.ref_id))
