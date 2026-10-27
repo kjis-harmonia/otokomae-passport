@@ -129,6 +129,8 @@ interface Props {
 
 /** 「戻る」で戻れる画面（読み込み中・送信中・終わった画面は数えない） */
 const BACKABLE = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'pickStaff', 'companionMenu', 'confirmParty', 'ai', 'askUsual', 'usualSaved'])
+/** 戻り先にできる画面。担当が決まっていない確認画面は、すぐ担当の画面に差し替わるので数えない（戻るとまた担当の画面になってしまう） */
+const canReturnTo = (s: Step) => BACKABLE.has(s.k) && !(s.k === 'confirm' && !s.staffChosen && !s.staffId)
 /** ここまで来たら、戻る先を忘れる（予約・キャンセルが終わった） */
 const FORGET = new Set<Step['k']>(['done', 'cancelled', 'unavailable', 'offer', 'offerGone'])
 /** 時間を選んだ画面（「時間を選び直す」の戻り先） */
@@ -276,14 +278,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const canBack = backList.length > 0
   useEffect(() => {
     const prev = shownRef.current
-    if (BACKABLE.has(step.k)) shownRef.current = step
+    if (canReturnTo(step)) shownRef.current = step
     if (goingBackRef.current) { goingBackRef.current = false; return }
     if (FORGET.has(step.k)) {
       historyRef.current = []; shownRef.current = null
       setBackList([]) // eslint-disable-line react-hooks/set-state-in-effect
       return
     }
-    if (!BACKABLE.has(step.k) || !prev || prev === step || prev.k === step.k) return
+    if (!canReturnTo(step) || !prev || prev === step || prev.k === step.k) return
     historyRef.current = [...historyRef.current, prev].slice(-12)
     setBackList(historyRef.current)
   }, [step])
@@ -1227,7 +1229,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <IconButton label="閉じる" onClick={onClose}><X size={22} strokeWidth={2} /></IconButton>
           {/* 考えている・送っている間は出さない（あとから届いた答えで戻った画面が上書きされないように） */}
-          {canBack && BACKABLE.has(step.k) && (
+          {canBack && canReturnTo(step) && (
             <button type="button" onClick={() => goBack()} aria-label="ひとつ前の画面に戻る" style={{
               height: 40, padding: '0 14px 0 8px', borderRadius: 20, border: 'none', background: C.fill, color: C.text,
               display: 'flex', alignItems: 'center', gap: 2, fontSize: 15, fontFamily: FONT, cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
