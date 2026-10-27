@@ -19,8 +19,7 @@ import { isWelcomeCouponBlockedToday, WELCOME_COUPON_WEEKEND_MESSAGE } from '../
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 import { isReservationForDate } from '../utils/currentReservation'
-import { VisitMenuPicker, type VisitInfo } from '../components/VisitMenuPicker'
-import { CheckoutSummary } from '../components/CheckoutSummary'
+import type { VisitInfo } from '../components/VisitMenuPicker'
 import { MemberCheckout } from '../components/MemberCheckout'
 import { resolveMemberQr } from '../utils/memberQrIdentity'
 import {
@@ -282,7 +281,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   // Checkin
   const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
-  const [visitInfo, setVisitInfo]         = useState<VisitInfo | null>(null)
+  const [, setVisitInfo]         = useState<VisitInfo | null>(null)
 
   // 既存会員のアプリ紐付けコード（6桁・10分有効・1回限り）
   const [bindCode, setBindCode]             = useState<{ code: string; expiresAt: string } | null>(null)
@@ -1069,8 +1068,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     <span style={{ fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.12em' }}>{fmtVisitDate(checkInDate)}</span><br />
                     として記録しました。
                   </p>
-                  {visitInfo && <VisitMenuPicker key={scannedData.userId} userId={scannedData.userId} info={visitInfo} staffName={staffId} />}
-                  {visitInfo && <CheckoutSummary info={visitInfo} selected={selectedTickets} />}
+                  {/* メニューはお会計の中で選ぶ（予約のメニューも「変える」で変えられ、今日のメニューに記録される）。上に別の選ぶ欄・古いお会計の枠は出さない（10/28 慶一郎さん） */}
                   {/* 券は会計確定と同時に使用済みにする。 */}
                   <MemberCheckout
                     key={scannedData.userId}

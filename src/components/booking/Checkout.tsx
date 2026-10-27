@@ -25,7 +25,7 @@ const METHODS: { id: PaymentMethod; label: string }[] = [
 type Line = SaleLine & { key: number }
 let keySeq = 0
 
-export function Checkout({ api, customers, reservationId, clientId = null, initialTicketIds, ensureActor, onClose, onDone, quick = false }: {
+export function Checkout({ api, customers, reservationId, clientId = null, initialTicketIds, ensureActor, onClose, onDone, quick = false, onMenuPicked }: {
   api: CheckoutApi
   /** 予約なしの会計で顧客を探す */
   customers?: CustomerApi
@@ -41,6 +41,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   /** 店舗端末で会員QRを読んだあと：画面の中に出す短い会計。メニューごとの金額をその場で入れて確定する（担当で料金が変わるため）。
    *  メニューの追加・値引きは「メニューの追加・値引き」から（ふつうの会計と同じ内容に広がる） */
   quick?: boolean
+  /** 短い会計でメニューを選んだとき（店舗端末は今日のメニューとして記録する） */
+  onMenuPicked?: (code: string) => void
 }) {
   const [detail, setDetail] = useState(!quick)
   const [personal, setPersonal] = useState<ReadonlyMap<string, number>>(() => new Map())
@@ -168,6 +170,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     const price = src === 'service_menu' ? personal.get(item.id) ?? item.price : item.price
     setLines(ls => [...ls, { key: ++keySeq, source: src, ref_id: item.id, name: item.name, category: item.category, unit_price: price, quantity: 1, discount: 0 }])
     setAdding(false)
+    if (src === 'service_menu' && item.id) onMenuPicked?.(item.id)
   }
   // 券で引けるのは料金（ほかの値引きを引いたあと）まで。5,000円の会計に 6,000円分は使えない（10/28 慶一郎さん）
   const ticketRoom = Math.max(0, totals.subtotal - lines.reduce((n, l) => n + l.discount, 0) - manualAmount)
@@ -319,7 +322,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     ) : (
                       <span style={{ minWidth: 0 }}>
                         <span style={{ display: 'block', fontSize: 15 }}>{l.name}{l.quantity > 1 ? <span style={{ color: C.sub }}>{` ×${l.quantity}`}</span> : null}</span>
-                        {!ctx.reservation && lines.filter(x => x.source !== 'manual').length === 1 && <button type="button" onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>変える</button>}
+                        {lines.filter(x => x.source !== 'manual').length === 1 && <button type="button" onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>変える</button>}
                       </span>
                     )}
                     <input value={String(l.unit_price)} inputMode="numeric" aria-label={`${l.name}の金額`}
