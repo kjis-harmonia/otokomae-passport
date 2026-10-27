@@ -373,10 +373,10 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 const otherDiscount = totals.discount - ticketSum
                 const row = { display: 'flex', justifyContent: 'space-between', fontSize: 15, lineHeight: 1.9, fontVariantNumeric: 'tabular-nums' } as const
                 const viaGinpay = method === 'ginpay'
-                const heading = !method ? 'お支払い方法を確かめています…' : viaGinpay ? '銀Payで支払う金額（現金は受け取りません）' : '現金でお受け取り'
+                const heading = lines.length === 0 ? 'メニューを選ぶと金額が出ます' : !method ? 'お支払い方法を確かめています…' : viaGinpay ? '銀Payで支払う金額（現金は受け取りません）' : '現金でお受け取り'
                 return (
                   <>
-                  {method && (
+                  {method && lines.length > 0 && (
                     <div role="status" style={{ marginTop: 14, padding: '12px 16px', borderRadius: 14, lineHeight: 1.6,
                       background: viaGinpay ? 'rgba(36,107,82,0.10)' : 'rgba(168,130,63,0.14)', border: `2px solid ${viaGinpay ? '#246b52' : '#a8823f'}` }}>
                       <div style={{ fontSize: 20, fontWeight: 700, color: viaGinpay ? '#246b52' : '#7a5a1f' }}>
@@ -400,7 +400,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                       </div>
                     )}
                     <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.85 }}>{heading}</div>
-                    <div style={{ fontSize: 46, fontWeight: 700, lineHeight: 1.15, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: totals.total < 0 ? '#ff9b9b' : C.bg }}>{yen(Math.max(0, totals.total))}</div>
+                    {/* メニューが無いときに ¥0 と出すと「0円で会計」と見えてしまう（10/28） */}
+                    <div style={{ fontSize: 46, fontWeight: 700, lineHeight: 1.15, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: totals.total < 0 ? '#ff9b9b' : C.bg }}>{lines.length === 0 ? '—' : yen(Math.max(0, totals.total))}</div>
                   </div>
                   </>
                 )
