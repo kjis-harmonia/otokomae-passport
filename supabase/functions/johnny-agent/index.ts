@@ -23,14 +23,16 @@ const TTS_STYLE = '理容室「二代目銀二郎」の受付。親しみやす�
 const MAX_AUDIO_B64 = 2_000_000
 
 /** 録音を文字にする。メニュー名・スタッフ名を手がかりに渡して、聞き間違いを減らす */
-async function transcribe(b64: string, mime: string, menus: MenuInfo[], staff: StaffInfo[]): Promise<string> {
+async function transcribe(b64: string, mime: string, menus: MenuInfo[], staff: StaffInfo[], sb = false): Promise<string> {
   const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
   const ext = /mpeg|mp3/.test(mime) ? 'mp3' : /mp4|m4a|aac/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : /wav/.test(mime) ? 'wav' : 'webm'
   const form = new FormData()
   form.append('file', new Blob([bytes], { type: mime || 'audio/webm' }), `voice.${ext}`)
   form.append('model', STT_MODEL)
   form.append('language', 'ja')
-  form.append('prompt', `福岡の理容室「銀二郎」の予約の会話。博多弁のことがある（〜けん、〜と？、よか）。よく出る言葉：今日、明日、あさって、今週、来週、土曜、日曜、午前、午後、何時、何時ごろ、空いとる？、予約、指名、変更、キャンセル、いつもの、カット、パーマ、カラー、顔そり。メニュー：${menus.map(m => m.name).join('、').slice(0, 600)}。スタッフ：${staff.map(x => x.name).join('、')}。`)
+  form.append('prompt', sb
+    ? `福岡の理容室「銀二郎」のスタッフが予約表に入れる1文（例：明日15時 田中さん パンチ 銀二郎で／今日15時から16時半 クローズ）。よく出る言葉：今日、明日、あさって、何時、何時半、から、まで、クローズ、閉めて、電話予約、ホットペッパー、指名、フリー、さん、様。メニュー：${menus.map(m => m.name).join('、').slice(0, 600)}。スタッフ：${staff.map(x => x.name).join('、')}。`
+    : `福岡の理容室「銀二郎」の予約の会話。博多弁のことがある（〜けん、〜と？、よか）。よく出る言葉：今日、明日、あさって、今週、来週、土曜、日曜、午前、午後、何時、何時ごろ、空いとる？、予約、指名、変更、キャンセル、いつもの、カット、パーマ、カラー、顔そり。メニュー：${menus.map(m => m.name).join('、').slice(0, 600)}。スタッフ：${staff.map(x => x.name).join('、')}。`)
   const r = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${OPENAI_KEY}` }, body: form })
   if (!r.ok) throw new Error(`stt_unavailable ${r.status} ${(await r.text()).slice(0, 200)}`)
   const data = await r.json()
@@ -132,6 +134,21 @@ Deno.serve(async (req) => {
 
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json(400, { error: 'invalid_request' }) }
+  // 銀二郎SB（店舗端末）の「話して予約」：スタッフのログインを確かめて、録音を文字にするだけ（AI には聞かない・10/27）
+  //   iPad のホーム画面のアプリでは端末の音声認識が使えないため、お客様の AI予約と同じくサーバーで文字にする
+  const staffToken = str(body.staff, 200)
+  if (staffToken) {
+    const sbAudio = typeof body.audio === 'string' && body.audio.length <= MAX_AUDIO_B64 ? body.audio : ''
+    if (!sbAudio) return json(400, { error: 'invalid_request' })
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/staff_sb_options`, {
+      method: 'POST', headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_staff: staffToken }),
+    })
+    if (!r.ok) return json(r.status >= 500 ? 502 : 401, { error: r.status >= 500 ? 'db_unavailable' : 'staff_auth_required' })
+    const sbOpts = await r.json() as { menus?: MenuInfo[]; staff?: StaffInfo[] }
+    try { return json(200, { heard: await transcribe(sbAudio, str(body.mime, 60), sbOpts.menus ?? [], sbOpts.staff ?? [], true) }) }
+    catch { return json(502, { error: 'stt_unavailable' }) }
+  }
   const session = str(body.session, 200)
   const denied=await checkJohnnyStoreAccess(SUPABASE_URL,ANON_KEY,session)
   if(denied)return json(denied.status,{error:denied.error})
