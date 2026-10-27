@@ -1226,7 +1226,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       <div style={{ display: 'flex', flexShrink: 0, justifyContent: 'space-between', padding: '8px 8px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <IconButton label="閉じる" onClick={onClose}><X size={22} strokeWidth={2} /></IconButton>
-          {canBack && (
+          {/* 考えている・送っている間は出さない（あとから届いた答えで戻った画面が上書きされないように） */}
+          {canBack && BACKABLE.has(step.k) && (
             <button type="button" onClick={() => goBack()} aria-label="ひとつ前の画面に戻る" style={{
               height: 40, padding: '0 14px 0 8px', borderRadius: 20, border: 'none', background: C.fill, color: C.text,
               display: 'flex', alignItems: 'center', gap: 2, fontSize: 15, fontFamily: FONT, cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
