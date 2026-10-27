@@ -61,7 +61,7 @@ export function SbScreen() {
   const scrolled = useRef<string | null>(null)
   const blocked = busy || !!pending.pending || !!pending.error || !online || !!error
   // 予約をドラッグして時間・担当を変える（今日より前の日は動かさない）
-  const drag = useReservationDrag({ date, slotW: SLOT_W, enabled: !blocked && !!options && date >= today, onDrop: t => { setNotice(null); setMoving(t) } })
+  const drag = useReservationDrag({ date, slotW: SLOT_W, scrollRef, leftInset: LABEL_W, enabled: !blocked && !!options && date >= today, onDrop: t => { setNotice(null); setMoving(t) } })
 
   const operator = options?.actors.some(a => a.name === actor) ? actor : options?.actors[0]?.name ?? ''
   const loadHpb = useCallback(async () => {
