@@ -1078,7 +1078,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>次にやること</p>
                     {[
                       '来店チェックインは完了しています',
-                      '割引券を選んで「お会計に進む」を押してください。券は会計確定時に使用されます',
+                      '割引券・漢トク券を選ぶと、上の「お受け取り金額」から差し引かれます。券は会計確定時に使用されます',
                       'すべて完了したら「来店完了」を押してください',
                     ].map((text, i) => (
                       <p key={text} style={{ display: 'flex', gap: 10, fontFamily: SERIF, fontSize: 13, color: '#1c1f1d', lineHeight: 1.6, marginTop: i === 0 ? 0 : 6 }}>
