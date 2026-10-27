@@ -65,12 +65,13 @@ export function VisitMenuPicker({ userId, info, staffName }: { userId: string; i
 
   return (
     <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: '#f8f7f4', border: '1px solid rgba(151,115,43,0.28)' }}>
-      <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>今日のメニュー</p>
+      {/* 予約があれば「ご予約のメニュー」（10/28 慶一郎さん）。予約なしのときだけ選んでもらう */}
+      <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>{current?.source === 'reservation' && !editing ? 'ご予約のメニュー' : '今日のメニュー'}</p>
       {current && !editing ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ flex: 1 }}>
             <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#1c1f1d' }}>{current.name}</p>
-            <p style={{ fontSize: 11, color: '#6b716d', marginTop: 2 }}>{current.source === 'reservation' ? '予約から自動で記録しました' : '記録しました'}</p>
+            <p style={{ fontSize: 11, color: '#6b716d', marginTop: 2 }}>{current.source === 'reservation' ? 'ご予約のメニューです（予約から自動で記録）' : '記録しました'}</p>
           </div>
           <button type="button" onClick={() => setEditing(true)} style={{
             padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(151,115,43,0.45)', background: 'transparent',
