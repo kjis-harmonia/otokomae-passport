@@ -23,7 +23,7 @@ export function V2Menu({ open, onClose, onTickets, onAccount }: { open: boolean;
               {canShowInstallGuide() && <button type="button" className="v2-row" onClick={() => { onClose(); window.dispatchEvent(new Event(SHOW_INSTALL_GUIDE_EVENT)) }}><Smartphone size={20} /><span style={{ flex: 1 }}>ホーム画面に追加</span><ChevronRight size={18} /></button>}
             </div>
             <div className="v2-panel v2-glass" style={{ marginTop: 12 }}>
-              <p className="v2-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Bell size={14} />Johnny のお知らせ</p>
+              <p className="v2-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Bell size={14} />銀二郎のお知らせ</p>
               <PushToggle tone="mono" />
             </div>
             <div className="v2-panel v2-glass" style={{ marginTop: 12, padding: '4px 14px' }}>
