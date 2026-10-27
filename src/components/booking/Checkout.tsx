@@ -337,7 +337,25 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 </div>
               ) : <button type="button" onClick={() => setManual({ amount: '', label: '' })} style={{ ...linkStyle, display: 'flex' }}>値引きを入力</button>}
 
-              {/* 合計 */}
+              {/* 合計。QR を読んだあとの短い会計は、券を引いたあとの「お受け取り金額」を大きく（現金でいくら受け取るか迷わないように・10/27 慶一郎さん） */}
+              {quick ? (() => {
+                const ticketSum = chosenTickets.reduce((n, t) => n + t.amount, 0)
+                const otherDiscount = totals.discount - ticketSum
+                const row = { display: 'flex', justifyContent: 'space-between', fontSize: 15, lineHeight: 1.9, fontVariantNumeric: 'tabular-nums' } as const
+                return (
+                  <div role="status" aria-label={`お受け取り金額 ${yen(Math.max(0, totals.total))}`} style={{ marginTop: 14, padding: '14px 18px 16px', borderRadius: 16, background: C.text, color: C.bg }}>
+                    {(totals.discount > 0) && (
+                      <div style={{ paddingBottom: 8, marginBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.25)' }}>
+                        <div style={row}><span>料金</span><span>{yen(totals.subtotal)}</span></div>
+                        {chosenTickets.map(t => <div key={t.id} style={row}><span>{t.title}</span><span>−{yen(t.amount)}</span></div>)}
+                        {otherDiscount > 0 && <div style={row}><span>値引き</span><span>−{yen(otherDiscount)}</span></div>}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.85 }}>お受け取り金額</div>
+                    <div style={{ fontSize: 46, fontWeight: 700, lineHeight: 1.15, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: totals.total < 0 ? '#ff9b9b' : C.bg }}>{yen(Math.max(0, totals.total))}</div>
+                  </div>
+                )
+              })() : (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.text}` }}>
                 {totals.discount > 0 && (
                   <>
@@ -350,6 +368,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   <span style={{ fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: totals.total < 0 ? C.danger : C.text }}>{yen(totals.total)}</span>
                 </div>
               </div>
+              )}
 
               {hold && (
                 <div role="status" style={{ margin: '0 0 10px', padding: '12px 14px', borderRadius: 12, lineHeight: 1.6, fontSize: 14,
