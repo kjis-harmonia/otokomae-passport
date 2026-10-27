@@ -27,7 +27,7 @@ import { planCompanion } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { takeAiTurn } from './aiQuota'
 import { PushToggle } from '../../components/PushToggle'
-import { canBeUsual, getUsualMenu, setUsualMenu, usualMenuOrder } from './usualMenu'
+import { canBeUsual, getUsualMenu, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from './usualMenu'
 import { pushState } from '../../utils/webPush'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
@@ -68,7 +68,7 @@ type Step =
   | { k: 'searching'; label?: string }
   | { k: 'pick'; req: VisitRequest; menu: MenuOption; offer: Offer; note?: string }
   /** 予約の確認。staffId：指名、change：この予約を新しい日時に変える、say：AI の言葉 */
-  | { k: 'confirm'; req: VisitRequest; menu: MenuOption; slot: Slot; staffId?: string | null; change?: CustomerReservation; say?: string; staffChosen?: boolean }
+  | { k: 'confirm'; req: VisitRequest; menu: MenuOption; slot: Slot; staffId?: string | null; change?: CustomerReservation; say?: string; staffChosen?: boolean; usualStaff?: boolean }
   /** 担当（指名）を選ぶ：確定の前に必ず聞く。avail はその時間にその担当が空いているか */
   | { k: 'pickStaff'; next: ConfirmStep; avail?: Record<string, boolean>; note?: string }
   | { k: 'booking'; menu: MenuOption; slot: Slot }
@@ -511,12 +511,17 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // ── 担当：指名なしの予約は無い。担当が決まっていなければ確定の前に必ず聞く（担当が1人なら、その人に決める） ──
   const optionsRef = useRef(options)
   useEffect(() => { optionsRef.current = options }, [options])
+  const [rememberStaff, setRememberStaff] = useState(() => !!getUsualStaff())
+  const rememberStaffRef = useRef(rememberStaff)
+  useEffect(() => { rememberStaffRef.current = rememberStaff }, [rememberStaff])
   const chooseStaff = useCallback((s: Extract<Step, { k: 'pickStaff' }>, staffId: string | null) => {
     if (staffId && s.avail?.[staffId] === false) {
       const name = optionsRef.current?.staff?.find(st => st.id === staffId)?.name ?? 'その担当'
       setStep({ ...s, note: `${name}は、この時間は空いていません。ほかの担当をお選びください。` })
       return
     }
+    // 「次回からもこの担当にする」：オンなら登録、オフなら取り消し（毎回聞く）
+    if (staffId) setUsualStaff(rememberStaffRef.current ? staffId : null)
     setStep({ ...s.next, staffId, staffChosen: true })
   }, [])
   useEffect(() => {
@@ -524,8 +529,23 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const staff = options?.staff ?? []
     if (staff.length === 0) return
     if (staff.length === 1) { setStep({ ...step, staffId: staff[0].id, staffChosen: true }); return } // eslint-disable-line react-hooks/set-state-in-effect -- 担当が1人ならその人。2人以上なら確定の前に担当の画面へ差し替える
+    // いつもの担当を登録している人は、担当の確認を省く（その担当がその時間に空いていなければ、担当の画面で選んでもらう・10/27 慶一郎さん）
+    const usual = step.change ? null : getUsualStaff()
+    const usualStaff = usual ? staff.find(st => st.id === usual) : undefined
+    if (usualStaff) {
+      let alive = true
+      const at = Date.parse(step.slot.starts_at)
+      void api.staffSlots(slotDate(step.slot.starts_at), step.menu.code, usualStaff.id)
+        .then(list => list.some(x => Date.parse(x.starts_at) === at), () => false)
+        .then(free => {
+          if (!alive) return
+          if (free) setStep({ ...step, staffId: usualStaff.id, staffChosen: true, usualStaff: true })
+          else setStep({ k: 'pickStaff', next: step, note: `いつもの担当の${usualStaff.name}は、この時間は空いていません。ほかの担当をお選びください。` })
+        })
+      return () => { alive = false }
+    }
     setStep({ k: 'pickStaff', next: step })
-  }, [step, options])
+  }, [step, options, api])
   // 担当を選ぶ画面：その時間にそれぞれの担当が空いているか（空いていない担当は押せない表示に）
   useEffect(() => {
     if (step.k !== 'pickStaff' || step.avail) return
@@ -1487,6 +1507,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {(options?.staff ?? []).map(st => step.avail?.[st.id] === false
               ? <SecondaryButton key={st.id} onClick={() => setStep({ ...step, note: `${st.name}は、この時間は空いていません。ほかの担当をお選びください。` })}>{st.name}（この時間は空いていません）</SecondaryButton>
               : <PrimaryButton key={st.id} onClick={() => chooseStaff(step, st.id)}>{st.name}</PrimaryButton>)}
+            {!step.next.change && (
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '6px 0 2px', fontSize: 14, color: C.text, cursor: 'pointer' }}>
+                <input type="checkbox" checked={rememberStaff} onChange={e => setRememberStaff(e.target.checked)} style={{ width: 20, height: 20, accentColor: C.text }} />
+                次回からもこの担当にする（担当の確認を省きます）
+              </label>
+            )}
           </>
         )}
         {step.k === 'confirm' && (
@@ -1494,11 +1520,15 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {voice.listen === 'listening' && (
               <p style={{ margin: '0 0 2px', fontSize: 13, color: C.secondary, textAlign: 'center' }}>「はい」「いいえ」と話しても進めます</p>
             )}
-            <PrimaryButton onClick={() => book(step.menu, step.slot, step.req, step.staffId ?? null, replaceOf(step))}>はい</PrimaryButton>
+            {/* 担当がまだ決まっていない間（いつもの担当の空きを確かめている間）は押せない */}
+            <PrimaryButton disabled={!step.staffChosen && !step.staffId && (options?.staff?.length ?? 0) > 1} onClick={() => book(step.menu, step.slot, step.req, step.staffId ?? null, replaceOf(step))}>はい</PrimaryButton>
             {!step.change && (
               <SecondaryButton onClick={() => setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req, replace: ownActive ?? undefined } })}>お連れ様を追加</SecondaryButton>
             )}
             {backList.some(isTimeChoice) && <SecondaryButton onClick={() => goBack(isTimeChoice)}>時間を選び直す</SecondaryButton>}
+            {!step.change && step.staffChosen && (options?.staff?.length ?? 0) > 1 && (
+              <SecondaryButton onClick={() => setStep({ k: 'pickStaff', next: { ...step, staffId: null, staffChosen: false, usualStaff: false } })}>担当を変える</SecondaryButton>
+            )}
             <SecondaryButton onClick={() => declineConfirm(step.menu)}>いいえ</SecondaryButton>
           </>
         )}
@@ -1697,8 +1727,8 @@ function WaitlistCard({ api, view }: { api: BookingAssistantApi; view: { menu: M
   )
 }
 
-function PrimaryButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
-  return <button type="button" onClick={onClick} style={{ ...buttonBase, background: C.text, color: C.bg }}>{children}</button>
+function PrimaryButton({ onClick, children, disabled = false }: { onClick: () => void; children: ReactNode; disabled?: boolean }) {
+  return <button type="button" onClick={onClick} disabled={disabled} style={{ ...buttonBase, background: C.text, color: C.bg, opacity: disabled ? 0.45 : 1 }}>{children}</button>
 }
 
 function SecondaryButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
