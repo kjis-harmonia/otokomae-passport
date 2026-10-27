@@ -161,7 +161,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const ginpayAccount = ginpayAccounts.length === 1 ? ginpayAccounts[0] : ginpayAccounts.find(a => a.id === ginpayAccountId) ?? null
   const ginpayShort = method === 'ginpay' && !!ginpayAccount && ginpayAccount.balance < totals.total
   const ginpayOk = method !== 'ginpay' || (!!ginpayAccount && totals.total > 0 && !ginpayShort)
-  const optionsReady = lines.every(l => l.source !== 'manual' || (l.name.trim() !== '' && l.unit_price > 0))
+  // オプションは金額だけでよい（名前は任意。空なら「オプション」で記録・10/28 慶一郎さん）
+  const optionsReady = lines.every(l => l.source !== 'manual' || l.unit_price > 0)
   const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && optionsReady && !!method && totals.total >= 0
     && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy
 
@@ -245,7 +246,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     try {
       const proposed: CheckoutAttempt = attempt ?? { version: 1, backend: api.backend, customerLabel: clientInfo?.name ?? ctx?.reservation?.customer_name ?? '匿名', operator: api.operator(), createdAt: new Date().toISOString(), input: {
         reservation_id: ctx?.reservation?.id, client_id: ctx?.reservation ? undefined : client?.id,
-        stylist_id: stylistId!, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
+        stylist_id: stylistId!, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.source === 'manual' && !l.name.trim() ? 'オプション' : l.name.trim() || l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
         manual_discount: manualAmount > 0 ? { amount: manualAmount, label: manual!.label.trim() } : undefined,
         payment_method: method!, expected_total: totals.total, idempotency_key: saleKey,
         ginpay_account_id: method === 'ginpay' ? ginpayAccount?.id : undefined,
@@ -315,7 +316,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   <div key={l.key} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
                     {l.source === 'manual' ? (
                       <span style={{ minWidth: 0 }}>
-                        <input value={l.name} onChange={e => update(l.key, { name: e.target.value.slice(0, 40) })} placeholder="オプションの名前（例：鼻毛抜き）" aria-label="オプションの名前"
+                        <input value={l.name} onChange={e => update(l.key, { name: e.target.value.slice(0, 40) })} placeholder="名前（任意）例：鼻毛抜き" aria-label="オプションの名前"
                           style={{ ...inputStyle, fontSize: 15 }} />
                         <button type="button" onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>消す</button>
                       </span>
