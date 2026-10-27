@@ -147,9 +147,9 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
       <button type="button" className="v2-cta v2-glass" onClick={reserve}>
         <span className="v2-cta-spark" aria-hidden="true"><Sparkle size={22} strokeWidth={1.6} /></span>
         <span className="v2-cta-text">
-          <b>{!selected ? 'AI予約（Johnny に相談）' : selected.kind === 'usual' ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>
-          <small>{!selected ? '銀二郎専属AI Johnny がお聞きします'
-            : selected.kind === 'usual' && !selected.code ? '銀二郎専属AI Johnny がお聞きします'
+          <b>{!selected ? 'AI予約' : selected.kind === 'usual' ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>
+          <small>{!selected ? 'ご希望を AI がお聞きします'
+            : selected.kind === 'usual' && !selected.code ? 'ご希望を AI がお聞きします'
             : price ? <>{selected.kind === 'usual' ? selected.label + '　' : ''}<span className="v2-cta-price">{yen(price.price)}</span>{price.normal != null && price.normal !== price.price ? '　会員価格' : ''}</> : selected.label}</small>
         </span>
         <span className="v2-cta-go" aria-hidden="true"><ArrowRight size={20} /></span>

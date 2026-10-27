@@ -28,11 +28,11 @@ export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWh
     } finally { setBusy(false) }
   }
 
-  const title = state === 'on' ? 'JOHNNY のお知らせ：受け取り中' : 'JOHNNY のお知らせを受け取る'
+  const title = state === 'on' ? '銀二郎のお知らせ：受け取り中' : '銀二郎のお知らせを受け取る'
   const sub = state === 'on' ? 'メンテナンスカットの期限が近づいたらお知らせします（押すと止めます）'
     : state === 'denied' ? '通知が許可されていません。設定アプリの「通知」から許可してください'
     : state === 'needs-install' ? 'ホーム画面に追加すると、お知らせを受け取れます'
-    : 'メンテナンスカットの期限が近づいたら、JOHNNY がお知らせします'
+    : 'メンテナンスカットの期限が近づいたら、お知らせします'
 
   const gold = tone === 'gold'
   return (
@@ -67,7 +67,7 @@ function Unsupported() {
   ].filter(Boolean).join('・')
   return (
     <div style={{ padding: '15px 18px', borderRadius: 14, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(201,162,74,0.28)', color: '#F2E6C8' }}>
-      <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700 }}>JOHNNY のお知らせ</p>
+      <p style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700 }}>銀二郎のお知らせ</p>
       <p style={{ fontSize: 12, marginTop: 4, color: 'rgba(242,230,200,0.6)', lineHeight: 1.6 }}>
         このスマホでは、まだお知らせを受け取れません。iPhone は iOS 16.4 以降で、ホーム画面に追加したアプリから開くと受け取れます。
       </p>
