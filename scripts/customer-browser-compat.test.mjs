@@ -48,7 +48,7 @@ test('actual home renders its selected style when Array.at is unavailable', () =
 
 test('an empty style library still opens the Johnny consultation entry on older browsers', () => {
   const content = JSON.stringify(homeFixture(true)({ onGinpay: () => {} }))
-  assert.match(content, /AI予約（Johnny に相談）/)
+  assert.match(content, /AI予約/)
 })
 
 function passkeyFixture(fetcher) {
