@@ -369,7 +369,7 @@ function ticketCard(list: TicketRow[], status: 'active' | 'expired' | 'used', no
     statusHint:   status === 'active' && allPending
       ? '譲渡手続き中'
       : status === 'active' && isWelcome
-        ? '特殊パーマ対象 / 平日のみ（土日利用不可）'
+        ? 'パーマ全種類対象 / 平日のみ（土日利用不可）'
         : undefined,
     prices:       rep.amount > 0 ? [{ memberPrice: rep.amount }] : [],
     validFrom:    rep.created_at,
