@@ -541,3 +541,9 @@
   .sb-new-alert span { flex-basis: calc(100% - 30px); }
   .sb-new-alert .sb-primary { flex: 1 1 100%; }
 }
+
+/* 予約をドラッグして時間・担当を変える（掴んだ予約は指・カーソルについてくる。下の行を探せるよう当たり判定は外す） */
+.sb-reservation-confirmed { touch-action: pan-x pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.sb-reservation.sb-dragging { z-index: 20; pointer-events: none; opacity: 0.92; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22); outline: 2px solid var(--sb-blue, #2f6fa8); }
+.sb-drag-time { position: absolute; top: 4px; right: 6px; padding: 1px 6px; border-radius: 6px; background: var(--sb-ink); color: #fff; font-size: 12px; font-style: normal; font-weight: 700; }
+.sb-move-change { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
