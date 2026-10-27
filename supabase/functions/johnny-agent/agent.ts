@@ -55,6 +55,20 @@ const jstParts = (iso: string) => {
 }
 const addDays = (date: string, n: number) => new Date(new Date(date + 'T00:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10)
 const toIso = (date: string, hm: string) => new Date(`${date}T${hm}:00+09:00`).toISOString()
+/** 「今日空いてる？」の一覧に出す、おもなメニュー（顔そり・オプション・前髪だけ は出さない。名前で頼まれたら予約はできる・10/28 慶一郎さん） */
+export const isMainMenu = (code: string) => !/^(shave-|opt-)/.test(code) && code !== 'cut-bangs'
+/** 「今日」「明日」「10月30日（金）」 */
+function dayWord(date: string, now: string): string {
+  const today = jstParts(now).date
+  if (date === today) return '今日'
+  if (date === addDays(today, 1)) return '明日'
+  if (date === addDays(today, 2)) return 'あさって'
+  const p = jstParts(toIso(date, '12:00'))
+  return `${Number(date.slice(5, 7))}月${Number(date.slice(8, 10))}日（${p.wd}）`
+}
+/** 「9時」「9時半」「9時15分」 */
+const spokenTime = (hm: string) => { const [h, m] = hm.split(':').map(Number); return `${h}時${m === 0 ? '' : m === 30 ? '半' : `${m}分`}` }
+
 /** 時刻の表記を揃えて比べる（AI は「2026-10-17T10:00:00+09:00」「…Z」どちらでも書くことがある） */
 const sameInstant = (a: string, b: string) => { const x = Date.parse(a), y = Date.parse(b); return Number.isFinite(x) && x === y }
 
@@ -283,7 +297,8 @@ function describeOverview(o: DayOverview, ctx: AgentContext) {
   if (!o.open || !o.hours) return { date: o.date, open: false }
   const names = new Map(ctx.menus.map(m => [m.code, m]))
   // 同じ空き方のメニューはまとめて、空いている開始時刻（HH:MM）を全部渡す
-  const groups = o.groups.map(g => ({ menus: g.codes.map(c => `${c}（${names.get(c)?.name ?? c}・${names.get(c)?.duration_min ?? '?'}分）`), times: ranges(g.slots.map(s => jstParts(s).time), 15) }))
+  const groups = o.groups.map(g => ({ codes: g.codes.filter(isMainMenu), slots: g.slots })).filter(g => g.codes.length > 0)
+    .map(g => ({ menus: g.codes.map(c => `${c}（${names.get(c)?.name ?? c}・${names.get(c)?.duration_min ?? '?'}分）`), times: ranges(g.slots.map(s => jstParts(s).time), 15) }))
   const none = ctx.menus.filter(m => !o.groups.some(g => g.codes.includes(m.code))).map(m => m.code)
   return { date: o.date, open: true, hours: o.hours, groups, no_slots: none }
 }
@@ -544,9 +559,16 @@ function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: M
       const at = heard.time && heard.dates.includes(o.date) ? toIso(o.date, heard.time) : null
       o.groups.forEach(g => { const sorted = [...g.slots].sort(); const pick = at ? sorted.find(x => sameInstant(x, at)) ?? sorted.find(x => Date.parse(x) >= Date.parse(at)) : sorted[0]; if (pick) g.codes.forEach(c => first.set(c, pick)) })
       if (first.size === 0) return { ok: false, error: `${o.date} は空きがありません。別の日を day_overview で調べてください` }
-      const order = [...picked.filter(c => first.has(c)), ...(ctx.lastMenuCode && first.has(ctx.lastMenuCode) ? [ctx.lastMenuCode] : []), ...ctx.menus.map(m => m.code).filter(c => first.has(c))]
+      // AI が選んだもの・前回のメニューのほかは、おもなメニューだけ（顔そり・オプション・前髪だけ は出さない）
+      const order = [...picked.filter(c => first.has(c) && (isMainMenu(c) || c === heard.menu)), ...(ctx.lastMenuCode && first.has(ctx.lastMenuCode) ? [ctx.lastMenuCode] : []), ...ctx.menus.map(m => m.code).filter(c => first.has(c) && isMainMenu(c))]
       const items = [...new Set(order)].map(c => ({ menu_code: c, first_time: first.get(c) ?? null }))
-      return { ok: true, say, ui: { type: 'menus', items, date: o.date } }
+      // 言葉は実際の空きから作る（AI が受付の開始時刻を空きと取り違えて「8時から」と言い、一覧は 9:00 だった・10/28）
+      const earliest = items.map(i => i.first_time).filter((x): x is string => !!x).sort((a, b) => Date.parse(a) - Date.parse(b))[0]
+      const hours = o.hours ? `${dayWord(o.date, ctx.now)}は${spokenTime(o.hours.start.slice(0, 5))}から${spokenTime(o.hours.end.slice(0, 5))}まで受付しています。` : ''
+      const exact = !!at && items.some(i => i.first_time && sameInstant(i.first_time, at))
+      const lead = at ? (exact ? `${spokenTime(heard.time!)}に入れられるメニューです。` : `${spokenTime(heard.time!)}は埋まっていて、そのあとの空きです。`)
+        : earliest ? `いちばん早い空きは${spokenTime(jstParts(earliest).time)}からです。` : ''
+      return { ok: true, say: `${hours}${lead}メニューを選んでください。`, ui: { type: 'menus', items, date: o.date } }
     }
     case 'slots': {
       if (!menuOk(u.menu_code)) return { ok: false, error: typeof u.menu_code === 'string' ? 'slots の menu_code がメニュー表にありません' : 'ui に menu_code（メニュー表の code）を必ず書いてください' }
