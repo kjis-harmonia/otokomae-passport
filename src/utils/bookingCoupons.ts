@@ -104,12 +104,15 @@ export function premiumFor(menuCode: string, startsAt: string): PremiumApplied |
   return null
 }
 
-/** 予約の日に使える割引券・漢トク券（未使用・期限内・譲渡中でない。Welcome は平日だけ） */
-export function usableTickets(tickets: readonly TicketRow[], startsAt: string): TicketRow[] {
+/** Welcomeクーポン（初回パーマ 2,000円引き）が使えるメニュー：パーマ（セットを含む）だけ（10/27 慶一郎さん） */
+export const isPermMenu = (code: string) => /^(perm|set)-/.test(code)
+
+/** 予約の日に使える割引券・漢トク券（未使用・期限内・譲渡中でない。Welcome は平日・パーマだけ。menuCode が無ければメニューは問わない） */
+export function usableTickets(tickets: readonly TicketRow[], startsAt: string, menuCode?: string): TicketRow[] {
   const visit = Date.parse(startsAt)
   return tickets.filter(t => (t.type === 'discount' || t.type === 'otoku') && !t.used && !t.pending_transfer
     && (!t.expires_at || Date.parse(t.expires_at) > visit)
-    && !(isWelcomeCouponTicket(t) && isWeekendOrHoliday(startsAt)))
+    && !(isWelcomeCouponTicket(t) && (isWeekendOrHoliday(startsAt) || (menuCode !== undefined && !isPermMenu(menuCode)))))
 }
 
 export interface PriceBreakdown {
