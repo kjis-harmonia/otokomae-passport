@@ -8,6 +8,7 @@ import { createStaffCustomerApi } from '../utils/customerApi'
 import { yen } from '../utils/bookingApi'
 import { callStaffRpc, rpcErrorMessage } from '../utils/staffSession'
 import { getStoredValue } from '../utils/storage'
+import { readCheckoutAttempt, startNextCheckout } from '../utils/checkoutAttempt'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
@@ -31,7 +32,8 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   const [api] = useState(() => createStaffCheckoutApi(readActor))
   const [customers] = useState(() => createStaffCustomerApi(readActor))
 
-  async function open() {
+  /** again：同じお客様の2件目（お子様・お連れ様など）。予約は1件目で会計済みなので、予約なしの会計にする */
+  async function open(again = false) {
     if (opening.current) return
     if (!staffName.trim()) { setError('上の「担当者」を選んでからお会計に進んでください。'); return }
     opening.current = true
@@ -39,7 +41,13 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
     try {
       const r = await callStaffRpc<{ client_id?: string; reservation_id?: string | null; error?: string }>('staff_client_for_member', { p_user_id: userId })
       if (!r.client_id) { setError('このお客様の顧客台帳が見つかりません。予約台帳の「店頭会計」から顧客を選んで会計してください。'); return }
-      setTarget({ reservationId: r.reservation_id ?? null, clientId: r.client_id })
+      // 前の会計が確定していれば区切る（同じお客様の2件目が「前回の会計結果を確認」になって払えなかった・10/27）
+      const prev = readCheckoutAttempt()
+      if (prev?.result) await startNextCheckout(prev.input.idempotency_key)
+      // 今日の予約がもう会計済みなら（QR を読み直した・2件目）、予約なしの会計にする
+      let reservationId = again ? null : r.reservation_id ?? null
+      if (reservationId && (await api.context(reservationId, null)).paid_sale_id) reservationId = null
+      setTarget({ reservationId, clientId: r.client_id })
     } catch (err) {
       setError(rpcErrorMessage(err))
     } finally {
@@ -61,6 +69,11 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
           <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#1c1f1d' }}>お会計済み（{PAYMENT_LABEL[paid.payment_method ?? ''] ?? paid.payment_method}）</span>
           <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#1c1f1d' }}>{yen(paid.total)}</span>
         </div>
+        {error && <p style={{ marginTop: 8, fontSize: 13, color: '#b23a3a' }}>{error}</p>}
+        <button type="button" disabled={loading} onClick={() => { setPaid(null); void open(true) }}
+          style={{ width: '100%', marginTop: 12, minHeight: 48, borderRadius: 12, background: '#ffffff', border: '1px solid rgba(151,115,43,0.5)', color: '#1c1f1d', fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer' }}>
+          もう1件お会計する（お子様・お連れ様）
+        </button>
       </div>
     )
   }

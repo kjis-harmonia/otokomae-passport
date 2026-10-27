@@ -50,6 +50,10 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const [lines, setLines] = useState<Line[]>([])
   const [editing, setEditing] = useState<number | null>(null)
   const [ticketIds, setTicketIds] = useState<string[]>([])
+  // 店舗端末：会計を開いたあとに下の一覧で選んだ券も、この会計に入れる（10/27：選んでも差し引かれなかった）
+  const latestInitial = useRef(initialTicketIds)
+  useEffect(() => { latestInitial.current = initialTicketIds }, [initialTicketIds])
+  const initialKey = (initialTicketIds ?? []).join(',')
   const [manual, setManual] = useState<{ amount: string; label: string } | null>(null)
   // 短い会計は銀Pay だけで払う（10/26 慶一郎さん）。最初から GINPay を選んでおく
   const [method, setMethod] = useState<PaymentMethod | null>(quick ? 'ginpay' : null)
@@ -97,11 +101,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       setPersonal(personalOf)
       setCtx(c)
       if (!c.reservation && clientId && c.client) setClient(c.client)
-      if (initialTicketIds?.length) {
-        const usable = c.tickets.filter(t => !t.blocked && initialTicketIds.includes(t.id))
-        // メンテナンスクーポンはほかの券と一緒に使えないので、混ざっていたらメンテナンスクーポンだけ
-        setTicketIds((usable.some(t => t.type === 'coupon') ? usable.filter(t => t.type === 'coupon').slice(0, 1) : usable).map(t => t.id))
-      }
+      const wanted = latestInitial.current
+      if (wanted?.length) setTicketIds(usableTicketIds(c.tickets, wanted))
       if (c.reservation) {
         const r = c.reservation
         setStylistId(r.staff_id)
@@ -109,9 +110,18 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       }
     }).catch(err => { if (alive) setError(rpcErrorMessage(err, '会計の準備ができませんでした。')) })
     return () => { alive = false }
-    // 開いたときの顧客・券だけを使う（あとからの変更はこの画面の中で）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 開いたときの顧客だけを使う（券は latestInitial と下の同期で入れる）
   }, [api, reservationId, clientId, reload])
+
+  // 開いたあとに選び直した券（読み込み前なら、読み込んだときに上で入れる）
+  const ctxTickets = ctx?.tickets
+  useEffect(() => {
+    if (!ctxTickets || initialTicketIds === undefined) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTicketIds(usableTicketIds(ctxTickets, initialTicketIds))
+    // 選んだ券が変わったときだけ（会計の中で選び直した券は、一覧が変わるまでそのまま）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialKey])
 
   useEffect(() => {
     if (!busy) return
@@ -402,6 +412,12 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       )}
     </div>
   )
+}
+
+/** 選んだ券のうち使えるもの。メンテナンスクーポンはほかの券と一緒に使えないので、混ざっていたらメンテナンスクーポンだけ */
+function usableTicketIds(tickets: CheckoutContext['tickets'], wanted: readonly string[]): string[] {
+  const usable = tickets.filter(t => !t.blocked && wanted.includes(t.id))
+  return (usable.some(t => t.type === 'coupon') ? usable.filter(t => t.type === 'coupon').slice(0, 1) : usable).map(t => t.id)
 }
 
 /** 予約なしの会計：顧客を探して選ぶ／匿名（名前だけで既存の顧客に紐付けない） */
