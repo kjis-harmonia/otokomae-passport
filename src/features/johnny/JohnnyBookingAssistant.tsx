@@ -307,7 +307,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         setMaintLeft(w0?.maintenanceLeft ?? null)
         const w = w0 && regMenu ? { ...w0, usual: [regMenu, ...w0.usual.filter(m => m.code !== regMenu.code)].slice(0, 2) } : w0
         if (w) {
-          turnsRef.current = [{ role: 'assistant', text: `おかえりなさい！${welcomeText(w).lines.join('')}ご予約はどうしますか？` }]
+          turnsRef.current = [{ role: 'assistant', text: welcomeText(w).speech }]
           setStep({ k: 'welcome', w })
         } else setStep({ k: 'askWhen' })
       })
@@ -1000,7 +1000,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       }
       case 'welcome': {
         const t = welcomeText(step.w)
-        return { title: 'おかえりなさい！', sub: t.lines.join(''), speech: t.speech, listen: true }
+        return { title: t.title, sub: t.lines.join(''), speech: t.speech, listen: true }
       }
       case 'askWhen': {
         const title = step.again === 'unclear' ? 'すみません、日時を聞き取れませんでした。'
