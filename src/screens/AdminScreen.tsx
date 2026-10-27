@@ -1081,36 +1081,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                       getTicketsForStaff(scannedData.userId).then(setUserTickets).catch(() => {})
                     }}
                   />
-                  {/* 次にやること */}
-                  <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: '#f8f7f4', border: '1px solid rgba(151,115,43,0.28)' }}>
-                    <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#97732b', marginBottom: 8 }}>次にやること</p>
-                    {[
-                      '来店チェックインは完了しています',
-                      '割引券・漢トク券を選ぶと、上の「お受け取り金額」から差し引かれます。券は会計確定時に使用されます',
-                      'すべて完了したら「来店完了」を押してください',
-                    ].map((text, i) => (
-                      <p key={text} style={{ display: 'flex', gap: 10, fontFamily: SERIF, fontSize: 13, color: '#1c1f1d', lineHeight: 1.6, marginTop: i === 0 ? 0 : 6 }}>
-                        <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', border: '1px solid rgba(151,115,43,0.55)', color: '#97732b', fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span>
-                        <span>{text}</span>
-                      </p>
-                    ))}
-                  </div>
-                  <button
-                    onClick={handleReset}
-                    disabled={issueLoading}
-                    style={{
-                      width: '100%', marginTop: 14, padding: '15px 0', borderRadius: 14,
-                      background: 'linear-gradient(160deg, #3a3e3b 0%, #1c1f1d 100%)',
-                      border: '1px solid rgba(151,115,43,0.55)', boxShadow: '0 4px 24px rgba(28,31,29,0.12)',
-                      color: '#ffffff', fontFamily: SERIF, fontSize: 16, fontWeight: 700, letterSpacing: '0.22em',
-                      cursor: issueLoading ? 'default' : 'pointer', opacity: issueLoading ? 0.6 : 1,
-                    }}
-                  >
-                    来店完了
-                    <span style={{ display: 'block', fontSize: 10, fontWeight: 400, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.72)', marginTop: 3 }}>
-                      次のお客様のQR読み取りへ
-                    </span>
-                  </button>
+                  {/* 「次にやること」と「来店完了」は出さない：来店の記録は QR を読んだときに済み、次のお客様へは下の「次のお客様」で進む（10/28 慶一郎さん：ややこしい） */}
                 </div>
               ) : (
                 <button
