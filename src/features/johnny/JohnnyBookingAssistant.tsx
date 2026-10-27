@@ -1067,9 +1067,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     switch (step.k) {
       case 'loading': return { title: '' }
       case 'contact': return {
-        title: 'お名前とお電話番号を教えてください',
-        sub: 'ご予約の確認でお店からご連絡することがあります。',
-        speech: 'ご予約のために、お名前とお電話番号を教えてください。',
+        title: 'ご予約のお名前（フルネーム）とお電話番号を教えてください',
+        sub: '下のお名前だけ・ニックネームではなく、姓と名の両方をご入力ください。ご予約の確認でお店からご連絡することがあります。',
+        speech: 'ご予約のために、フルネームのお名前と、お電話番号を教えてください。',
       }
       case 'welcome': {
         const t = welcomeText(step.w)
@@ -1462,7 +1462,6 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'contact' && (
               <ContactForm
-                initialName={step.name}
                 onSave={(name, phone) => api.saveContact(name, phone)}
                 onSaved={() => setStep({ k: 'askWhen' })}
               />
@@ -1763,12 +1762,12 @@ function Row({ title, detail, note, onClick, href, muted }: {
 }
 
 /** 連絡先の登録（本名・電話番号）。保存はサーバー（customer_set_contact） */
-function ContactForm({ initialName, onSave, onSaved }: {
-  initialName: string
+function ContactForm({ onSave, onSaved }: {
   onSave: (name: string, phone: string) => Promise<void>
   onSaved: () => void
 }) {
-  const [name, setName] = useState(initialName)
+  // アプリ登録の名前（ニックネーム・下の名前だけのことがある）は最初から入れない。入れるとそのまま進んでしまう（10/28 慶一郎さん）
+  const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1800,7 +1799,7 @@ function ContactForm({ initialName, onSave, onSaved }: {
   return (
     <form onSubmit={e => { e.preventDefault(); void submit() }} style={{ width: '100%', marginTop: 24 }}>
       <div style={{ borderRadius: 14, overflow: 'hidden', background: C.fill }}>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="お名前（本名）" aria-label="お名前（本名）"
+        <input value={name} onChange={e => setName(e.target.value)} placeholder={`お名前（フルネーム）例：銀二 太郎`} aria-label="ご予約のお名前（フルネーム）"
           autoComplete="name" maxLength={40} style={field} />
         <div style={{ height: 0.5, background: C.separator, marginLeft: 16 }} />
         <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="電話番号（090-1234-5678）" aria-label="電話番号"
