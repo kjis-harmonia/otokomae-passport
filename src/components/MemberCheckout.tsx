@@ -90,6 +90,8 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         ensureActor={() => !!readActor().trim()}
         onClose={() => setTarget(null)}
         onDone={sale => { setTarget(null); setPaid(sale); onPaid(sale) }}
+        // お会計で選んだメニューを今日のメニューとして記録する（いつものメニュー・来店の記録に使う。失敗しても会計は続ける）
+        onMenuPicked={code => { void callStaffRpc('staff_set_visit_menu', { p_user_id: userId, p_menu_code: code, p_staff_name: staffName || null }).catch(() => {}) }}
       />
     )
   }
