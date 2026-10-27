@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, Keyboard, Mic, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowUp, ChevronLeft, Keyboard, Mic, Volume2, VolumeX, X } from 'lucide-react'
 import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
 import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
@@ -126,6 +126,17 @@ interface Props {
   /** ホームの「いつもの」から（メニューが分からなければ、いつものメニューを聞いて登録する） */
   initialUsual?: boolean
 }
+
+/** 「戻る」で戻れる画面（読み込み中・送信中・終わった画面は数えない） */
+const BACKABLE = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'pickStaff', 'companionMenu', 'confirmParty', 'ai', 'askUsual', 'usualSaved'])
+/** 戻り先にできる画面。担当が決まっていない確認画面は、すぐ担当の画面に差し替わるので数えない（戻るとまた担当の画面になってしまう） */
+const canReturnTo = (s: Step) => BACKABLE.has(s.k) && !(s.k === 'confirm' && !s.staffChosen && !s.staffId)
+/** ここまで来たら、戻る先を忘れる（予約・キャンセルが終わった） */
+const FORGET = new Set<Step['k']>(['done', 'cancelled', 'unavailable', 'offer', 'offerGone'])
+/** 時間を選んだ画面（「時間を選び直す」の戻り先） */
+const isTimeChoice = (s: Step) => s.k === 'pick' || s.k === 'overview' || (s.k === 'ai' && s.view.kind === 'slots')
+const BACK_WORDS = /戻|もど|前の画面|ひとつ前|一つ前/
+const TIME_AGAIN = /(時間|時刻|じかん).{0,6}(変|かえ|替|ずら|選び直)|別の時間|ほかの時間|他の時間|違う時間/
 
 const JST = 9 * 60 * 60 * 1000
 function jstDate(offsetDays = 0): string {
@@ -256,6 +267,43 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const { speak, startListening, stopListening, finishListening } = voice
   /** 録音を送れなかった・聞き取れなかったときの一言 */
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
+
+  // 戻る：見せた画面を覚えておき、「戻る」で1つずつ前の画面へ（確定の手前で「やっぱり時間を変えたい」に応える・10/27 慶一郎さん）
+  //   同じ画面の言い直し（「空いていません」の一言など）は1つと数える。予約が終わったら忘れる
+  const historyRef = useRef<Step[]>([])
+  const shownRef = useRef<Step | null>(null)
+  const goingBackRef = useRef(false)
+  // 画面に出す用（戻れるか・時間を選び直せるか）
+  const [backList, setBackList] = useState<Step[]>([])
+  const canBack = backList.length > 0
+  useEffect(() => {
+    const prev = shownRef.current
+    if (canReturnTo(step)) shownRef.current = step
+    if (goingBackRef.current) { goingBackRef.current = false; return }
+    if (FORGET.has(step.k)) {
+      historyRef.current = []; shownRef.current = null
+      setBackList([]) // eslint-disable-line react-hooks/set-state-in-effect
+      return
+    }
+    if (!canReturnTo(step) || !prev || prev === step || prev.k === step.k) return
+    historyRef.current = [...historyRef.current, prev].slice(-12)
+    setBackList(historyRef.current)
+  }, [step])
+  /** 1つ前の画面へ。where を渡すと、それに合ういちばん近い前の画面へ（「時間を選び直す」） */
+  const goBack = useCallback((where?: (s: Step) => boolean) => {
+    const h = historyRef.current
+    if (!h.length) return
+    let i = h.length - 1
+    if (where) { while (i >= 0 && !where(h[i])) i--; if (i < 0) i = h.length - 1 }
+    const target = h[i]
+    historyRef.current = h.slice(0, i)
+    setBackList(historyRef.current)
+    stopListening(); setAnswer(null); setHeard('')
+    goingBackRef.current = true
+    shownRef.current = target
+    stepRef.current = target
+    setStep(target)
+  }, [stopListening])
 
   /** 質問を読み上げて、終わったら聞き取りを始める */
   const ask = useCallback((text: string, listenAfter = true) => {
@@ -791,6 +839,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setHeard(text)
     setVoiceNote(null)
     const s = stepRef.current
+    // 「戻って」「やっぱり時間を変えたい」：前の画面へ（AI に聞かない）
+    if ((s.k === 'confirm' || s.k === 'pickStaff' || s.k === 'confirmParty') && historyRef.current.length) {
+      if (TIME_AGAIN.test(text) && historyRef.current.some(isTimeChoice)) { goBack(isTimeChoice); return }
+      if (BACK_WORDS.test(text)) { goBack(); return }
+    }
     if (handleLocalRequest(text, s)) return
     // 担当を選ぶ段階（AI に聞かない）：担当の名前
     if (s.k === 'pickStaff') {
@@ -838,7 +891,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const consultOnly = detectAsk(text, menus)?.kind === 'consult' && isEmptyRequest(parseVisitRequest(text)) && !matchMenu(text, menus)
     if (aiOnRef.current && AI_STEPS.has(s.k) && !consultOnly) { void viaAgent(text, s); return }
     legacyRef.current(text, s.k === 'ai' || s.k === 'confirmCancel' || s.k === 'welcome' ? { k: 'askWhen' } : s)
-  }, [handleLocalRequest, book, bookParty, cancelReservation, chooseStaff, declineConfirm, menus, planParty, viaAgent])
+  }, [handleLocalRequest, book, bookParty, cancelReservation, chooseStaff, declineConfirm, goBack, menus, planParty, viaAgent])
 
   /** 決まった規則の JOHNNY（AI が使えないとき・デモ） */
   const handleLegacy = useCallback((text: string, s: Step) => {
@@ -1173,7 +1226,16 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     >
       {/* 上：閉じる・読み上げ */}
       <div style={{ display: 'flex', flexShrink: 0, justifyContent: 'space-between', padding: '8px 8px 0' }}>
-        <IconButton label="閉じる" onClick={onClose}><X size={22} strokeWidth={2} /></IconButton>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <IconButton label="閉じる" onClick={onClose}><X size={22} strokeWidth={2} /></IconButton>
+          {/* 考えている・送っている間は出さない（あとから届いた答えで戻った画面が上書きされないように） */}
+          {canBack && canReturnTo(step) && (
+            <button type="button" onClick={() => goBack()} aria-label="ひとつ前の画面に戻る" style={{
+              height: 40, padding: '0 14px 0 8px', borderRadius: 20, border: 'none', background: C.fill, color: C.text,
+              display: 'flex', alignItems: 'center', gap: 2, fontSize: 15, fontFamily: FONT, cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+            }}><ChevronLeft size={20} strokeWidth={2} />戻る</button>
+          )}
+        </div>
         <IconButton label={voice.muted ? '読み上げをオンにする' : '読み上げをオフにする'} onClick={() => voice.setMuted(!voice.muted)}>
           {voice.muted ? <VolumeX size={20} strokeWidth={1.8} /> : <Volume2 size={20} strokeWidth={1.8} />}
         </IconButton>
@@ -1436,6 +1498,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {!step.change && (
               <SecondaryButton onClick={() => setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req, replace: ownActive ?? undefined } })}>お連れ様を追加</SecondaryButton>
             )}
+            {backList.some(isTimeChoice) && <SecondaryButton onClick={() => goBack(isTimeChoice)}>時間を選び直す</SecondaryButton>}
             <SecondaryButton onClick={() => declineConfirm(step.menu)}>いいえ</SecondaryButton>
           </>
         )}
