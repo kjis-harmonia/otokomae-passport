@@ -205,7 +205,7 @@ function WelcomeCouponDialog({
               fontWeight: 700,
             }}
           >
-            特殊パーマ<br />
+            パーマ<br />
             <span style={{ color: '#D9B763', letterSpacing: '0.04em' }}>¥2,000 OFF</span>
           </p>
         </div>
