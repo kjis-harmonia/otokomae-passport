@@ -152,8 +152,10 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
       setInterim('')
       if (cancelled) return
       const blob = new Blob(chunks, { type: recorder.mimeType || mime || 'audio/webm' })
-      // 話し声が無かった（大きさを測れたとき）・短すぎる
-      if ((analyser && !voiced) || blob.size < 2000) { setNotice('聞き取れませんでした。マイクを押して、もう一度話してください。'); return }
+      // 何も話さなかった（大きさを測れたとき）：ボタンで答える人もいるので、何も言わずに止める（10/27：確認画面に「聞き取れませんでした」が出ていた）
+      if (analyser && !voiced) return
+      // 話したが短すぎる
+      if (blob.size < 2000) { setNotice('聞き取れませんでした。マイクを押して、もう一度話してください。'); return }
       onAudioRef.current?.(blob)
     }
     const timer = window.setInterval(() => {
