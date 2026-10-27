@@ -28,11 +28,13 @@ export function HqStaffDevices() {
   }, [])
   useEffect(() => { void load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect -- 読み込みが終わってから入れる
 
-  async function run(fn: string, params: Record<string, unknown>) {
+  async function run(fn: string, params: Record<string, unknown> | Record<string, unknown>[]) {
     setBusy(true); setError(null)
     try {
-      const r = await callHqRpc<{ ok?: boolean; error?: string }>(fn, params)
-      if (r.error) setError(ERRORS[r.error] ?? '変更できませんでした。')
+      for (const p of Array.isArray(params) ? params : [params]) {
+        const r = await callHqRpc<{ ok?: boolean; error?: string }>(fn, p)
+        if (r.error) { setError(ERRORS[r.error] ?? '変更できませんでした。'); break }
+      }
       await load()
     } catch (err) {
       const code = (err as { code?: string })?.code ?? ''
@@ -41,7 +43,9 @@ export function HqStaffDevices() {
   }
 
   const disabled = busy || isHqPreview() || !data
-  const pending = data?.devices.filter(d => !d.approved_at) ?? []
+  // 承認待ち：種類が分かる端末（この仕組みのあとに PIN を入れた端末）は1台ずつ、以前の種類不明の端末はまとめて
+  const pending = data?.devices.filter(d => !d.approved_at && d.hint) ?? []
+  const unknown = data?.devices.filter(d => !d.approved_at && !d.hint) ?? []
   const approved = data?.devices.filter(d => d.approved_at) ?? []
   return (
     <section className="hq-surface" style={{ marginTop: 20 }}>
@@ -72,6 +76,13 @@ export function HqStaffDevices() {
           </span>
         </div>
       ))}
+      {unknown.length > 0 && (
+        <details className="hq-setting-row" style={{ display: 'block' }}>
+          <summary style={{ cursor: 'pointer' }}><strong>以前に PIN を入れた端末（種類不明） {unknown.length} 台</strong></summary>
+          <p style={{ margin: '8px 0' }}>この仕組みの前に PIN を入れた端末です。お店の端末は、もう一度 PIN を入れると種類つきで上に出るので、そちらを承認してください。</p>
+          <button className="hq-button" disabled={disabled} onClick={() => void run('hq_revoke_staff_device', unknown.map(d => ({ p_id: d.id })))}>{unknown.length} 台をまとめて取り消す</button>
+        </details>
+      )}
       {approved.length > 0 && <p className="hq-setting-row" style={{ fontWeight: 600 }}>承認済み {approved.length} 台</p>}
       {approved.map(d => (
         <div className="hq-setting-row" key={d.id}>
