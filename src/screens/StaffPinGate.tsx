@@ -15,6 +15,7 @@ const ERROR_TEXT = {
   locked:         '入力ミスが続いたため10分間ロック中です',
   not_configured: 'PINがサーバーに未設定です（管理者へ連絡）',
   network:        '通信できません。電波を確認してください',
+  device_pending: 'この端末はまだ承認されていません。本部の「設定」で承認してください',
 } as const
 type PinError = keyof typeof ERROR_TEXT
 
@@ -54,7 +55,7 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
     setTimeout(() => {
       setPin('')
       setErrorKind(null)
-    }, result.reason === 'invalid_pin' ? 700 : 2400)
+    }, result.reason === 'invalid_pin' ? 700 : result.reason === 'device_pending' ? 8000 : 2400)
   }, [])
 
   const handleDigit = useCallback((d: string) => {

@@ -91,13 +91,23 @@ export async function callStaffRpc<T>(fn: string, params: Record<string, unknown
 
 // ── ログイン / ログアウト ─────────────────────────────────────────────────────
 
-export type StaffLoginResult = { ok: true } | { ok: false; reason: 'invalid_pin' | 'locked' | 'not_configured' | 'network' }
+export type StaffLoginResult = { ok: true } | { ok: false; reason: 'invalid_pin' | 'locked' | 'not_configured' | 'network' | 'device_pending' }
+
+/** 本部の端末一覧で見分けるための端末の種類（例：iPad / Safari / ホーム画面）。個人を特定する情報は送らない */
+export function deviceHint(): string {
+  const ua = navigator.userAgent
+  const touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1
+  const device = /iPad/.test(ua) || touchMac ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? (/Mobile/.test(ua) ? 'Android スマホ' : 'Android タブレット') : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : 'その他'
+  const browser = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'ブラウザ'
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone
+  return `${device} / ${browser}${standalone ? ' / ホーム画面' : ''}`
+}
 
 export async function staffLogin(pin: string): Promise<StaffLoginResult> {
   try {
     let deviceKey: string | null = null
     try { deviceKey = localStorage.getItem(STAFF_DEVICE_KEY) } catch { /* ignore */ }
-    const { data, error } = await supabase.rpc('staff_login', { p_pin: pin, p_device_key: deviceKey })
+    const { data, error } = await supabase.rpc('staff_login', { p_pin: pin, p_device_key: deviceKey, p_hint: deviceHint() })
     // RPC 自体が無い（ステップA 未適用）場合は「未設定」と表示する
     if (error) return { ok: false, reason: error.code === 'PGRST202' ? 'not_configured' : 'network' }
     const r = data as { token?: string; expires_at?: string; device_key?: string | null; error?: string }
@@ -105,6 +115,11 @@ export async function staffLogin(pin: string): Promise<StaffLoginResult> {
       localStorage.setItem(STAFF_TOKEN_KEY, JSON.stringify({ token: r.token, expiresAt: r.expires_at }))
       if (r.device_key) localStorage.setItem(STAFF_DEVICE_KEY, r.device_key)
       return { ok: true }
+    }
+    // 本部で承認していない端末：端末キーは覚えておく（この端末を本部で承認すると、次から入れる）
+    if (r.error === 'device_pending') {
+      if (r.device_key) localStorage.setItem(STAFF_DEVICE_KEY, r.device_key)
+      return { ok: false, reason: 'device_pending' }
     }
     const reason = r.error === 'locked' || r.error === 'not_configured' ? r.error : 'invalid_pin'
     return { ok: false, reason }
