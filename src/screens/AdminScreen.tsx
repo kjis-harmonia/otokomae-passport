@@ -393,8 +393,18 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           setUserTickets(ctx.tickets)
           setTodayUsedType(ctx.today_used_type)
           setSelectedTicketIds(canUseDiscountType(ctx.today_used_type, ticket.type) && !isWelcomeCouponBlockedToday(ticket) ? [ticket.id] : [])
-          setCheckInStatus('idle')
+          // チケットの QR でも会員QR と同じく来店チェックインまで済ませ、お会計を出す（10/28：チェックインを押さないとお会計が出なかった）
+          setCheckInStatus('loading')
           setCheckInDate(null)
+          try {
+            const visit = await checkInVisit(tuData.userId)
+            setCheckInDate(visit.date)
+            setVisitInfo(visit.info)
+            setCheckInStatus('done')
+          } catch (err) {
+            setCheckInStatus('idle')
+            setUseError(rpcErrorMessage(err, '来店登録に失敗しました。「来店チェックイン」を押して再度お試しください。'))
+          }
           setPhase('result')
           return
         }
@@ -1136,11 +1146,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               <p style={{ fontSize: 9, letterSpacing: '0.24em', color: '#1c1f1d', marginBottom: 10, fontFamily: SERIF }}>
                 保有チケット（未使用 {ticketsLoading ? '—' : `${activeTickets.length}枚`}）
               </p>
-              {!ticketsLoading && activeTickets.length > 0 && (
-                <p style={{ fontSize: 11, color: '#1c1f1d', marginBottom: 10, lineHeight: 1.6 }}>
-                  使う券をタップして選ぶと、上のお会計の「お受け取り金額」から差し引かれ、「会計を確定」を押したときに使用済みになります（割引券と漢トク券は一緒に使えます。メンテナンスクーポンだけは単独）。
-                </p>
-              )}
+              {/* 券の使い方の案内は出さない：QR を読めば自動でチェックインしてお会計が出る（10/28 慶一郎さん） */}
               {ticketsLoading ? (
                 <div style={{ padding: '16px', textAlign: 'center', borderRadius: 14, background: '#ffffff', border: '1px solid #f3f1ed' }}>
                   <p style={{ fontSize: 12, color: '#1c1f1d' }}>読込中…</p>
