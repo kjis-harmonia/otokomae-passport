@@ -1,4 +1,4 @@
-// 2回目以降のお客様への最初のひとこと（執事の口調：「おかえりなさいませ。前回のご来店から13日でございます。…それとも、またパンチパーマになさいますか？」）。
+// 2回目以降のお客様への最初のひとこと（「おかえりなさいませ。前回のご来店から13日です。…メンテナンスカットにしますか？それとも、いつものパンチパーマにしますか？」）。
 //   来店の履歴：来店の記録（QR の来店登録ごと・メニューつき、customer_recent_visits）＋記録の無い日の過去の予約。新しい方から5回
 //   最後の来店日：QR で来店登録した日（customer_get_last_visit）と、履歴のいちばん新しい日の新しい方
 //   前回のメニュー：その日のメニュー（分かるときだけ）
@@ -67,21 +67,21 @@ export function maintenanceDeadline(left: number, now = Date.now()): string {
   return `あと${left}日（${d.getUTCMonth() + 1}月${d.getUTCDate()}日まで）`
 }
 
-/** 画面と読み上げの言葉。来店したことのあるお客様には執事の口調で（10/27 慶一郎さん）
- *  例：「おかえりなさいませ。前回のご来店から13日でございます。まもなくメンテナンスカットのご予約ができなくなります（10月28日まで）。それとも、またパンチパーマになさいますか？」 */
+/** 画面と読み上げの言葉。ていねいだけど自然に、何を選べばいいかが1回で分かる聞き方にする（10/27 慶一郎さん：迷わないアプリ）
+ *  例：「おかえりなさいませ。前回のご来店から13日です。まもなくメンテナンスカットのご予約ができなくなります（明日まで）。メンテナンスカットにしますか？それとも、いつものパンチパーマにしますか？」 */
 export function welcomeText(w: Welcome, now = Date.now()): { title: string; lines: string[]; speech: string } {
   const title = 'おかえりなさいませ。'
-  const lines = [w.days === 0 ? '本日はご来店ありがとうございました。' : `前回のご来店から${w.days}日でございます。`]
+  const lines = [w.days === 0 ? '今日はご来店ありがとうございました。' : `前回のご来店から${w.days}日です。`]
   const usual = w.usual.find(m => m.code !== MAINTENANCE_MENU.code)
   if (w.maintenanceLeft != null) {
     const left = w.maintenanceLeft
     const end = new Date(now + 9 * 3600000 + left * 86400000)
     const until = `${end.getUTCMonth() + 1}月${end.getUTCDate()}日`
-    lines.push(left === 0 ? 'メンテナンスカットのご予約は、本日までとなります。'
+    lines.push(left === 0 ? 'メンテナンスカットのご予約は、今日までです。'
       : left <= 3 ? `まもなくメンテナンスカットのご予約ができなくなります（${left === 1 ? '明日' : until}まで）。`
-      : `メンテナンスカットのご予約は、${until}までお取りできます。`)
-    lines.push(usual ? `それとも、また${usual.name}になさいますか？` : 'メンテナンスカットでお取りいたしましょうか？')
-  } else if (usual) lines.push(`また${usual.name}になさいますか？`)
-  else lines.push('ご予約はいかがいたしましょう？')
+      : `メンテナンスカットのご予約は、${until}までできます。`)
+    lines.push(usual ? `メンテナンスカットにしますか？それとも、いつもの${usual.name}にしますか？` : 'メンテナンスカットで予約しますか？')
+  } else if (usual) lines.push(`いつもの${usual.name}で予約しますか？`)
+  else lines.push('ご希望の日時を教えてください。')
   return { title, lines, speech: `${title}${lines.join('')}` }
 }
