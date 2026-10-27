@@ -19,7 +19,8 @@ function matchesCommand(v: Record<string, unknown>, c: SbCommand): boolean {
     || !['pending', 'done', 'not_required'].includes(String(v.transfer_status))) return false
   if (c.kind !== 'create' && v.id !== c.reservation_id) return false
   if (c.kind === 'create' || c.kind === 'edit') {
-    return v.customer_name === c.input.customer_name.trim() && v.source === c.input.source
+    // 変更では予約の経路（AI予約の app など）はサーバーがそのまま残す。経路を比べると、変わっていても「失敗」になっていた（10/27）
+    return v.customer_name === c.input.customer_name.trim() && (c.kind === 'edit' || v.source === c.input.source)
       && Date.parse(String(v.starts_at)) === Date.parse(c.input.starts_at)
       && (c.input.staff_id === null || v.staff_id === c.input.staff_id)
       && (!c.input.client_id || v.client_id === c.input.client_id)
