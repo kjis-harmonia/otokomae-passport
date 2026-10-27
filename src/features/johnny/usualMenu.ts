@@ -4,6 +4,8 @@
 import { getStoredValue, setStoredValue } from '../../utils/storage'
 
 export const USUAL_MENU_KEY = 'ginjiro_usual_menu'
+/** いつもの担当（担当の画面で「次回からもこの担当にする」を選んだ人。登録していれば担当の確認を省く・10/27） */
+export const USUAL_STAFF_KEY = 'ginjiro_usual_staff'
 
 export interface UsualMenu { code: string; name: string }
 
@@ -30,4 +32,14 @@ export function usualMenuOrder<T extends { code: string }>(menus: readonly T[]):
 export function setUsualMenu(menu: UsualMenu): boolean {
   setStoredValue(USUAL_MENU_KEY, { code: menu.code, name: menu.name })
   return getUsualMenu()?.code === menu.code
+}
+
+/** いつもの担当の id（登録していなければ null＝どちらでもいい・毎回聞く） */
+export function getUsualStaff(): string | null {
+  const v = getStoredValue<string | null>(USUAL_STAFF_KEY, null)
+  return typeof v === 'string' && v ? v : null
+}
+/** いつもの担当を登録する（null で取り消し＝毎回聞く） */
+export function setUsualStaff(staffId: string | null): void {
+  setStoredValue(USUAL_STAFF_KEY, staffId)
 }
