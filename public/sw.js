@@ -30,6 +30,8 @@ self.addEventListener('push', (event) => {
       badge: '/icons/icon-192.png',
       tag: data.tag || 'ginjiro-johnny',
       renotify: true,
+      // 銀二郎SB の予約・キャンセルのお知らせは、押すまで消さない（パソコン・Android。iPad は 設定→通知→バナースタイル「持続的」・10/27）
+      requireInteraction: !!sb,
       vibrate: sb ? [120, 60, 220] : undefined,
       data: { url: data.url || '/?tab=reserve&johnny=1' },
     }),
