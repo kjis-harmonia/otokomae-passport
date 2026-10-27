@@ -34,11 +34,14 @@ async function loadVisited(): Promise<{ visited: boolean; menu: UsualMenu | null
   return { visited: true, menu: m ? { code: m.code, name: m.name, title: styleTitleFor(m.code, m.name) } : null }
 }
 
-/** 登録したいつものメニューは毎回読み直す（Johnny で登録した直後にも反映）。来店の記録は5分読み直さない */
+/** 登録したいつものメニューは毎回読み直す（Johnny で登録した直後にも反映）。来店の記録は5分読み直さない
+ *  ただし「まだ来店なし」「読めなかった」は覚えない：店で来店登録・初回の本人確認をした直後に出るように（10/27） */
 export async function loadUsual(): Promise<Usual> {
   const reg = getUsualMenu()
   if (reg && canBeUsual(reg.code)) return { menu: { ...reg, title: styleTitleFor(reg.code, reg.name) } }
   if (!cache || Date.now() - cache.at >= 5 * 60000) cache = { at: Date.now(), visited: loadVisited().catch(() => ({ visited: false, menu: null })) }
-  const v = await cache.visited
+  const mine = cache
+  const v = await mine.visited
+  if (!v.visited && cache === mine) cache = null
   return v.visited ? { menu: v.menu } : null
 }
