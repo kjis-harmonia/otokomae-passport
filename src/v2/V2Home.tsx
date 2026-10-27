@@ -49,14 +49,28 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   // 料金表を読み終えたら値段を出し直す
   useEffect(() => { let alive = true; void ensurePriceRules().then(() => { if (alive) setPricesReady(n => n + 1) }); return () => { alive = false } }, [])
   // 来店したことがあれば「いつもの」を先頭に出して、まだカテゴリを触っていなければそこを開く
+  //   店で来店登録・初回の本人確認をしたあと（ログインが変わる・アプリに戻る）にも読み直す
   useEffect(() => {
     let alive = true
-    void loadUsual().then(u => {
-      if (!alive || !u) return
-      setUsual(u)
-      if (!touched.current) { setCat(USUAL); setIndex(0) }
-    })
-    return () => { alive = false }
+    let shown = false
+    const load = () => {
+      if (document.visibilityState !== 'visible') return
+      void loadUsual().then(u => {
+        if (!alive || !u) return
+        setUsual(u)
+        if (!shown && !touched.current) { setCat(USUAL); setIndex(0) }
+        shown = true
+      })
+    }
+    load()
+    const events = ['ginjiro:customer-session-changed', 'focus'] as const
+    events.forEach(e => window.addEventListener(e, load))
+    document.addEventListener('visibilitychange', load)
+    return () => {
+      alive = false
+      events.forEach(e => window.removeEventListener(e, load))
+      document.removeEventListener('visibilitychange', load)
+    }
   }, [])
   // 先頭にチップが増えると、ブラウザは前に吸い付いていたチップ（昭和の漢）へ戻ろうとして「いつもの」が左に隠れる → 描いた直後に先頭へ
   useLayoutEffect(() => { if (usual) catsRail.current?.scrollTo({ left: 0 }) }, [usual])

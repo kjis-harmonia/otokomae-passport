@@ -161,8 +161,10 @@ export function QrCameraScanner({
         (decoded) => {
           const s = claimScanner(); if (!s) return
           playCue('qr') // 「QRコードを読み込みました！」
-          // カメラを止め終わるのを待たずに読み取り結果へ進む（止めるのは裏で）
-          setActiveState(false); onScan(decoded); void haltScanner(s)
+          // カメラを止め終わってから読み取り結果へ進む。止める途中で画面（映像の枠）を消すと、
+          // iPad の Safari がページごと落ちて PIN からやり直しになる（10/27）。止まらないときも 1.5 秒で進む
+          setActiveState(false)
+          void Promise.race([haltScanner(s), new Promise(r => setTimeout(r, 1500))]).then(() => onScan(decoded))
         },
         undefined,
       )
