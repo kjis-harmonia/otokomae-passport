@@ -51,7 +51,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
         <section className="v2-panel v2-glass" aria-label="次のご予約">
           <CalendarClock size={26} color="var(--v2-gold-deep)" />
           <p className="v2-big" style={{ fontSize: 22, marginTop: 10 }}>現在、ご予約はありません</p>
-          <p className="v2-note" style={{ margin: '6px 0 16px' }}>日時と髪型を伝えるだけで、Johnny が予約します。</p>
+          <p className="v2-note" style={{ margin: '6px 0 16px' }}>日時と髪型を伝えるだけで、AI が予約します。</p>
           <button type="button" className="v2-btn v2-btn-gold" onClick={onJohnny}>AI予約する</button>
           <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>電話で予約する（{SHOP_PHONE_DISPLAY}）</a>
         </section>

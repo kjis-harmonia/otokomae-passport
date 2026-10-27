@@ -36,11 +36,11 @@ export function ReserveScreen(props:{onShowQr?:()=>void;onClose?:()=>void}){
 }
 
 function StoreBookingGate({session,access,onShowQr,onClose}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void;onClose?:()=>void}){
-  return <section className="customer-access" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="Johnnyの来店認証">
+  return <section className="customer-access" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="AI予約の来店認証">
     {onClose&&<button type="button" className="v2-back" onClick={onClose}>‹ 戻る</button>}
     {/* 主な操作は1つ（QR を見せる）。Face ID は確認済みの人だけなので小さく下に */}
     <h1>はじめに、店頭で本人確認</h1>
-    <p>次のご来店時に、会員QRをスタッフに見せてください。確認が済むと、AI予約（銀二郎専属AI Johnny）が使えます。</p>
+    <p>次のご来店時に、会員QRをスタッフに見せてください。確認が済むと、AI予約が使えます。</p>
     {access.mode==='checking'?<p role="status">会員情報を確認しています…</p>:onShowQr&&<button type="button" className="access-primary" onClick={onShowQr}>会員QRを表示する</button>}
     {!session&&<PasskeyLoginButton quiet label="確認済みの方：Face IDでログイン" onSignedIn={()=>{}}/>}
     {access.mode==='error'&&<>
