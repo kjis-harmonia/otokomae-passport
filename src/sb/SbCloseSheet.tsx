@@ -71,7 +71,6 @@ export function SbCloseSheet({ options, preset, actor, onClose, onDone, onNewBoo
             return <button type="button" key={m} className="sb-qc-choice" aria-pressed={end === m} onClick={() => setEnd(m)}><small>{tag}</small><strong>{hm(m)}</strong></button>
           })}
         </div>
-        <label className="sb-field sb-qc-other">ほかの時間<select value={end !== null && !choices.includes(end) ? end : ''} onChange={e => e.target.value && setEnd(Number(e.target.value))}><option value="">選ぶ</option>{TIMES.filter(m => m > start).map(m => <option key={m} value={m}>{hm(m)}</option>)}</select></label>
         {onNewBooking && <button type="button" className="sb-text-link" onClick={onNewBooking}>クローズではなく、この時間に新規予約を入れる</button>}
       </fieldset>
       {error && <p role="alert" className="sb-error">{error}</p>}
