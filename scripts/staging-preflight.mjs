@@ -68,6 +68,14 @@ const MIGRATION_ORDER = [
   '20261023000500_staff_alert_fallback.sql',
   '20261024000000_sb_close_time.sql',
   '20261024000100_ginpay_hold.sql',
+  '20261026000000_client_menu_prices.sql',
+  '20261026000100_booking_options_personal_price.sql',
+  '20261027000000_staff_device_approval.sql',
+  '20261027000100_ginpay_hold_checkout.sql',
+  '20261027000200_welcome_perm_only.sql',
+  '20261027000300_perm_welcome_coupon_name.sql',
+  '20261028000000_member_checkout_unpaid_reservation.sql',
+  '20261028000100_audit_fixes.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [

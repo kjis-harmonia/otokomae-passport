@@ -64,6 +64,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const [method, setMethod] = useState<PaymentMethod | null>(null)
   const methodPicked = useRef(false)
   const [holdChecked, setHoldChecked] = useState(false)
+  // 仮支払いを確かめられなかった（通信の失敗）。「仮支払いなし」とは分ける（監査 10/28 改善1）
+  const [holdError, setHoldError] = useState(false)
+  const [holdRetry, setHoldRetry] = useState(0)
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [ginpayAccountId, setGinpayAccountId] = useState<string | null>(null)
@@ -201,9 +204,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   useEffect(() => {
     if (!holdReservationId || !api.ginpayHold) return
     let alive = true
-    api.ginpayHold(holdReservationId).then(h => { if (alive) { setHold(h); setHoldChecked(true) } }).catch(() => { if (alive) setHoldChecked(true) })
+    api.ginpayHold(holdReservationId).then(h => { if (alive) { setHold(h); setHoldError(false); setHoldChecked(true) } }).catch(() => { if (alive) setHoldError(true) })
     return () => { alive = false }
-  }, [holdReservationId, api])
+  }, [holdReservationId, api, holdRetry])
   // 仮支払いがお会計以内なら、最初の1回だけ GINPay とその口座を選んでおく（スタッフが変えたら戻さない）
   const holdCovers = !!hold && !!clientInfo && totals.total > 0 && totals.total <= hold.amount
   useEffect(() => {
@@ -216,11 +219,11 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   // 短い会計の自動の支払い方法（仮支払いを確かめ終わってから1回だけ）
   const holdKnown = !!ctx && (!holdReservationId || holdChecked)
   useEffect(() => {
-    if (!quick || !holdKnown || methodPicked.current) return
+    if (!quick || !holdKnown || holdError || methodPicked.current) return
     methodPicked.current = true
     setMethod(hold && clientInfo ? 'ginpay' : 'cash') // 仮支払いを確かめ終わったときに1回だけ
     if (hold) setGinpayAccountId(id => id ?? hold.account_id) // eslint-disable-line react-hooks/set-state-in-effect
-  }, [quick, holdKnown, hold, clientInfo])
+  }, [quick, holdKnown, holdError, hold, clientInfo])
   function pickMethod(m: PaymentMethod) { methodPicked.current = true; setMethod(m) }
   // 券で全額まかなえた（お支払い 0円）：銀Pay は 0円では払えないので現金（0円）で確定する（10/27：漢トク券だけで会計できなかった）
   useEffect(() => {
@@ -410,8 +413,10 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 const ready = lines.length > 0 && !!method
                 const gold = '#c9a45c'
                 const accent = viaGinpay ? '#7fc4a4' : gold
-                const title = !lines.length ? 'お会計' : !method ? 'お支払い方法を確かめています…' : viaGinpay ? (hold ? '銀Pay 仮支払い済み' : '銀Pay で支払い') : '現金でのお支払い'
-                const note = !ready ? 'メニューを選ぶと金額が出ます'
+                const title = !lines.length ? 'お会計' : !method && holdError ? '仮支払いを確かめられませんでした' : !method ? 'お支払い方法を確かめています…' : viaGinpay ? (hold ? '銀Pay 仮支払い済み' : '銀Pay で支払い') : '現金でのお支払い'
+                const note = !lines.length ? 'メニューを選ぶと金額が出ます'
+                  : !method && holdError ? '通信を確かめて「もう一度確かめる」を押すか、お客様に聞いて下の支払方法を選んでください。'
+                  : !ready ? 'お支払い方法を確かめています…'
                   : viaGinpay
                     ? hold ? `予約のときに ${yen(hold.amount)} を仮支払いしています。現金は受け取りません。${totals.total > hold.amount ? `差額 ${yen(totals.total - hold.amount)} も銀Pay の残高から。` : ''}` : '銀Pay の残高から支払います。現金は受け取りません。'
                     : '銀Pay の仮支払いはありません。現金で受け取ってから確定してください。'
@@ -437,6 +442,12 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                         <div style={{ fontSize: 12, lineHeight: 1.6, color: 'rgba(244,239,228,0.72)' }}>{note}</div>
                       </div>
                     </div>
+                    {!method && holdError && lines.length > 0 && (
+                      <div style={{ padding: '12px 18px 16px' }}>
+                        <button type="button" onClick={() => { setHoldError(false); setHoldRetry(n => n + 1) }}
+                          style={{ width: '100%', minHeight: 44, borderRadius: 12, border: '1px solid rgba(201,164,92,0.6)', background: 'transparent', color: '#f4efe4', fontSize: 15, cursor: 'pointer' }}>もう一度確かめる</button>
+                      </div>
+                    )}
                     {ready && (
                       <div style={{ padding: '12px 18px 18px' }}>
                         {totals.discount > 0 && (
