@@ -76,6 +76,7 @@ const MIGRATION_ORDER = [
   '20261027000300_perm_welcome_coupon_name.sql',
   '20261028000000_member_checkout_unpaid_reservation.sql',
   '20261028000100_audit_fixes.sql',
+  '20261028000200_ticket_over_price.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
