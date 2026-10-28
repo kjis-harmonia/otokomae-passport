@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { StaffHome } from './StaffHome'
+import { SecurityAlert } from '../components/SecurityAlert'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 import { Delete } from 'lucide-react'
@@ -15,7 +16,7 @@ const ERROR_TEXT = {
   locked:         '入力ミスが続いたため10分間ロック中です',
   not_configured: 'PINがサーバーに未設定です（管理者へ連絡）',
   network:        '通信できません。電波を確認してください',
-  device_pending: 'この端末はまだ承認されていません。本部の「設定」で承認してください',
+  device_pending: 'この端末は登録されていません。本部の「設定」で登録してください',
 } as const
 type PinError = keyof typeof ERROR_TEXT
 
@@ -42,7 +43,7 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
 
   const submitPin = useCallback(async (candidate: string) => {
     setChecking(true)
-    const result = await staffLogin(candidate)
+    const result = await staffLogin(candidate, app)
     setChecking(false)
     if (result.ok) {
       setSuccess(true)
@@ -56,7 +57,7 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
       setPin('')
       setErrorKind(null)
     }, result.reason === 'invalid_pin' ? 700 : result.reason === 'device_pending' ? 8000 : 2400)
-  }, [])
+  }, [app])
 
   const handleDigit = useCallback((d: string) => {
     if (error || checking) return
@@ -85,7 +86,8 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
     return () => window.removeEventListener('keydown', onKey)
   }, [handleDigit, handleBack])
 
-  if (authed) return children ?? <StaffHome />
+  // 登録していない端末が入ろうとしたら、了解を押すまで画面全体に警告を出す（店舗端末・SB の両方）
+  if (authed) return <>{children ?? <StaffHome />}<SecurityAlert app={app} /></>
 
   // iPhone のパスコード画面のように：あたたかい白・明朝の店名・6つの点・丸いキー（端末メニューと同じ見た目）
   return (

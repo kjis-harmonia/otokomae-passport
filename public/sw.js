@@ -22,7 +22,7 @@ self.addEventListener('push', (event) => {
   try { data = event.data ? event.data.json() : {} } catch { data = { body: event.data ? event.data.text() : '' } }
   const title = data.title || '銀二郎 JOHNNY'
   // SB への「予約が入りました」「キャンセルが入りました」：開いている SB にも知らせて、画面で音を鳴らし予約表を読み直す
-  const sb = data.kind === 'sb-new-reservation' || data.kind === 'sb-cancel' || data.kind === 'sb-final'
+  const sb = data.kind === 'sb-new-reservation' || data.kind === 'sb-cancel' || data.kind === 'sb-final' || data.kind === 'sb-intrusion'
   event.waitUntil(Promise.all([
     self.registration.showNotification(title, {
       body: data.body || '',
