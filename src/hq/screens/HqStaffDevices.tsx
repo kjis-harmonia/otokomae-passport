@@ -1,12 +1,16 @@
 // 本部の設定：店舗端末の2段階認証。承認した端末だけスタッフPINでログインできる（10/27 慶一郎さん）
 //   知らない端末で PIN を入れると「承認待ち」としてここに出る。店の端末を承認してから「登録した端末だけ」をオンにする
+//   10/28：種類ごとの台数の上限（店舗端末 2台・SB 6台）。登録していない端末が入ろうとした記録も出す
 import { useCallback, useEffect, useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { callHqRpc } from '../hqSession'
 import { isHqPreview } from '../hqPreview'
 
-interface Device { id: string; label: string | null; hint: string | null; created_at: string; last_seen_at: string; approved_at: string | null }
-interface DeviceList { require_approval: boolean; devices: Device[] }
+type App = 'staff' | 'sb'
+interface Device { id: string; label: string | null; hint: string | null; app?: App | null; created_at: string; last_seen_at: string; approved_at: string | null }
+interface Intrusion { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: App | null; hint: string | null; acked_at: string | null; acked_by: string | null }
+interface DeviceList { require_approval: boolean; devices: Device[]; limits?: Record<App, number>; alerts?: Intrusion[] }
+const APP_NAME: Record<App, string> = { staff: '店舗端末', sb: '銀二郎SB' }
 
 const when = (iso: string) => {
   const d = new Date(new Date(iso).getTime() + 9 * 3600000)
@@ -15,6 +19,7 @@ const when = (iso: string) => {
 const ERRORS: Record<string, string> = {
   no_approved_device: '先に、お店で使う端末を1台以上承認してください（誰も入れなくなるため）。',
   not_found: 'この端末は見つかりませんでした。一覧を読み直してください。',
+  limit_reached: '登録できる台数を超えます。先に、使っていない端末を取り消してください。',
 }
 
 export function HqStaffDevices() {
@@ -47,9 +52,19 @@ export function HqStaffDevices() {
   const pending = data?.devices.filter(d => !d.approved_at && d.hint) ?? []
   const unknown = data?.devices.filter(d => !d.approved_at && !d.hint) ?? []
   const approved = data?.devices.filter(d => d.approved_at) ?? []
+  const limits: Record<App, number> = data?.limits ?? { staff: 2, sb: 6 }
+  const used = (app: App) => approved.filter(d => (d.app ?? 'staff') === app).length
+  const full = (app: App) => used(app) >= limits[app]
+  const approveButton = (d: Device, app: App, label: string) => (
+    <button key={app} className="hq-button hq-button-primary" disabled={disabled || full(app)} title={full(app) ? `${APP_NAME[app]}は${limits[app]}台までです` : undefined}
+      onClick={() => void run('hq_approve_staff_device', { p_id: d.id, p_label: names[d.id] ?? '', p_app: app })}>{label}</button>
+  )
   return (
     <section className="hq-surface" style={{ marginTop: 20 }}>
-      <div className="hq-surface-header"><h2>店舗端末の承認（2段階認証）</h2></div>
+      <div className="hq-surface-header"><h2>店舗端末・SB の登録（2段階認証）</h2></div>
+      <p className="hq-setting-row" style={{ fontWeight: 600 }}>
+        登録済み：店舗端末 {used('staff')} / {limits.staff} 台・銀二郎SB {used('sb')} / {limits.sb} 台
+      </p>
       <div className="hq-setting-row">
         <div>
           <strong>登録した端末だけログインできる</strong>
@@ -65,13 +80,13 @@ export function HqStaffDevices() {
       {pending.map(d => (
         <div className="hq-setting-row" key={d.id}>
           <div>
-            <strong>{d.hint ?? '種類不明の端末'}</strong>
+            <strong>{d.app ? `${APP_NAME[d.app]}・` : ''}{d.hint ?? '種類不明の端末'}</strong>
             <p>最後に使った日時 {when(d.last_seen_at)}（初めて {when(d.created_at)}）</p>
           </div>
           <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input value={names[d.id] ?? ''} onChange={e => setNames(n => ({ ...n, [d.id]: e.target.value }))} placeholder="名前（例：お店のiPad）" aria-label="端末の名前" maxLength={40}
               style={{ height: 34, border: '1px solid #dddde3', borderRadius: 8, padding: '0 10px', fontSize: 12, width: 150 }} />
-            <button className="hq-button hq-button-primary" disabled={disabled} onClick={() => void run('hq_approve_staff_device', { p_id: d.id, p_label: names[d.id] ?? '' })}>承認</button>
+            {d.app ? approveButton(d, d.app, full(d.app) ? `${APP_NAME[d.app]}は満杯` : '承認') : <>{approveButton(d, 'staff', '店舗端末で承認')}{approveButton(d, 'sb', 'SBで承認')}</>}
             <button className="hq-button hq-button-quiet" disabled={disabled} onClick={() => void run('hq_revoke_staff_device', { p_id: d.id })}>取り消し</button>
           </span>
         </div>
@@ -87,10 +102,19 @@ export function HqStaffDevices() {
       {approved.map(d => (
         <div className="hq-setting-row" key={d.id}>
           <div>
-            <strong>{d.label ?? d.hint ?? '名前なし'}</strong>
+            <strong>{APP_NAME[d.app ?? 'staff']}・{d.label ?? d.hint ?? '名前なし'}</strong>
             <p>{d.label && d.hint ? `${d.hint}・` : ''}最後に使った日時 {when(d.last_seen_at)}</p>
           </div>
           <button className="hq-button hq-button-quiet" disabled={disabled} onClick={() => void run('hq_revoke_staff_device', { p_id: d.id })}>取り消し（ログインも切る）</button>
+        </div>
+      ))}
+      {(data?.alerts?.length ?? 0) > 0 && <p className="hq-setting-row" style={{ fontWeight: 600, color: '#c0392b' }}>登録していない端末からの試み（30日）</p>}
+      {data?.alerts?.map(a => (
+        <div className="hq-setting-row" key={a.id}>
+          <div>
+            <strong style={{ color: '#c0392b' }}>{when(a.created_at)}　{a.reason === 'pin_ok' ? 'PINは合っていました（PINを変えてください）' : 'PINを3回まちがえました'}</strong>
+            <p>{a.app ? `${APP_NAME[a.app]}・` : ''}{a.hint ?? '種類不明'}　{a.acked_at ? `了解：${when(a.acked_at)}（${a.acked_by ?? 'スタッフ'}）` : 'まだ誰も了解していません'}</p>
+          </div>
         </div>
       ))}
       {data && data.devices.length === 0 && <p className="hq-setting-row">まだ端末がありません。お店の端末でスタッフPINを入れると、ここに出ます。</p>}

@@ -103,11 +103,12 @@ export function deviceHint(): string {
   return `${device} / ${browser}${standalone ? ' / ホーム画面' : ''}`
 }
 
-export async function staffLogin(pin: string): Promise<StaffLoginResult> {
+/** app：店舗端末（staff）か銀二郎SB（sb）か。本部の台数の上限（店舗端末 2台・SB 6台）を種類ごとに数える */
+export async function staffLogin(pin: string, app: 'staff' | 'sb' = 'staff'): Promise<StaffLoginResult> {
   try {
     let deviceKey: string | null = null
     try { deviceKey = localStorage.getItem(STAFF_DEVICE_KEY) } catch { /* ignore */ }
-    const { data, error } = await supabase.rpc('staff_login', { p_pin: pin, p_device_key: deviceKey, p_hint: deviceHint() })
+    const { data, error } = await supabase.rpc('staff_login', { p_pin: pin, p_device_key: deviceKey, p_hint: deviceHint(), p_app: app })
     // RPC 自体が無い（ステップA 未適用）場合は「未設定」と表示する
     if (error) return { ok: false, reason: error.code === 'PGRST202' ? 'not_configured' : 'network' }
     const r = data as { token?: string; expires_at?: string; device_key?: string | null; error?: string }
