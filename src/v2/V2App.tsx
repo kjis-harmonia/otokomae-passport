@@ -1,8 +1,8 @@
-// 銀二郎App V2.0 の外枠：上に正式ロゴと ☰、下に浮かぶガラスのタブ3つ（ホーム｜会員QR｜次回予約）。
+// 銀二郎App V2.0 の外枠：上に正式ロゴと ☰、下に浮かぶガラスのタブ4つ（ホーム｜会員QR｜次回予約｜ガチャ）。
 // チケット・ログインと引き継ぎは ☰ から開くページ、AI予約（Johnny）は全画面。どの機能も消さず、入口だけ整理する。
 // 画面の切り替えは App の activeTab（お知らせのリンク ?tab=reserve・?tab=tickets もそのまま効く）。
 import { useEffect, useRef, useState } from 'react'
-import { CalendarClock, ChevronLeft, Home, Menu, QrCode } from 'lucide-react'
+import { CalendarClock, ChevronLeft, Home, Menu, QrCode, Sparkles } from 'lucide-react'
 import type { NavTab } from '../data/brand'
 import { JOHNNY_INTENT_EVENT } from '../features/johnny/bookingIntent'
 import { ReserveScreen } from '../screens/ReserveScreen'
@@ -11,6 +11,7 @@ import type { WalletFilter } from '../data/wallet'
 import { V2Home } from './V2Home'
 import { V2Qr } from './V2Qr'
 import { V2Next } from './V2Next'
+import { V2Gacha } from './V2Gacha'
 import { V2Menu } from './V2Menu'
 import { V2Account } from './V2Account'
 import { V2Ginpay } from './V2Ginpay'
@@ -20,6 +21,7 @@ const TABS: { id: NavTab; label: string; icon: typeof Home }[] = [
   { id: 'home', label: 'ホーム', icon: Home },
   { id: 'qr', label: '会員QR', icon: QrCode },
   { id: 'next', label: '次回予約', icon: CalendarClock },
+  { id: 'gacha', label: 'ガチャ', icon: Sparkles },
 ]
 
 export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModalChange }: {
@@ -31,9 +33,10 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   const [pay, setPay] = useState(false)
   const go = (t: NavTab) => { setPay(false); setActiveTab(t) }
   // Johnny・チケットなどを閉じたら、開く前のタブへ戻る
-  const lastTab = useRef<NavTab>(activeTab === 'qr' || activeTab === 'next' ? activeTab : 'home')
-  const tab: NavTab = activeTab === 'qr' || activeTab === 'next' ? activeTab : 'home'
-  useEffect(() => { if (activeTab === 'home' || activeTab === 'qr' || activeTab === 'next') lastTab.current = activeTab }, [activeTab])
+  const isTab = (t: NavTab) => t === 'qr' || t === 'next' || t === 'gacha'
+  const lastTab = useRef<NavTab>(isTab(activeTab) ? activeTab : 'home')
+  const tab: NavTab = isTab(activeTab) ? activeTab : 'home'
+  useEffect(() => { if (activeTab === 'home' || isTab(activeTab)) lastTab.current = activeTab }, [activeTab])
 
   // スタイルの「この髪型でAI予約する」：メニューは ReserveScreen が受け取る
   useEffect(() => {
@@ -64,7 +67,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
 
   // ホーム・会員QR・次回予約は1画面に収めて固定（上下にスワイプしない）
   const isHome = tab === 'home' && !pay && activeTab !== 'mypage'
-  const fixed = isHome || (activeTab !== 'mypage' && (tab === 'qr' || tab === 'next'))
+  const fixed = isHome || (activeTab !== 'mypage' && (tab === 'qr' || tab === 'next' || tab === 'gacha'))
   return (
     <div className={isHome ? 'v2 v2-fixed v2-home' : fixed ? 'v2 v2-fixed' : 'v2'}>
       <header className="v2-head">
@@ -79,6 +82,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
           : tab === 'home' && pay ? <V2Ginpay onBack={() => setPay(false)} onShowQr={() => go('qr')} />
           : tab === 'home' ? <V2Home onGinpay={() => setPay(true)} />
           : tab === 'qr' ? <V2Qr onTickets={() => setActiveTab('tickets')} />
+          : tab === 'gacha' ? <V2Gacha />
           : <V2Next onJohnny={() => setActiveTab('reserve')} />}
       </main>
 
