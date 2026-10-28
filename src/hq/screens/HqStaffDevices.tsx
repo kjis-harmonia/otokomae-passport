@@ -9,7 +9,7 @@ import { isHqPreview } from '../hqPreview'
 type App = 'staff' | 'sb'
 interface Device { id: string; label: string | null; hint: string | null; app?: App | null; created_at: string; last_seen_at: string; approved_at: string | null }
 interface Intrusion { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: App | null; hint: string | null; acked_at: string | null; acked_by: string | null }
-interface DeviceList { require_approval: boolean; devices: Device[]; limits?: Record<App, number>; alerts?: Intrusion[] }
+interface DeviceList { require_approval: boolean; devices: Device[]; limits?: Record<App, number>; alerts?: Intrusion[]; locked_at?: string | null }
 const APP_NAME: Record<App, string> = { staff: '店舗端末', sb: '銀二郎SB' }
 /** 端末の画面の右下に出る「端末 3F9A」と同じ番号 */
 const code = (d: Device) => d.id.slice(0, 4).toUpperCase()
@@ -29,6 +29,7 @@ export function HqStaffDevices() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [names, setNames] = useState<Record<string, string>>({})
+  const [confirmRelease, setConfirmRelease] = useState(false)
   const load = useCallback(async () => {
     try { setData(await callHqRpc<DeviceList>('hq_staff_devices')); setError(null) }
     catch { setError('端末の一覧を読めませんでした。') }
@@ -64,6 +65,20 @@ export function HqStaffDevices() {
   return (
     <section className="hq-surface" style={{ marginTop: 20 }}>
       <div className="hq-surface-header"><h2>店舗端末・SB の登録（2段階認証）</h2></div>
+      {data?.locked_at && (
+        <div className="hq-setting-row" role="alert" style={{ flexWrap: 'wrap', gap: 10, background: '#fdecec', borderLeft: '4px solid #c0392b' }}>
+          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+            <strong style={{ color: '#c0392b' }}>ロック中（{when(data.locked_at)}から）：店舗端末・銀二郎SB を止めています</strong>
+            <p>登録していない端末が PIN で入ろうとしました。下の記録を確かめ、必要なら PIN を変えてから解除してください。お客様のアプリは動いています。</p>
+          </div>
+          {confirmRelease
+            ? <span style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button className="hq-button hq-button-primary" disabled={disabled} onClick={() => { setConfirmRelease(false); void run('hq_release_lockdown', {}) }}>確認した・解除する</button>
+                <button className="hq-button hq-button-quiet" disabled={disabled} onClick={() => setConfirmRelease(false)}>やめる</button>
+              </span>
+            : <button className="hq-button" disabled={disabled} onClick={() => setConfirmRelease(true)}>ロックを解除する</button>}
+        </div>
+      )}
       <p className="hq-setting-row" style={{ fontWeight: 600 }}>
         登録済み：店舗端末 {used('staff')} / {limits.staff} 台・銀二郎SB {used('sb')} / {limits.sb} 台
       </p>
@@ -80,15 +95,15 @@ export function HqStaffDevices() {
       {error && <p className="hq-setting-row" role="alert" style={{ color: '#c0392b' }}>{error}</p>}
       {pending.length > 0 && <p className="hq-setting-row" style={{ fontWeight: 600 }}>承認待ち {pending.length} 台</p>}
       {pending.map(d => (
-        <div className="hq-setting-row" key={d.id}>
-          <div>
+        <div className="hq-setting-row" key={d.id} style={{ flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
             <strong>端末 {code(d)}・{d.app ? `${APP_NAME[d.app]}・` : ''}{d.hint ?? '種類不明の端末'}</strong>
             <p>最後に使った日時 {when(d.last_seen_at)}（初めて {when(d.created_at)}）</p>
           </div>
-          <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <input value={names[d.id] ?? ''} onChange={e => setNames(n => ({ ...n, [d.id]: e.target.value }))} placeholder="名前（例：お店のiPad）" aria-label="端末の名前" maxLength={40}
               style={{ height: 34, border: '1px solid #dddde3', borderRadius: 8, padding: '0 10px', fontSize: 12, width: 150 }} />
-            {d.app ? approveButton(d, d.app, full(d.app) ? `${APP_NAME[d.app]}は満杯` : '承認') : <>{approveButton(d, 'staff', '店舗端末で承認')}{approveButton(d, 'sb', 'SBで承認')}</>}
+            {d.app ? approveButton(d, d.app, full(d.app) ? `${APP_NAME[d.app]}は満杯` : '承認') : <>{approveButton(d, 'staff', full('staff') ? '店舗端末は満杯' : '店舗端末で承認')}{approveButton(d, 'sb', full('sb') ? 'SBは満杯' : 'SBで承認')}</>}
             <button className="hq-button hq-button-quiet" disabled={disabled} onClick={() => void run('hq_revoke_staff_device', { p_id: d.id })}>取り消し</button>
           </span>
         </div>
