@@ -33,8 +33,12 @@ export function useReservationDrag({ date, slotW, enabled, scrollRef, leftInset,
   const dropRef = useRef(onDrop)
   useEffect(() => { dropRef.current = onDrop }, [onDrop])
 
-  // 30分ごとに動かす（もとの時刻が :15 などでも、落とした先は :00 か :30）
-  const snapped = useCallback((r: SbReservation, dx: number) => Math.round((jstMinutesOf(r.starts_at, date) + dx / slotW * 15) / 30) * 30, [date, slotW])
+  // 30分ごとに動かす（もとの時刻が :15 などでも、落とした先は :00 か :30）。
+  // 15分ぶんも動かしていなければ元の時刻のまま（長押しして離しただけで 11:15→11:30 にならないように・監査3 I2）
+  const snapped = useCallback((r: SbReservation, dx: number) => {
+    const m0 = jstMinutesOf(r.starts_at, date)
+    return Math.abs(dx) < slotW ? m0 : Math.round((m0 + dx / slotW * 15) / 30) * 30
+  }, [date, slotW])
 
   useEffect(() => {
     const scroller = () => scrollRef.current
