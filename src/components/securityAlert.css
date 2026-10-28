@@ -62,6 +62,8 @@
   animation: sec-alert-blink 0.9s steps(2, start) infinite;
 }
 .sec-alert-icon {
+  display: block;
+  margin: 0 auto;
   color: #fff;
   filter: drop-shadow(0 0 14px rgba(255, 60, 60, 1));
 }
