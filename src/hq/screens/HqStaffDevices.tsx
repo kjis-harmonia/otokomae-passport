@@ -112,8 +112,8 @@ export function HqStaffDevices() {
       {data?.alerts?.map(a => (
         <div className="hq-setting-row" key={a.id}>
           <div>
-            <strong style={{ color: '#c0392b' }}>{when(a.created_at)}　{a.reason === 'pin_ok' ? 'PINは合っていました（PINを変えてください）' : 'PINを3回まちがえました'}</strong>
-            <p>{a.app ? `${APP_NAME[a.app]}・` : ''}{a.hint ?? '種類不明'}　{a.acked_at ? `了解：${when(a.acked_at)}（${a.acked_by ?? 'スタッフ'}）` : 'まだ誰も了解していません'}</p>
+            <strong style={{ color: '#c0392b' }}>{when(a.created_at)}・{a.reason === 'pin_ok' ? 'PINは合っていました（PINを変えてください）' : 'PINを3回まちがえました'}</strong>
+            <p>{a.app ? `${APP_NAME[a.app]}・` : ''}{a.hint ?? '種類不明'}・{a.acked_at ? `了解：${when(a.acked_at)}（${a.acked_by ?? 'スタッフ'}）` : 'まだ誰も了解していません'}</p>
           </div>
         </div>
       ))}
