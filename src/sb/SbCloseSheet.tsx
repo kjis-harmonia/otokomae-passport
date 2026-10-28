@@ -15,9 +15,9 @@ export interface SbClosePreset { date: string; minutes: number | null; endMinute
 const pad = (n: number) => String(n).padStart(2, '0')
 const hm = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`
 const iso = (date: string, m: number) => `${date}T${hm(m)}:00+09:00`
-// 8:00〜22:00 を15分ごと
-const TIMES = Array.from({ length: (22 - 8) * 4 + 1 }, (_, i) => 8 * 60 + i * 15)
-const snap = (m: number) => Math.round(m / 15) * 15
+// 8:00〜22:00 を30分ごと（10/28 慶一郎さん）
+const TIMES = Array.from({ length: (22 - 8) * 2 + 1 }, (_, i) => 8 * 60 + i * 30)
+const snap = (m: number) => Math.round(m / 30) * 30
 
 export function SbCloseSheet({ options, preset, actor, onClose, onDone, onNewBooking }: {
   options: SbOptions; preset: SbClosePreset; actor: string
@@ -42,7 +42,7 @@ export function SbCloseSheet({ options, preset, actor, onClose, onDone, onNewBoo
       const r = await callStaffRpc<{ ok?: boolean; overlap?: number; error?: string }>('staff_close_time', {
         p_staff_ids: staffIds, p_starts_at: iso(date, start!), p_ends_at: iso(date, end!), p_actor: actor || 'SB', p_note: null,
       })
-      if (r.error) { setError(r.error === 'past' ? 'もう過ぎた時間は閉められません。' : r.error === 'invalid_staff' ? '担当を選び直してください。' : '時間を確かめてください（15分刻み・終わりは始まりより後）。'); return }
+      if (r.error) { setError(r.error === 'past' ? 'もう過ぎた時間は閉められません。' : r.error === 'invalid_staff' ? '担当を選び直してください。' : '時間を確かめてください（30分刻み・終わりは始まりより後）。'); return }
       const who = options.staff.filter(s => staffIds.includes(s.id)).map(s => s.name).join('・')
       onDone(`${jstDateLabel(date)} ${hm(start!)}〜${hm(end!)}（${who}）をクローズしました。AI 予約は入りません。${r.overlap ? `この時間にはすでに予約が${r.overlap}件あります（そのまま残ります）。` : ''}`)
     } catch { setError('閉められませんでした。通信を確かめて、もう一度押してください。') }
