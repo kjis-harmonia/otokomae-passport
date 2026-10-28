@@ -8,7 +8,7 @@ import { isHqPreview } from '../hqPreview'
 
 type App = 'staff' | 'sb'
 interface Device { id: string; label: string | null; hint: string | null; app?: App | null; created_at: string; last_seen_at: string; approved_at: string | null }
-interface Intrusion { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: App | null; hint: string | null; acked_at: string | null; acked_by: string | null }
+interface Intrusion { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: App | 'hq' | null; hint: string | null; acked_at: string | null; acked_by: string | null }
 interface DeviceList { require_approval: boolean; devices: Device[]; limits?: Record<App, number>; alerts?: Intrusion[]; locked_at?: string | null }
 const APP_NAME: Record<App, string> = { staff: '店舗端末', sb: '銀二郎SB' }
 /** 端末の画面の右下に出る「端末 3F9A」と同じ番号 */
@@ -22,6 +22,8 @@ const ERRORS: Record<string, string> = {
   no_approved_device: '先に、お店で使う端末を1台以上承認してください（誰も入れなくなるため）。',
   not_found: 'この端末は見つかりませんでした。一覧を読み直してください。',
   limit_reached: '登録できる台数を超えます。先に、使っていない端末を取り消してください。',
+  own_device: 'いま使っているこの端末は取り消せません。',
+  own_device_not_approved: '先に、いま使っているこの端末（右下の「本部端末」の番号）を承認してください。',
 }
 
 export function HqStaffDevices() {
@@ -130,11 +132,85 @@ export function HqStaffDevices() {
         <div className="hq-setting-row" key={a.id}>
           <div>
             <strong style={{ color: '#c0392b' }}>{when(a.created_at)}・{a.reason === 'pin_ok' ? 'PINは合っていました（PINを変えてください）' : 'PINをまちがえました'}</strong>
-            <p>{a.app ? `${APP_NAME[a.app]}・` : ''}{a.hint ?? '種類不明'}・{a.acked_at ? `了解：${when(a.acked_at)}（${a.acked_by ?? 'スタッフ'}）` : 'まだ誰も了解していません'}</p>
+            <p>{a.app ? `${a.app === 'hq' ? '本部' : APP_NAME[a.app]}・` : ''}{a.hint ?? '種類不明'}・{a.acked_at ? `了解：${when(a.acked_at)}（${a.acked_by ?? 'スタッフ'}）` : 'まだ誰も了解していません'}</p>
           </div>
         </div>
       ))}
       {data && data.devices.length === 0 && <p className="hq-setting-row">まだ端末がありません。お店の端末でスタッフPINを入れると、ここに出ます。</p>}
+    </section>
+  )
+}
+
+// 本部の端末（10/28）：本部も登録した端末だけ。上限3台。いま使っている端末は取り消せない
+interface HqDevice { id: string; label: string | null; hint: string | null; created_at: string; last_seen_at: string; approved_at: string | null; mine: boolean }
+interface HqDeviceList { require_approval: boolean; limit: number; devices: HqDevice[] }
+
+export function HqHqDevices() {
+  const [data, setData] = useState<HqDeviceList | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [names, setNames] = useState<Record<string, string>>({})
+  const load = useCallback(async () => {
+    try { setData(await callHqRpc<HqDeviceList>('hq_hq_devices')); setError(null) }
+    catch { setError('本部の端末の一覧を読めませんでした。') }
+  }, [])
+  useEffect(() => { void load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect -- 読み込みが終わってから入れる
+
+  async function run(fn: string, params: Record<string, unknown>) {
+    setBusy(true); setError(null)
+    try {
+      const r = await callHqRpc<{ ok?: boolean; error?: string }>(fn, params)
+      if (r.error) setError(ERRORS[r.error] ?? '変更できませんでした。')
+      await load()
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? ''
+      setError(ERRORS[code] ?? '変更できませんでした。')
+    } finally { setBusy(false) }
+  }
+
+  const disabled = busy || isHqPreview() || !data
+  const approved = data?.devices.filter(d => d.approved_at) ?? []
+  const pending = data?.devices.filter(d => !d.approved_at) ?? []
+  const full = approved.length >= (data?.limit ?? 3)
+  const code = (d: HqDevice) => d.id.slice(0, 4).toUpperCase()
+  return (
+    <section className="hq-surface" style={{ marginTop: 20 }}>
+      <div className="hq-surface-header"><h2>本部の端末</h2></div>
+      <p className="hq-setting-row" style={{ fontWeight: 600 }}>登録済み：{approved.length} / {data?.limit ?? 3} 台</p>
+      <div className="hq-setting-row" style={{ flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+          <strong>本部も登録した端末だけ</strong>
+          <p>オンにすると、ここで承認した端末だけが本部に入れます。本部PINが漏れても、知らない端末からは入れません（入ろうとするとロック）。各端末の右下の「本部端末 ○○○○」で見分けてください。</p>
+        </div>
+        <button className={`hq-button${data?.require_approval ? ' hq-button-primary' : ''}`} disabled={disabled}
+          onClick={() => void run('hq_set_hq_device_policy', { p_require: !data?.require_approval })}>
+          <ShieldCheck size={14} />{data ? (data.require_approval ? 'オン（承認した端末だけ）' : 'オフ（どの端末でも入れる）') : '読み込み中…'}
+        </button>
+      </div>
+      {error && <p className="hq-setting-row" role="alert" style={{ color: '#c0392b' }}>{error}</p>}
+      {pending.map(d => (
+        <div className="hq-setting-row" key={d.id} style={{ flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+            <strong>本部端末 {code(d)}・{d.hint ?? '種類不明の端末'}{d.mine ? '（この端末）' : ''}</strong>
+            <p>最後に使った日時 {when(d.last_seen_at)}（初めて {when(d.created_at)}）</p>
+          </div>
+          <span style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <input value={names[d.id] ?? ''} onChange={e => setNames(n => ({ ...n, [d.id]: e.target.value }))} placeholder="名前（例：テイテイ iPhone）" aria-label="端末の名前" maxLength={40}
+              style={{ height: 34, border: '1px solid #dddde3', borderRadius: 8, padding: '0 10px', fontSize: 12, width: 160 }} />
+            <button className="hq-button hq-button-primary" disabled={disabled || full} onClick={() => void run('hq_approve_hq_device', { p_id: d.id, p_label: names[d.id] ?? '' })}>{full ? '満杯' : '承認'}</button>
+            {!d.mine && <button className="hq-button hq-button-quiet" disabled={disabled} onClick={() => void run('hq_revoke_hq_device', { p_id: d.id })}>取り消し</button>}
+          </span>
+        </div>
+      ))}
+      {approved.map(d => (
+        <div className="hq-setting-row" key={d.id} style={{ flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+            <strong>本部端末 {code(d)}・{d.label ?? d.hint ?? '名前なし'}{d.mine ? '（この端末）' : ''}</strong>
+            <p>{d.label && d.hint ? `${d.hint}・` : ''}最後に使った日時 {when(d.last_seen_at)}</p>
+          </div>
+          {!d.mine && <button className="hq-button hq-button-quiet" disabled={disabled} onClick={() => void run('hq_revoke_hq_device', { p_id: d.id })}>取り消し（ログインも切る）</button>}
+        </div>
+      ))}
     </section>
   )
 }
