@@ -3,6 +3,7 @@ import { Bell, BellOff, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, 
 import { addDaysToDateString, getJapanDateString } from '../utils/dateUtils'
 import { jstDateLabel, jstMinutesOf, jstTime, STATUS_LABEL, yen } from '../utils/bookingApi'
 import { callStaffRpc } from './sbRpc'
+import { supabase } from '../lib/supabase'
 import { sbApi, sbError, salonBoardCopy, type SbOutcome } from './sbApi'
 import { sbPending, subscribeSbPending } from './sbPending'
 import type { SbCommand, SbLedger, SbOptions, SbReservation, TransferStatus } from './sbTypes'
@@ -88,6 +89,7 @@ export function SbScreen() {
   const seen = useRef<Set<string> | null>(null)
   const lastVoice = useRef(0)
   const announce = (kind: 'new' | 'cancel' | 'final' = 'new') => { if (kind !== 'final' && Date.now() - lastVoice.current < 20_000) return; lastVoice.current = Date.now(); announceVoice(kind) }
+  const ackChannel = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const loadUnacked = async () => {
     try {
       const list = await callStaffRpc<typeof unacked>('staff_new_unacked')
@@ -95,6 +97,8 @@ export function SbScreen() {
       const fresh = seen.current ? list.filter(r => !seen.current!.has(`${r.kind}:${r.id}`)) : []
       if (fresh.length) announce(fresh.some(r => r.kind !== 'cancel') ? 'new' : 'cancel')
       seen.current = new Set(list.map(r => `${r.kind}:${r.id}`))
+      // ほかの端末で確認済みになったら、この端末の声も止める
+      if (!list.length) window.speechSynthesis?.cancel()
       setUnacked(list)
     } catch { /* 仕組みが無い・通信切れ：次の読み込みで */ }
   }
@@ -104,7 +108,10 @@ export function SbScreen() {
     // 画面に戻ったら（iPad のスリープ明け・別のアプリから戻ったとき）すぐ確かめる
     const onVisible = () => { if (document.visibilityState === 'visible') void loadUnacked() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => { clearInterval(poll); document.removeEventListener('visibilitychange', onVisible) }
+    // どれかの端末で「サロンボードに入れました」を押したら、ほかの端末もすぐ読み直す（合図だけ。中身はサーバーから読む）
+    const ch = supabase.channel('sb-ack').on('broadcast', { event: 'ack' }, () => { void loadUnacked(); void refresh(dateRef.current) }).subscribe()
+    ackChannel.current = ch
+    return () => { clearInterval(poll); document.removeEventListener('visibilitychange', onVisible); ackChannel.current = null; void supabase.removeChannel(ch) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!unacked.length) return
@@ -119,7 +126,7 @@ export function SbScreen() {
   const ackNew = async () => {
     unlockChime()
     // 画面に出ている分だけ確認済みにする（押す直前に届いた予約は、次の読み込みで帯に出る）
-    try { await callStaffRpc('staff_ack_new', { p_staff_name: operator || null, p_ids: unacked.map(r => r.id) }); setUnacked([]); void loadUnacked(); window.speechSynthesis?.cancel(); void refresh(dateRef.current) } catch { /* 次の読み込みでもう一度 */ }
+    try { await callStaffRpc('staff_ack_new', { p_staff_name: operator || null, p_ids: unacked.map(r => r.id) }); setUnacked([]); void ackChannel.current?.send({ type: 'broadcast', event: 'ack', payload: {} }); void loadUnacked(); window.speechSynthesis?.cancel(); void refresh(dateRef.current) } catch { /* 次の読み込みでもう一度 */ }
   }
   // AI 予約のお知らせ：この端末で受け取っているか。届いたら（開いているとき）ピコーンと鳴らして予約表を読み直す
   const [push, setPush] = useState<SbPushState | null>(null)
