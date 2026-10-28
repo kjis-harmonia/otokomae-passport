@@ -1,7 +1,8 @@
 import type { BookingOptions, Ledger, NewReservationInput, Reservation } from '../utils/bookingApi'
 
 export type TransferStatus = 'pending' | 'done' | 'not_required'
-export type SbReservation = Reservation & { booking_lane: number; transfer_status: TransferStatus; updated_at: string }
+/** ginpay_paid：銀Pay で前もって支払い済み（仮支払い中・会計で確定済み） */
+export type SbReservation = Reservation & { booking_lane: number; transfer_status: TransferStatus; updated_at: string; ginpay_paid?: boolean }
 export type SbOptions = Omit<BookingOptions, 'staff' | 'menus'> & {
   actors: { id: string; name: string }[]
   staff: (BookingOptions['staff'][number] & { capacity: number })[]

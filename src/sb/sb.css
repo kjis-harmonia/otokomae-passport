@@ -583,3 +583,7 @@
 .sb-qc-choice[aria-pressed='true'] small { color: rgba(255, 255, 255, 0.7); }
 .sb-qc-other { margin-top: 14px; }
 @media (max-width: 520px) { .sb-qc-card { grid-template-columns: 1fr 1fr; } .sb-qc-range { grid-column: 1 / -1; justify-self: start; text-align: left; } }
+
+/* 銀Pay で前もって支払い済み：名前の横にピンクの丸チェック（10/28 慶一郎さん） */
+.sb-ginpay-mark { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; padding: 1px 6px 1px 4px; border-radius: 999px; background: #fde4ee; color: #c2185b; font-size: 11px; font-weight: 700; vertical-align: 2px; letter-spacing: 0.02em; }
+.sb-ginpay-mark svg { flex: none; }
