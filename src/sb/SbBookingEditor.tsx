@@ -76,7 +76,8 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
     } catch (err) { setError(sbError(err)) } finally { reviewing.current = false; setChecking(false) }
   }
 
-  const availableTimes = [...new Set((slots ?? []).map(s => s.starts_at))]
+  // SB で選ぶ開始時刻は30分ごと（10/28 慶一郎さん）
+  const availableTimes = [...new Set((slots ?? []).map(s => s.starts_at))].filter(iso => Number(jstTime(iso).slice(3, 5)) % 30 === 0)
   const submit = () => {
     if (!preview || busy) return
     recordMenuUsage(preview.input.menu_codes)
@@ -109,7 +110,7 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
           {r?.items.filter(i => !options.menus.some(m => m.code === i.menu_code)).map(i => <p key={i.menu_code} className="sb-muted">{i.name}（現在の予約内容）</p>)}
         </section>
         <label className="sb-field">担当<select value={staffId ?? ''} onChange={e => setStaffId(e.target.value || null)}><option value="">指名なし</option>{options.staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-        <div className="sb-form-grid"><label className="sb-field">日付<input type="date" value={date} min={getJapanDateString()} max={addDaysToDateString(getJapanDateString(), options.settings.booking_window_days)} required onChange={e => { setDate(e.target.value); setTime('') }} /></label><label className="sb-field">開始時刻<input type="time" step={options.settings.slot_minutes * 60} value={time} required onChange={e => setTime(e.target.value)} /></label></div>
+        <div className="sb-form-grid"><label className="sb-field">日付<input type="date" value={date} min={getJapanDateString()} max={addDaysToDateString(getJapanDateString(), options.settings.booking_window_days)} required onChange={e => { setDate(e.target.value); setTime('') }} /></label><label className="sb-field">開始時刻<input type="time" step={1800} value={time} required onChange={e => setTime(e.target.value)} /></label></div>
         {codes.length > 0 && <details className="sb-times"><summary>空き時間を選ぶ</summary>{slotError ? <p role="alert">空き時間を取得できませんでした。</p> : !slots ? <p className="sb-muted">確認中…</p> : !availableTimes.length ? <p className="sb-muted">この条件の空き時間はありません。</p> : <div className="sb-time-grid">{availableTimes.map(iso => <button type="button" key={iso} aria-pressed={time === jstTime(iso)} onClick={() => setTime(jstTime(iso))}>{jstTime(iso)}</button>)}</div>}</details>}
         <details className="sb-extra" open={source === 'hotpepper' || undefined}><summary>予約経路・メモ</summary>
           <label className="sb-field">予約経路<select value={source} onChange={e => setSource(e.target.value as SbInput['source'])}><option value="staff">店舗入力</option><option value="phone">電話</option><option value="hotpepper">HOT PEPPER</option></select></label>

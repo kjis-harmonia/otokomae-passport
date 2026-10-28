@@ -24,6 +24,8 @@ const ACTOR = 'ginjiro_staff_name'
 const OCCUPYING = new Set(['confirmed', 'checked_in', 'in_service', 'awaiting_payment', 'completed'])
 const TRANSFER: Record<TransferStatus, string> = { pending: '未転記', done: '転記済み', not_required: '転記不要' }
 const SLOT_W = 44
+/** SB で選ぶ時間の刻み（押す・ドラッグ・クローズ・新規予約）。表示は15分の幅のまま（10/28 慶一郎さん：30分ごと） */
+export const SB_STEP = 30
 const LABEL_W = 96
 const LANE_H = 72
 const loadActor = () => { try { return localStorage.getItem(ACTOR) ? JSON.parse(localStorage.getItem(ACTOR)!) as string : '' } catch { return '' } }
@@ -302,7 +304,7 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
       {Array.from({ length: lanes }, (_, lane) => <button key={lane} className="sb-empty-lane" disabled={blocked || !staff.shifts.length || date < getJapanDateString()} aria-label={`${staff.name}の新規予約 枠${lane + 1}`} style={{ top: lane * LANE_H, height: LANE_H }}
         onClick={e => {
           if (e.detail === 0) { onNew(); return }
-          const m = range.start + Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / SLOT_W) * 15
+          const m = range.start + Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / SLOT_W * 15 / SB_STEP) * SB_STEP
           if (nowMin !== null && m < nowMin) return
           // 空いている時間を押したら、その時間・担当でクローズ（いつまでか選ぶだけ）。新規予約はその画面から（10/28 慶一郎さん）
           const shift = staff.shifts.find(s => jstMinutesOf(s.start, date) <= m && jstMinutesOf(s.end, date) > m)
