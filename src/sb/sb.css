@@ -589,5 +589,6 @@
 .sb-ginpay-mark svg { flex: none; }
 /* 名前が長い・予約が短いときは名前を縮め、銀Pay の印は残す（監査3 I8） */
 .sb-reservation strong.sb-res-name { display: flex; align-items: center; min-width: 0; }
-.sb-res-name > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-res-name > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; }
 .sb-res-name .sb-ginpay-mark { flex: none; }
+.sb-reservation-list strong.sb-res-name { display: flex; align-items: center; min-width: 0; }
