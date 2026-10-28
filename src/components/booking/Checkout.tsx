@@ -166,7 +166,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const ginpayOk = method !== 'ginpay' || (!!ginpayAccount && totals.total > 0 && !ginpayShort)
   // オプションは金額だけでよい（名前は任意。空なら「オプション」で記録・10/28 慶一郎さん）
   const optionsReady = lines.every(l => l.source !== 'manual' || l.unit_price > 0)
-  const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && optionsReady && !!method && totals.total >= 0
+  // 券を引く前の金額（券以外の値引きのあと）。券がこれを超えた分はおつりにしない
+  const beforeTickets = totals.subtotal - lines.reduce((n, l) => n + l.discount, 0) - manualAmount
+  const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && optionsReady && !!method && (totals.total >= 0 || beforeTickets >= 0)
     && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy
 
   function update(key: number, patch: Partial<SaleLine>) { setLines(ls => ls.map(l => l.key === key ? { ...l, ...patch } : l)) }
@@ -176,28 +178,15 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     setAdding(false)
     if (src === 'service_menu' && item.id) onMenuPicked?.(item.id)
   }
-  // 券で引けるのは料金（ほかの値引きを引いたあと）まで。5,000円の会計に 6,000円分は使えない（10/28 慶一郎さん）
-  const ticketRoom = Math.max(0, totals.subtotal - lines.reduce((n, l) => n + l.discount, 0) - manualAmount)
+  // 券は料金を超えても使える：お支払いは0円で、超えた分はおつりにしない（10/28 慶一郎さん：これまでも端数はチップとして受け取っていた）
   const ticketSum = chosenTickets.reduce((n, t) => n + t.amount, 0)
-  const ticketFits = (t: { id: string; amount: number; type: string }) =>
-    ticketIds.includes(t.id) || (t.type === 'coupon' ? t.amount <= ticketRoom : ticketSum - chosenTickets.filter(x => x.type === 'coupon').reduce((n, x) => n + x.amount, 0) + t.amount <= ticketRoom)
+  const ticketOver = Math.max(0, ticketSum - Math.max(0, beforeTickets))
   function toggleTicket(id: string, type: string) {
-    const t = tickets.find(x => x.id === id)
-    if (t && !ticketFits(t)) return
     // 割引券・漢トク券は何枚でも種類をまたいでも使える。メンテナンスクーポンだけはほかの券と一緒に使えない
     setTicketIds(ids => ids.includes(id) ? ids.filter(x => x !== id)
       : type === 'coupon' ? [id]
       : [...ids.filter(x => tickets.find(t => t.id === x)?.type !== 'coupon'), id])
   }
-  // メニューが入っていて、選んだ券が料金を超えたら（QR で選んできた券・料金を下げたとき）、選んだ順に入るところまで残す
-  const overKey = lines.length > 0 && ticketSum > ticketRoom ? `${ticketRoom}:${ticketIds.join(',')}` : ''
-  useEffect(() => {
-    if (!overKey) return
-    let sum = 0
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTicketIds(ids => ids.filter(id => { const a = tickets.find(t => t.id === id)?.amount ?? 0; if (sum + a > ticketRoom) return false; sum += a; return true }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overKey])
 
   // 予約の会計：銀Pay の仮支払いを読み込む
   const holdReservationId = ctx?.reservation?.id ?? null
@@ -251,7 +240,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
         reservation_id: ctx?.reservation?.id, client_id: ctx?.reservation ? undefined : client?.id,
         stylist_id: stylistId!, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.source === 'manual' && !l.name.trim() ? 'オプション' : l.name.trim() || l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
         manual_discount: manualAmount > 0 ? { amount: manualAmount, label: manual!.label.trim() } : undefined,
-        payment_method: method!, expected_total: totals.total, idempotency_key: saleKey,
+        payment_method: method!, expected_total: Math.max(0, totals.total), idempotency_key: saleKey,
         ginpay_account_id: method === 'ginpay' ? ginpayAccount?.id : undefined,
       } }
       const res = await withCheckoutLock(() => settleCheckout(api, proposed))
@@ -382,13 +371,12 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   {tickets.map(t => {
                     const on = ticketIds.includes(t.id)
                     const permOnly = !hasPerm && welcomeIds.includes(t.id)
-                    const over = !on && lines.length > 0 && !ticketFits(t)
-                    const off = !!t.blocked || permOnly || over
+                    const off = !!t.blocked || permOnly
                     return (
                       <button key={t.id} type="button" disabled={off} onClick={() => toggleTicket(t.id, t.type)} aria-pressed={on} style={{ ...lineBtn, opacity: off ? 0.55 : 1, cursor: off ? 'default' : 'pointer' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                           <span aria-hidden="true" style={{ width: 18, height: 18, flexShrink: 0, boxSizing: 'border-box', borderRadius: 4, border: `1.5px solid ${on ? C.text : C.lineStrong}`, background: on ? C.text : 'transparent', color: C.bg, fontSize: 13, lineHeight: '15px', textAlign: 'center', fontWeight: 700 }}>{on ? '✓' : ''}</span>
-                          <span style={{ fontSize: 14 }}>{t.title}{t.blocked ? <span style={{ fontSize: 12, color: C.mute }}>{` ${TICKET_BLOCK_LABEL[t.blocked]}`}</span> : permOnly ? <span style={{ fontSize: 12, color: C.mute }}> パーマのときだけ使えます</span> : over && <span style={{ fontSize: 12, color: C.mute }}> 料金を超えるので使えません</span>}</span>
+                          <span style={{ fontSize: 14 }}>{t.title}{t.blocked ? <span style={{ fontSize: 12, color: C.mute }}>{` ${TICKET_BLOCK_LABEL[t.blocked]}`}</span> : permOnly && <span style={{ fontSize: 12, color: C.mute }}> パーマのときだけ使えます</span>}</span>
                         </span>
                         <span style={{ fontSize: 14, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{t.amount ? `−${yen(t.amount)}` : ''}</span>
                       </button>
@@ -420,6 +408,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   : viaGinpay
                     ? hold ? `予約のときに ${yen(hold.amount)} を仮支払いしています。現金は受け取りません。${totals.total > hold.amount ? `差額 ${yen(totals.total - hold.amount)} も銀Pay の残高から。` : ''}` : '銀Pay の残高から支払います。現金は受け取りません。'
                     : '銀Pay の仮支払いはありません。現金で受け取ってから確定してください。'
+                const overNote = ticketOver > 0 ? `券が料金を ${yen(ticketOver)} 上回っています（おつりは出ません）。` : ''
                 const totalLabel = !ready ? '' : viaGinpay ? '銀Payで支払う金額' : '現金でお受け取り'
                 const Icon = viaGinpay ? Wallet : Banknote
                 const row = { display: 'flex', alignItems: 'baseline', gap: 10, fontSize: 14, lineHeight: 2, fontVariantNumeric: 'tabular-nums' } as const
@@ -440,6 +429,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontFamily: '"Shippori Mincho","Noto Serif JP",serif', fontSize: 19, fontWeight: 700, letterSpacing: '0.06em', color: ready ? accent : '#f4efe4' }}>{title}</div>
                         <div style={{ fontSize: 12, lineHeight: 1.6, color: 'rgba(244,239,228,0.72)' }}>{note}</div>
+                        {ready && overNote && <div style={{ fontSize: 12, lineHeight: 1.6, color: '#e2c27f', marginTop: 2 }}>{overNote}</div>}
                       </div>
                     </div>
                     {!method && holdError && lines.length > 0 && (
