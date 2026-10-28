@@ -240,6 +240,15 @@ export function SbScreen() {
       {pending.pending && !pending.error && <button className="sb-secondary" disabled={busy || !online} onClick={() => void retry()}>{busy ? '確認中…' : '同じ内容で結果を確認'}</button>}
       {!pending.pending && !pending.error && online && <button className="sb-icon" aria-label="再読み込み" onClick={() => { void refresh(date); void loadOptions() }}><RefreshCw size={18} /></button>}
     </div>}
+    {/* この端末が通知を受け取れないときは、ずっと出しておく（SB を閉じていると予約のお知らせが届かないため・10/28 慶一郎さん） */}
+    {push && push !== 'on' && <div className="sb-alert" role="status"><span>{push === 'needs-install'
+      ? 'この端末は、SB を閉じていると予約のお知らせが届きません。Safari の共有ボタン →「ホーム画面に追加」で追加した SB を開いて「通知」を押してください。'
+      : push === 'denied'
+        ? 'この端末は、お知らせが許可されていません。iPad の「設定」→「通知」→「銀二郎SB」でオンにしてください。'
+        : push === 'unsupported'
+          ? 'この端末・ブラウザは、SB を閉じているときのお知らせに対応していません。'
+          : 'この端末は、SB を閉じていると予約のお知らせが届きません。右上の「通知」を押して受け取りをオンにしてください。'}</span>
+      {push === 'off' && <button className="sb-secondary" onClick={() => void togglePush()}>通知をオンにする</button>}</div>}
     {hpb && hpb.open > 0 && <div className="sb-alert" role="status"><span>HOT PEPPERのメールで確認が必要なものが{hpb.open}件あります。</span><button className="sb-secondary" onClick={() => setHpbOpen(true)}>確認する</button></div>}
     {unacked.length > 0 && <NewAlert list={unacked} onAck={() => void ackNew()} onOpen={openReservation} />}
     {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
