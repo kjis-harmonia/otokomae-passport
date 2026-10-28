@@ -8,7 +8,7 @@ import { isHqPreview } from '../hqPreview'
 
 type App = 'staff' | 'sb'
 interface Device { id: string; label: string | null; hint: string | null; app?: App | null; created_at: string; last_seen_at: string; approved_at: string | null }
-interface Intrusion { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: App | 'hq' | null; hint: string | null; acked_at: string | null; acked_by: string | null }
+interface Intrusion { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: App | 'hq' | null; hint: string | null; acked_at: string | null; acked_by: string | null; ip?: string | null; user_agent?: string | null }
 interface DeviceList { require_approval: boolean; devices: Device[]; limits?: Record<App, number>; alerts?: Intrusion[]; locked_at?: string | null }
 const APP_NAME: Record<App, string> = { staff: '店舗端末', sb: '銀二郎SB' }
 /** 端末の画面の右下に出る「端末 3F9A」と同じ番号 */
@@ -119,8 +119,8 @@ export function HqStaffDevices() {
       )}
       {approved.length > 0 && <p className="hq-setting-row" style={{ fontWeight: 600 }}>承認済み {approved.length} 台</p>}
       {approved.map(d => (
-        <div className="hq-setting-row" key={d.id}>
-          <div>
+        <div className="hq-setting-row" key={d.id} style={{ flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
             <strong>端末 {code(d)}・{APP_NAME[d.app ?? 'staff']}・{d.label ?? d.hint ?? '名前なし'}</strong>
             <p>{d.label && d.hint ? `${d.hint}・` : ''}最後に使った日時 {when(d.last_seen_at)}</p>
           </div>
@@ -133,6 +133,7 @@ export function HqStaffDevices() {
           <div>
             <strong style={{ color: '#c0392b' }}>{when(a.created_at)}・{a.reason === 'pin_ok' ? 'PINは合っていました（PINを変えてください）' : 'PINをまちがえました'}</strong>
             <p>{a.app ? `${a.app === 'hq' ? '本部' : APP_NAME[a.app]}・` : ''}{a.hint ?? '種類不明'}・{a.acked_at ? `了解：${when(a.acked_at)}（${a.acked_by ?? 'スタッフ'}）` : 'まだ誰も了解していません'}</p>
+            {(a.ip || a.user_agent) && <p style={{ fontSize: 11, wordBreak: 'break-all' }}>{a.ip ? `IP ${a.ip}` : ''}{a.ip && a.user_agent ? '・' : ''}{a.user_agent ?? ''}</p>}
           </div>
         </div>
       ))}
@@ -169,8 +170,8 @@ export function HqHqDevices() {
   }
 
   const disabled = busy || isHqPreview() || !data
-  const approved = data?.devices.filter(d => d.approved_at) ?? []
-  const pending = data?.devices.filter(d => !d.approved_at) ?? []
+  const approved = data?.devices?.filter(d => d.approved_at) ?? []
+  const pending = data?.devices?.filter(d => !d.approved_at) ?? []
   const full = approved.length >= (data?.limit ?? 3)
   const code = (d: HqDevice) => d.id.slice(0, 4).toUpperCase()
   return (
