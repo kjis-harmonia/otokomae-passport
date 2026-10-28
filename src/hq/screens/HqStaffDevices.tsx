@@ -11,6 +11,8 @@ interface Device { id: string; label: string | null; hint: string | null; app?: 
 interface Intrusion { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: App | null; hint: string | null; acked_at: string | null; acked_by: string | null }
 interface DeviceList { require_approval: boolean; devices: Device[]; limits?: Record<App, number>; alerts?: Intrusion[] }
 const APP_NAME: Record<App, string> = { staff: '店舗端末', sb: '銀二郎SB' }
+/** 端末の画面の右下に出る「端末 3F9A」と同じ番号 */
+const code = (d: Device) => d.id.slice(0, 4).toUpperCase()
 
 const when = (iso: string) => {
   const d = new Date(new Date(iso).getTime() + 9 * 3600000)
@@ -68,7 +70,7 @@ export function HqStaffDevices() {
       <div className="hq-setting-row">
         <div>
           <strong>登録した端末だけログインできる</strong>
-          <p>オンにすると、ここで承認した端末だけがスタッフPINで入れます。PINが漏れても、知らない端末からは入れません。</p>
+          <p>オンにすると、ここで承認した端末だけがスタッフPINで入れます。PINが漏れても、知らない端末からは入れません。各端末の画面の右下に出る「端末 ○○○○」の番号で見分けてください。</p>
         </div>
         <button className={`hq-button${data?.require_approval ? ' hq-button-primary' : ''}`} disabled={disabled}
           onClick={() => void run('hq_set_staff_device_policy', { p_require: !data?.require_approval })}>
@@ -80,7 +82,7 @@ export function HqStaffDevices() {
       {pending.map(d => (
         <div className="hq-setting-row" key={d.id}>
           <div>
-            <strong>{d.app ? `${APP_NAME[d.app]}・` : ''}{d.hint ?? '種類不明の端末'}</strong>
+            <strong>端末 {code(d)}・{d.app ? `${APP_NAME[d.app]}・` : ''}{d.hint ?? '種類不明の端末'}</strong>
             <p>最後に使った日時 {when(d.last_seen_at)}（初めて {when(d.created_at)}）</p>
           </div>
           <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -102,7 +104,7 @@ export function HqStaffDevices() {
       {approved.map(d => (
         <div className="hq-setting-row" key={d.id}>
           <div>
-            <strong>{APP_NAME[d.app ?? 'staff']}・{d.label ?? d.hint ?? '名前なし'}</strong>
+            <strong>端末 {code(d)}・{APP_NAME[d.app ?? 'staff']}・{d.label ?? d.hint ?? '名前なし'}</strong>
             <p>{d.label && d.hint ? `${d.hint}・` : ''}最後に使った日時 {when(d.last_seen_at)}</p>
           </div>
           <button className="hq-button hq-button-quiet" disabled={disabled} onClick={() => void run('hq_revoke_staff_device', { p_id: d.id })}>取り消し（ログインも切る）</button>
