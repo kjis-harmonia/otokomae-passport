@@ -92,9 +92,13 @@ export function SbScreen() {
   const lastVoice = useRef(0)
   const announce = (kind: 'new' | 'cancel' | 'final' = 'new') => { if (kind !== 'final' && Date.now() - lastVoice.current < 20_000) return; lastVoice.current = Date.now(); announceVoice(kind) }
   const ackChannel = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  // 監査2 R6：読み直しは最後に頼んだものだけ使う（古い応答で、確認済みの帯や声がよみがえらないように）
+  const unackedGen = useRef(0)
   const loadUnacked = async () => {
+    const gen = ++unackedGen.current
     try {
       const list = await callStaffRpc<typeof unacked>('staff_new_unacked')
+      if (gen !== unackedGen.current) return
       // 開いている間に増えた分は、お知らせが届かなくても鳴らす（最初の読み込みでは鳴らさない）
       const fresh = seen.current ? list.filter(r => !seen.current!.has(`${r.kind}:${r.id}`)) : []
       if (fresh.length) announce(fresh.some(r => r.kind !== 'cancel') ? 'new' : 'cancel')
@@ -128,7 +132,9 @@ export function SbScreen() {
   const ackNew = async () => {
     unlockChime()
     // 画面に出ている分だけ確認済みにする（押す直前に届いた予約は、次の読み込みで帯に出る）
-    try { await callStaffRpc('staff_ack_new', { p_staff_name: operator || null, p_ids: unacked.map(r => r.id) }); setUnacked([]); void ackChannel.current?.send({ type: 'broadcast', event: 'ack', payload: {} }); void loadUnacked(); window.speechSynthesis?.cancel(); void refresh(dateRef.current) } catch { /* 次の読み込みでもう一度 */ }
+    // 監査2 R2：画面に出ていた「新しい予約」と「取消」を分けて確認する（見ていない取消まで確認済みにしない）
+    unackedGen.current++ // 確認の前に始まった読み直しの結果は使わない
+    try { await callStaffRpc('staff_ack_new', { p_staff_name: operator || null, p_new_ids: unacked.filter(r => r.kind !== 'cancel').map(r => r.id), p_cancel_ids: unacked.filter(r => r.kind === 'cancel').map(r => r.id) }); setUnacked([]); void ackChannel.current?.send({ type: 'broadcast', event: 'ack', payload: {} }); void loadUnacked(); window.speechSynthesis?.cancel(); void refresh(dateRef.current) } catch { /* 次の読み込みでもう一度 */ }
   }
   // AI 予約のお知らせ：この端末で受け取っているか。届いたら（開いているとき）ピコーンと鳴らして予約表を読み直す
   const [push, setPush] = useState<SbPushState | null>(null)
