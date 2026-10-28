@@ -14,6 +14,7 @@
   --sb-gold-tint: #faf5e9;
   --sb-green: #246b52;
   --sb-blue: #26628b;
+  --sb-emerald: #1f9a7e;
   --sb-red: #b23a3a;
   --sb-focus: #26628b;
   --sb-slot: 44px;
@@ -204,6 +205,8 @@
 .sb-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 .sb-blue { background: var(--sb-blue); }
 .sb-green { background: var(--sb-green); }
+.sb-emerald { background: var(--sb-emerald); }
+.sb-closed-dot { background: #d9cdb4; }
 .sb-gold-dot { background: var(--sb-gold); }
 .sb-reservation small .sb-gold-dot { margin-left: 2px; }
 .sb-reservation-list .sb-gold-dot { flex: none; }
@@ -286,6 +289,11 @@
 .sb-reservation strong { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-reservation span { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-reservation small { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #4d5750; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* AI 予約（アプリから・来店前）は薄いエメラルド。ホットペッパーなどは今までの薄い水色・クローズは薄茶色（10/28 慶一郎さん） */
+.sb-reservation-confirmed.sb-src-ai {
+  background: linear-gradient(180deg, #ecf8f4 0%, #dff2eb 100%);
+  box-shadow: inset 3px 0 0 var(--sb-emerald), 0 1px 2px rgba(23, 128, 104, 0.14);
+}
 .sb-reservation-checked_in, .sb-reservation-in_service, .sb-reservation-awaiting_payment {
   background: linear-gradient(180deg, #eef6f1 0%, #e4f0e9 100%); box-shadow: inset 3px 0 0 var(--sb-green), 0 1px 2px rgba(36, 107, 82, 0.12);
 }
