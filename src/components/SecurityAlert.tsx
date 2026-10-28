@@ -2,7 +2,7 @@
 // 店舗端末・銀二郎SB の両方で、登録済みの端末の画面全体を赤くして、誰かが「了解」を押すまで出し続ける（了解はすべての端末で共通）
 import { useEffect, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
-import { callStaffRpc, deviceHint } from '../utils/staffSession'
+import { callStaffRpc, deviceCode, deviceHint } from '../utils/staffSession'
 import './securityAlert.css'
 
 type Alert = { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: 'staff' | 'sb' | null; hint: string | null }
@@ -11,6 +11,13 @@ const POLL_MS = 20_000
 
 function time(iso: string) {
   return new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+/** 画面の隅に、この端末の番号（本部の端末一覧の番号と同じ）。どの端末を登録するか見分けるため */
+export function DeviceTag() {
+  const [code, setCode] = useState<string | null>(null)
+  useEffect(() => { void deviceCode().then(setCode) }, [])
+  return code ? <span className="device-tag">端末 {code}</span> : null
 }
 
 export function SecurityAlert({ app }: { app: 'staff' | 'sb' }) {
