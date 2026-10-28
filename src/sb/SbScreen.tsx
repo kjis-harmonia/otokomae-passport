@@ -269,7 +269,8 @@ export function SbScreen() {
         <div className="sb-axis-name">担当者</div><div className="sb-axis">{Array.from({ length: (range.end - range.start) / 60 }, (_, i) => range.start + i * 60).map(m => <span key={m} style={{ left: x(m) + 8 }}>{Math.floor(m / 60)}:00</span>)}</div>
         {ledger.staff.map(staff => { const bookings = active.filter(r => r.staff_id === staff.id); const used = Math.max(0, ...bookings.map(r => r.booking_lane + 1)); const lanes = Math.max(2, used) /* ふだんは2段。同時に3件入った日だけ3段に増やす */
           return <StaffRow key={staff.id} drag={drag} staff={staff} lanes={lanes} reservations={bookings} ledger={ledger} date={date} range={range} nowMin={minutesNow} x={x} blocked={blocked}
-            onOpen={setSelectedId} onNew={minutes => newBooking({ date, staffId: staff.id, minutes })} onBlock={b => setReopening({ block: b, staffName: b.staff_id ? staff.name : '全員' })} /> })}
+            onOpen={setSelectedId} onNew={minutes => newBooking({ date, staffId: staff.id, minutes })}
+            onTapSlot={(minutes, shiftEnd) => openClose({ date, minutes, endMinutes: null, staffId: staff.id, quick: true, shiftEnd })} onBlock={b => setReopening({ block: b, staffName: b.staff_id ? staff.name : '全員' })} /> })}
       </div>{!ledger.staff.length && <p className="sb-empty">本部で予約スタッフの設定が必要です。</p>}</div>}
     <footer className="sb-statusbar"><div>{ledger?.closure ? <span>休業日{ledger.closure.reason ? `：${ledger.closure.reason}` : ''}</span> : ledger && !ledger.staff.some(s => s.shifts.length) ? <span>本部で勤務時間の設定が必要です。</span> : <span>{active.length}件</span>}
       <button onClick={() => setHpbOpen(true)}>HPBメール</button>{cancelled.length > 0 && <button onClick={() => setArchive('cancelled')}>取消・不来店 {cancelled.length}件</button>}{toTransfer.length > 0 && <button onClick={() => setArchive('transfer')}>未転記 {toTransfer.length}件</button>}</div><span>{updated ? `${updated} 更新` : ''}</span></footer>
@@ -280,18 +281,19 @@ export function SbScreen() {
     {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
     {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} actor={operator} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
-    {closing && options && <SbCloseSheet options={options} preset={closing} actor={operator} onClose={() => setClosing(null)} onDone={m => { setClosing(null); setNotice(m); void refresh(dateRef.current) }} />}
+    {closing && options && <SbCloseSheet options={options} preset={closing} actor={operator} onClose={() => setClosing(null)}
+      onNewBooking={closing.quick ? () => { const p = closing; setClosing(null); newBooking({ date: p.date, staffId: p.staffId ?? undefined, minutes: p.minutes ?? undefined }) } : undefined} onDone={m => { setClosing(null); setNotice(m); void refresh(dateRef.current) }} />}
     {reopening && <SbReopenSheet block={reopening.block} staffName={reopening.staffName} actor={operator} onClose={() => setReopening(null)} onDone={m => { setReopening(null); setNotice(m); void refresh(dateRef.current) }} />}
     {moving && options && <SbMoveSheet key={`${moving.r.id}:${moving.staffId}:${moving.minutes}`} target={moving} options={options} date={date} busy={busy} onSend={send} onClose={() => setMoving(null)} />}
     {editor && options && <SbBookingEditor key={editor.reservation?.id ?? 'new'} options={options} preset={editor.preset} reservation={editor.reservation} actor={operator} busy={busy} onSend={send} onClose={() => setEditor(null)} />}
   </div>
 }
 
-function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMin, x, blocked, onOpen, onNew, onBlock }: {
+function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMin, x, blocked, onOpen, onNew, onTapSlot, onBlock }: {
   drag: ReturnType<typeof useReservationDrag>
   staff: SbLedger['staff'][number]; lanes: number; reservations: SbReservation[]; ledger: SbLedger; date: string
   range: { start: number; end: number }; nowMin: number | null; x: (minute: number) => number; blocked: boolean
-  onOpen: (id: string) => void; onNew: (minute?: number) => void; onBlock: (block: SbLedger['blocks'][number]) => void
+  onOpen: (id: string) => void; onNew: (minute?: number) => void; onTapSlot: (minute: number, shiftEnd: number) => void; onBlock: (block: SbLedger['blocks'][number]) => void
 }) {
   const blocks = ledger.blocks.filter(b => b.staff_id === null || b.staff_id === staff.id)
   return <><div className="sb-staff-name" style={{ minHeight: lanes * LANE_H }}><strong>{staff.name}</strong><small>{staff.shifts.length ? `同時${staff.capacity}枠` : '休み'}</small></div>
@@ -302,7 +304,9 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
           if (e.detail === 0) { onNew(); return }
           const m = range.start + Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / SLOT_W) * 15
           if (nowMin !== null && m < nowMin) return
-          if (staff.shifts.some(s => jstMinutesOf(s.start, date) <= m && jstMinutesOf(s.end, date) > m)) onNew(m)
+          // 空いている時間を押したら、その時間・担当でクローズ（いつまでか選ぶだけ）。新規予約はその画面から（10/28 慶一郎さん）
+          const shift = staff.shifts.find(s => jstMinutesOf(s.start, date) <= m && jstMinutesOf(s.end, date) > m)
+          if (shift) onTapSlot(m, jstMinutesOf(shift.end, date))
         }} />)}
       {blocks.map(b => {
         const style = { left: x(Math.max(range.start, jstMinutesOf(b.starts_at, date))), width: x(Math.min(range.end, jstMinutesOf(b.ends_at, date))) - x(Math.max(range.start, jstMinutesOf(b.starts_at, date))) }
