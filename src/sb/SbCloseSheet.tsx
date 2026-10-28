@@ -107,9 +107,10 @@ export function SbReopenSheet({ block, staffName, actor, onClose, onDone }: {
   const reopen = async () => {
     setBusy(true); setError(null)
     try {
-      const r = await callStaffRpc<{ ok?: boolean; error?: string }>('staff_reopen_time', { p_block_id: block.id, p_actor: actor || 'SB' })
+      const r = await callStaffRpc<{ ok?: boolean; error?: string; still_blocked?: number }>('staff_reopen_time', { p_block_id: block.id, p_actor: actor || 'SB' })
       if (r.error) { setError('この時間は本部で閉めたものです。本部で外してください。'); return }
-      onDone(`${jstTime(block.starts_at)}〜${jstTime(block.ends_at)}（${staffName}）のクローズを外しました。AI 予約が入るようになります。`)
+      // 監査3 R2：ほかのクローズ・休憩がまだ重なっていれば、AI 予約は入らないまま
+      onDone(`${jstTime(block.starts_at)}〜${jstTime(block.ends_at)}（${staffName}）のクローズを外しました。${r.still_blocked ? 'ただし、この時間にはまだ別のクローズか休憩があるので、AI 予約は入りません。' : 'AI 予約が入るようになります。'}`)
     } catch { setError('外せませんでした。通信を確かめて、もう一度押してください。') }
     finally { setBusy(false) }
   }
