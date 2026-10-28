@@ -1,6 +1,6 @@
 // 本部の設定：店舗端末の2段階認証。承認した端末だけスタッフPINでログインできる（10/27 慶一郎さん）
 //   知らない端末で PIN を入れると「承認待ち」としてここに出る。店の端末を承認してから「登録した端末だけ」をオンにする
-//   10/28：種類ごとの台数の上限（店舗端末 2台・SB 6台）。登録していない端末が入ろうとした記録も出す
+//   10/28：種類ごとの台数の上限（店舗端末 3台・SB 7台）。登録していない端末が入ろうとした記録も出す
 import { useCallback, useEffect, useState } from 'react'
 import { ShieldCheck } from 'lucide-react'
 import { callHqRpc } from '../hqSession'
@@ -57,7 +57,7 @@ export function HqStaffDevices() {
   const pending = data?.devices.filter(d => !d.approved_at && d.hint) ?? []
   const unknown = data?.devices.filter(d => !d.approved_at && !d.hint) ?? []
   const approved = data?.devices.filter(d => d.approved_at) ?? []
-  const limits: Record<App, number> = data?.limits ?? { staff: 2, sb: 6 }
+  const limits: Record<App, number> = data?.limits ?? { staff: 3, sb: 7 }
   const used = (app: App) => approved.filter(d => (d.app ?? 'staff') === app).length
   const full = (app: App) => used(app) >= limits[app]
   const approveButton = (d: Device, app: App, label: string) => (

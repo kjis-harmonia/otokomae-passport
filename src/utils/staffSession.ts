@@ -120,7 +120,7 @@ export async function deviceCode(): Promise<string | null> {
   } catch { return null }
 }
 
-/** app：店舗端末（staff）か銀二郎SB（sb）か。本部の台数の上限（店舗端末 2台・SB 6台）を種類ごとに数える */
+/** app：店舗端末（staff）か銀二郎SB（sb）か。本部の台数の上限（店舗端末 3台・SB 7台）を種類ごとに数える */
 export async function staffLogin(pin: string, app: 'staff' | 'sb' = 'staff'): Promise<StaffLoginResult> {
   try {
     let deviceKey: string | null = null
