@@ -260,7 +260,7 @@ export function SbScreen() {
     {unacked.length > 0 && <NewAlert list={unacked} onAck={() => void ackNew()} onOpen={openReservation} />}
     {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
       onNew={p => newBooking({ date, minutes: p.minutes, staffId: p.staffId })} onTransfer={() => setArchive('transfer')} />}
-    <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />予約</span><span><i className="sb-dot sb-green" />来店済み</span><span><i className="sb-dot sb-gold-dot" />未転記</span></div>
+    <div className="sb-board-toolbar"><div className="sb-legend"><span><i className="sb-dot sb-blue" />ホットペッパー</span><span><i className="sb-dot sb-emerald" />AI予約</span><span><i className="sb-dot sb-closed-dot" />クローズ</span><span><i className="sb-dot sb-green" />来店済み</span><span><i className="sb-dot sb-gold-dot" />未転記</span></div>
       <div className="sb-view-picker" role="group" aria-label="予約の表示"><button className="sb-icon" aria-label="予約表" title="予約表" aria-pressed={view === 'board'} onClick={() => setView('board')}><CalendarDays size={19} /></button><button className="sb-icon" aria-label="予約一覧" title="予約一覧" aria-pressed={view === 'list'} onClick={() => setView('list')}><List size={19} /></button><button className="sb-icon" aria-label="予約表を更新" title="更新" disabled={busy} onClick={() => void refresh(date)}><RefreshCw size={18} /></button></div></div>
     {notice && <p className="sb-notice" role="status">{notice}</p>}
     {!ledger ? <div className="sb-empty">{error ? '予約表を表示できません。' : <><LoaderCircle size={18} className="sb-spin" />読み込み中…</>}</div>
@@ -318,7 +318,7 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
       {reservations.map(r => {
         const start = jstMinutesOf(r.starts_at, date), end = jstMinutesOf(r.ends_at, date), until = jstMinutesOf(r.occupied_until, date)
         const dragging = drag.view?.id === r.id ? drag.view : null
-        return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}${dragging ? ' sb-dragging' : ''}`} aria-label={`${jstTime(r.starts_at)} ${r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`}
+        return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}${r.source === 'app' ? ' sb-src-ai' : ''}${dragging ? ' sb-dragging' : ''}`} aria-label={`${jstTime(r.starts_at)} ${r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`}
           onPointerDown={e => drag.start(e, r)} onClick={() => { if (drag.clicked()) onOpen(r.id) }} onContextMenu={e => { if (r.status === 'confirmed') e.preventDefault() }}
           style={{ left: x(start) + 2, width: Math.max(12, x(end) - x(start) - 4), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10, ...(dragging ? { transform: `translate(${dragging.dx}px, ${dragging.dy}px)` } : {}) }}>
           {dragging && <em className="sb-drag-time">{`${Math.floor(dragging.minutes / 60)}:${String(dragging.minutes % 60).padStart(2, '0')}`}</em>}
