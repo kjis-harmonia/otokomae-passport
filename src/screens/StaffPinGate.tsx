@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { StaffHome } from './StaffHome'
-import { SecurityAlert } from '../components/SecurityAlert'
+import { SecurityAlert, DeviceTag } from '../components/SecurityAlert'
 import { isStaging } from '../utils/env'
 import { StgBadge } from '../components/StgBadge'
 import { Delete } from 'lucide-react'
@@ -87,7 +87,7 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
   }, [handleDigit, handleBack])
 
   // 登録していない端末が入ろうとしたら、了解を押すまで画面全体に警告を出す（店舗端末・SB の両方）
-  if (authed) return <>{children ?? <StaffHome />}<SecurityAlert app={app} /></>
+  if (authed) return <>{children ?? <StaffHome />}<SecurityAlert app={app} /><DeviceTag /></>
 
   // iPhone のパスコード画面のように：あたたかい白・明朝の店名・6つの点・丸いキー（端末メニューと同じ見た目）
   return (
@@ -122,6 +122,8 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
             <span key={i} className={i < pin.length ? (error ? 'is-error' : success ? 'is-ok' : 'is-on') : undefined} />
           ))}
         </motion.div>
+
+        <DeviceTag />
 
         <motion.div className="st-pin-pad" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12, duration: 0.4 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (

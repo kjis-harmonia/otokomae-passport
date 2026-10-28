@@ -141,3 +141,20 @@
 @media (prefers-reduced-motion: reduce) {
   .sec-alert, .sec-alert::after, .sec-alert-noise, .sec-alert-scan::after, .sec-alert-code, .sec-alert h1 { animation: none; }
 }
+
+/* この端末の番号（本部の一覧と同じ）。邪魔にならないよう右下に小さく */
+.device-tag {
+  position: fixed;
+  right: max(8px, env(safe-area-inset-right));
+  bottom: max(6px, env(safe-area-inset-bottom));
+  z-index: 2147482000;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #6b6b73;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}

@@ -103,6 +103,16 @@ export function deviceHint(): string {
   return `${device} / ${browser}${standalone ? ' / ホーム画面' : ''}`
 }
 
+/** この端末の番号（本部の端末一覧の「番号」と同じ。端末キーの SHA-256 の先頭4文字）。端末キーが無ければ null */
+export async function deviceCode(): Promise<string | null> {
+  try {
+    const key = localStorage.getItem(STAFF_DEVICE_KEY)
+    if (!key || !crypto?.subtle) return null
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key))
+    return Array.from(new Uint8Array(buf).slice(0, 2), b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+  } catch { return null }
+}
+
 /** app：店舗端末（staff）か銀二郎SB（sb）か。本部の台数の上限（店舗端末 2台・SB 6台）を種類ごとに数える */
 export async function staffLogin(pin: string, app: 'staff' | 'sb' = 'staff'): Promise<StaffLoginResult> {
   try {
