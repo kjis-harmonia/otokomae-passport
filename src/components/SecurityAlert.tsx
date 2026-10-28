@@ -90,7 +90,7 @@ export function SecurityAlert({ app, authed = true }: { app: 'staff' | 'sb'; aut
               <li key={a.id}>
                 <span>{time(a.created_at)}</span>
                 <span>{a.app === 'sb' ? '銀二郎SB' : '店舗端末'}{a.hint ? `・${a.hint}` : ''}</span>
-                <b>{a.reason === 'pin_ok' ? 'PINは合っていました' : 'PINを3回まちがえました'}</b>
+                <b>{a.reason === 'pin_ok' ? 'PINは合っていました' : 'PINをまちがえました'}</b>
               </li>
             ))}
             {state.alerts.length > 3 && <li className="sec-alert-more">ほか {state.alerts.length - 3}件</li>}
