@@ -84,6 +84,7 @@ const MIGRATION_ORDER = [
   '20261028000700_alert_ip.sql',
   '20261028000800_ticket_issue_300.sql',
   '20261028000900_sb_ginpay_mark.sql',
+  '20261028001000_audit2_fixes.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [

@@ -467,8 +467,10 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
                   <span style={{ fontSize: 15, fontWeight: 600 }}>お支払い</span>
-                  <span style={{ fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: totals.total < 0 ? C.danger : C.text }}>{yen(totals.total)}</span>
+                  {/* 監査2 R5：券が料金を超えたときは0円（超えた分はおつりにしない）。券以外の値引きが超えたときだけ赤 */}
+                  <span style={{ fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: beforeTickets < 0 ? C.danger : C.text }}>{yen(Math.max(0, totals.total))}</span>
                 </div>
+                {ticketOver > 0 && <p style={{ fontSize: 13, color: C.sub, margin: '4px 0 0', textAlign: 'right' }}>券が料金を {yen(ticketOver)} 上回っています（おつりは出ません）</p>}
               </div>
               )}
 
@@ -511,9 +513,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                         <>
                           <Sum label="現在の残高" value={yen(ginpayAccount.balance)} />
                           <Sum label="今回のお支払い" value={`−${yen(Math.max(0, totals.total))}`} />
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, lineHeight: 1.9, color: ginpayAccount.balance < totals.total ? C.danger : C.text }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, lineHeight: 1.9, color: ginpayAccount.balance < Math.max(0, totals.total) ? C.danger : C.text }}>
                             <span>支払後の残高</span>
-                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{ginpayAccount.balance < totals.total ? '残高が不足しています' : yen(ginpayAccount.balance - totals.total)}</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{ginpayAccount.balance < Math.max(0, totals.total) ? '残高が不足しています' : yen(ginpayAccount.balance - Math.max(0, totals.total))}</span>
                           </div>
                         </>
                       )}
