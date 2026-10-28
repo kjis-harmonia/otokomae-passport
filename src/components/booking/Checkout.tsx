@@ -407,7 +407,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   : !ready ? 'お支払い方法を確かめています…'
                   : viaGinpay
                     ? hold ? `予約のときに ${yen(hold.amount)} を仮支払いしています。現金は受け取りません。${totals.total > hold.amount ? `差額 ${yen(totals.total - hold.amount)} も銀Pay の残高から。` : ''}` : '銀Pay の残高から支払います。現金は受け取りません。'
-                    : '銀Pay の仮支払いはありません。現金で受け取ってから確定してください。'
+                    : '銀Pay の仮支払いはありません。現金（PayPay などのときも）で受け取ってから確定してください。'
                 const overNote = ticketOver > 0 ? `券が料金を ${yen(ticketOver)} 上回っています（おつりは出ません）。` : ''
                 const totalLabel = !ready ? '' : viaGinpay ? '銀Payで支払う金額' : '現金でお受け取り'
                 const Icon = viaGinpay ? Wallet : Banknote
@@ -487,6 +487,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   {METHODS.filter(m => quick ? m.id === 'ginpay' || m.id === 'cash' : m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => pickMethod(m.id)}>{quick && m.id === 'ginpay' ? '銀Pay' : m.label}</Choice>)}
                 </span>
               </Row>
+              {/* 店舗端末で QR を読んだあとの会計：PayPay などの支払いも「現金」で確定する（10/28 慶一郎さん） */}
+              {quick && <p style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, margin: '-4px 0 8px' }}>PayPay などの支払いの際も「現金」を押してください。</p>}
               {/* 銀Pay は口座の持ち主（お客様）を選んだ会計だけ。選んでいないときに「無い」と迷わないよう一言 */}
               {!clientInfo && <p style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, margin: '-4px 0 8px' }}>GINPay（銀Pay）は、上でお客様を選ぶと使えます。</p>}
               {method === 'ginpay' && (

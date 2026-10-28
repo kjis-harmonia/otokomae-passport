@@ -22,7 +22,7 @@ export function pendingIssuance(): PendingIssuance | null {
   if (!value || typeof value !== 'object' || !UUID.test(value.requestId) ||
       typeof value.userId !== 'string' || !value.userId ||
       !['otoku', 'discount'].includes(value.type) || !Number.isInteger(value.amount) || value.amount < 1 || value.amount > 100000 ||
-      !Number.isInteger(value.quantity) || value.quantity < 1 || value.quantity > 30 ||
+      !Number.isInteger(value.quantity) || value.quantity < 1 || value.quantity > 300 ||
       typeof value.staffName !== 'string' || !value.staffName.trim() || typeof value.customerName !== 'string') {
     throw new RpcError('pending_issue_invalid', '確認待ちの発行情報を読み込めません。新しく発行せず、管理者に確認してください。')
   }
@@ -45,7 +45,7 @@ export async function withIssuanceLock<T>(work: () => Promise<T>): Promise<T> {
 export function prepareIssuance(input: IssueTicketsInput): PendingIssuance {
   if (pendingIssuance()) throw new RpcError('pending_issue_exists', '確認待ちの発行があります。先に同じ発行を確認してください。')
   if (!Number.isInteger(input.amount) || input.amount < 1 || input.amount > 100000) throw new RpcError('invalid_amount', '金額は1〜100,000円で入力してください。')
-  if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 30) throw new RpcError('invalid_quantity', '枚数は1〜30枚で入力してください。')
+  if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 300) throw new RpcError('invalid_quantity', '枚数は1〜300枚で入力してください。')
   const next = { ...input, requestId: crypto.randomUUID(), backend: backend() }
   const raw = JSON.stringify(next)
   localStorage.setItem(KEY, raw)

@@ -33,7 +33,7 @@ import {
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
 const STAFF_NAMES  = TERMINAL_OPERATORS
-const MAX_QTY      = 30
+const MAX_QTY      = 300 // 10/28 慶一郎さん：漢トク券をたくさん持っている人がいるので、一度に300枚まで
 const QTY_PRESETS  = [1, 2, 3, 5, 10, 30]
 const DISCOUNT_AMOUNT_PRESETS = [100, 500, 1000]
 
@@ -1336,8 +1336,16 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginBottom: 18 }}>
                 <button onClick={() => setQuantity(q => Math.max(1, q - 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: '#ffffff', border: '1.5px solid #e6e3dd', color: '#1c1f1d', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
                 <div style={{ textAlign: 'center', minWidth: 72 }}>
-                  <span style={{ fontFamily: SERIF, fontSize: 32, fontWeight: 700, color: '#1c1f1d', letterSpacing: '-0.01em' }}>{quantity}</span>
+                  {/* 枚数は打ち込みもできる（1〜300枚） */}
+                  <input
+                    inputMode="numeric" pattern="[0-9]*" aria-label="枚数"
+                    value={quantity}
+                    onFocus={e => e.currentTarget.select()}
+                    onChange={e => { const v = parseInt(e.target.value.replace(/\D/g, '') || '1', 10); setQuantity(Math.min(MAX_QTY, Math.max(1, v))) }}
+                    style={{ width: 96, textAlign: 'center', fontFamily: SERIF, fontSize: 32, fontWeight: 700, color: '#1c1f1d', letterSpacing: '-0.01em', border: 'none', borderBottom: '1.5px solid #e6e3dd', background: 'transparent', outline: 'none', padding: 0 }}
+                  />
                   <span style={{ fontSize: 12, color: '#1c1f1d', marginLeft: 4 }}>枚</span>
+                  <p style={{ fontSize: 10, color: '#6b6b73', marginTop: 4 }}>数字を打ち込めます（最大{MAX_QTY}枚）</p>
                 </div>
                 <button onClick={() => setQuantity(q => Math.min(MAX_QTY, q + 1))} style={{ width: 46, height: 46, borderRadius: '50%', background: '#ffffff', border: '1.5px solid #e6e3dd', color: '#1c1f1d', fontSize: 22, fontWeight: 300, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
               </div>
