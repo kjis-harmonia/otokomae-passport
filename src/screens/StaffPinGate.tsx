@@ -17,6 +17,7 @@ const ERROR_TEXT = {
   not_configured: 'PINがサーバーに未設定です（管理者へ連絡）',
   network:        '通信できません。電波を確認してください',
   device_pending: 'この端末は登録されていません。本部の「設定」で登録してください',
+  lockdown:       '安全のため止めています。慶一郎の確認を待ってください',
 } as const
 type PinError = keyof typeof ERROR_TEXT
 
@@ -56,7 +57,7 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
     setTimeout(() => {
       setPin('')
       setErrorKind(null)
-    }, result.reason === 'invalid_pin' ? 700 : result.reason === 'device_pending' ? 8000 : 2400)
+    }, result.reason === 'invalid_pin' ? 700 : result.reason === 'device_pending' || result.reason === 'lockdown' ? 8000 : 2400)
   }, [app])
 
   const handleDigit = useCallback((d: string) => {
@@ -124,6 +125,7 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
         </motion.div>
 
         <DeviceTag />
+        <SecurityAlert app={app} authed={false} />
 
         <motion.div className="st-pin-pad" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12, duration: 0.4 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (

@@ -91,9 +91,14 @@ async function sendStaffNew(test = false): Promise<{ reservations: number; cance
     await send(JSON.stringify({ title: 'まだ確認されていません', body: `${when(r)} ${r.customer_name}様（${r.staff_name}）${cancel ? 'のキャンセル' : ''}。サロンボードへの${cancel ? '取り消し' : '入力'}を確認してください。`, url: '/sb', tag: `sb-final-${r.id}`, kind: 'sb-final' }))
   }
   // 登録していない端末が PIN で入ろうとした（10/28）：SB を入れたすべての端末へ。仕組みが無い DB では何もしない
-  const sec = await rpc<{ alerts: { id: number }[]; subs: Sub[] }>('staff_device_alerts_for_sender', { p_secret: SECRET }).catch(() => null)
-  for (const a of sec?.alerts ?? []) {
-    const payload = JSON.stringify({ title: '⚠ 登録していない端末がPINで入ろうとしました', body: '慶一郎まで急いで報告してください。', url: '/sb', tag: `sb-intrusion-${a.id}`, kind: 'sb-intrusion' })
+  // ロック中は約3分ごとに送り直す（remind）。iPad・iPhone は他のアプリの上に画面を出せないため、お知らせで気づいてもらう
+  const sec = await rpc<{ alerts: { id: number }[]; remind?: boolean; subs: Sub[] }>('staff_device_alerts_for_sender', { p_secret: SECRET }).catch(() => null)
+  const secPayloads = [
+    ...(sec?.alerts ?? []).map(a => ({ title: '⚠ 登録していない端末がPINで入ろうとしました', body: '慶一郎まで急いで報告してください。店舗端末・SB を止めています。', url: '/sb', tag: `sb-intrusion-${a.id}`, kind: 'sb-intrusion' })),
+    ...(sec?.remind ? [{ title: '⚠ ロック中：店舗端末・SB を止めています', body: '登録していない端末がPINで入ろうとしました。慶一郎まで急いで報告してください。', url: '/sb', tag: `sb-intrusion-remind-${Date.now()}`, kind: 'sb-intrusion' }] : []),
+  ]
+  for (const p of secPayloads) {
+    const payload = JSON.stringify(p)
     for (const s of sec?.subs ?? []) {
       try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 3600, urgency: 'high' }); delivered++ }
       catch (e) { const code = (e as { statusCode?: number }).statusCode; if ((code === 404 || code === 410) && !gone.includes(s.endpoint)) gone.push(s.endpoint) }

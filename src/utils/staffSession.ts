@@ -52,6 +52,12 @@ export function clearStaffSession(): void {
   try { localStorage.removeItem(STAFF_TOKEN_KEY) } catch { /* ignore */ }
 }
 
+/** 侵入でロック中：操作が断られたら知らせる（砂嵐の警告をすぐ出す） */
+export const STAFF_LOCKED_EVENT = 'ginjiro:staff-locked'
+export function notifyStaffLocked(): void {
+  window.dispatchEvent(new Event(STAFF_LOCKED_EVENT))
+}
+
 function notifyAuthRequired(): void {
   clearStaffSession()
   window.dispatchEvent(new Event(STAFF_AUTH_REQUIRED_EVENT))
@@ -66,6 +72,7 @@ function notifyAuthRequired(): void {
 export async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.rpc(fn, params)
   if (error) {
+    if ((error.message ?? '').includes('staff_locked')) notifyStaffLocked()
     if ((error.message ?? '').includes('staff_auth_required')) {
       notifyAuthRequired()
       throw new RpcError('staff_auth_required', 'スタッフ認証の有効期限が切れました。PINを入力し直してください。', error)
@@ -91,7 +98,7 @@ export async function callStaffRpc<T>(fn: string, params: Record<string, unknown
 
 // ── ログイン / ログアウト ─────────────────────────────────────────────────────
 
-export type StaffLoginResult = { ok: true } | { ok: false; reason: 'invalid_pin' | 'locked' | 'not_configured' | 'network' | 'device_pending' }
+export type StaffLoginResult = { ok: true } | { ok: false; reason: 'invalid_pin' | 'locked' | 'not_configured' | 'network' | 'device_pending' | 'lockdown' }
 
 /** 本部の端末一覧で見分けるための端末の種類（例：iPad / Safari / ホーム画面）。個人を特定する情報は送らない */
 export function deviceHint(): string {
@@ -132,6 +139,7 @@ export async function staffLogin(pin: string, app: 'staff' | 'sb' = 'staff'): Pr
       if (r.device_key) localStorage.setItem(STAFF_DEVICE_KEY, r.device_key)
       return { ok: false, reason: 'device_pending' }
     }
+    if (r.error === 'lockdown') { notifyStaffLocked(); return { ok: false, reason: 'lockdown' } }
     const reason = r.error === 'locked' || r.error === 'not_configured' ? r.error : 'invalid_pin'
     return { ok: false, reason }
   } catch {
