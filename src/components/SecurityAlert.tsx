@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 import { callStaffRpc, deviceCode, deviceHint, STAFF_LOCKED_EVENT } from '../utils/staffSession'
 import './securityAlert.css'
 
-type Alert = { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: 'staff' | 'sb' | null; hint: string | null; acked_at?: string | null; acked_by?: string | null }
+type Alert = { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: 'staff' | 'sb' | 'hq' | null; hint: string | null; acked_at?: string | null; acked_by?: string | null }
 type State = { locked: boolean; since?: string | null; alerts: Alert[] }
 
 const POLL_MS = 20_000
@@ -89,7 +89,7 @@ export function SecurityAlert({ app, authed = true }: { app: 'staff' | 'sb'; aut
             {state.alerts.slice(-3).map(a => (
               <li key={a.id}>
                 <span>{time(a.created_at)}</span>
-                <span>{a.app === 'sb' ? '銀二郎SB' : '店舗端末'}{a.hint ? `・${a.hint}` : ''}</span>
+                <span>{a.app === 'sb' ? '銀二郎SB' : a.app === 'hq' ? '本部' : '店舗端末'}{a.hint ? `・${a.hint}` : ''}</span>
                 <b>{a.reason === 'pin_ok' ? 'PINは合っていました' : 'PINをまちがえました'}</b>
               </li>
             ))}

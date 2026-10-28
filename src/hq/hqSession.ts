@@ -7,7 +7,7 @@
  */
 
 import { supabase } from '../lib/supabase'
-import { RpcError, callRpc } from '../utils/staffSession'
+import { RpcError, callRpc, deviceHint } from '../utils/staffSession'
 import { isHqPreview } from './hqPreview'
 
 const HQ_TOKEN_KEY  = 'ginjiro_hq_session'
@@ -65,13 +65,23 @@ export async function callHqRpc<T>(fn: string, params: Record<string, unknown> =
   }
 }
 
-export type HqLoginResult = { ok: true } | { ok: false; reason: 'invalid_pin' | 'locked' | 'not_configured' | 'network' }
+export type HqLoginResult = { ok: true } | { ok: false; reason: 'invalid_pin' | 'locked' | 'not_configured' | 'network' | 'device_pending' }
+
+/** この端末の本部の番号（本部の「本部の端末」一覧の番号と同じ。端末キーの SHA-256 の先頭4文字） */
+export async function hqDeviceCode(): Promise<string | null> {
+  try {
+    const key = localStorage.getItem(HQ_DEVICE_KEY)
+    if (!key || !crypto?.subtle) return null
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key))
+    return Array.from(new Uint8Array(buf).slice(0, 2), b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+  } catch { return null }
+}
 
 export async function hqLogin(pin: string): Promise<HqLoginResult> {
   try {
     let deviceKey: string | null = null
     try { deviceKey = localStorage.getItem(HQ_DEVICE_KEY) } catch { /* ignore */ }
-    const { data, error } = await supabase.rpc('hq_login', { p_pin: pin, p_device_key: deviceKey })
+    const { data, error } = await supabase.rpc('hq_login', { p_pin: pin, p_device_key: deviceKey, p_hint: deviceHint() })
     // RPC 自体が無い（ステップA 未適用）場合は「未設定」と表示する
     if (error) return { ok: false, reason: error.code === 'PGRST202' ? 'not_configured' : 'network' }
     const r = data as { token?: string; expires_at?: string; device_key?: string | null; error?: string }
@@ -79,6 +89,11 @@ export async function hqLogin(pin: string): Promise<HqLoginResult> {
       localStorage.setItem(HQ_TOKEN_KEY, JSON.stringify({ token: r.token, expiresAt: r.expires_at }))
       if (r.device_key) localStorage.setItem(HQ_DEVICE_KEY, r.device_key)
       return { ok: true }
+    }
+    // 本部に登録していない端末：端末キーは覚えておく（承認されると次から入れる）
+    if (r.error === 'device_pending') {
+      if (r.device_key) localStorage.setItem(HQ_DEVICE_KEY, r.device_key)
+      return { ok: false, reason: 'device_pending' }
     }
     const reason = r.error === 'locked' || r.error === 'not_configured' ? r.error : 'invalid_pin'
     return { ok: false, reason }
@@ -95,6 +110,12 @@ export async function verifyHqSession(): Promise<boolean> {
     const { data, error } = await supabase.rpc('hq_session_valid', { p_token: token })
     if (error) return true // 通信不調時は保存済みトークンを信頼し、実際の取得時にサーバーが再検証する
     if (data !== true) clearHqSession()
+    // この仕組みの前にログインしたセッションを、この端末の番号と結びつける（本部も登録制にするため）
+    else {
+      let deviceKey: string | null = null
+      try { deviceKey = localStorage.getItem(HQ_DEVICE_KEY) } catch { /* ignore */ }
+      if (deviceKey) void supabase.rpc('hq_bind_device', { p_hq: token, p_device_key: deviceKey, p_hint: deviceHint() })
+    }
     return data === true
   } catch {
     return true
