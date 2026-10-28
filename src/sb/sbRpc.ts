@@ -112,6 +112,7 @@ export async function callRpc<T>(fn: string, params: Record<string, unknown>): P
     const httpStatus = typeof response.status === 'number' ? response.status : 0
     const resultUnknown = !isProvenNotCommitted(error, httpStatus)
     const options = { httpStatus, resultUnknown }
+    if ((error.message ?? '').includes('staff_locked')) window.dispatchEvent(new Event('ginjiro:staff-locked'))
     if ((error.message ?? '').includes('staff_auth_required')) {
       notifyStaffAuthRequired()
       throw new RpcError('staff_auth_required', 'スタッフ認証の有効期限が切れました。PINを入力し直してください。', error, 'supabase_error', options)
