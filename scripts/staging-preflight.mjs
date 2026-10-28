@@ -79,6 +79,7 @@ const MIGRATION_ORDER = [
   '20261028000200_ticket_over_price.sql',
   '20261028000300_staff_device_limit.sql',
   '20261028000400_staff_lockdown.sql',
+  '20261028000500_lock_first_fail.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
