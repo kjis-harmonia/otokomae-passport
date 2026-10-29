@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { WalletCard } from '../../data/wallet'
 import { CARD_THEMES, SERIF, IVORY, cardCategoryLabel, isOtokuTicketCard, statusColor, yen, type CardTheme } from './walletTheme'
 import { isWelcomeCouponTicket, PERM_RETURN_COUPON_ISSUED_BY, PERM_RETURN_COUPON_TITLE } from '../../utils/welcomeCoupon'
+import { MARBLE, marbleBackground } from './marble'
 
 export const CARD_HEIGHT = 304
 /** スタック時に見えるカード上端の高さ（ヘッダー部分） */
@@ -72,6 +73,11 @@ export function WalletCardFace({
   // パーマのクーポン（初回 Welcome・再来店）：額と条件を大きく、半券に縦書き
   const isPermCoupon = isWelcome || isReturn
   const theme     = inactive ? CARD_THEMES[card.accent] : isWelcome ? WELCOME_THEME : isReturn ? RETURN_THEME : CARD_THEMES[card.accent]
+  // 券は色つきの大理石（会員証の白い大理石と同じ世界観・10/29）：Welcome 赤・再来店 緑・漢トク券 黒・ほかの割引券 紺
+  const marble = card.category !== 'otoku' ? null
+    : isWelcome ? MARBLE.red : isReturn ? MARBLE.green
+    : isOtokuTicketCard(card) ? (card.accent === 'otoku-300' ? MARBLE.bronze : card.accent === 'otoku-1000' ? MARBLE.black : MARBLE.silver)
+    : MARBLE.navy
   const sc        = statusColor(card)
   const isTicket  = card.category === 'otoku'
   const isPremium = isPremiumCategory(card.category)
@@ -91,7 +97,7 @@ export function WalletCardFace({
         position: 'relative',
         height: CARD_HEIGHT,
         borderRadius: 24,
-        background: theme.background,
+        background: marble ? marbleBackground(marble) : theme.background,
         border: `1px solid ${isFront ? theme.frontBorder : theme.border}`,
         boxShadow: isFront && !inactive
           ? `inset 0 1px 0 rgba(242,230,200,0.08), inset 0 0 48px ${theme.glow}`
@@ -112,13 +118,6 @@ export function WalletCardFace({
         color: theme.accent, opacity: 0.045, pointerEvents: 'none', userSelect: 'none',
       }}>銀</span>}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: isPremium || isPermCoupon ? 2 : 1.5, background: theme.hairline, opacity: inactive ? 0.4 : 1 }} />
-      {isWelcome && !inactive && (
-        <>
-          {/* 金箔の内枠と斜めの光沢 */}
-          <span aria-hidden="true" style={{ position: 'absolute', inset: 6, borderRadius: 19, border: '1px solid rgba(243,217,138,0.22)', pointerEvents: 'none' }} />
-          <span aria-hidden="true" style={{ position: 'absolute', top: -40, bottom: -40, left: '48%', width: 70, transform: 'rotate(18deg)', background: 'linear-gradient(90deg, transparent, rgba(243,217,138,0.07), transparent)', pointerEvents: 'none' }} />
-        </>
-      )}
       {sweep && <span key={sweep} className="wallet-sweep" aria-hidden="true" />}
 
       {/* ── Header (CARD_STRIP) ── */}
