@@ -1351,7 +1351,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                 {/* 日にちを押すだけで進める（話さなくても予約できる・10/29 慶一郎さん）：今日・明日・明後日・もっと先 */}
                 {[0, 1, 2].map(i => {
                   const d = jstDate(i)
-                  return <Row key={d} onClick={() => void pickDay(step.menu!, d)} title={`${['今日', '明日', '明後日'][i]}（${monthDay(d)}・${'日月火水木金土'[new Date(`${d}T12:00:00Z`).getUTCDay()]}）`} detail={`${step.menu!.name}・${yen(step.menu!)}`} />
+                  return <Row key={d} onClick={() => void pickDay(step.menu!, d)} title={['今日', '明日', '明後日'][i]} detail={`${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}（${'日月火水木金土'[new Date(`${d}T12:00:00Z`).getUTCDay()]}）`} />
                 })}
                 <Row onClick={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(3), `${m.name}の、明々後日からの空きです。`) }} title="もっと先の日" detail="近い空きから" />
                 {maintLeft != null && maintenanceMenu && <Row onClick={startMaintenance} title="メンテナンスカット" detail={`${maintLeft === 0 ? '今日まで' : `あと${maintLeft}日`}・${yen(maintenanceMenu)}`} />}
