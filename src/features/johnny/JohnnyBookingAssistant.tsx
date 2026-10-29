@@ -1326,7 +1326,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               <List>
                 {/* 並び（10/29 慶一郎さん）：いつものメニュー → メンテナンスカット → いつもの担当 → いつものメニューを変える → ほか */}
                 {step.w.usual.filter(m => m.code !== 'maintenance').map(m => (
-                  <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={`${m.duration_min}分・${yen(m)}`} note="いつもの" />
+                  <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={yen(m)} note="いつもの" />
                 ))}
                 {step.w.maintenanceLeft != null ? (
                   <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
@@ -1335,11 +1335,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                 )}
                 {/* いつもの担当：押すたびに 担当1 → 担当2 → 毎回選ぶ と切り替わる */}
                 {(options?.staff?.length ?? 0) > 1 && (
-                  <Row onClick={cycleUsualStaff} title="いつもの担当" detail={options?.staff?.find(st => st.id === usualStaffId)?.name ?? '毎回選ぶ'} note="押すと変更" />
+                  <Row onClick={cycleUsualStaff} title="いつもの担当" detail={options?.staff?.find(st => st.id === usualStaffId)?.name ?? '毎回選ぶ'} />
                 )}
                 <Row onClick={() => { const now = getUsualMenu(); setStep({ k: 'askUsual', note: `${now ? `今のいつものメニューは${now.name}です。` : ''}いつものメニューを、どれに変えますか？` }) }} title="いつものメニューを変える" />
                 {/* いつもの・メンテナンスカットだけしか選べないと思われないように（10/27 慶一郎さん） */}
-                <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true } })} title="ほかのメニューから選ぶ" detail="カット・パーマ・カラーなど" />
+                <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true } })} title="ほかのメニューから選ぶ" />
                 <Row onClick={() => setStep({ k: 'askWhen' })} title="日時を伝えて予約する" muted />
               </List>
             )}
