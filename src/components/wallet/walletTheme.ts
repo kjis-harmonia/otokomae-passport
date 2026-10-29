@@ -1,6 +1,13 @@
 import type { WalletAccent, WalletCard } from '../../data/wallet'
 import { isWelcomeCouponTicket } from '../../utils/welcomeCoupon'
 
+export const CARD_HEIGHT = 304
+/** 券（割引券・漢トク券・パーマのクーポン）は細長く（10/29 慶一郎さん：もっと細長く、スマートに） */
+export const TICKET_HEIGHT = 204
+export function cardHeight(card: WalletCard): number {
+  return card.category === 'otoku' ? TICKET_HEIGHT : CARD_HEIGHT
+}
+
 export const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
 export const IVORY     = '#F2E6C8'

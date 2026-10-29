@@ -5,7 +5,8 @@ import {
   type PanInfo,
 } from 'framer-motion'
 import type { WalletCard } from '../../data/wallet'
-import { WalletCardFace, CARD_HEIGHT, CARD_STRIP } from './WalletCardFace'
+import { WalletCardFace, CARD_STRIP } from './WalletCardFace'
+import { cardHeight } from './walletTheme'
 
 const SPRING  = { type: 'spring', stiffness: 380, damping: 36, mass: 0.9 } as const
 const INSTANT = { duration: 0 } as const
@@ -105,7 +106,7 @@ export function WalletStack({
                     style={{
                       position: 'relative',
                       zIndex: i + 1,
-                      marginTop: i === 0 ? 0 : -(CARD_HEIGHT - CARD_STRIP),
+                      marginTop: i === 0 ? 0 : -(cardHeight(rest[i - 1]) - CARD_STRIP),
                       borderRadius: 24,
                       boxShadow: '0 -12px 28px rgba(0,0,0,0.5), 0 -1px 0 rgba(31,28,24,0.26)',
                       cursor: 'pointer',
