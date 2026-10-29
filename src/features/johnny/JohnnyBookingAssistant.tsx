@@ -66,7 +66,7 @@ type Step =
   /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
   | { k: 'overview'; req: VisitRequest; advice: DayAdvice; note?: string }
   | { k: 'searching'; label?: string }
-  | { k: 'pick'; req: VisitRequest; menu: MenuOption; offer: Offer; note?: string }
+  | { k: 'pick'; req: VisitRequest; menu: MenuOption; offer: Offer; note?: string; wholeDay?: boolean }
   /** 予約の確認。staffId：指名、change：この予約を新しい日時に変える、say：AI の言葉 */
   | { k: 'confirm'; req: VisitRequest; menu: MenuOption; slot: Slot; staffId?: string | null; change?: CustomerReservation; say?: string; staffChosen?: boolean; usualStaff?: boolean }
   /** 担当（指名）を選ぶ：確定の前に必ず聞く。avail はその時間にその担当が空いているか */
@@ -355,7 +355,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         const reg = getUsualMenu()
         const regMenu = reg && canBeUsual(reg.code) ? opts.menus.find(m => m.code === reg.code) : undefined
         setMaintLeft(w0?.maintenanceLeft ?? null)
-        const w = w0 && regMenu ? { ...w0, usual: [regMenu, ...w0.usual.filter(m => m.code !== regMenu.code)].slice(0, 2) } : w0
+        // いつものは1つだけ（パンチパーマの人に通常カットは出さない・10/29 慶一郎さん）：登録したもの、なければ来店でいちばん多いもの
+        const w = w0 ? { ...w0, usual: (regMenu ? [regMenu] : w0.usual).slice(0, 1) } : w0
         if (w) {
           turnsRef.current = [{ role: 'assistant', text: welcomeText(w).speech }]
           setStep({ k: 'welcome', w })
@@ -414,6 +415,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const initialUsualRef = useRef(initialUsual)
   useEffect(() => {
     if ((!initialMenuRef.current && !initialLabelRef.current && !initialUsualRef.current) || !options || (step.k !== 'welcome' && step.k !== 'askWhen')) return
+    // 開いてすぐの切り替え（ようこそ → ○○ですね）は「戻る」の戻り先にしない（いつもので開くと、見ていない画面へ戻る「戻る」が出ていた・10/29 慶一郎さん）
+    goingBackRef.current = true
     // 「いつもの」でメニューが分からない：いつものメニューを聞く
     if (initialUsualRef.current && !initialMenuRef.current) {
       initialUsualRef.current = false
@@ -449,6 +452,22 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       setStep({ k: 'unavailable', reason: 'network' })
     }
   }, [api, stopListening])
+
+  // ── 日にちのボタン（今日・明日・明後日）：その日の空きを朝から夜まで散らして6件。空きが無ければ次に早い日 ──
+  const pickDay = useCallback(async (menu: MenuOption, date: string) => {
+    setStep({ k: 'searching' })
+    stopListening()
+    const req: VisitRequest = { dates: [date], time: null, range: null, earliest: false }
+    try {
+      const slots = [...await api.slots(date, menu.code)].sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+      if (slots.length === 0) { void soonest(menu, req, addDays(date, 1), `${menu.name}は${dayWord(date)}は空きがありません。`); return }
+      const n = Math.min(6, slots.length)
+      const picks = n === 1 ? slots : [...new Set(Array.from({ length: n }, (_, i) => Math.round(i * (slots.length - 1) / (n - 1))))].map(i => slots[i])
+      setStep({ k: 'pick', req, menu, offer: { kind: 'choices', slots: picks }, note: `${dayWord(date)}の${menu.name}の空きです。`, wholeDay: true })
+    } catch {
+      setStep({ k: 'unavailable', reason: 'network' })
+    }
+  }, [api, soonest, stopListening])
 
   // ── 空き枠を探して提案 ──
   const search = useCallback(async (reqIn: VisitRequest, menu: MenuOption) => {
@@ -514,6 +533,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const optionsRef = useRef(options)
   useEffect(() => { optionsRef.current = options }, [options])
   const [rememberStaff, setRememberStaff] = useState(() => !!getUsualStaff())
+  // ようこその「いつもの担当」：押すたびに 担当1 → 担当2 → 毎回選ぶ（null）
+  const [usualStaffId, setUsualStaffId] = useState<string | null>(() => getUsualStaff())
+  const cycleUsualStaff = useCallback(() => {
+    const ids = (optionsRef.current?.staff ?? []).map(st => st.id)
+    const order: (string | null)[] = [...ids, null]
+    const next = order[(order.indexOf(usualStaffId) + 1) % order.length] ?? null
+    setUsualStaff(next); setUsualStaffId(next); setRememberStaff(!!next)
+  }, [usualStaffId])
   const rememberStaffRef = useRef(rememberStaff)
   useEffect(() => { rememberStaffRef.current = rememberStaff }, [rememberStaff])
   const chooseStaff = useCallback((s: Extract<Step, { k: 'pickStaff' }>, staffId: string | null) => {
@@ -523,7 +550,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       return
     }
     // 「次回からもこの担当にする」：オンなら登録、オフなら取り消し（毎回聞く）
-    if (staffId) setUsualStaff(rememberStaffRef.current ? staffId : null)
+    if (staffId) { const v = rememberStaffRef.current ? staffId : null; setUsualStaff(v); setUsualStaffId(v) }
     setStep({ ...s.next, staffId, staffChosen: true })
   }, [])
   useEffect(() => {
@@ -1144,8 +1171,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         const spoken = multiDay ? step.offer.slots.map(x => spokenVisit(x.starts_at)).join('、') : `${day.relative ?? day.date}は${times}`
         return {
           title: step.note ? step.note : missed ? `${step.req.time?.replace(/^0/, '')} は埋まっています` : `${day.relative ?? day.date} の空き`,
-          sub: step.note ? `${step.menu.name}のいちばん早い空きです。どれにしますか？` : '近い時間をご案内します。どれにしますか？',
-          speech: step.note ? `${head}いちばん早いのは、${spoken}です。どれにしますか？` : `${head}${spoken}が空いています。どれにしますか？`,
+          sub: step.wholeDay ? '朝から夜までの空きから選べます。どれにしますか？' : step.note ? `${step.menu.name}のいちばん早い空きです。どれにしますか？` : '近い時間をご案内します。どれにしますか？',
+          speech: step.wholeDay ? `${head}${spoken}が空いています。どれにしますか？` : step.note ? `${head}いちばん早いのは、${spoken}です。どれにしますか？` : `${head}${spoken}が空いています。どれにしますか？`,
           listen: true,
         }
       }
@@ -1298,26 +1325,36 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'welcome' && (
               <List>
-                {step.w.maintenanceLeft != null && (
-                  <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
-                )}
-                {step.w.usual.map(m => m.code === 'maintenance' ? (
-                  <Row key={m.code} onClick={startMaintenance} title="メンテナンスカットで予約" detail={maintenanceMenu ? `${maintenanceMenu.duration_min}分・${yen(maintenanceMenu)}` : 'ホットペッパー'} note="いつもの" />
-                ) : (
-                  <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={`${m.duration_min}分・${yen(m)}`} note="いつもの" />
+                {/* 並び（10/29 慶一郎さん）：いつものメニュー → メンテナンスカット → いつもの担当 → いつものメニューを変える → ほか */}
+                {step.w.usual.filter(m => m.code !== 'maintenance').map(m => (
+                  <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={yen(m)} note="いつもの" />
                 ))}
+                {step.w.maintenanceLeft != null ? (
+                  <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
+                ) : step.w.usual.some(m => m.code === 'maintenance') && (
+                  <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={maintenanceMenu ? `${maintenanceMenu.duration_min}分・${yen(maintenanceMenu)}` : 'ホットペッパー'} note="いつもの" />
+                )}
+                {/* いつもの担当：押すたびに 担当1 → 担当2 → 毎回選ぶ と切り替わる */}
+                {(options?.staff?.length ?? 0) > 1 && (
+                  <Row onClick={cycleUsualStaff} title="いつもの担当" detail={options?.staff?.find(st => st.id === usualStaffId)?.name ?? '毎回選ぶ'} />
+                )}
+                <Row onClick={() => { const now = getUsualMenu(); setStep({ k: 'askUsual', note: `${now ? `今のいつものメニューは${now.name}です。` : ''}いつものメニューを、どれに変えますか？` }) }} title="いつものメニューを変える" />
                 {/* いつもの・メンテナンスカットだけしか選べないと思われないように（10/27 慶一郎さん） */}
-                <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true } })} title="ほかのメニューから選ぶ" detail="カット・パーマ・カラーなど" />
+                <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true } })} title="ほかのメニューから選ぶ" />
                 <Row onClick={() => setStep({ k: 'askWhen' })} title="日時を伝えて予約する" muted />
               </List>
             )}
 
-            {/* メニューが決まったとき（「いつもの」など）、前回のご来店から14日以内ならメンテナンスカットにも切り替えられる。過ぎていたら出さない */}
-            {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.menu.code !== 'maintenance' && maintLeft != null && maintenanceMenu && (
+            {/* メニューが決まったとき（「いつもの」など）：日にちを押して進める。前回のご来店から14日以内ならメンテナンスカットにも切り替えられる（過ぎていたら出さない） */}
+            {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.menu.code !== 'maintenance' && (
               <List>
-                {/* 選んだメニューも出す（メンテナンスカットしか選べないように見えていた・10/29 慶一郎さん）。押すと近い空きから */}
-                <Row onClick={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(0), `${m.name}ですね。`) }} title={step.menu.name} detail={`近い空きを見る・${yen(step.menu)}`} />
-                <Row onClick={startMaintenance} title="メンテナンスカット" detail={`${maintLeft === 0 ? '今日まで' : `あと${maintLeft}日`}・${yen(maintenanceMenu)}`} />
+                {/* 日にちを押すだけで進める（話さなくても予約できる・10/29 慶一郎さん）：今日・明日・明後日・もっと先 */}
+                {[0, 1, 2].map(i => {
+                  const d = jstDate(i)
+                  return <Row key={d} onClick={() => void pickDay(step.menu!, d)} title={`${['今日', '明日', '明後日'][i]}（${monthDay(d)}・${'日月火水木金土'[new Date(`${d}T12:00:00Z`).getUTCDay()]}）`} detail={`${step.menu!.name}・${yen(step.menu!)}`} />
+                })}
+                <Row onClick={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(3), `${m.name}の、明々後日からの空きです。`) }} title="もっと先の日" detail="近い空きから" />
+                {maintLeft != null && maintenanceMenu && <Row onClick={startMaintenance} title="メンテナンスカット" detail={`${maintLeft === 0 ? '今日まで' : `あと${maintLeft}日`}・${yen(maintenanceMenu)}`} />}
               </List>
             )}
 

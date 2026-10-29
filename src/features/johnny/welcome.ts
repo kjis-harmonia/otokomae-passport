@@ -1,4 +1,4 @@
-// 2回目以降のお客様への最初のひとこと（「おかえりなさいませ。前回のご来店から13日です。…今回はどうしますか？メンテナンスカットでも、いつものパンチパーマでも、ほかのメニューでも予約できます。」）。
+// 2回目以降のお客様への最初のひとこと（「おかえりなさい。前回のご来店から13日です。メンテナンスカットは明日まで。」）。
 //   来店の履歴：来店の記録（QR の来店登録ごと・メニューつき、customer_recent_visits）＋記録の無い日の過去の予約。新しい方から5回
 //   最後の来店日：QR で来店登録した日（customer_get_last_visit）と、履歴のいちばん新しい日の新しい方
 //   前回のメニュー：その日のメニュー（分かるときだけ）
@@ -68,21 +68,15 @@ export function maintenanceDeadline(left: number, now = Date.now()): string {
 }
 
 /** 画面と読み上げの言葉。ていねいだけど自然に。いつもの・メンテナンスカットだけでなく、ほかのメニューも選べると分かるように（10/27 慶一郎さん：迷わないアプリ）
- *  例：「おかえりなさいませ。前回のご来店から13日です。まもなくメンテナンスカットのご予約ができなくなります（明日まで）。今回はどうしますか？メンテナンスカットでも、いつものパンチパーマでも、ほかのメニューでも予約できます。」 */
+ *  例：「おかえりなさい。前回のご来店から13日です。メンテナンスカットは明日まで。」（読み上げは最後に「今回はどうしますか？」） */
 export function welcomeText(w: Welcome, now = Date.now()): { title: string; lines: string[]; speech: string } {
-  const title = 'おかえりなさいませ。'
+  const title = 'おかえりなさい。' // 10/29 慶一郎さん：「おかえりなさいませ」より、これくらいで
+  // 文字は短く（10/29 慶一郎さん：文字が多い）。何ができるかは下のボタンで分かるので、ここは来店からの日数とメンテナンスの期限だけ
   const lines = [w.days === 0 ? '今日はご来店ありがとうございました。' : `前回のご来店から${w.days}日です。`]
-  const usual = w.usual.find(m => m.code !== MAINTENANCE_MENU.code)
   if (w.maintenanceLeft != null) {
     const left = w.maintenanceLeft
     const end = new Date(now + 9 * 3600000 + left * 86400000)
-    const until = `${end.getUTCMonth() + 1}月${end.getUTCDate()}日`
-    lines.push(left === 0 ? 'メンテナンスカットのご予約は、今日までです。'
-      : left <= 3 ? `まもなくメンテナンスカットのご予約ができなくなります（${left === 1 ? '明日' : until}まで）。`
-      : `メンテナンスカットのご予約は、${until}までできます。`)
-    lines.push(usual ? `今回はどうしますか？メンテナンスカットでも、いつもの${usual.name}でも、ほかのメニューでも予約できます。`
-      : '今回はどうしますか？メンテナンスカットでも、ほかのメニューでも予約できます。')
-  } else if (usual) lines.push(`今回はどうしますか？いつもの${usual.name}でも、ほかのメニューでも予約できます。`)
-  else lines.push('今回はどうしますか？メニューかご希望の日時を教えてください。')
-  return { title, lines, speech: `${title}${lines.join('')}` }
+    lines.push(left === 0 ? 'メンテナンスカットは今日まで。' : left === 1 ? 'メンテナンスカットは明日まで。' : `メンテナンスカットは${end.getUTCMonth() + 1}月${end.getUTCDate()}日まで。`)
+  }
+  return { title, lines, speech: `${title}${lines.join('')}今回はどうしますか？` }
 }
