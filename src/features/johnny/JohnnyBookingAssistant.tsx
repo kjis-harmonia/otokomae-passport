@@ -414,6 +414,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const initialUsualRef = useRef(initialUsual)
   useEffect(() => {
     if ((!initialMenuRef.current && !initialLabelRef.current && !initialUsualRef.current) || !options || (step.k !== 'welcome' && step.k !== 'askWhen')) return
+    // 開いてすぐの切り替え（ようこそ → ○○ですね）は「戻る」の戻り先にしない（いつもので開くと、見ていない画面へ戻る「戻る」が出ていた・10/29 慶一郎さん）
+    goingBackRef.current = true
     // 「いつもの」でメニューが分からない：いつものメニューを聞く
     if (initialUsualRef.current && !initialMenuRef.current) {
       initialUsualRef.current = false
@@ -530,6 +532,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const optionsRef = useRef(options)
   useEffect(() => { optionsRef.current = options }, [options])
   const [rememberStaff, setRememberStaff] = useState(() => !!getUsualStaff())
+  // ようこその「いつもの担当」：押すたびに 担当1 → 担当2 → 毎回選ぶ（null）
+  const [usualStaffId, setUsualStaffId] = useState<string | null>(() => getUsualStaff())
+  const cycleUsualStaff = useCallback(() => {
+    const ids = (optionsRef.current?.staff ?? []).map(st => st.id)
+    const order: (string | null)[] = [...ids, null]
+    const next = order[(order.indexOf(usualStaffId) + 1) % order.length] ?? null
+    setUsualStaff(next); setUsualStaffId(next); setRememberStaff(!!next)
+  }, [usualStaffId])
   const rememberStaffRef = useRef(rememberStaff)
   useEffect(() => { rememberStaffRef.current = rememberStaff }, [rememberStaff])
   const chooseStaff = useCallback((s: Extract<Step, { k: 'pickStaff' }>, staffId: string | null) => {
@@ -539,7 +549,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       return
     }
     // 「次回からもこの担当にする」：オンなら登録、オフなら取り消し（毎回聞く）
-    if (staffId) setUsualStaff(rememberStaffRef.current ? staffId : null)
+    if (staffId) { const v = rememberStaffRef.current ? staffId : null; setUsualStaff(v); setUsualStaffId(v) }
     setStep({ ...s.next, staffId, staffChosen: true })
   }, [])
   useEffect(() => {
@@ -1314,14 +1324,20 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'welcome' && (
               <List>
-                {step.w.maintenanceLeft != null && (
-                  <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
-                )}
-                {step.w.usual.map(m => m.code === 'maintenance' ? (
-                  <Row key={m.code} onClick={startMaintenance} title="メンテナンスカットで予約" detail={maintenanceMenu ? `${maintenanceMenu.duration_min}分・${yen(maintenanceMenu)}` : 'ホットペッパー'} note="いつもの" />
-                ) : (
+                {/* 並び（10/29 慶一郎さん）：いつものメニュー → メンテナンスカット → いつもの担当 → いつものメニューを変える → ほか */}
+                {step.w.usual.filter(m => m.code !== 'maintenance').map(m => (
                   <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={`${m.duration_min}分・${yen(m)}`} note="いつもの" />
                 ))}
+                {step.w.maintenanceLeft != null ? (
+                  <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
+                ) : step.w.usual.some(m => m.code === 'maintenance') && (
+                  <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={maintenanceMenu ? `${maintenanceMenu.duration_min}分・${yen(maintenanceMenu)}` : 'ホットペッパー'} note="いつもの" />
+                )}
+                {/* いつもの担当：押すたびに 担当1 → 担当2 → 毎回選ぶ と切り替わる */}
+                {(options?.staff?.length ?? 0) > 1 && (
+                  <Row onClick={cycleUsualStaff} title="いつもの担当" detail={options?.staff?.find(st => st.id === usualStaffId)?.name ?? '毎回選ぶ'} note="押すと変更" />
+                )}
+                <Row onClick={() => { const now = getUsualMenu(); setStep({ k: 'askUsual', note: `${now ? `今のいつものメニューは${now.name}です。` : ''}いつものメニューを、どれに変えますか？` }) }} title="いつものメニューを変える" />
                 {/* いつもの・メンテナンスカットだけしか選べないと思われないように（10/27 慶一郎さん） */}
                 <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true } })} title="ほかのメニューから選ぶ" detail="カット・パーマ・カラーなど" />
                 <Row onClick={() => setStep({ k: 'askWhen' })} title="日時を伝えて予約する" muted />
