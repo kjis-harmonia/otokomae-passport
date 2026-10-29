@@ -1,12 +1,13 @@
 // 本日のガチャ（10/29 慶一郎さん、10/30 動画を3部構成に）：下タブ「ガチャ」→「本日のガチャを回す」で演出の動画を画面いっぱいに流す。
 // 1部・2部（INTRO）→ タップ待ち（WAIT、くり返し・最初と最後のコマが同じなので継ぎ目なし）→ お客様が球をタップ → 3部 開放（OPEN）→ 結果。
-// 1部・2部の動画はまだないので、今は待ちから始まる。景品・1日1回はまだ決まっていないので、結果は「準備中」。
+// 1部・2部はつないだ1本（砂漠→神殿→球、最後のコマが待ちの最初と同じ）。景品・1日1回はまだ決まっていないので、結果は「準備中」。
 // 動画は public/gacha（Gemini で作ったもの・縦 9:16）。音を出すので、再生はボタン・タップのその場で始める（iPhone の決まり）。
 // 待ちと開放は別の video を重ね、開放が実際に動き出してから待ちを隠す（切り替えで黒が挟まらないように）
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 
-const INTRO: string[] = [] // 1部・2部ができたら '/gacha/gacha-1.mp4', '/gacha/gacha-2.mp4' の順に入れる
+const INTRO = ['/gacha/gacha-intro.mp4'] // 1部・2部（順に流す）
+const INTRO_POSTER = '/gacha/gacha-intro.jpg' // 1部の最初のコマ（読み込みの間に球が見えないように）
 const WAIT = '/gacha/gacha-wait.mp4'
 const OPEN = '/gacha/gacha-open.mp4'
 const POSTER = '/gacha/gacha-wait.jpg'
@@ -95,7 +96,7 @@ export function V2Gacha() {
       <p className="v2-gacha-note">音が出ます。音量にご注意ください。</p>
 
       <div className={`v2-gacha-stage${showing ? ' is-on' : ''}`} aria-hidden={!showing} onClick={open}>
-        <video ref={main} poster={POSTER} playsInline preload="auto" src={WAIT} />
+        <video ref={main} poster={phase === 'intro' ? INTRO_POSTER : POSTER} playsInline preload="auto" src={INTRO[0] ?? WAIT} />
         <video ref={burst} className={`v2-gacha-burst${opened ? ' is-on' : ''}`} src={OPEN} playsInline preload="auto" />
         {phase === 'tap' && <p className="v2-gacha-tap">光る球をタップ</p>}
         {phase === 'result' && <div className="v2-gacha-flash" />}
