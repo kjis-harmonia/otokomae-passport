@@ -355,7 +355,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         const reg = getUsualMenu()
         const regMenu = reg && canBeUsual(reg.code) ? opts.menus.find(m => m.code === reg.code) : undefined
         setMaintLeft(w0?.maintenanceLeft ?? null)
-        const w = w0 && regMenu ? { ...w0, usual: [regMenu, ...w0.usual.filter(m => m.code !== regMenu.code)].slice(0, 2) } : w0
+        // いつものは1つだけ（パンチパーマの人に通常カットは出さない・10/29 慶一郎さん）：登録したもの、なければ来店でいちばん多いもの
+        const w = w0 ? { ...w0, usual: (regMenu ? [regMenu] : w0.usual).slice(0, 1) } : w0
         if (w) {
           turnsRef.current = [{ role: 'assistant', text: welcomeText(w).speech }]
           setStep({ k: 'welcome', w })
