@@ -130,7 +130,9 @@ interface Props {
 /** 「戻る」で戻れる画面（読み込み中・送信中・終わった画面は数えない） */
 const BACKABLE = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'pickStaff', 'companionMenu', 'confirmParty', 'ai', 'askUsual', 'usualSaved'])
 /** 戻り先にできる画面。担当が決まっていない確認画面は、すぐ担当の画面に差し替わるので数えない（戻るとまた担当の画面になってしまう） */
-const canReturnTo = (s: Step) => BACKABLE.has(s.k) && !(s.k === 'confirm' && !s.staffChosen && !s.staffId)
+// 担当の画面は、空きを確かめ終わったものだけ戻り先にする（確かめる前の画面へ戻ると、また確かめて「どちらも埋まっています」へ
+//   進み直し、戻るを押しても抜けられなかった・10/29 慶一郎さん）
+const canReturnTo = (s: Step) => BACKABLE.has(s.k) && !(s.k === 'confirm' && !s.staffChosen && !s.staffId) && !(s.k === 'pickStaff' && !s.avail)
 /** ここまで来たら、戻る先を忘れる（予約・キャンセルが終わった） */
 const FORGET = new Set<Step['k']>(['done', 'cancelled', 'unavailable', 'offer', 'offerGone'])
 /** 時間を選んだ画面（「時間を選び直す」の戻り先） */
