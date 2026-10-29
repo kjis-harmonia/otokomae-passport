@@ -403,6 +403,7 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gacha-lead { margin: 0; font: 700 15px/1.4 var(--v2-serif); color: #f2e6c8; letter-spacing: .08em; }
 .v2-gacha-start { width: 100%; min-height: 56px; border-radius: 30px; border: 1px solid #e2c27f; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
   background: linear-gradient(135deg, #8a6420, #e7c77e 55%, #b38834); color: #2a1c08; font: 700 17px/1 var(--v2-serif); letter-spacing: .1em; box-shadow: 0 0 24px rgba(231,199,126,.45); }
+.v2-gacha-start:disabled { cursor: default; opacity: .7; }
 .v2-gacha-note { margin: 12px 0 0; text-align: center; font-size: 12px; color: var(--v2-sub); }
 .v2-gacha-stage { position: fixed; inset: 0; z-index: 300; background: #000; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .35s ease; }
 .v2-gacha-stage.is-on { opacity: 1; visibility: visible; pointer-events: auto; }
@@ -413,14 +414,13 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gacha-tap { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); margin: 0; text-align: center; color: #fff6dc;
   font: 700 20px/1.4 var(--v2-serif); letter-spacing: .2em; text-shadow: 0 0 18px rgba(255,200,90,.95); animation: v2-gacha-pulse 1.2s ease-in-out infinite; pointer-events: none; }
 @keyframes v2-gacha-pulse { 0%, 100% { opacity: .45; transform: scale(.97); } 50% { opacity: 1; transform: scale(1.03); } }
-.v2-gacha-flash { position: absolute; inset: 0; background: #fffaf0; animation: v2-gacha-flash .6s ease-out forwards; pointer-events: none; }
-@keyframes v2-gacha-flash { from { opacity: 0; } to { opacity: .7; } }
-.v2-gacha-result { position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%); max-width: 360px; margin: 0 auto; padding: 28px 22px 22px; border-radius: 26px; text-align: center;
+/* 結果は下に出す（4部の銀ちゃんを隠さない） */
+.v2-gacha-result { position: absolute; left: 24px; right: 24px; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); max-width: 360px; margin: 0 auto; padding: 28px 22px 22px; border-radius: 26px; text-align: center;
   background: linear-gradient(160deg, #1a1108, #0a0603); border: 1px solid rgba(226,194,127,.6); color: #e2c27f; display: grid; gap: 10px; justify-items: center;
   animation: v2-gacha-in .5s .2s ease-out both; }
 .v2-gacha-result b { font: 700 20px/1.4 var(--v2-serif); color: #f2e6c8; letter-spacing: .06em; }
 .v2-gacha-result span { font-size: 14px; color: rgba(242,230,200,.75); }
 .v2-gacha-result button { margin-top: 8px; width: 100%; min-height: 48px; border-radius: 24px; border: 1px solid rgba(226,194,127,.5); background: rgba(226,194,127,.12); color: #f2e6c8; font: 700 15px/1 var(--v2-serif); letter-spacing: .14em; cursor: pointer; }
-@keyframes v2-gacha-in { from { opacity: 0; transform: translateY(-46%) scale(.94); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
+@keyframes v2-gacha-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 .v2-gacha-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: max(14px, env(safe-area-inset-right, 0px)); width: 44px; height: 44px; border-radius: 50%;
   border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.35); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
