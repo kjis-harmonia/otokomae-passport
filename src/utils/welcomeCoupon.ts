@@ -9,6 +9,15 @@ export const WELCOME_COUPON_MEMO = '対象: パーマ全種類（パーマのセ
 export const WELCOME_COUPON_WEEKEND_MESSAGE =
   'Welcomeクーポンは平日のみ利用できます。土日は利用できません。'
 
+/** 再来店パーマクーポン（10/29 慶一郎さん）：初回パーマの翌日に配る 500円引き。使える条件は Welcome と同じ（パーマだけ・平日のみ） */
+export const PERM_RETURN_COUPON_TITLE = '再来店パーマクーポン'
+export const PERM_RETURN_COUPON_ISSUED_BY = 'system-perm-return'
+
+/** パーマのときだけ・平日のみ使える券（Welcome と再来店パーマクーポン）。会計の券一覧は issued_by が無いので名前でも見る */
+export function isPermOnlyCoupon(ticket: Pick<TicketRow, 'title' | 'issued_by' | 'amount'>): boolean {
+  return isWelcomeCouponTicket(ticket) || ticket.issued_by === PERM_RETURN_COUPON_ISSUED_BY || ticket.title === PERM_RETURN_COUPON_TITLE
+}
+
 export function isWelcomeCouponTicket(
   ticket: Pick<TicketRow, 'title' | 'issued_by' | 'amount'>,
 ): boolean {
