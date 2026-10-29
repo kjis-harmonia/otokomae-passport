@@ -318,7 +318,10 @@ export function buildTicketCards(tickets: TicketRow[], now = new Date()): Wallet
     if (t.used) continue
     const expired = isTicketExpired(t, now)
     const ticketTypeKey = isWelcome ? 'welcome' : t.type === 'cut-ticket' ? 'otoku' : t.type
-    const key = `${expired ? 'x' : 'a'}::${ticketTypeKey}::${t.amount}::${t.expires_at?.slice(0, 10) ?? ''}::${t.issued_by}::${t.title}`
+    // 漢トク券は、発行したスタッフが違っても同じ金額・期限・名前なら1枚のカードに（10/29 慶一郎さん：同じ値段なのに別々のカードだった）。
+    //   割引券・Welcome・再来店パーマクーポンは発行元で見分けるので、今までどおり発行元も見る
+    const issuer = ticketTypeKey === 'otoku' ? '' : t.issued_by
+    const key = `${expired ? 'x' : 'a'}::${ticketTypeKey}::${t.amount}::${t.expires_at?.slice(0, 10) ?? ''}::${issuer}::${t.title}`
     const list = groups.get(key)
     if (list) list.push(t)
     else groups.set(key, [t])
