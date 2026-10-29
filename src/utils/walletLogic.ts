@@ -305,7 +305,7 @@ const WALLET_TICKET_TYPES = new Set(['otoku', 'cut-ticket', 'discount'])
  * 保有チケット → WalletCard。
  *   未使用・期限内 → 券種＋金額＋期限でグループ化（×N枚）
  *   期限切れ      → 同様にグループ化（status: expired）
- *   使用済み      → 1枚ずつ（status: used, USED 表示）
+ *   使用済み      → 出さない（10/29）
  */
 export function buildTicketCards(tickets: TicketRow[], now = new Date()): WalletCard[] {
   const groups = new Map<string, TicketRow[]>()
@@ -314,10 +314,8 @@ export function buildTicketCards(tickets: TicketRow[], now = new Date()): Wallet
   for (const t of tickets) {
     const isWelcome = isWelcomeCouponTicket(t)
     if (!WALLET_TICKET_TYPES.has(t.type) && !isWelcome) continue
-    if (t.used) {
-      cards.push(ticketCard([t], 'used', now))
-      continue
-    }
+    // 使い終わった券はウォレットに出さない（10/29 慶一郎さん：USED はチケットから消して）
+    if (t.used) continue
     const expired = isTicketExpired(t, now)
     const ticketTypeKey = isWelcome ? 'welcome' : t.type === 'cut-ticket' ? 'otoku' : t.type
     const key = `${expired ? 'x' : 'a'}::${ticketTypeKey}::${t.amount}::${t.expires_at?.slice(0, 10) ?? ''}::${t.issued_by}::${t.title}`
