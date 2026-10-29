@@ -1,44 +1,84 @@
-// 本日のガチャ（10/29 慶一郎さん）：下タブ「ガチャ」→「本日のガチャを回す」で演出の動画を画面いっぱいに流す。
-// 動画の最後（光る球）で止め、光がゆっくり脈打つ上で、お客様が球をタップしたら開く（くり返すと継ぎ目が見えるので戻さない）。景品・1日1回はまだ決まっていないので、結果は「準備中」。
-// 動画は public/gacha（Gemini で作ったもの）。音を出すので、再生はボタンを押したその場で始める（iPhone の決まり）
+// 本日のガチャ（10/29 慶一郎さん、10/30 動画を3部構成に）：下タブ「ガチャ」→「本日のガチャを回す」で演出の動画を画面いっぱいに流す。
+// 1部・2部（INTRO）→ タップ待ち（WAIT、くり返し・最初と最後のコマが同じなので継ぎ目なし）→ お客様が球をタップ → 3部 開放（OPEN）→ 結果。
+// 1部・2部の動画はまだないので、今は待ちから始まる。景品・1日1回はまだ決まっていないので、結果は「準備中」。
+// 動画は public/gacha（Gemini で作ったもの・縦 9:16）。音を出すので、再生はボタン・タップのその場で始める（iPhone の決まり）。
+// 待ちと開放は別の video を重ね、開放が実際に動き出してから待ちを隠す（切り替えで黒が挟まらないように）
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 
-const VIDEO = '/gacha/gacha-01.mp4'
-const POSTER = '/gacha/gacha-01.jpg'
-const TAP_AT = 17.5 // 手が球から離れて「どうぞ」になるところ
+const INTRO: string[] = [] // 1部・2部ができたら '/gacha/gacha-1.mp4', '/gacha/gacha-2.mp4' の順に入れる
+const WAIT = '/gacha/gacha-wait.mp4'
+const OPEN = '/gacha/gacha-open.mp4'
+const POSTER = '/gacha/gacha-wait.jpg'
 
-type Phase = 'idle' | 'playing' | 'tap' | 'open'
+type Phase = 'idle' | 'intro' | 'tap' | 'open' | 'result'
+
+const play = (v: HTMLVideoElement) => {
+  v.muted = false
+  void v.play().catch(() => { v.muted = true; void v.play().catch(() => {}) })
+}
+const playWait = (v: HTMLVideoElement) => {
+  v.src = WAIT
+  v.loop = true
+  play(v)
+}
 
 export function V2Gacha() {
-  const video = useRef<HTMLVideoElement>(null)
+  const main = useRef<HTMLVideoElement>(null)
+  const burst = useRef<HTMLVideoElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
+  const [clip, setClip] = useState(0)
+  const [opened, setOpened] = useState(false) // 開放の動画が動き出した（待ちを隠してよい）
+
 
   const start = () => {
-    const v = video.current
-    if (!v) return
-    v.currentTime = 0
-    v.muted = false
-    setPhase('playing')
-    void v.play().catch(() => { v.muted = true; void v.play().catch(() => setPhase('tap')) })
+    const v = main.current
+    const b = burst.current
+    if (!v || !b) return
+    setOpened(false)
+    b.pause()
+    b.currentTime = 0
+    if (INTRO.length) {
+      setClip(0)
+      v.loop = false
+      v.src = INTRO[0]
+      play(v)
+      setPhase('intro')
+    } else {
+      playWait(v)
+      setPhase('tap')
+    }
   }
-  const close = () => { video.current?.pause(); setPhase('idle') }
+  const close = () => { main.current?.pause(); burst.current?.pause(); setOpened(false); setPhase('idle') }
+
+  // 1部が終わったら2部、最後まで行ったら待ちへ
+  useEffect(() => {
+    const v = main.current
+    if (!v) return
+    const ended = () => {
+      if (phase !== 'intro') return
+      const next = clip + 1
+      if (next < INTRO.length) { setClip(next); v.src = INTRO[next]; play(v) } else { playWait(v); setPhase('tap') }
+    }
+    v.addEventListener('ended', ended)
+    return () => v.removeEventListener('ended', ended)
+  }, [phase, clip])
 
   useEffect(() => {
-    const v = video.current
-    if (!v) return
-    const tick = () => { if (v.currentTime >= TAP_AT) setPhase(p => (p === 'playing' ? 'tap' : p)) }
-    // 最後のコマで止まったまま（戻して流し直さない）
-    const ended = () => setPhase(p => (p === 'playing' ? 'tap' : p))
-    v.addEventListener('timeupdate', tick)
-    v.addEventListener('ended', ended)
-    return () => { v.removeEventListener('timeupdate', tick); v.removeEventListener('ended', ended) }
+    const b = burst.current
+    if (!b) return
+    const playing = () => { setOpened(true); main.current?.pause() }
+    const ended = () => setPhase(p => (p === 'open' ? 'result' : p))
+    b.addEventListener('playing', playing)
+    b.addEventListener('ended', ended)
+    return () => { b.removeEventListener('playing', playing); b.removeEventListener('ended', ended) }
   }, [])
 
   const open = () => {
-    if (phase !== 'tap') return
+    const b = burst.current
+    if (phase !== 'tap' || !b) return
     setPhase('open')
-    setTimeout(() => video.current?.pause(), 700)
+    play(b)
   }
 
   const showing = phase !== 'idle'
@@ -54,12 +94,12 @@ export function V2Gacha() {
       </section>
       <p className="v2-gacha-note">音が出ます。音量にご注意ください。</p>
 
-      <div className={`v2-gacha-stage${showing ? ' is-on' : ''}${phase === 'open' ? ' is-open' : ''}`} aria-hidden={!showing} onClick={open}>
-        <video ref={video} src={VIDEO} poster={POSTER} playsInline preload="auto" />
-        {phase === 'tap' && <div className="v2-gacha-glow" />}
+      <div className={`v2-gacha-stage${showing ? ' is-on' : ''}`} aria-hidden={!showing} onClick={open}>
+        <video ref={main} poster={POSTER} playsInline preload="auto" src={WAIT} />
+        <video ref={burst} className={`v2-gacha-burst${opened ? ' is-on' : ''}`} src={OPEN} playsInline preload="auto" />
         {phase === 'tap' && <p className="v2-gacha-tap">光る球をタップ</p>}
-        {phase === 'open' && <div className="v2-gacha-flash" />}
-        {phase === 'open' && (
+        {phase === 'result' && <div className="v2-gacha-flash" />}
+        {phase === 'result' && (
           <div className="v2-gacha-result" onClick={e => e.stopPropagation()}>
             <Sparkles size={28} />
             <b>景品は準備中です</b>
