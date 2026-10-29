@@ -1,13 +1,13 @@
 // 本日のガチャ（10/29 慶一郎さん、10/30 動画を3部構成に）：下タブ「ガチャ」→「本日のガチャを回す」で演出の動画を画面いっぱいに流す。
-// 1部・2部（INTRO）→ タップ待ち（WAIT、くり返し・最初と最後のコマが同じなので継ぎ目なし）→ お客様が球をタップ → 3部 開放（OPEN）→ 結果。
-// 1部・2部はつないだ1本（砂漠→神殿→球、最後のコマが待ちの最初と同じ）。景品・1日1回はまだ決まっていないので、結果は「準備中」。
-// 動画は public/gacha（Gemini で作ったもの・縦 9:16）。音を出すので、再生はボタン・タップのその場で始める（iPhone の決まり）。
-// 待ちと開放は別の video を重ね、開放が実際に動き出してから待ちを隠す（切り替えで黒が挟まらないように）
+// 1部・2部（INTRO、砂漠→神殿→球）→ タップ待ち（WAIT、くり返し）→ お客様が球をタップ → 3部 開放（OPEN）→ 結果。景品・1日1回はまだ決まっていないので、結果は「準備中」。
+// 動画は public/gacha（Gemini で作ったもの・縦 9:16）。つなぎ目は動画の中で 0.75 秒かけて溶かしてある：INTRO の終わりは WAIT の始まりの直前のコマ、WAIT は終わりと始まりが同じ（10/30「まだ不自然」）。
+// 3本は別の video を重ねる。次の動画が実際に動き出してから前の動画を隠す（切り替えで黒や下絵が挟まらない）。開放はタップの位置がどこでも 0.5 秒で溶かして出す。
+// 音を出すので、再生はボタン・タップのその場で始める（iPhone の決まり）。待ちはボタンのときに一度再生して止め、あとから音つきで流せるようにしておく
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 
-const INTRO = ['/gacha/gacha-intro.mp4'] // 1部・2部（順に流す）
-const INTRO_POSTER = '/gacha/gacha-intro.jpg' // 1部の最初のコマ（読み込みの間に球が見えないように）
+const INTRO = '/gacha/gacha-intro.mp4'
+const INTRO_POSTER = '/gacha/gacha-intro.jpg'
 const WAIT = '/gacha/gacha-wait.mp4'
 const OPEN = '/gacha/gacha-open.mp4'
 const POSTER = '/gacha/gacha-wait.jpg'
@@ -18,61 +18,53 @@ const play = (v: HTMLVideoElement) => {
   v.muted = false
   void v.play().catch(() => { v.muted = true; void v.play().catch(() => {}) })
 }
-const playWait = (v: HTMLVideoElement) => {
-  v.src = WAIT
-  v.loop = true
-  play(v)
-}
+const rewind = (v: HTMLVideoElement) => { v.pause(); v.currentTime = 0 }
 
 export function V2Gacha() {
-  const main = useRef<HTMLVideoElement>(null)
+  const intro = useRef<HTMLVideoElement>(null)
+  const wait = useRef<HTMLVideoElement>(null)
   const burst = useRef<HTMLVideoElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
-  const [clip, setClip] = useState(0)
-  const [opened, setOpened] = useState(false) // 開放の動画が動き出した（待ちを隠してよい）
-
+  const [top, setTop] = useState<'intro' | 'wait' | 'burst'>('intro') // いま前に出ている動画
 
   const start = () => {
-    const v = main.current
+    const i = intro.current
+    const w = wait.current
     const b = burst.current
-    if (!v || !b) return
-    setOpened(false)
-    b.pause()
-    b.currentTime = 0
-    if (INTRO.length) {
-      setClip(0)
-      v.loop = false
-      v.src = INTRO[0]
-      play(v)
-      setPhase('intro')
-    } else {
-      playWait(v)
-      setPhase('tap')
-    }
+    if (!i || !w || !b) return
+    rewind(b)
+    rewind(i)
+    w.muted = false
+    void w.play().then(() => rewind(w)).catch(() => {})
+    setTop('intro')
+    setPhase('intro')
+    play(i)
   }
-  const close = () => { main.current?.pause(); burst.current?.pause(); setOpened(false); setPhase('idle') }
-
-  // 1部が終わったら2部、最後まで行ったら待ちへ
-  useEffect(() => {
-    const v = main.current
-    if (!v) return
-    const ended = () => {
-      if (phase !== 'intro') return
-      const next = clip + 1
-      if (next < INTRO.length) { setClip(next); v.src = INTRO[next]; play(v) } else { playWait(v); setPhase('tap') }
-    }
-    v.addEventListener('ended', ended)
-    return () => v.removeEventListener('ended', ended)
-  }, [phase, clip])
+  const close = () => {
+    for (const v of [intro.current, wait.current, burst.current]) v?.pause()
+    setPhase('idle')
+  }
 
   useEffect(() => {
+    const i = intro.current
+    const w = wait.current
     const b = burst.current
-    if (!b) return
-    const playing = () => { setOpened(true); main.current?.pause() }
-    const ended = () => setPhase(p => (p === 'open' ? 'result' : p))
-    b.addEventListener('playing', playing)
-    b.addEventListener('ended', ended)
-    return () => { b.removeEventListener('playing', playing); b.removeEventListener('ended', ended) }
+    if (!i || !w || !b) return
+    // 1部・2部の最後のコマを出したまま待ちを流し、動き出したら入れ替える
+    const introEnded = () => { setPhase(p => (p === 'intro' ? 'tap' : p)); play(w) }
+    const waitPlaying = () => { if (i.ended) setTop(t => (t === 'intro' ? 'wait' : t)) } // ボタンのときの一度きりの再生では入れ替えない
+    const burstPlaying = () => { setTop('burst'); setTimeout(() => w.pause(), 600) }
+    const burstEnded = () => setPhase(p => (p === 'open' ? 'result' : p))
+    i.addEventListener('ended', introEnded)
+    w.addEventListener('playing', waitPlaying)
+    b.addEventListener('playing', burstPlaying)
+    b.addEventListener('ended', burstEnded)
+    return () => {
+      i.removeEventListener('ended', introEnded)
+      w.removeEventListener('playing', waitPlaying)
+      b.removeEventListener('playing', burstPlaying)
+      b.removeEventListener('ended', burstEnded)
+    }
   }, [])
 
   const open = () => {
@@ -96,8 +88,9 @@ export function V2Gacha() {
       <p className="v2-gacha-note">音が出ます。音量にご注意ください。</p>
 
       <div className={`v2-gacha-stage${showing ? ' is-on' : ''}`} aria-hidden={!showing} onClick={open}>
-        <video ref={main} poster={phase === 'intro' ? INTRO_POSTER : POSTER} playsInline preload="auto" src={INTRO[0] ?? WAIT} />
-        <video ref={burst} className={`v2-gacha-burst${opened ? ' is-on' : ''}`} src={OPEN} playsInline preload="auto" />
+        <video ref={wait} src={WAIT} poster={POSTER} loop playsInline preload="auto" />
+        <video ref={intro} src={INTRO} poster={INTRO_POSTER} className={top === 'intro' ? '' : 'is-off'} playsInline preload="auto" />
+        <video ref={burst} src={OPEN} className={`v2-gacha-burst${top === 'burst' ? ' is-on' : ''}`} playsInline preload="auto" />
         {phase === 'tap' && <p className="v2-gacha-tap">光る球をタップ</p>}
         {phase === 'result' && <div className="v2-gacha-flash" />}
         {phase === 'result' && (
