@@ -88,6 +88,7 @@ const MIGRATION_ORDER = [
   '20261029000000_audit3_fixes.sql',
   '20261029000100_perm_return_coupon.sql',
   '20261029000200_perm_return_expiry.sql',
+  '20261029000300_customer_slots_30.sql',
 ]
 // 以前の名前（改名済み）。docs・テスト・スクリプトに参照が残っていないこと（migration 本文のコメントは内容を変えないため対象外）
 const STALE_MIGRATION_NAMES = [
