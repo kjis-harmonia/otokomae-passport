@@ -13,7 +13,7 @@ import { PrimaryButton } from './ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
 import { playCue } from '../../audio/cue'
 import { Banknote, Wallet } from 'lucide-react'
-import { isWelcomeCouponTicket } from '../../utils/welcomeCoupon'
+import { isPermOnlyCoupon } from '../../utils/welcomeCoupon'
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
 // 「会計を確定」で初めて売上になる（確定は DB の1トランザクション。予約は完了になる）。毎日何十回も使うので、文字と金額だけで構成する。
@@ -221,7 +221,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
 
   // Welcomeクーポン（初回パーマ 2,000円引き）はパーマ（セットを含む）のときだけ（10/27 慶一郎さん：カットでも使えていた）
   const hasPerm = lines.some(l => !!l.ref_id && /^(perm|set)-/.test(l.ref_id))
-  const welcomeIds = tickets.filter(t => isWelcomeCouponTicket({ title: t.title, amount: t.amount, issued_by: '' })).map(t => t.id)
+  // 再来店パーマクーポン（10/29）も同じ
+  const welcomeIds = tickets.filter(t => isPermOnlyCoupon({ title: t.title, amount: t.amount, issued_by: '' })).map(t => t.id)
   const welcomeKey = hasPerm ? '' : welcomeIds.filter(id => ticketIds.includes(id)).join(',')
   useEffect(() => {
     if (!welcomeKey) return

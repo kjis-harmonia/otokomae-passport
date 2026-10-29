@@ -108,6 +108,27 @@ async function sendStaffNew(test = false): Promise<{ reservations: number; cance
   return { reservations: list.length, cancels: (p.cancels ?? []).length, devices: (p.subs ?? []).length, delivered }
 }
 
+/** 再来店パーマクーポン（10/29）：来店日の翌日 12:00 に配った券のお知らせ。配る・誰に送るかは DB が決める（12:00〜20:59 だけ） */
+async function sendPermReturn(): Promise<{ sent: number; delivered: number }> {
+  const list = await rpc<{ user_id: string; expires_at: string | null; subs: { endpoint: string; p256dh: string; auth: string }[] | null }[]>('perm_return_for_sender', { p_secret: SECRET })
+  let delivered = 0
+  for (const g of list ?? []) {
+    const until = g.expires_at ? new Date(Date.parse(g.expires_at) - 1).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric' }) : null
+    const title = '二代目 銀二郎'
+    const body = `ご来店ありがとうございました。次回のパーマで使える500円引きのクーポンをお届けしました。${until ? `${until}まで、` : ''}平日にお使いいただけます。`
+    const payload = JSON.stringify({ title, body, url: '/?tab=tickets', tag: `perm-return-${g.user_id}` })
+    let n = 0
+    const gone: string[] = []
+    for (const s of g.subs ?? []) {
+      try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 60 * 60 * 6 }); n++ }
+      catch (e) { const code = (e as { statusCode?: number }).statusCode; if (code === 404 || code === 410) gone.push(s.endpoint) }
+    }
+    await rpc('perm_return_record_for_sender', { p_secret: SECRET, p_user_id: g.user_id, p_title: title, p_body: body, p_delivered: n, p_gone: gone }).catch(() => {})
+    delivered += n
+  }
+  return { sent: (list ?? []).length, delivered }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method_not_allowed', { status: 405 })
   if (!SECRET || req.headers.get('x-notify-secret') !== SECRET) return new Response('forbidden', { status: 403 })
@@ -132,7 +153,9 @@ Deno.serve(async (req) => {
   // SB の試し送り：{ "staff_test": true }。SB だけの毎分の見回り（キャンセル待ちの無い本番）：{ "staff": true }
   if ((body as { staff_test?: unknown }).staff_test === true || (body as { staff?: unknown }).staff === true) {
     const test = (body as { staff_test?: unknown }).staff_test === true
-    return new Response(JSON.stringify({ staff: true, test, ...(await sendStaffNew(test)) }), { headers: { 'Content-Type': 'application/json' } })
+    // 毎分の見回りのついでに、再来店パーマクーポンを配って知らせる（失敗しても SB のお知らせは止めない）
+    const permReturn = test ? null : await sendPermReturn().catch((e: unknown) => ({ error: String(e).slice(0, 120) }))
+    return new Response(JSON.stringify({ staff: true, test, ...(await sendStaffNew(test)), permReturn }), { headers: { 'Content-Type': 'application/json' } })
   }
 
   // キャンセル待ち（毎分）：{ "waitlist": true } のときは、空いた枠を押さえた人へ「確定して」のお知らせ。
