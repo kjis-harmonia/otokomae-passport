@@ -80,7 +80,9 @@ export function WalletCardFace({
   const isTicket  = card.category === 'otoku'
   const isPremium = isPremiumCategory(card.category)
   // チケットの英字（OTOKU TICKET 等）は券種名の繰り返しで、狭い画面では途切れるため出さない
-  const tag       = isTicket ? '' : card.subtitle ?? card.eyebrow
+  // 券の上の小さな文字：漢トク券・割引券は金額も（重ねたとき上の段しか見えないので、金額違いを見分けられるように・10/29）
+  const ticketAmount = card.prices[0]?.memberPrice
+  const tag       = isTicket ? (!isPermCoupon && ticketAmount !== undefined ? yen(ticketAmount) : '') : card.subtitle ?? card.eyebrow
   // Welcomeクーポンは見出しを「特殊パーマ」だけにして途切れさせない
   // 再来店パーマクーポンも「再来店パーマ」だけに（種類は上の小さな文字で）
   const title     = isWelcome ? card.title.replace(/\s*Welcome\s*クーポン\s*$/, '') || card.title
@@ -131,7 +133,7 @@ export function WalletCardFace({
               {tag && (
                 <>
                   <span style={{ width: 3, height: 3, borderRadius: 9, background: 'rgba(242,230,200,0.3)', flexShrink: 0 }} />
-                  <span style={{ color: 'rgba(242,230,200,0.56)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tag}</span>
+                  <span style={{ color: isTicket ? 'rgba(242,230,200,0.92)' : 'rgba(242,230,200,0.56)', fontWeight: isTicket ? 700 : undefined, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tag}</span>
                 </>
               )}
             </p>
