@@ -36,5 +36,5 @@ export function isWeekendInJapan(now = new Date()): boolean {
 }
 
 export function isWelcomeCouponBlockedToday(ticket: TicketRow, now = new Date()): boolean {
-  return isWelcomeCouponTicket(ticket) && isWeekendInJapan(now)
+  return isPermOnlyCoupon(ticket) && isWeekendInJapan(now) // 再来店パーマクーポンも平日のみ（10/29）
 }

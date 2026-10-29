@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { WalletCard } from '../../data/wallet'
 import { CARD_THEMES, SERIF, IVORY, cardCategoryLabel, isOtokuTicketCard, statusColor, yen, type CardTheme } from './walletTheme'
-import { isWelcomeCouponTicket } from '../../utils/welcomeCoupon'
+import { isWelcomeCouponTicket, PERM_RETURN_COUPON_ISSUED_BY, PERM_RETURN_COUPON_TITLE } from '../../utils/welcomeCoupon'
 
 export const CARD_HEIGHT = 304
 /** スタック時に見えるカード上端の高さ（ヘッダー部分） */
@@ -20,8 +20,22 @@ const WELCOME_THEME: CardTheme = {
   glow:       'rgba(229,192,99,0.22)',
 }
 
+/** 再来店パーマクーポン専用の配色：漆黒 × 落ち着いた金（Welcome の深紅と見分ける） */
+const RETURN_THEME: CardTheme = {
+  background: 'radial-gradient(80% 70% at 100% 0%, rgba(229,192,99,0.12) 0%, transparent 60%), linear-gradient(160deg, #17130D 0%, #0D0B08 55%, #070605 100%)',
+  border:     'rgba(229,192,99,0.30)',
+  frontBorder:'rgba(229,192,99,0.72)',
+  hairline:   'linear-gradient(90deg, transparent 0%, rgba(229,192,99,0.85) 50%, transparent 100%)',
+  accent:     '#E5C063',
+  glow:       'rgba(229,192,99,0.10)',
+}
+
 function isWelcomeCard(card: WalletCard): boolean {
   return card.source.kind === 'ticket' && card.source.tickets.some(isWelcomeCouponTicket)
+}
+
+function isReturnCard(card: WalletCard): boolean {
+  return card.source.kind === 'ticket' && card.source.tickets.some(t => t.issued_by === PERM_RETURN_COUPON_ISSUED_BY || t.title === PERM_RETURN_COUPON_TITLE)
 }
 
 function isPremiumCategory(category: WalletCard['category']): boolean {
@@ -54,14 +68,19 @@ export function WalletCardFace({
 }) {
   const inactive  = card.status === 'expired' || card.status === 'used'
   const isWelcome = isWelcomeCard(card)
-  const theme     = isWelcome && !inactive ? WELCOME_THEME : CARD_THEMES[card.accent]
+  const isReturn  = !isWelcome && isReturnCard(card)
+  // パーマのクーポン（初回 Welcome・再来店）：額と条件を大きく、半券に縦書き
+  const isPermCoupon = isWelcome || isReturn
+  const theme     = inactive ? CARD_THEMES[card.accent] : isWelcome ? WELCOME_THEME : isReturn ? RETURN_THEME : CARD_THEMES[card.accent]
   const sc        = statusColor(card)
   const isTicket  = card.category === 'otoku'
   const isPremium = isPremiumCategory(card.category)
   // チケットの英字（OTOKU TICKET 等）は券種名の繰り返しで、狭い画面では途切れるため出さない
   const tag       = isTicket ? '' : card.subtitle ?? card.eyebrow
   // Welcomeクーポンは見出しを「特殊パーマ」だけにして途切れさせない
-  const title     = isWelcome ? card.title.replace(/\s*Welcome\s*クーポン\s*$/, '') || card.title : card.title
+  // 再来店パーマクーポンも「再来店パーマ」だけに（種類は上の小さな文字で）
+  const title     = isWelcome ? card.title.replace(/\s*Welcome\s*クーポン\s*$/, '') || card.title
+    : isReturn ? card.title.replace(/\s*クーポン\s*$/, '') || card.title : card.title
   const heroCarriesStatus = isFront && !inactive && (card.category === 'cut' || isPremium)
   const sweep = useSweepOnce(isFront && isPremium && card.live ? `${card.id}:${card.statusLabel}` : null)
 
@@ -86,13 +105,13 @@ export function WalletCardFace({
         transition: 'border-color 240ms ease',
       }}
     >
-      {/* 透かし */}
-      <span aria-hidden="true" style={{
+      {/* 透かし（券は額が主役なので出さない） */}
+      {!isTicket && <span aria-hidden="true" style={{
         position: 'absolute', right: isTicket ? '30%' : -18, bottom: -64,
         fontFamily: SERIF, fontSize: 220, fontWeight: 700, lineHeight: 1,
         color: theme.accent, opacity: 0.045, pointerEvents: 'none', userSelect: 'none',
-      }}>銀</span>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: isPremium || isWelcome ? 2 : 1.5, background: theme.hairline, opacity: inactive ? 0.4 : 1 }} />
+      }}>銀</span>}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: isPremium || isPermCoupon ? 2 : 1.5, background: theme.hairline, opacity: inactive ? 0.4 : 1 }} />
       {isWelcome && !inactive && (
         <>
           {/* 金箔の内枠と斜めの光沢 */}
@@ -105,9 +124,9 @@ export function WalletCardFace({
       {/* ── Header (CARD_STRIP) ── */}
       <div style={{ position: 'relative', height: CARD_STRIP - 16, flexShrink: 0, paddingRight: isTicket ? '28%' : 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, height: 24 }}>
-          {isWelcome ? (
-            <p style={{ minWidth: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.12em', color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              ウェルカムクーポン
+          {isPermCoupon ? (
+            <p style={{ minWidth: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', color: theme.accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isWelcome ? 'ウェルカムクーポン' : '再来店クーポン'}
             </p>
           ) : (
             <p style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, fontSize: 11, letterSpacing: '0.16em', whiteSpace: 'nowrap' }}>
@@ -120,15 +139,8 @@ export function WalletCardFace({
               )}
             </p>
           )}
-          {!heroCarriesStatus && (isWelcome && !inactive ? (
-            <span style={{
-              flexShrink: 0, fontSize: 12, fontWeight: 800, letterSpacing: '0.04em',
-              padding: '4px 10px', borderRadius: 999, color: '#1A0E04', whiteSpace: 'nowrap',
-              background: 'linear-gradient(135deg, #F3D98A 0%, #C9A24A 100%)', border: '1px solid rgba(243,217,138,0.9)',
-            }}>
-              平日限定
-            </span>
-          ) : (
+          {/* パーマのクーポンは期限・使用済みを下の小さな文字に（上は名前を途切れさせない） */}
+          {!heroCarriesStatus && !isPermCoupon && (
             <span style={{
               flexShrink: 0, fontSize: 12, fontWeight: 700, letterSpacing: '0.04em',
               padding: '4px 11px', borderRadius: 999,
@@ -136,7 +148,7 @@ export function WalletCardFace({
             }}>
               {card.statusLabel}
             </span>
-          ))}
+          )}
         </div>
         <h3 style={{
           marginTop: 6,
@@ -146,9 +158,9 @@ export function WalletCardFace({
         }}>
           {title}
         </h3>
-        {isWelcome && (
-          <p style={{ marginTop: 4, fontSize: 11.5, letterSpacing: '0.12em', color: 'rgba(242,230,200,0.62)', whiteSpace: 'nowrap' }}>
-            新規のお客様限定
+        {isPermCoupon && (
+          <p style={{ marginTop: 4, fontSize: 12, letterSpacing: '0.1em', color: 'rgba(242,230,200,0.62)', whiteSpace: 'nowrap' }}>
+            {isWelcome ? '新規のお客様限定' : '次回のパーマに'}
           </p>
         )}
       </div>
@@ -157,19 +169,23 @@ export function WalletCardFace({
       <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingRight: isTicket ? '28%' : 0 }}>
         {card.category === 'cut' && <CutHero card={card} theme={theme} />}
         {isPremium && <PermHero card={card} theme={theme} />}
-        {card.category === 'otoku' && (isWelcome ? <WelcomeHero card={card} theme={theme} /> : <TicketHero card={card} theme={theme} />)}
+        {card.category === 'otoku' && (isPermCoupon
+          ? <WelcomeHero card={card} theme={theme} tags={isWelcome ? ['平日のみ', '初回1回限り'] : ['平日のみ', 'パーマのみ']} />
+          : <TicketHero card={card} theme={theme} />)}
       </div>
 
       {/* ── Footer ── */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12, minHeight: 40, paddingRight: isTicket ? '28%' : 0 }}>
         <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.5)', letterSpacing: '0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-          {isFront && !isTicket ? '詳細  ›' : ''}
+          {isPermCoupon ? card.statusLabel : isFront && !isTicket ? '詳細  ›' : ''}
         </p>
         {isFront && cta}
       </div>
 
-      {isTicket && (isWelcome ? <WelcomeStub card={card} theme={theme} /> : <TicketStub card={card} theme={theme} />)}
-      {card.status === 'used' && <UsedStamp />}
+      {isTicket && (isPermCoupon
+        ? <WelcomeStub card={card} theme={theme} text={isWelcome ? 'WELCOME' : '再来店'} />
+        : <TicketStub card={card} theme={theme} />)}
+      {card.status === 'used' && <UsedStamp onStub={isTicket} />}
     </div>
   )
 }
@@ -295,8 +311,8 @@ function TicketHero({ card, theme }: { card: WalletCard; theme: CardTheme }) {
   )
 }
 
-/** Welcomeクーポン：大きな割引額＋条件タグ */
-function WelcomeHero({ card, theme }: { card: WalletCard; theme: CardTheme }) {
+/** パーマのクーポン（Welcome・再来店）：大きな割引額＋条件タグ */
+function WelcomeHero({ card, theme, tags }: { card: WalletCard; theme: CardTheme; tags: string[] }) {
   const amount = card.prices[0]?.memberPrice
   return (
     <div>
@@ -314,7 +330,7 @@ function WelcomeHero({ card, theme }: { card: WalletCard; theme: CardTheme }) {
         </p>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-        {['平日のみ', '初回1回限り'].map(text => (
+        {tags.map(text => (
           <span key={text} style={{
             fontSize: 11, letterSpacing: '0.06em', color: 'rgba(242,230,200,0.86)', whiteSpace: 'nowrap',
             padding: '3px 9px', borderRadius: 999, border: '1px solid rgba(243,217,138,0.34)', background: 'rgba(0,0,0,0.22)',
@@ -327,9 +343,13 @@ function WelcomeHero({ card, theme }: { card: WalletCard; theme: CardTheme }) {
   )
 }
 
-/** Welcomeクーポンの半券：縦書きの WELCOME */
-function WelcomeStub({ card, theme }: { card: WalletCard; theme: CardTheme }) {
+/** パーマのクーポンの半券：縦書きの WELCOME／再来店 */
+function WelcomeStub({ card, theme, text }: { card: WalletCard; theme: CardTheme; text: string }) {
   const count = card.count ?? 1
+  // 使用済みは半券に USED の印だけ（縦書きと重ねない）
+  if (card.status === 'used') {
+    return <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '26%', borderLeft: '1.5px dashed rgba(243,217,138,0.28)' }} />
+  }
   return (
     <div style={{
       position: 'absolute', top: 0, bottom: 0, right: 0, width: '26%',
@@ -340,9 +360,9 @@ function WelcomeStub({ card, theme }: { card: WalletCard; theme: CardTheme }) {
       <span style={{ width: 22, height: 1, background: 'linear-gradient(90deg, transparent, rgba(243,217,138,0.7), transparent)' }} />
       <span style={{
         writingMode: 'vertical-rl', fontFamily: SERIF, fontSize: 15, fontWeight: 700,
-        letterSpacing: '0.42em', color: theme.accent, textShadow: '0 0 18px rgba(229,192,99,0.35)',
+        letterSpacing: '0.42em', color: theme.accent,
       }}>
-        WELCOME
+        {text}
       </span>
       <span style={{ width: 22, height: 1, background: 'linear-gradient(90deg, transparent, rgba(243,217,138,0.7), transparent)' }} />
       {count > 1 && <span style={{ fontSize: 11, color: 'rgba(242,230,200,0.6)' }}>×{count}</span>}
@@ -365,13 +385,14 @@ function TicketStub({ card, theme }: { card: WalletCard; theme: CardTheme }) {
   )
 }
 
-function UsedStamp() {
+/** 使用済みの印。券は半券の上に押して、額に重ねない */
+function UsedStamp({ onStub = false }: { onStub?: boolean }) {
   return (
     <div
       aria-hidden="true"
       style={{
-        position: 'absolute', right: '32%', top: '50%',
-        transform: 'rotate(-12deg)',
+        position: 'absolute', right: onStub ? '13%' : '32%', top: '50%',
+        transform: onStub ? 'translate(50%, -50%) rotate(-90deg)' : 'rotate(-12deg)',
         padding: '4px 14px',
         border: '2px solid rgba(242,230,200,0.32)',
         borderRadius: 6,
