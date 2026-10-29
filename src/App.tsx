@@ -41,7 +41,8 @@ const PASSKEY_SETUP_PROMPT_KEY = 'ginjiro_passkey_setup_prompt_v1'
 type AppPhase = 'onboarding' | 'app'
 
 // Staging だけ：?preview=v2 で、登録なしに V2.0 の画面を見られる（GPT など AI に見せる用）。本番では効かない
-const PREVIEW_V2 = isStaging() && new URLSearchParams(window.location.search).get('preview') === 'v2'
+// Staging は会員登録なしでそのまま開く（10/29 慶一郎さん）。登録の流れを試すときだけ ?onboarding=1。本番は今までどおり
+const PREVIEW_V2 = isStaging() && new URLSearchParams(window.location.search).get('onboarding') !== '1'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function isShopUnlocked(): boolean {
