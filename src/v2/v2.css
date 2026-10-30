@@ -411,9 +411,13 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gacha-stage video.is-off { opacity: 0; }
 .v2-gacha-stage .v2-gacha-burst { opacity: 0; transition: opacity .5s ease; }
 .v2-gacha-stage .v2-gacha-burst.is-on { opacity: 1; }
-.v2-gacha-tap { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); margin: 0; text-align: center; color: #fff6dc;
-  font: 700 20px/1.4 var(--v2-serif); letter-spacing: .2em; text-shadow: 0 0 18px rgba(255,200,90,.95); animation: v2-gacha-pulse 1.2s ease-in-out infinite; pointer-events: none; }
-@keyframes v2-gacha-pulse { 0%, 100% { opacity: .45; transform: scale(.97); } 50% { opacity: 1; transform: scale(1.03); } }
+/* タップ待ちの文字：球（画面のまん中）のすぐ下の台座に重ねる。深海の水色で光らせ、指のアイコンが球を指す（10/31 慶一郎さん「タップの文字も添えて」） */
+.v2-gacha-tap { position: absolute; left: 0; right: 0; top: 70%; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; color: #fff;
+  font: 700 22px/1.4 var(--v2-serif); letter-spacing: .24em; text-shadow: 0 0 10px rgba(120,230,255,.95), 0 0 24px rgba(60,200,255,.8), 0 2px 6px rgba(0,0,0,.7);
+  animation: v2-gacha-pulse 1.4s ease-in-out infinite; pointer-events: none; }
+.v2-gacha-tap svg { transform: rotate(-12deg); filter: drop-shadow(0 0 8px rgba(120,230,255,.95)); animation: v2-gacha-poke 1.4s ease-in-out infinite; }
+@keyframes v2-gacha-pulse { 0%, 100% { opacity: .7; transform: scale(.98); } 50% { opacity: 1; transform: scale(1.03); } }
+@keyframes v2-gacha-poke { 0%, 100% { transform: rotate(-12deg) translateY(4px); } 50% { transform: rotate(-12deg) translateY(-6px); } }
 /* 結果は下に出す（4部の銀ちゃんを隠さない） */
 .v2-gacha-result { position: absolute; left: 24px; right: 24px; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); max-width: 360px; margin: 0 auto; padding: 28px 22px 22px; border-radius: 26px; text-align: center;
   background: linear-gradient(160deg, #1a1108, #0a0603); border: 1px solid rgba(226,194,127,.6); color: #e2c27f; display: grid; gap: 10px; justify-items: center;

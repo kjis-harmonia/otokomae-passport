@@ -5,7 +5,7 @@
 // iPhone は preload を守らず流しながら読むので、電波しだいでカクカクする（10/30「球体もカクカク」）。タブを開いたら3本とも先に全部読み、読み終わってからボタンを押せる。
 // 音を出すので、再生はボタン・タップのその場で始める（iPhone の決まり）。待ちはボタンのときに一度再生して止め、あとから音つきで流せるようにしておく
 import { useEffect, useRef, useState } from 'react'
-import { Sparkles, X } from 'lucide-react'
+import { Pointer, Sparkles, X } from 'lucide-react'
 
 const INTRO = '/gacha/gacha-intro.mp4'
 const INTRO_POSTER = '/gacha/gacha-intro.jpg'
@@ -128,7 +128,7 @@ export function V2Gacha() {
         <video ref={wait} src={src?.[WAIT]} poster={POSTER} loop playsInline preload="auto" />
         <video ref={intro} src={src?.[INTRO]} poster={INTRO_POSTER} className={top === 'intro' ? '' : 'is-off'} playsInline preload="auto" />
         <video ref={burst} src={src?.[OPEN]} className={`v2-gacha-burst${top === 'burst' ? ' is-on' : ''}`} playsInline preload="auto" />
-        {phase === 'tap' && <p className="v2-gacha-tap">光る球をタップ</p>}
+        {phase === 'tap' && <p className="v2-gacha-tap"><Pointer size={30} strokeWidth={1.6} aria-hidden />光る球をタップ</p>}
         {phase === 'result' && (
           <div className="v2-gacha-result" onClick={e => e.stopPropagation()}>
             <Sparkles size={28} />
