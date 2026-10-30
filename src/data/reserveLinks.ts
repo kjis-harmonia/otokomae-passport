@@ -43,6 +43,7 @@ export const RESERVE_LINKS: Readonly<Record<string, string>> = {
   // 専用クーポンURL 確定分
   'シンサイパンチ':                     'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008914837&add=0&addMenu=0&rootCd=10',
   '覚醒の色':                           'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000010603641&add=0&addMenu=0&rootCd=10',
+  'APACHI':                             'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000011406763&add=0&addMenu=0&rootCd=10',
   'サラリーマン専用 ギリギリパーマ':     'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000009996260&add=0&addMenu=0&rootCd=10',
   'ちょい悪オヤジ専用 昭和ヘアスタイル': 'https://beauty.hotpepper.jp/CSP/bt/reserve/?storeId=H000583749&couponId=CP00000008738693&add=0&addMenu=0&rootCd=10',
 }
