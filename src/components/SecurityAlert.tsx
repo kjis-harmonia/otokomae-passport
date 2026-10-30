@@ -4,11 +4,11 @@
 import { useEffect, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { callStaffRpc, deviceCode, deviceHint, STAFF_LOCKED_EVENT } from '../utils/staffSession'
+import { callStaffRpc, deviceCode, deviceHint, keepStaffSession, STAFF_LOCKED_EVENT } from '../utils/staffSession'
 import './securityAlert.css'
 
 type Alert = { id: number; created_at: string; reason: 'pin_ok' | 'pin_fail'; app: 'staff' | 'sb' | 'hq' | null; hint: string | null; acked_at?: string | null; acked_by?: string | null }
-type State = { locked: boolean; since?: string | null; alerts: Alert[] }
+type State = { locked: boolean; since?: string | null; alerts: Alert[]; expires_at?: string | null }
 
 const POLL_MS = 20_000
 
@@ -34,6 +34,7 @@ export function SecurityAlert({ app, authed = true }: { app: 'staff' | 'sb'; aut
       try {
         if (authed) {
           const r = await callStaffRpc<State>('staff_security_check', { p_app: app, p_hint: deviceHint() })
+          if (r.expires_at) keepStaffSession(r.expires_at)
           if (alive) setState({ locked: !!r.locked, since: r.since, alerts: r.alerts ?? [] })
         } else {
           const { data } = await supabase.rpc('staff_lockdown_status')
