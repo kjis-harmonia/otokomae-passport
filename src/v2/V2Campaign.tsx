@@ -1,0 +1,57 @@
+// アプリを開いたときのキャンペーン（10/30 慶一郎さん：APACHI を季節限定に）。ホームの上に写真を1枚大きく出し、「この髪型でAI予約する」か「閉じる」。
+// 同じキャンペーンは1台につき1回だけ（閉じても予約しても、次からは出さない）。Staging は確かめやすいように毎回出す。
+// 次のキャンペーンは CAMPAIGN を書き換える（id を変えれば、前のを見た人にも出る）。期間が過ぎたら出さない。
+import { useEffect, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { requestJohnny } from '../features/johnny/bookingIntent'
+import { getStoredValue, setStoredValue } from '../utils/storage'
+import { isStaging } from '../utils/env'
+
+const CAMPAIGN = {
+  id: 'apachi-2026-autumn',
+  image: '/assets/styles/apachi.jpg',
+  alt: 'APACHI　ショートピンパーマ × ホワイトメッシュ',
+  menuCode: 'perm-apache',
+  label: 'APACHI',
+  until: '2026-12-31',
+}
+const SEEN_KEY = 'ginjiro_campaign_seen'
+
+function shouldShow(): boolean {
+  if (new Date() > new Date(`${CAMPAIGN.until}T23:59:59+09:00`)) return false
+  return isStaging() || getStoredValue<string>(SEEN_KEY, '') !== CAMPAIGN.id
+}
+
+export function V2Campaign() {
+  const reduce = useReducedMotion()
+  const [open, setOpen] = useState(false)
+
+  // ホームが出てから少し待って出す（いきなり覆わない）
+  useEffect(() => {
+    if (!shouldShow()) return
+    const img = new Image()
+    img.src = CAMPAIGN.image
+    const t = window.setTimeout(() => setOpen(true), 700)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  const close = () => { setStoredValue(SEEN_KEY, CAMPAIGN.id); setOpen(false) }
+  const reserve = () => { close(); requestJohnny({ menuCode: CAMPAIGN.menuCode, label: CAMPAIGN.label }) }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div className="v2-campaign" role="dialog" aria-modal="true" aria-label={CAMPAIGN.label} onClick={close}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+          <motion.div className="v2-campaign-body" onClick={e => e.stopPropagation()}
+            initial={reduce ? false : { opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduce ? undefined : { opacity: 0, y: 8 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+            <img src={CAMPAIGN.image} alt={CAMPAIGN.alt} />
+            <button type="button" className="v2-campaign-go" onClick={reserve}>この髪型でAI予約する</button>
+            <button type="button" className="v2-campaign-close" onClick={close}>閉じる</button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}

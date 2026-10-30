@@ -14,6 +14,7 @@ import { V2Next } from './V2Next'
 import { V2Menu } from './V2Menu'
 import { V2Account } from './V2Account'
 import { V2Ginpay } from './V2Ginpay'
+import { V2Campaign } from './V2Campaign'
 import './v2.css'
 
 const TABS: { id: NavTab; label: string; icon: typeof Home }[] = [
@@ -93,6 +94,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
         })}
       </nav>
 
+      {isHome && <V2Campaign />}
       <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} />
     </div>
   )

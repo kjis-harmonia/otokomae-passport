@@ -19,6 +19,6 @@ export const UI_CATEGORIES = [
   {
     id: '季節限定',
     sub: 'SEASONAL',
-    titles: ['秋ニグロ', '銀パラ', '覚醒の色'],
+    titles: ['APACHI', '秋ニグロ', '銀パラ', '覚醒の色'],
   },
 ] as const

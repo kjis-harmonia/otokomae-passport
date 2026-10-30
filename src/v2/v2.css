@@ -395,3 +395,10 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
   .v2 :is([aria-current="page"],[aria-pressed="true"]) { outline: 2px solid Highlight; }
 }
 
+
+/* Campaign: one poster over the home screen, then reserve or close. */
+.v2-campaign { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: calc(env(safe-area-inset-top, 0px) + 20px) 16px calc(env(safe-area-inset-bottom, 0px) + 20px); background: rgba(12,10,8,.78); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.v2-campaign-body { width: min(100%, 400px, calc((100dvh - 190px) * .8)); display: grid; gap: 10px; }
+.v2-campaign-body img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; display: block; border-radius: 18px; }
+.v2-campaign-go { height: 54px; margin-top: 6px; border: 0; border-radius: 27px; background: #f8f6f1; color: #1d1915; font: 600 16px/1 var(--v2-sans); letter-spacing: .04em; cursor: pointer; }
+.v2-campaign-close { height: 44px; border: 0; background: none; color: rgba(255,255,255,.78); font: 500 14px/1 var(--v2-sans); cursor: pointer; }
