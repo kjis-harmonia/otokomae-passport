@@ -14,6 +14,9 @@ const CAMPAIGN = {
   menuCode: 'perm-apache',
   label: 'APACHI',
   until: '2026-12-31',
+  kicker: 'NEW MENU',
+  title: '新メニュー登場',
+  detail: ['季節限定', 'アパッチ', '¥18,000', '約4時間'],
 }
 const SEEN_KEY = 'ginjiro_campaign_seen'
 
@@ -46,7 +49,12 @@ export function V2Campaign() {
           <motion.div className="v2-campaign-body" onClick={e => e.stopPropagation()}
             initial={reduce ? false : { opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduce ? undefined : { opacity: 0, y: 8 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+            <header className="v2-campaign-head">
+              <span>{CAMPAIGN.kicker}</span>
+              <h2>{CAMPAIGN.title}</h2>
+            </header>
             <img src={CAMPAIGN.image} alt={CAMPAIGN.alt} />
+            <p className="v2-campaign-detail">{CAMPAIGN.detail.map(d => <span key={d}>{d}</span>)}</p>
             <button type="button" className="v2-campaign-go" onClick={reserve}>この髪型でAI予約する</button>
             <button type="button" className="v2-campaign-close" onClick={close}>閉じる</button>
           </motion.div>
