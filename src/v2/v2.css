@@ -435,4 +435,10 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-campaign-detail span + span::before { content: "・"; margin: 0 4px; color: rgba(255,255,255,.5); }
 .v2-campaign-body img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; display: block; border-radius: 18px; }
 .v2-campaign-go { height: 54px; margin-top: 6px; border: 0; border-radius: 27px; background: #f8f6f1; color: #1d1915; font: 600 16px/1 var(--v2-sans); letter-spacing: .04em; cursor: pointer; }
-.v2-campaign-close { height: 44px; border: 0; background: none; color: rgba(255,255,255,.78); font: 500 14px/1 var(--v2-sans); cursor: pointer; }
+.v2-campaign-foot { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
+.v2-campaign-hide { position: relative; display: flex; align-items: center; gap: 8px; min-height: 44px; font: 500 13px/1 var(--v2-sans); color: rgba(255,255,255,.82); cursor: pointer; }
+.v2-campaign-hide input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.v2-campaign-hide i { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.6); display: grid; place-items: center; color: #1d1915; }
+.v2-campaign-hide input:checked + i { background: #f8f6f1; border-color: #f8f6f1; }
+.v2-campaign-hide input:focus-visible + i { outline: 2px solid #d8bd86; outline-offset: 2px; }
+.v2-campaign-close { height: 44px; padding: 0 4px; border: 0; background: none; color: #fff; font: 600 14px/1 var(--v2-sans); cursor: pointer; }
