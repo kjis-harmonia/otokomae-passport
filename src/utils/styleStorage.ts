@@ -425,6 +425,21 @@ const SEED_DRAFTS: StyleCardDraft[] = [
     isPublished: true,
     sortOrder: 22,
   },
+  {
+    title: 'APACHI',
+    category: 'seasonal',
+    catchCopy: 'ショートピンパーマ × ホワイトメッシュ。',
+    description:
+      '短く立ち上げたピンパーマに、白いメッシュを散らした季節限定スタイル。近くで見ても遠くから見ても、ひと目で分かる存在感。',
+    price: 18000,
+    durationMinutes: 240,
+    imageUrl: '/assets/styles/apachi.jpg',
+    tags: ['ピンパーマ', 'メッシュ', '季節限定', '個性', '存在感'],
+    stats: { intimidation: 5, sexiness: 4, popularity: 4, difficulty: 4, durability: 4 },
+    isFeatured: true,
+    isPublished: true,
+    sortOrder: 23,
+  },
 ]
 
 /**
