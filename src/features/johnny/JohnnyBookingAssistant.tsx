@@ -23,7 +23,7 @@ import type { AgentAnswer, AgentShown, AgentTurn } from './agentClient'
 import { useVoice } from './useVoice'
 import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvisor'
 import { JohnnyRider, type OrbState } from './JohnnyRider'
-import { planCompanion } from './partyPlanner'
+import { planCompanion, planPartyDay } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { takeAiTurn } from './aiQuota'
 import { PushToggle } from '../../components/PushToggle'
@@ -81,7 +81,9 @@ type Step =
   | { k: 'usualSaved'; menu: MenuOption; failed?: boolean }
   | { k: 'confirmParty'; primary: PartyPrimary; companion: { menu: MenuOption; slot: Slot }; togetherAt: string | null
       /** その時間にお連れ様を担当できる人（分からないときは undefined）。選んだ担当は companionPick（読み上げ・戻るの履歴を増やさない）・10/30 慶一郎さん「お連れ様も担当を選べるように」 */
-      companionFree?: string[] }
+      companionFree?: string[]
+      /** 希望の日はお連れ様が入れず、ほかの日に移した：もとの日（YYYY-MM-DD） */
+      movedFrom?: string }
   /** AI の返事（話す言葉と、出す一覧） */
   | { k: 'ai'; say: string; view: AiView }
   | { k: 'confirmCancel'; reservation: CustomerReservation; say: string }
@@ -682,21 +684,44 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const date = slotDate(primary.slot.starts_at)
     try {
       const staff = options?.staff?.length ? options.staff : null
-      const lists = staff
+      const primaryStaff = staff ? primary.staffId : null
+      const listsOn = async (day: string) => staff
         ? await Promise.all(staff.map(async st => ({
             staffId: st.id,
-            primary: (await api.staffSlots(date, primary.menu.code, st.id)).map(x => x.starts_at),
-            companion: (await api.staffSlots(date, menu.code, st.id)).map(x => x.starts_at),
+            primary: (await api.staffSlots(day, primary.menu.code, st.id)).map(x => x.starts_at),
+            companion: (await api.staffSlots(day, menu.code, st.id)).map(x => x.starts_at),
           })))
-        : [{ staffId: 'any', primary: (await api.slots(date, primary.menu.code)).map(x => x.starts_at), companion: (await api.slots(date, menu.code)).map(x => x.starts_at) }]
-      const plan = planCompanion(primary.slot.starts_at, primary.menu.duration_min, staff ? primary.staffId : null, lists)
+        : [{ staffId: 'any', primary: (await api.slots(day, primary.menu.code)).map(x => x.starts_at), companion: (await api.slots(day, menu.code)).map(x => x.starts_at) }]
+      let lists = await listsOn(date)
+      let plan = planCompanion(primary.slot.starts_at, primary.menu.duration_min, primaryStaff, lists)
+      let at = primary
+      let movedFrom: string | undefined
+      // その日にお連れ様が入れないとき：「ならいつ？」と聞き直さなくていいように、お二人とも入れる一番早い日を先に探す（10/30 慶一郎さん）。
+      //   時刻はもとの希望に近いほう、担当（指名）・メニューはそのまま。2週間先まで
       if (!plan.companion) {
-        setStep({ k: 'ai', say: `${dayWord(date)}は、お連れ様の${menu.name}の空きがありません。別の日をお伝えください。`, view: { kind: 'talk', handoff: false } })
-        return
+        const clock = jstMinutes(primary.slot.starts_at)
+        const days = Array.from({ length: 14 }, (_, k) => addDays(date, k + 1))
+        for (let k = 0; k < days.length && !movedFrom; k += 3) {
+          const batch = days.slice(k, k + 3)
+          const got = await Promise.all(batch.map(async day => ({ day, lists: await listsOn(day) })))
+          for (const g of got) {
+            const p = planPartyDay(clock, primary.menu.duration_min, primaryStaff, g.lists, jstMinutes)
+            if (!p) continue
+            lists = g.lists
+            plan = p
+            at = { ...primary, slot: { starts_at: p.primary }, req: reqFromSlot(p.primary) }
+            movedFrom = date
+            break
+          }
+        }
+        if (!movedFrom) {
+          setStep({ k: 'ai', say: `2週間先まで、お二人ご一緒に入れる空きがありません。お手数ですが、お電話でご相談ください。`, view: { kind: 'talk', handoff: true } })
+          return
+        }
       }
-      const C = Date.parse(plan.companion), S = Date.parse(primary.slot.starts_at)
-      const companionFree = staff ? lists.filter(b => b.companion.some(x => Date.parse(x) === C) && (b.staffId !== primary.staffId || C >= S + primary.menu.duration_min * 60000)).map(b => b.staffId) : undefined
-      setStep({ k: 'confirmParty', primary, companion: { menu, slot: { starts_at: plan.companion } }, togetherAt: plan.togetherAt, companionFree })
+      const C = Date.parse(plan.companion!), S = Date.parse(at.slot.starts_at)
+      const companionFree = staff ? lists.filter(b => b.companion.some(x => Date.parse(x) === C) && (b.staffId !== at.staffId || C >= S + at.menu.duration_min * 60000)).map(b => b.staffId) : undefined
+      setStep({ k: 'confirmParty', primary: at, companion: { menu, slot: { starts_at: plan.companion! } }, togetherAt: plan.togetherAt, companionFree, movedFrom })
       pickCompanion(null)
     } catch {
       setStep({ k: 'unavailable', reason: 'network' })
@@ -1162,13 +1187,15 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         : { title: `${step.menu.name}を、いつものメニューに登録しました`, sub: '次回からは、ホームの「いつもの」で予約できます。', speech: `ありがとうございます。${step.menu.name}を、いつものメニューに登録しますね。次回からは、いつもので予約ができますよ。` }
       case 'confirmParty': {
         const same = Date.parse(step.companion.slot.starts_at) === Date.parse(step.primary.slot.starts_at)
+        const moved = step.movedFrom ? `${dayWord(step.movedFrom)}はお連れ様の空きがないため、お二人とも入れる一番早い日にしました。` : ''
         const head = same ? `${spokenVisit(step.primary.slot.starts_at)}、お二人同時にご案内できます。`
+          : step.movedFrom ? `${spokenVisit(step.primary.slot.starts_at)}、お連れ様は${spokenTime(step.companion.slot.starts_at)}からご案内できます。`
           : `お連れ様は${spokenTime(step.companion.slot.starts_at)}からご案内できます。`
         const alt = step.togetherAt ? `お二人同時なら${spokenTime(step.togetherAt)}からいけます。` : ''
         return {
           title: same ? 'お二人同時にご案内できます' : `お連れ様は ${formatVisit(step.companion.slot.starts_at).time} からご案内できます`,
-          sub: alt || undefined,
-          speech: `${head}${alt}この内容でよろしいですか？`,
+          sub: [moved, alt].filter(Boolean).join('') || undefined,
+          speech: `${moved}${head}${alt}この内容でよろしいですか？`,
           listen: true,
         }
       }
