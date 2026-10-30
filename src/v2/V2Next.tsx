@@ -3,7 +3,7 @@
 // AI予約は投げた時点で「予約確定」（サロンボードへの転記はお店の仕事なので、お客様には見せない）。
 import { useEffect, useState } from 'react'
 import { CalendarClock, Phone, Scissors } from 'lucide-react'
-import { formatVisit, useNextVisit } from '../features/johnny/nextReservation'
+import { companionNames, formatVisit, useNextVisit } from '../features/johnny/nextReservation'
 import { heldFor, useGinpayHolds } from '../features/ginpay/holds'
 import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { hasCustomerSession } from '../utils/customerSession'
@@ -23,6 +23,7 @@ function useLastVisit(): string | null {
 
 export function V2Next({ onJohnny }: { onJohnny: () => void }) {
   const { next, companions } = useNextVisit()
+  const names = companionNames()
   const holds = useGinpayHolds()
   const prepaid = heldFor(holds, next?.id)
   const visit = next ? formatVisit(next.starts_at) : null
@@ -46,7 +47,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
             const paid = heldFor(holds, c.id)
             return (
               <div key={c.id} style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--v2-line)', display: 'grid', gap: 4, fontSize: 15 }}>
-                <span className="v2-label" style={{ margin: 0 }}>お連れ様</span>
+                <span className="v2-label" style={{ margin: 0 }}>{names[c.id] ? `お連れ様（${names[c.id]}様）` : 'お連れ様'}</span>
                 <span><b style={{ color: 'var(--v2-gold-deep)' }}>{formatVisit(c.starts_at).time}〜</b>{' '}{c.items.map(i => i.name).join('・')}</span>
                 <span style={{ color: 'var(--v2-sub)' }}>担当：{c.staff_name}</span>
                 {paid != null && <span style={{ color: 'var(--v2-gold-deep)', fontWeight: 700 }}>✓ 銀Pay 仮支払い済み ¥{paid.toLocaleString()}</span>}

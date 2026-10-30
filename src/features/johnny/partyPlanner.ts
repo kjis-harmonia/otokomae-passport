@@ -40,3 +40,17 @@ export function planCompanion(primaryAt: string, primaryMin: number, primaryStaf
   const iso = (t: number | null) => (t == null ? null : new Date(t).toISOString())
   return { companion: iso(companion), together, togetherAt: iso(togetherAt) }
 }
+
+/** 予約者の時刻ごと試して、お連れ様も入れる案を返す（ほかの日に移すとき）。
+ *  時刻は「もとの希望と同じ時刻か、そのあと」を早い順に、無ければその前を遅い順に。無ければ null */
+export function planPartyDay(clockMin: number, primaryMin: number, primaryStaff: string | null, staff: readonly StaffSlots[], minutesOf: (iso: string) => number): (PartyPlan & { primary: string }) | null {
+  const times = [...new Set(staff.filter(s => !primaryStaff || s.staffId === primaryStaff).flatMap(s => s.primary))]
+    .sort((x, y) => ms(x) - ms(y))
+  const after = times.filter(t => minutesOf(t) >= clockMin)
+  const before = times.filter(t => minutesOf(t) < clockMin).reverse()
+  for (const t of [...after, ...before]) {
+    const plan = planCompanion(t, primaryMin, primaryStaff, staff)
+    if (plan.companion) return { ...plan, primary: new Date(ms(t)).toISOString() }
+  }
+  return null
+}
