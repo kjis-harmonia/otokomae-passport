@@ -66,7 +66,7 @@ type Step =
   /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
   | { k: 'overview'; req: VisitRequest; advice: DayAdvice; note?: string }
   | { k: 'searching'; label?: string }
-  | { k: 'pick'; req: VisitRequest; menu: MenuOption; offer: Offer; note?: string; wholeDay?: boolean }
+  | { k: 'pick'; req: VisitRequest; menu: MenuOption; offer: Offer; note?: string; wholeDay?: boolean; waitDate?: string }
   /** 予約の確認。staffId：指名、change：この予約を新しい日時に変える、say：AI の言葉 */
   | { k: 'confirm'; req: VisitRequest; menu: MenuOption; slot: Slot; staffId?: string | null; change?: CustomerReservation; say?: string; staffChosen?: boolean; usualStaff?: boolean }
   /** 担当（指名）を選ぶ：確定の前に必ず聞く。avail はその時間にその担当が空いているか */
@@ -440,14 +440,15 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [step, options])
 
   // ── メニューが決まっていて、日が決まっていない／希望の日が埋まっている：近い日から探して、間をあけて3件 ──
-  const soonest = useCallback(async (menu: MenuOption, req: VisitRequest, from: string, note: string) => {
+  //   waitDate：希望の日が埋まっていた（その日のキャンセル待ちも出す・10/30 慶一郎さん「その日がいいって人もおる」）
+  const soonest = useCallback(async (menu: MenuOption, req: VisitRequest, from: string, note: string, waitDate?: string) => {
     setStep({ k: 'searching' })
     stopListening()
     try {
       const picks = spreadSlots(await api.nextSlots(menu.code, from, 10), 3)
       if (picks.length === 0) { setStep({ k: 'askWhen', again: 'none', menu }); return }
       const dates = [...new Set(picks.map(x => slotDate(x.starts_at)))]
-      setStep({ k: 'pick', req: { ...req, dates, time: null }, menu, offer: { kind: 'choices', slots: picks }, note })
+      setStep({ k: 'pick', req: { ...req, dates, time: null }, menu, offer: { kind: 'choices', slots: picks }, note, waitDate })
     } catch {
       setStep({ k: 'unavailable', reason: 'network' })
     }
@@ -460,7 +461,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const req: VisitRequest = { dates: [date], time: null, range: null, earliest: false }
     try {
       const slots = [...await api.slots(date, menu.code)].sort((a, b) => a.starts_at.localeCompare(b.starts_at))
-      if (slots.length === 0) { void soonest(menu, req, addDays(date, 1), `${menu.name}は${dayWord(date)}は空きがありません。`); return }
+      if (slots.length === 0) { void soonest(menu, req, addDays(date, 1), `${menu.name}は${dayWord(date)}は空きがありません。`, date); return }
       const n = Math.min(6, slots.length)
       const picks = n === 1 ? slots : [...new Set(Array.from({ length: n }, (_, i) => Math.round(i * (slots.length - 1) / (n - 1))))].map(i => slots[i])
       setStep({ k: 'pick', req, menu, offer: { kind: 'choices', slots: picks }, note: `${dayWord(date)}の${menu.name}の空きです。`, wholeDay: true })
@@ -486,7 +487,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       const offer = planOffer(req, Object.fromEntries(results))
       if (offer.kind === 'exact') setStep({ k: 'confirm', req, menu, slot: offer.slots[0] })
       // 希望の日に空きが無い：「空きがありません」で止めず、次に早い日時を案内する
-      else if (offer.kind === 'none') void soonest(menu, req, addDays(dates[dates.length - 1], 1), `${menu.name}は${dayWord(dates[0])}は空きがありません。`)
+      else if (offer.kind === 'none') void soonest(menu, req, addDays(dates[dates.length - 1], 1), `${menu.name}は${dayWord(dates[0])}は空きがありません。`, dates[0])
       else setStep({ k: 'pick', req, menu, offer })
     } catch {
       setStep({ k: 'unavailable', reason: 'network' })
@@ -523,7 +524,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   /** その日の空きから、選んだメニューの時刻を出す（時刻の指定どおりならそのまま確認へ） */
   const pickFromOverview = useCallback((s: Extract<Step, { k: 'overview' }>, menu: MenuOption) => {
     const hit = s.advice.available.find(x => x.menu.code === menu.code)
-    if (!hit) { void soonest(menu, s.req, addDays(s.advice.date, 1), `${menu.name}は${dayWord(s.advice.date)}は空きがありません。`); return }
+    if (!hit) { void soonest(menu, s.req, addDays(s.advice.date, 1), `${menu.name}は${dayWord(s.advice.date)}は空きがありません。`, s.advice.date); return }
     if (s.req.time && hit.slots.length === 1) { setStep({ k: 'confirm', req: s.req, menu, slot: hit.slots[0] }); return }
     setStep({ k: 'pick', req: s.req, menu, offer: { kind: 'choices', slots: spreadSlots(hit.slots, 3) } })
   }, [soonest])
@@ -828,6 +829,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [api, stepFromAgent, stopListening])
 
   /** 確認画面で「いいえ」：AI なら次の希望を聞く、決まった規則なら日時から聞き直す */
+  // 確認画面で「変更する」を押した（その画面の間だけ、変え方のボタンを出す）
+  const [changeFor, setChangeFor] = useState<Step | null>(null)
+
   const declineConfirm = useCallback((menu?: MenuOption) => {
     if (aiOnRef.current) {
       const say = 'かしこまりました。ほかにご希望の日時やメニューはありますか？'
@@ -1171,7 +1175,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         const spoken = multiDay ? step.offer.slots.map(x => spokenVisit(x.starts_at)).join('、') : `${day.relative ?? day.date}は${times}`
         return {
           title: step.note ? step.note : missed ? `${step.req.time?.replace(/^0/, '')} は埋まっています` : `${day.relative ?? day.date} の空き`,
-          sub: step.wholeDay ? '朝から夜までの空きから選べます。どれにしますか？' : step.note ? `${step.menu.name}のいちばん早い空きです。どれにしますか？` : '近い時間をご案内します。どれにしますか？',
+          sub: step.wholeDay ? '朝から夜までの空きから選べます。どれにしますか？' : step.waitDate ? `${step.menu.name}のいちばん早い空きです。${dayWord(step.waitDate)}がよければ、キャンセル待ちもできます。` : step.note ? `${step.menu.name}のいちばん早い空きです。どれにしますか？` : '近い時間をご案内します。どれにしますか？',
           speech: step.wholeDay ? `${head}${spoken}が空いています。どれにしますか？` : step.note ? `${head}いちばん早いのは、${spoken}です。どれにしますか？` : `${head}${spoken}が空いています。どれにしますか？`,
           listen: true,
         }
@@ -1384,6 +1388,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                   <Row key={x.starts_at} onClick={() => setStep({ k: 'confirm', req: step.req, menu: step.menu, slot: x })}
                     title={formatVisit(x.starts_at).time} detail={formatVisit(x.starts_at).date} />
                 ))}
+                {step.waitDate && (
+                  <Row onClick={() => setStep({ k: 'ai', say: `${dayWord(step.waitDate!)}の${step.menu.name}に空きが出たら、お知らせします。`, view: { kind: 'waitlist', menu: step.menu, staffId: null, date: step.waitDate!, from: '00:00', to: '23:59' } })}
+                    title={`${dayWord(step.waitDate)}のキャンセル待ち`} detail="空きが出たらお知らせ" />
+                )}
                 <Row onClick={() => setStep({ k: 'askWhen', again: 'retry', menu: step.menu })} title="別の日時にする" muted />
               </List>
             )}
@@ -1571,14 +1579,17 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
             {/* 担当がまだ決まっていない間（いつもの担当の空きを確かめている間）は押せない */}
             <PrimaryButton disabled={!step.staffChosen && !step.staffId && (options?.staff?.length ?? 0) > 1} onClick={() => book(step.menu, step.slot, step.req, step.staffId ?? null, replaceOf(step))}>はい</PrimaryButton>
-            {!step.change && (
-              <SecondaryButton onClick={() => setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req, replace: ownActive ?? undefined } })}>お連れ様を追加</SecondaryButton>
-            )}
-            {backList.some(isTimeChoice) && <SecondaryButton onClick={() => goBack(isTimeChoice)}>時間を選び直す</SecondaryButton>}
-            {!step.change && step.staffChosen && (options?.staff?.length ?? 0) > 1 && (
-              <SecondaryButton onClick={() => setStep({ k: 'pickStaff', next: { ...step, staffId: null, staffChosen: false, usualStaff: false } })}>担当を変える</SecondaryButton>
-            )}
-            <SecondaryButton onClick={() => declineConfirm(step.menu)}>いいえ</SecondaryButton>
+            {/* 予約の一歩手前はボタンを2つだけ（10/30 慶一郎さん「情報量多すぎん？」）。変えるときだけ、変え方を出す */}
+            {changeFor !== step ? <SecondaryButton onClick={() => setChangeFor(step)}>変更する</SecondaryButton> : <>
+              {backList.some(isTimeChoice) && <SecondaryButton onClick={() => goBack(isTimeChoice)}>時間を選び直す</SecondaryButton>}
+              {!step.change && step.staffChosen && (options?.staff?.length ?? 0) > 1 && (
+                <SecondaryButton onClick={() => setStep({ k: 'pickStaff', next: { ...step, staffId: null, staffChosen: false, usualStaff: false } })}>担当を変える</SecondaryButton>
+              )}
+              {!step.change && (
+                <SecondaryButton onClick={() => setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req, replace: ownActive ?? undefined } })}>お連れ様を追加</SecondaryButton>
+              )}
+              <SecondaryButton onClick={() => declineConfirm(step.menu)}>日にち・メニューを選び直す</SecondaryButton>
+            </>}
           </>
         )}
         {step.k === 'confirmParty' && (
