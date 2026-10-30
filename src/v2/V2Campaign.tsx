@@ -1,6 +1,6 @@
 // アプリを開いたときのキャンペーン（10/30 慶一郎さん：APACHI を季節限定に）。ホームの上に写真を1枚大きく出し、「この髪型でAI予約する」か「閉じる」。
 // 同じキャンペーンは1台につき1回だけ（閉じても予約しても、次からは出さない）。Staging は確かめやすいように毎回出す。
-// 次のキャンペーンは CAMPAIGN を書き換える（id を変えれば、前のを見た人にも出る）。期間が過ぎたら出さない。
+// 次のキャンペーンは CAMPAIGN を書き換える（id を変えれば、前のを見た人にも出る）。終わりの日は決めない（ホットペッパーからアパッチが消えたら CAMPAIGN を外す・10/30 慶一郎さん）
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { requestJohnny } from '../features/johnny/bookingIntent'
@@ -13,7 +13,6 @@ const CAMPAIGN = {
   alt: 'APACHI　ショートピンパーマ × ホワイトメッシュ',
   menuCode: 'perm-apache',
   label: 'APACHI',
-  until: '2026-12-31',
   kicker: 'NEW MENU',
   title: '新メニュー登場',
   detail: ['季節限定', 'アパッチ', '¥18,000', '約4時間'],
@@ -21,7 +20,6 @@ const CAMPAIGN = {
 const SEEN_KEY = 'ginjiro_campaign_seen'
 
 function shouldShow(): boolean {
-  if (new Date() > new Date(`${CAMPAIGN.until}T23:59:59+09:00`)) return false
   return isStaging() || getStoredValue<string>(SEEN_KEY, '') !== CAMPAIGN.id
 }
 
