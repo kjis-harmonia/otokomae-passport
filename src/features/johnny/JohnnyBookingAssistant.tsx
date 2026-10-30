@@ -16,7 +16,7 @@ import { matchMenu, type MenuOption } from './menuMatcher'
 import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
 import { isEmptyRequest, parseVisitRequest, parseYesNo, type VisitRequest } from './visitParser'
-import { companionIds, forgetReservation, formatVisit, pickNext, rememberCompanion, rememberReservation } from './nextReservation'
+import { companionIds, companionNames, forgetReservation, formatVisit, pickNext, rememberCompanion, rememberReservation } from './nextReservation'
 import { clearCurrentReservation, loadCurrentReservation } from '../../utils/currentReservation'
 import { heldFor, holdGinpay, useGinpayHolds, type GinpayHoldSummary } from '../ginpay/holds'
 import type { AgentAnswer, AgentShown, AgentTurn } from './agentClient'
@@ -75,11 +75,13 @@ type Step =
   | { k: 'done'; reservation: CustomerReservation; changedFrom?: CustomerReservation; oldKept?: boolean; companion?: CustomerReservation; companionFailed?: boolean; ginpay?: number | 'failed' }
   /** お連れ様：メニューを聞く → 2人分の確認（お連れ様は予約者の時間から一番早く。togetherAt：お二人同時に入れる時刻） */
   | { k: 'companionMenu'; primary: PartyPrimary }
+  /** お連れ様のお名前を聞く（お店の予約のメモに入れる・10/30 慶一郎さん「お連れ様の名前が不明のまま」） */
+  | { k: 'companionName'; primary: PartyPrimary; menu: MenuOption; retry?: boolean }
   /** ホームの「いつもの」から来たが、いつものメニューが分からない：声かボタンで教えてもらって登録する */
   | { k: 'askUsual'; note?: string }
   /** いつものメニューを登録した：メンテナンスカットのお知らせも受け取るか → そのメニューで日時へ */
   | { k: 'usualSaved'; menu: MenuOption; failed?: boolean }
-  | { k: 'confirmParty'; primary: PartyPrimary; companion: { menu: MenuOption; slot: Slot }; togetherAt: string | null
+  | { k: 'confirmParty'; primary: PartyPrimary; companion: { menu: MenuOption; slot: Slot; name: string }; togetherAt: string | null
       /** その時間にお連れ様を担当できる人（分からないときは undefined）。選んだ担当は companionPick（読み上げ・戻るの履歴を増やさない）・10/30 慶一郎さん「お連れ様も担当を選べるように」 */
       companionFree?: string[]
       /** 希望の日はお連れ様が入れず、ほかの日に移した：もとの日（YYYY-MM-DD） */
@@ -124,7 +126,7 @@ interface Props {
 }
 
 /** 「戻る」で戻れる画面（読み込み中・送信中・終わった画面は数えない） */
-const BACKABLE = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'pickStaff', 'companionMenu', 'confirmParty', 'ai', 'askUsual', 'usualSaved'])
+const BACKABLE = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'pickStaff', 'companionMenu', 'companionName', 'confirmParty', 'ai', 'askUsual', 'usualSaved'])
 /** 戻り先にできる画面。担当が決まっていない確認画面は、すぐ担当の画面に差し替わるので数えない（戻るとまた担当の画面になってしまう） */
 // 担当の画面は、空きを確かめ終わったものだけ戻り先にする（確かめる前の画面へ戻ると、また確かめて「どちらも埋まっています」へ
 //   進み直し、戻るを押しても抜けられなかった・10/29 慶一郎さん）
@@ -177,6 +179,13 @@ function spokenTime(iso: string): string {
 function spokenVisit(iso: string): string {
   const v = formatVisit(iso)
   return `${v.relative ?? v.date.replace(/（.）/, '')}の${spokenTime(iso)}`
+}
+
+/** お連れ様のお名前：話し言葉の「名前は」「です」「さん・様」を外す（「山田です」→ 山田）。取れなければ '' */
+function companionName(text: string): string {
+  return text.normalize('NFKC').replace(/[。、.,!！?？「」]/g, '').trim()
+    .replace(/^(お連れ様の|連れの)?(お?名前は|名前)/, '').replace(/(です|でお願いします|でお願い)$/, '').replace(/(さん|様|さま|くん|君|ちゃん)$/, '')
+    .trim().slice(0, 20)
 }
 
 /** 予約の時刻から、決まった規則の JOHNNY でも使える希望の形を作る（直前に埋まったときの探し直しに使う） */
@@ -678,7 +687,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [api, stopListening])
 
   /** お連れ様の時間を決める（担当ごとの空きを見て、予約者の時間から一番早く） */
-  const planParty = useCallback(async (primary: PartyPrimary, menu: MenuOption) => {
+  const planParty = useCallback(async (primary: PartyPrimary, menu: MenuOption, name: string) => {
     setStep({ k: 'searching', label: '空き状況を確認しています' })
     stopListening()
     const date = slotDate(primary.slot.starts_at)
@@ -721,7 +730,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       }
       const C = Date.parse(plan.companion!), S = Date.parse(at.slot.starts_at)
       const companionFree = staff ? lists.filter(b => b.companion.some(x => Date.parse(x) === C) && (b.staffId !== at.staffId || C >= S + at.menu.duration_min * 60000)).map(b => b.staffId) : undefined
-      setStep({ k: 'confirmParty', primary: at, companion: { menu, slot: { starts_at: plan.companion! } }, togetherAt: plan.togetherAt, companionFree, movedFrom })
+      setStep({ k: 'confirmParty', primary: at, companion: { menu, slot: { starts_at: plan.companion! }, name }, togetherAt: plan.togetherAt, companionFree, movedFrom })
       pickCompanion(null)
     } catch {
       setStep({ k: 'unavailable', reason: 'network' })
@@ -763,8 +772,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       for (const st of order) {
         try {
           const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id)
-          companion = await api.confirm(hold.hold_id, 'お連れ様')
-          rememberCompanion(companion.id)
+          companion = await api.confirm(hold.hold_id, `お連れ様：${s.companion.name}様`)
+          rememberCompanion(companion.id, s.companion.name)
           break
         } catch { /* 次の担当で試す */ }
       }
@@ -965,9 +974,15 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     if (s.k === 'companionMenu') {
       const menu = matchMenu(text, menus)
-      if (menu) { void planParty(s.primary, menu); return }
+      if (menu) { setStep({ k: 'companionName', primary: s.primary, menu }); return }
       if (parseYesNo(text) === false) { setStep({ k: 'confirm', req: s.primary.req, menu: s.primary.menu, slot: s.primary.slot, staffId: s.primary.staffId, staffChosen: true }); return }
       setStep({ ...s })
+      return
+    }
+    if (s.k === 'companionName') {
+      const name = companionName(text)
+      if (name) { void planParty(s.primary, s.menu, name); return }
+      setStep({ ...s, retry: true })
       return
     }
     if (s.k === 'confirmParty') {
@@ -1071,7 +1086,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   /** 録音した声：サーバーで文字にして、そのまま AI の答えまで受け取る（確認画面・AI が使えないときは文字にするだけ） */
   const handleAudio = useCallback(async (audio: Blob) => {
     const s = stepRef.current
-    const partyStep = s.k === 'companionMenu' || s.k === 'confirmParty' || s.k === 'askUsual'
+    const partyStep = s.k === 'companionMenu' || s.k === 'companionName' || s.k === 'confirmParty' || s.k === 'askUsual'
     // 担当を選ぶ画面の声も受け取る（文字にするだけ。ここで捨てると、話しても反応しない）
     if (!AI_STEPS.has(s.k) && !partyStep && s.k !== 'pickStaff') return
     let transcribeOnly = !aiOnRef.current || partyStep || s.k === 'confirm' || s.k === 'confirmCancel' || s.k === 'pickStaff'
@@ -1177,6 +1192,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         : { title: 'この予約をキャンセルしますか？', speech: step.say, listen: true }
       case 'cancelling': return { title: 'キャンセルしています' }
       case 'companionMenu': return { title: 'お連れ様のメニューは何にしますか？', speech: 'お連れ様のメニューは何にしますか？', listen: true }
+      case 'companionName': return step.retry
+        ? { title: 'お連れ様のお名前をもう一度お伝えください', sub: '例：山田', speech: 'すみません、もう一度お名前をお伝えください。', listen: true }
+        : { title: 'お連れ様のお名前を教えてください', sub: 'お店でお呼びするときのお名前です（例：山田）', speech: 'お連れ様のお名前を教えてください。', listen: true }
       case 'askUsual': return step.note
         ? { title: step.note, speech: step.note, listen: true }
         : { title: 'まだいつものメニューが登録されていません', sub: 'いつものメニューを、声で教えてください。', speech: 'まだいつものメニューが登録されていません。いつものメニューを、声で教えてください。', listen: true }
@@ -1299,9 +1317,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const doneCode = step.k === 'done' && !step.changedFrom ? step.reservation.items[0]?.menu_code : undefined
   const doneMenu = doneCode && canBeUsual(doneCode) ? menus.find(m => m.code === doneCode) : undefined
   const doneUsual = doneMenu && (usualDone === doneMenu.code || usualNow?.code !== doneMenu.code) ? doneMenu : undefined
-  const canTalk = ['pickStaff', 'welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'confirmParty', 'askUsual'].includes(step.k)
+  const canTalk = ['pickStaff', 'welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'companionName', 'confirmParty', 'askUsual'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
-  const compact = ['pickStaff', 'welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'confirmParty', 'askUsual', 'usualSaved'].includes(step.k)
+  const compact = ['pickStaff', 'welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'companionName', 'confirmParty', 'askUsual', 'usualSaved'].includes(step.k)
     || (step.k === 'ai' && step.view.kind !== 'talk')
   const voiceOff = voice.listen === 'unsupported' || voice.listen === 'denied'
 
@@ -1508,7 +1526,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {step.k === 'confirmParty' && (
               <div style={{ width: '100%', marginTop: 24, borderRadius: 14, overflow: 'hidden', background: C.fill }}>
                 <SummaryRow label="ご本人" value={`${visitLabel(step.primary.slot.starts_at)}・${step.primary.menu.name}`} />
-                <SummaryRow label="お連れ様" value={`${formatVisit(step.companion.slot.starts_at).time}・${step.companion.menu.name}`} />
+                <SummaryRow label={`${step.companion.name}様`} value={`${formatVisit(step.companion.slot.starts_at).time}・${step.companion.menu.name}`} />
               </div>
             )}
             {step.k === 'confirmParty' && (options?.staff?.length ?? 0) > 1 && (
@@ -2055,7 +2073,7 @@ function ReservationSummary({ r, companion }: { r: CustomerReservation; companio
   const names = r.items.map(i => i.name).join('・')
   return (
     <div style={{ width: '100%', marginTop: companion ? 12 : 24, borderRadius: 14, overflow: 'hidden', background: C.fill }}>
-      {(companion || companionIds().includes(r.id)) && <SummaryRow label="ご来店" value="お連れ様" />}
+      {(companion || companionIds().includes(r.id)) && <SummaryRow label="ご来店" value={companionNames()[r.id] ? `お連れ様（${companionNames()[r.id]}様）` : 'お連れ様'} />}
       <SummaryRow label="日時" value={visitLabel(r.starts_at)} />
       <SummaryRow label="メニュー" value={names} />
       <SummaryRow label="担当" value={r.staff_name} />

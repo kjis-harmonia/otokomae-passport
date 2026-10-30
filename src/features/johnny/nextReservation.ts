@@ -48,8 +48,17 @@ const COMPANION_KEY = 'ginjiro_companion_reservations'
 export function companionIds(): string[] {
   try { const v = JSON.parse(localStorage.getItem(COMPANION_KEY) ?? '[]'); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] } catch { return [] }
 }
-export function rememberCompanion(id: string): void {
-  try { localStorage.setItem(COMPANION_KEY, JSON.stringify([...companionIds(), id].slice(-30))) } catch { /* 表示用なので保存できなくても続ける */ }
+export function rememberCompanion(id: string, name?: string): void {
+  try {
+    localStorage.setItem(COMPANION_KEY, JSON.stringify([...companionIds(), id].slice(-30)))
+    if (name) localStorage.setItem(COMPANION_NAMES_KEY, JSON.stringify({ ...companionNames(), [id]: name }))
+  } catch { /* 表示用なので保存できなくても続ける */ }
+}
+
+/** お連れ様のお名前（予約 id → 名前）。お店には予約のメモで届く。お客様の画面では端末に覚えた名前を出す */
+const COMPANION_NAMES_KEY = 'ginjiro_companion_names'
+export function companionNames(): Record<string, string> {
+  try { const v = JSON.parse(localStorage.getItem(COMPANION_NAMES_KEY) ?? '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, string> : {} } catch { return {} }
 }
 
 export function pickNext(list: readonly CustomerReservation[]): CustomerReservation | null {
