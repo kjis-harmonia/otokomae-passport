@@ -93,3 +93,20 @@ test('browsers without VisualViewport retain the existing full-screen CSS fallba
   stop()
   assert.equal(f.value('--customer-visual-height'), '90vh')
 })
+
+test('when nothing is being typed, the dialog goes back to full height even if Safari keeps the shrunken viewport', () => {
+  const f = fixture()
+  const doc = Object.assign(new EventTarget(), { activeElement: { tagName: 'INPUT', isContentEditable: false } })
+  f.view.document = doc
+  f.view.setTimeout = fn => fn()
+  const stop = observeVisibleViewport(f.target, f.view)
+  f.viewport.height = 320
+  f.viewport.dispatchEvent(new Event('resize'))
+  f.flush()
+  assert.equal(f.value('--customer-visual-height'), '320px')
+  doc.activeElement = { tagName: 'BODY', isContentEditable: false }
+  f.view.dispatchEvent(new Event('focusout'))
+  f.flush()
+  assert.equal(f.value('--customer-visual-height'), '')
+  stop()
+})

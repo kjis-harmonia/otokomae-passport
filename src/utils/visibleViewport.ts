@@ -11,7 +11,11 @@ export function observeVisibleViewport(target: Pick<HTMLElement, 'style'>, view:
   let frame = 0
   const update = () => {
     frame = 0
-    if (!Number.isFinite(viewport.height) || viewport.height <= 0 || Math.abs(viewport.scale - 1) > .01) {
+    // 文字を打っていないときは画面いっぱい（10/30：iPhone でキーボードやマイクの確認を閉じたあと、縮んだ高さのまま戻らず、
+    //   JOHNNY の下に後ろの画面が見えていた）
+    const el = (view.document?.activeElement ?? null) as HTMLElement | null
+    const typing = !view.document || (!!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)))
+    if (!typing || !Number.isFinite(viewport.height) || viewport.height <= 0 || Math.abs(viewport.scale - 1) > .01) {
       restore()
       return
     }
@@ -23,10 +27,18 @@ export function observeVisibleViewport(target: Pick<HTMLElement, 'style'>, view:
   viewport.addEventListener('resize', schedule)
   viewport.addEventListener('scroll', schedule)
   view.addEventListener('resize', schedule)
+  // キーボードを閉じた直後は高さがまだ古いことがあるので、少し待ってもう一度
+  const later = () => { schedule(); view.setTimeout(schedule, 350) }
+  view.addEventListener('focusin', later)
+  view.addEventListener('focusout', later)
+  view.document?.addEventListener('visibilitychange', later)
   return () => {
     viewport.removeEventListener('resize', schedule)
     viewport.removeEventListener('scroll', schedule)
     view.removeEventListener('resize', schedule)
+    view.removeEventListener('focusin', later)
+    view.removeEventListener('focusout', later)
+    view.document?.removeEventListener('visibilitychange', later)
     if (frame) view.cancelAnimationFrame(frame)
     restore()
   }
