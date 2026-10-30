@@ -307,9 +307,20 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep(target)
   }, [stopListening])
 
-  /** 質問を読み上げて、終わったら聞き取りを始める */
+  // マイクを自分から聞きに行くのは、もう許可されているときか、お客様がマイクを押したあとだけ（10/30 慶一郎さん：予約の確認の画面で急に
+  //   「マイクへのアクセスを求めています」が出ていた。マイクを押した人にだけ聞けばいい）
+  const micOk = useRef(false)
+  useEffect(() => {
+    let alive = true
+    navigator.permissions?.query({ name: 'microphone' as PermissionName })
+      .then(p => { if (!alive) return; micOk.current = p.state === 'granted'; p.onchange = () => { micOk.current = p.state === 'granted' } })
+      .catch(() => { /* 確かめられないブラウザは、マイクを押したときだけ */ })
+    return () => { alive = false }
+  }, [])
+
+  /** 質問を読み上げて、終わったら聞き取りを始める（マイクを使ってよいときだけ） */
   const ask = useCallback((text: string, listenAfter = true) => {
-    speak(text, () => { if (listenAfter && voice.listen !== 'unsupported' && voice.listen !== 'denied') startListening() })
+    speak(text, () => { if (listenAfter && micOk.current && voice.listen !== 'unsupported' && voice.listen !== 'denied') startListening() })
   }, [speak, startListening, voice.listen])
 
   // Stop every BGM before the assistant is painted; keep it stopped until unmount.
@@ -829,9 +840,6 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [api, stepFromAgent, stopListening])
 
   /** 確認画面で「いいえ」：AI なら次の希望を聞く、決まった規則なら日時から聞き直す */
-  // 確認画面で「変更する」を押した（その画面の間だけ、変え方のボタンを出す）
-  const [changeFor, setChangeFor] = useState<Step | null>(null)
-
   const declineConfirm = useCallback((menu?: MenuOption) => {
     if (aiOnRef.current) {
       const say = 'かしこまりました。ほかにご希望の日時やメニューはありますか？'
@@ -1579,17 +1587,12 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
             {/* 担当がまだ決まっていない間（いつもの担当の空きを確かめている間）は押せない */}
             <PrimaryButton disabled={!step.staffChosen && !step.staffId && (options?.staff?.length ?? 0) > 1} onClick={() => book(step.menu, step.slot, step.req, step.staffId ?? null, replaceOf(step))}>はい</PrimaryButton>
-            {/* 予約の一歩手前はボタンを2つだけ（10/30 慶一郎さん「情報量多すぎん？」）。変えるときだけ、変え方を出す */}
-            {changeFor !== step ? <SecondaryButton onClick={() => setChangeFor(step)}>変更する</SecondaryButton> : <>
-              {backList.some(isTimeChoice) && <SecondaryButton onClick={() => goBack(isTimeChoice)}>時間を選び直す</SecondaryButton>}
-              {!step.change && step.staffChosen && (options?.staff?.length ?? 0) > 1 && (
-                <SecondaryButton onClick={() => setStep({ k: 'pickStaff', next: { ...step, staffId: null, staffChosen: false, usualStaff: false } })}>担当を変える</SecondaryButton>
-              )}
-              {!step.change && (
-                <SecondaryButton onClick={() => setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req, replace: ownActive ?? undefined } })}>お連れ様を追加</SecondaryButton>
-              )}
-              <SecondaryButton onClick={() => declineConfirm(step.menu)}>日にち・メニューを選び直す</SecondaryButton>
-            </>}
+            {/* 予約の一歩手前は「はい」「いいえ」だけ。時間・担当は上の「戻る」で選び直せる（10/30 慶一郎さん）。お連れ様は小さく下に */}
+            <SecondaryButton onClick={() => declineConfirm(step.menu)}>いいえ</SecondaryButton>
+            {!step.change && (
+              <button type="button" onClick={() => setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req, replace: ownActive ?? undefined } })}
+                style={{ minHeight: 44, border: 'none', background: 'none', color: C.secondary, fontSize: 14, cursor: 'pointer' }}>＋ お連れ様を追加</button>
+            )}
           </>
         )}
         {step.k === 'confirmParty' && (
@@ -1683,7 +1686,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             <IconButton label={typing ? '音声で答える' : '文字で入力する'} onClick={() => setTyping(t => !t)}>
               <Keyboard size={22} strokeWidth={1.8} />
             </IconButton>
-            <MicButton listening={voice.listen === 'listening'} onClick={() => (voice.listen === 'listening' ? (voice.recordMode ? finishListening() : stopListening()) : startListening())} />
+            <MicButton listening={voice.listen === 'listening'} onClick={() => { if (voice.listen === 'listening') { if (voice.recordMode) finishListening(); else stopListening() } else { micOk.current = true; startListening() } }} />
             <div style={{ width: 44 }} />
           </div>
         )}
