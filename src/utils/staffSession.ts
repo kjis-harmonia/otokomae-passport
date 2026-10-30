@@ -3,6 +3,7 @@
  *
  * - PIN はサーバー側（staff_login RPC）で照合する。フロントは正しい PIN を持たない。
  * - 照合に成功すると 14 時間有効のセッショントークンを受け取り、staff_* RPC の第1引数に付ける。
+ *   本部で登録した端末は、staff_security_check のたびにサーバーが期限を10年に延ばす（keepStaffSession で覚える）。
  * - RPC のエラー（通信失敗・DBエラー・業務エラー {error}）はすべて例外として返す。
  *   保存失敗を localStorage で成功扱いにする処理は行わない。
  */
@@ -46,6 +47,13 @@ function readSession(): StoredSession | null {
 
 export function getStaffToken(): string | null {
   return readSession()?.token ?? null
+}
+
+/** サーバーが延ばした期限を覚える（本部で登録した端末は、一度 PIN を入れたら入れ直さない・10/30） */
+export function keepStaffSession(expiresAt: string): void {
+  const s = readSession()
+  if (!s || s.expiresAt === expiresAt) return
+  try { localStorage.setItem(STAFF_TOKEN_KEY, JSON.stringify({ ...s, expiresAt })) } catch { /* ignore */ }
 }
 
 export function clearStaffSession(): void {
