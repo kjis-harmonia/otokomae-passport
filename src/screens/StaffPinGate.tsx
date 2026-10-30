@@ -77,15 +77,20 @@ export function StaffPinGate({ children, app = 'staff' }: { children?: ReactNode
     setPin((p) => p.slice(0, -1))
   }, [error, checking])
 
-  // Keyboard support
+  // Keyboard support：PIN の画面を出しているときだけ。
+  //   10/30 慶一郎さん「会員QRを読んで支払いを押したら PIN からやり直し」：ログイン中も数字キーを拾っていて、金額・電話番号などを打った数字が6桁たまると
+  //   PIN として送られ、間違い扱いでログインが消えていた（次の操作で PIN の画面へ）。入力欄で打った数字も拾わない
   useEffect(() => {
+    if (authed) return
     function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
       if (e.key >= '0' && e.key <= '9') handleDigit(e.key)
       if (e.key === 'Backspace') handleBack()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleDigit, handleBack])
+  }, [authed, handleDigit, handleBack])
 
   // 登録していない端末が入ろうとしたら、了解を押すまで画面全体に警告を出す（店舗端末・SB の両方）
   if (authed) return <>{children ?? <StaffHome />}<SecurityAlert app={app} /><DeviceTag /></>
