@@ -595,4 +595,7 @@
 .sb-companion-mark { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 7px 1px 5px; border-radius: 999px; background: #e6ecfa; color: #34509a; font-size: 11px; font-weight: 700; vertical-align: 2px; letter-spacing: 0.02em; }
 .sb-companion-mark svg { flex: none; }
 .sb-companion-of { font-style: normal; color: #34509a; margin-left: 2px; }
+/* 同時枠の外（4本目〜）：HOT PEPPER が枠を超えて受けた予約 */
+.sb-reservation.sb-over { border: 2px solid #d64545; border-left-width: 5px; background: #fdeeee; }
+.sb-over-mark { display: inline-flex; flex: none; align-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #d64545; color: #fff; font-size: 11px; font-weight: 700; vertical-align: 2px; letter-spacing: 0.04em; }
 .sb-reservation-list strong.sb-res-name { display: flex; align-items: center; min-width: 0; }

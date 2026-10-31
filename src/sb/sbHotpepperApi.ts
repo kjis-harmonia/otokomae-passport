@@ -22,8 +22,9 @@ const REASON: Record<string, string> = {
   invalid_status: '来店済みなどで変更できない状態です。',
   unreadable: 'メールの内容を読み取れませんでした。',
   already_cancelled: '先にキャンセルのメールが届いていたので入れていません。',
+  retried: '枠が埋まっていた予約です。枠の外（赤い枠オーバー）に入れ直しました。',
 }
-export const WARNING: Record<string, string> = { out_of_hours: '勤務時間外', unknown_stylist: '担当名が見つからず空いている人に入れました', created_from_change: '変更前の予約が無かったので新しく入れました' }
+export const WARNING: Record<string, string> = { over_capacity: '同時枠がいっぱいだったので、枠の外（赤い枠オーバー）に入れました', out_of_hours: '勤務時間外', unknown_stylist: '担当名が見つからず空いている人に入れました', created_from_change: '変更前の予約が無かったので新しく入れました' }
 
 export function hpbResult(m: HpbMail): string {
   if (m.repeat) return 'このメールは取込済みです。'
