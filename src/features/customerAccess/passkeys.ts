@@ -37,7 +37,7 @@ export function adoptMember(member:MemberIdentity){
   const previous=getStoredValue<string|null>(USER_ID_KEY,null)
   // User-owned server data stays unchanged. Do not carry another member's local display cache.
   if(previous!==member.user_id){
-    for(const key of ['otokomae_coupons','otokomae_gacha_date','otokomae_gacha_result','ginjiro_active_ticket','ginjiro_pending_contact','ginjiro_current_reservation','ginjiro_companion_reservations','ginjiro_member_issued_at','ginjiro_next_reservation'])localStorage.removeItem(key)
+    for(const key of ['otokomae_coupons','otokomae_gacha_date','otokomae_gacha_result','ginjiro_active_ticket','ginjiro_pending_contact','ginjiro_current_reservation','ginjiro_companion_reservations','ginjiro_member_issued_at','ginjiro_next_reservation','ginjiro_companion_names','ginjiro_usual_menu','ginjiro_usual_staff'])localStorage.removeItem(key)
     saveMemberStatus({memberName:member.name,rank:'ブロンズ',visitCount:0,stampCount:0,exp:0,points:0})
   }else saveMemberStatus({...loadMemberStatus(),memberName:member.name})
   setStoredValue(ONBOARDING_NAME_KEY,member.name)

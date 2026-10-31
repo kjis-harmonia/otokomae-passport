@@ -30,9 +30,8 @@ function readCached(): CustomerReservation | null {
   } catch { return null }
 }
 
-function writeCached(r: CustomerReservation | null): void {
+function writeCached(r: CustomerReservation | null, owner = currentOwner()): void {
   try {
-    const owner = currentOwner()
     if (r && owner) localStorage.setItem(KEY, JSON.stringify({ owner, r }))
     else localStorage.removeItem(KEY)
   } catch { /* 表示用なので保存できなくても続ける */ }
@@ -70,32 +69,44 @@ export function useNextReservation(): CustomerReservation | null {
   return useNextVisit().next
 }
 
+/** 予約一覧の読み込み状態。'failed' のときは「予約はありません」と言い切らない（10/30 監査 R3） */
+export type VisitStatus = 'loading' | 'ok' | 'failed'
+type Visit = { next: CustomerReservation | null; companions: CustomerReservation[]; status: VisitStatus; reload: () => void }
+
 /** 次の来店：自分の予約と、同じ日のお連れ様の予約（10/30 慶一郎さん「お連れ様追加の情報がのってない」）。
  *  予約はおひとり1つまでなので、同じ日のほかの予約はお連れ様の分。自分の分は、お連れ様として覚えた予約を除いたいちばん早いもの */
-export function useNextVisit(): { next: CustomerReservation | null; companions: CustomerReservation[] } {
-  const [visit, setVisit] = useState<{ next: CustomerReservation | null; companions: CustomerReservation[] }>(() => ({ next: readCached(), companions: [] }))
+export function useNextVisit(): Visit {
+  const [visit, setVisit] = useState<Omit<Visit, 'reload'>>(() => ({ next: readCached(), companions: [], status: hasCustomerSession() ? 'loading' : 'ok' }))
+  const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
     let alive = true
+    let gen = 0
     const load = () => {
-      setVisit(v => ({ next: readCached(), companions: v.companions }))
-      if (!hasCustomerSession()) return
+      // 会員の切替・遅い応答：頼んだときの会員と、いちばん新しい頼みの応答だけ使う（10/30 監査 R1）
+      const my = ++gen
+      const owner = currentOwner()
+      const cached = readCached()
+      if (!hasCustomerSession()) { setVisit({ next: cached, companions: [], status: 'ok' }); return }
+      setVisit(v => ({ next: cached, companions: cached && v.next?.id === cached.id ? v.companions : [], status: v.status === 'ok' && v.next?.id === cached?.id ? 'ok' : 'loading' }))
       bookingAssistantApi().reservations()
         .then(list => {
-          if (!alive) return
+          if (!alive || my !== gen || owner !== currentOwner()) return
           const marked = companionIds()
           const n = pickNext(list.filter(r => !marked.includes(r.id))) ?? pickNext(list)
           const companions = n ? list.filter(r => r.id !== n.id && isUpcoming(r) && sameDay(r.starts_at, n.starts_at)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
-          setVisit({ next: n, companions })
-          writeCached(n)
+          setVisit({ next: n, companions, status: 'ok' })
+          writeCached(n, owner)
         })
-        .catch(() => { /* 通信できないときは覚えている予約のまま */ })
+        .catch(() => { if (alive && my === gen) setVisit(v => ({ ...v, status: 'failed' })) }) // 覚えている予約はそのまま見せる
     }
     load()
+    const onStorage = (e: StorageEvent) => { if (e.key === null || e.key === 'ginjiro_customer_session' || e.key === USER_ID_KEY) load() }
     window.addEventListener(EVENT, load)
     window.addEventListener('ginjiro:customer-session-changed', load)
-    return () => { alive = false; window.removeEventListener(EVENT, load); window.removeEventListener('ginjiro:customer-session-changed', load) }
-  }, [])
-  return visit
+    window.addEventListener('storage', onStorage)
+    return () => { alive = false; window.removeEventListener(EVENT, load); window.removeEventListener('ginjiro:customer-session-changed', load); window.removeEventListener('storage', onStorage) }
+  }, [reloadKey])
+  return { ...visit, reload: () => setReloadKey(k => k + 1) }
 }
 
 /** 日本時間で同じ日か */

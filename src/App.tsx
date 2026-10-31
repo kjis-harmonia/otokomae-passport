@@ -21,7 +21,6 @@ import {
   ONBOARDING_DONE_KEY,
   ONBOARDING_NAME_KEY,
 } from './utils/storage'
-import { HERO_SLIDE_IMAGES } from './data/styleImages'
 import type { TicketRow } from './data/ticket'
 import { TICKET_TYPE_LABELS, TICKET_TYPE_COLORS } from './data/ticket'
 import { getTicketByTransferToken, acceptTransfer } from './utils/ticketStore'
@@ -254,6 +253,23 @@ function WelcomeCouponDialog({
   )
 }
 
+const PENDING_CLAIM_KEY = 'ginjiro_pending_claim'
+const PENDING_CLAIM_DAYS = 7
+function savePendingClaim(token: string): void {
+  try { localStorage.setItem(PENDING_CLAIM_KEY, JSON.stringify({ token, at: Date.now() })) } catch { /* 覚えられなくても今の画面では受け取れる */ }
+}
+function readPendingClaim(): string | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(PENDING_CLAIM_KEY) ?? 'null') as { token?: unknown; at?: unknown } | null
+    if (v && typeof v.token === 'string' && typeof v.at === 'number' && Date.now() - v.at < PENDING_CLAIM_DAYS * 86400000) return v.token
+    localStorage.removeItem(PENDING_CLAIM_KEY)
+  } catch { /* ignore */ }
+  return null
+}
+function clearPendingClaim(): void {
+  try { localStorage.removeItem(PENDING_CLAIM_KEY) } catch { /* ignore */ }
+}
+
 function App() {
   // テストデータを localStorage に1度だけ投入
   seedDevData()
@@ -272,12 +288,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const urls = [
-      '/images/ginjiro-splash.png',
-      HERO_SLIDE_IMAGES[0]?.src,
-      HERO_SLIDE_IMAGES[1]?.src,
-    ].filter(Boolean) as string[]
-
+    // 初回登録の背景に使う絵だけ先に読む。待つのは最大2.5秒：回線が遅くてもロゴのまま止めない（10/30 監査 R5）
+    const urls = ['/images/ginjiro-splash.png']
     let remaining = urls.length
     const onSettled = () => { if (--remaining <= 0) setImgReady(true) }
     urls.forEach(src => {
@@ -286,6 +298,8 @@ function App() {
       img.onerror = onSettled
       img.src = src
     })
+    const cap = setTimeout(() => setImgReady(true), 2500)
+    return () => clearTimeout(cap)
   }, [])
 
   // ── Phase ─────────────────────────────────────────────────────────────────────
@@ -347,14 +361,14 @@ function App() {
   },[setActiveTab])
 
   // ── Transfer acceptance overlay ───────────────────────────────────────────────
+  // 受け取りリンクは端末にも覚えておく：ホーム画面への追加・初回登録をはさんでも、次に開いたときに続きから受け取れる（10/30 監査 R4）
   const [transferToken, setTransferToken]   = useState<string | null>(() => {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('token')
+    const fromUrl = new URLSearchParams(window.location.search).get('token')
+    if (fromUrl) { savePendingClaim(fromUrl); return fromUrl }
+    return readPendingClaim()
   })
   const [transferTicket,  setTransferTicket]  = useState<TicketRow | null>(null)
-  const [transferLoading, setTransferLoading] = useState(() =>
-    !!new URLSearchParams(window.location.search).get('token')
-  )
+  const [transferLoading, setTransferLoading] = useState(() => !!transferToken)
   const [transferPhase, setTransferPhase]   = useState<TransferPhase>('preview')
   const [transferError, setTransferError]   = useState<string | null>(null)
   const [acceptedTicket, setAcceptedTicket] = useState<TicketRow | null>(null)
@@ -382,6 +396,7 @@ function App() {
       const ticket = await acceptTransfer(transferToken)
       setAcceptedTicket(ticket)
       setTransferPhase('done')
+      clearPendingClaim()
     } catch (e) {
       setTransferError(e instanceof Error ? e.message : '受け取りに失敗しました')
       setTransferPhase('error')
@@ -403,6 +418,7 @@ function App() {
   }
 
   function handleDismissTransfer() {
+    clearPendingClaim()
     setTransferToken(null)
     setTransferTicket(null)
     setTransferLoading(false)
@@ -471,13 +487,14 @@ function App() {
           </AnimatePresence>
 
           {transferToken && (
+            // 短い横画面・大きい文字でもボタンまで届くように、はみ出したら全体をスクロール（10/30 監査 R10）
             <div
-              style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+              style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', overscrollBehavior: 'contain', padding: 'max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left))' }}
             >
               <motion.div
                 initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.26 }}
-                style={{ width: '100%', maxWidth: 380, borderRadius: 24, background: 'linear-gradient(160deg, #160a07 0%, #0a0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.9)', padding: '28px 24px 24px' }}
+                style={{ width: '100%', maxWidth: 380, margin: 'auto 0', flexShrink: 0, borderRadius: 24, background: 'linear-gradient(160deg, #160a07 0%, #0a0504 100%)', border: '1px solid rgba(201,162,74,0.28)', boxShadow: '0 24px 64px rgba(0,0,0,0.9)', padding: '28px 24px 24px' }}
               >
                 {(transferPhase === 'preview' || transferPhase === 'accepting') && (
                   <>
