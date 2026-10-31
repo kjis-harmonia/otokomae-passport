@@ -591,4 +591,8 @@
 .sb-reservation strong.sb-res-name { display: flex; align-items: center; min-width: 0; }
 .sb-res-name > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; }
 .sb-res-name .sb-ginpay-mark { flex: none; }
+/* お連れ様の予約（AI予約で一緒に取った分）：名前の横に印、メニューの横に誰のお連れ様か */
+.sb-companion-mark { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 7px 1px 5px; border-radius: 999px; background: #e6ecfa; color: #34509a; font-size: 11px; font-weight: 700; vertical-align: 2px; letter-spacing: 0.02em; }
+.sb-companion-mark svg { flex: none; }
+.sb-companion-of { font-style: normal; color: #34509a; margin-left: 2px; }
 .sb-reservation-list strong.sb-res-name { display: flex; align-items: center; min-width: 0; }
