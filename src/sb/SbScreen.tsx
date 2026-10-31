@@ -326,12 +326,14 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
       {reservations.map(r => {
         const start = jstMinutesOf(r.starts_at, date), end = jstMinutesOf(r.ends_at, date), until = jstMinutesOf(r.occupied_until, date)
         const dragging = drag.view?.id === r.id ? drag.view : null
+        // 同時枠の外（4本目〜）：HOT PEPPER が枠を超えて受けた予約。赤く出して段取りを組めるように（11/1 慶一郎さん）
+        const over = r.booking_lane >= staff.capacity
         const companion = companionOf(r)
-        return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}${r.source === 'app' ? ' sb-src-ai' : ''}${dragging ? ' sb-dragging' : ''}`} aria-label={`${jstTime(r.starts_at)} ${companion ? `${companion}様（${r.customer_name}様のお連れ様）` : r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`}
+        return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}${r.source === 'app' ? ' sb-src-ai' : ''}${dragging ? ' sb-dragging' : ''}${over ? ' sb-over' : ''}`} aria-label={`${over ? '枠オーバー ' : ''}${jstTime(r.starts_at)} ${companion ? `${companion}様（${r.customer_name}様のお連れ様）` : r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`}
           onPointerDown={e => drag.start(e, r)} onClick={() => { if (drag.clicked()) onOpen(r.id) }} onContextMenu={e => { if (r.status === 'confirmed') e.preventDefault() }}
           style={{ left: x(start) + 2, width: Math.max(12, x(end) - x(start) - 4), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10, ...(dragging ? { transform: `translate(${dragging.dx}px, ${dragging.dy}px)` } : {}) }}>
           {dragging && <em className="sb-drag-time">{`${Math.floor(dragging.minutes / 60)}:${String(dragging.minutes % 60).padStart(2, '0')}`}</em>}
-          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}</small>
+          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{over && <b className="sb-over-mark">枠オーバー</b>}{companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}</small>
         </button>{until > end && <div className="sb-buffer" aria-label="片付け時間" style={{ left: x(end), width: x(until) - x(end), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10 }} />}</div>
       })}
       {nowMin !== null && nowMin >= range.start && nowMin < range.end && <div className="sb-now" style={{ left: x(nowMin) }} aria-hidden="true" />}
