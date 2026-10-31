@@ -12,6 +12,7 @@ import { requestJohnny } from '../features/johnny/bookingIntent'
 import type { StyleCard } from '../data/styleCard'
 import { V2GinpayBar } from './V2GinpayBar'
 import { loadUsual, type Usual } from './usualPicks'
+import { getCustomerSession } from '../utils/customerSession'
 
 const yen = (n: number) => `¥${n.toLocaleString()}`
 
@@ -53,10 +54,21 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   useEffect(() => {
     let alive = true
     let shown = false
+    let gen = 0
+    let shownFor = getCustomerSession()
     const load = () => {
       if (document.visibilityState !== 'visible') return
+      // 会員が変わったら前の人の「いつもの」をすぐ消し、いちばん新しい頼みで同じ会員の応答だけ使う（11/1 再監査 R8）
+      const owner = getCustomerSession()
+      if (owner !== shownFor) {
+        shownFor = owner
+        shown = false
+        setUsual(null)
+        setCat(c => (c === USUAL ? UI_CATEGORIES[0].id : c))
+      }
+      const my = ++gen
       void loadUsual().then(u => {
-        if (!alive || !u) return
+        if (!alive || my !== gen || getCustomerSession() !== owner || !u) return
         setUsual(u)
         if (!shown && !touched.current) { setCat(USUAL); setIndex(0) }
         shown = true
