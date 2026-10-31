@@ -33,6 +33,7 @@ function homeFixture(empty = false) {
     '../features/johnny/bookingIntent': { requestJohnny: () => {} },
     './V2GinpayBar': { V2GinpayBar: 'ginpay' },
     './usualPicks': { loadUsual: async () => null },
+    '../utils/customerSession': { getCustomerSession: () => null },
   }
   context.require = name => { assert.ok(modules[name], name); return modules[name] }
   vm.runInContext(compile(homeSource), context)
