@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Bell, BellOff, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, CircleCheck, Clipboard, List, LoaderCircle, Plus, RefreshCw } from 'lucide-react'
+import { Bell, BellOff, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, CircleCheck, Clipboard, List, LoaderCircle, Plus, RefreshCw, Users } from 'lucide-react'
 import { addDaysToDateString, getJapanDateString } from '../utils/dateUtils'
 import { jstDateLabel, jstMinutesOf, jstTime, STATUS_LABEL, yen } from '../utils/bookingApi'
 import { callStaffRpc } from './sbRpc'
@@ -326,11 +326,12 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
       {reservations.map(r => {
         const start = jstMinutesOf(r.starts_at, date), end = jstMinutesOf(r.ends_at, date), until = jstMinutesOf(r.occupied_until, date)
         const dragging = drag.view?.id === r.id ? drag.view : null
-        return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}${r.source === 'app' ? ' sb-src-ai' : ''}${dragging ? ' sb-dragging' : ''}`} aria-label={`${jstTime(r.starts_at)} ${r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`}
+        const companion = companionOf(r)
+        return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}${r.source === 'app' ? ' sb-src-ai' : ''}${dragging ? ' sb-dragging' : ''}`} aria-label={`${jstTime(r.starts_at)} ${companion ? `${companion}様（${r.customer_name}様のお連れ様）` : r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`}
           onPointerDown={e => drag.start(e, r)} onClick={() => { if (drag.clicked()) onOpen(r.id) }} onContextMenu={e => { if (r.status === 'confirmed') e.preventDefault() }}
           style={{ left: x(start) + 2, width: Math.max(12, x(end) - x(start) - 4), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10, ...(dragging ? { transform: `translate(${dragging.dx}px, ${dragging.dy}px)` } : {}) }}>
           {dragging && <em className="sb-drag-time">{`${Math.floor(dragging.minutes / 60)}:${String(dragging.minutes % 60).padStart(2, '0')}`}</em>}
-          <strong className="sb-res-name"><span>{r.customer_name}</span>{r.ginpay_paid && <GinpayMark />}</strong><span>{r.items.map(i => i.name).join('・')}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}</small>
+          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}</small>
         </button>{until > end && <div className="sb-buffer" aria-label="片付け時間" style={{ left: x(end), width: x(until) - x(end), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10 }} />}</div>
       })}
       {nowMin !== null && nowMin >= range.start && nowMin < range.end && <div className="sb-now" style={{ left: x(nowMin) }} aria-hidden="true" />}
@@ -338,7 +339,7 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
 }
 
 function ReservationList({ reservations, onPick }: { reservations: SbReservation[]; onPick: (id: string) => void }) {
-  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong className="sb-res-name"><span>{r.customer_name}</span>{r.ginpay_paid && <GinpayMark />}</strong><small>{r.items.map(i => i.name).join('・')}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}<ChevronRight size={18} /></button>)}</div> : <p className="sb-muted">予約はありません。</p>
+  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => { const companion = companionOf(r); return <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><small>{r.items.map(i => i.name).join('・')}{companion ? `／${r.customer_name}様のお連れ様` : ''}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}<ChevronRight size={18} /></button> })}</div> : <p className="sb-muted">予約はありません。</p>
 }
 
 function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onEdit, onSend }: {
@@ -406,6 +407,17 @@ function CopyRows({ r }: { r: SbReservation }) {
   const copy = (label: string, value: string) => { void navigator.clipboard?.writeText(value).then(() => setDone(label), () => setDone(null)) }
   return <div className="sb-copy-rows">{rows.map(([label, value]) => <button type="button" className="sb-copy-row" key={label} aria-label={`${label}をコピー`} onClick={() => copy(label, value)}>
     <span><small>{label}</small>{value}</span><b aria-live="polite">{done === label ? <><Check size={15} />コピー済み</> : <><Clipboard size={15} />コピー</>}</b></button>)}</div>
+}
+
+/** AI予約で「お連れ様」として一緒に取った予約（メモの「お連れ様：○○様」）。予約した人の名前のままだと二重予約に見えるので、
+ *  お連れ様の名前と印を出し、誰のお連れ様かを添える（11/1 慶一郎さん） */
+function companionOf(r: { note?: string | null }): string | null {
+  const m = r.note?.match(/^お連れ様：(.+?)様?$/m)
+  return m ? m[1].trim() || null : null
+}
+
+function CompanionMark() {
+  return <b className="sb-companion-mark" aria-label="お連れ様の予約"><Users size={12} strokeWidth={2.4} />お連れ様</b>
 }
 
 /** 銀Pay で前もって支払い済みの印（名前の横・ピンク） */
