@@ -1,7 +1,7 @@
 // 銀Pay の仮支払い（予約のときに残高を押さえる。本当の支払いはレジで会員QR を読んで会計を確定したとき）。
 // 予約をキャンセルすると押さえは消える（全額戻る）。台帳・残高は DB の customer_ginpay_* が正。
 import { useEffect, useState } from 'react'
-import { callCustomerRpc, hasCustomerSession } from '../../utils/customerSession'
+import { callCustomerRpc, getCustomerSession } from '../../utils/customerSession'
 
 export interface GinpayHoldSummary {
   balance: number
@@ -37,19 +37,26 @@ export function useGinpayHolds(): GinpayHoldSummary | null {
   const [summary, setSummary] = useState<GinpayHoldSummary | null>(null)
   useEffect(() => {
     let alive = true
+    let gen = 0
     const load = () => {
-      if (!hasCustomerSession()) { setSummary(null); return }
-      fetchGinpayHolds().then(s => { if (alive) setSummary(s) }).catch(() => { if (alive) setSummary(null) })
+      // いちばん新しい頼みで、同じ会員の応答だけ使う（古い応答で上書きしない・10/30 監査 R2）
+      const my = ++gen
+      const owner = getCustomerSession()
+      if (!owner) { setSummary(null); return }
+      const current = () => alive && my === gen && getCustomerSession() === owner
+      fetchGinpayHolds().then(s => { if (current()) setSummary(s) }).catch(() => { if (current()) setSummary(null) })
     }
     load()
     const onVisible = () => { if (document.visibilityState === 'visible') load() }
     window.addEventListener(EVENT, load)
     window.addEventListener('ginjiro:reservation-changed', load)
+    window.addEventListener('ginjiro:customer-session-changed', load)
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       alive = false
       window.removeEventListener(EVENT, load)
       window.removeEventListener('ginjiro:reservation-changed', load)
+      window.removeEventListener('ginjiro:customer-session-changed', load)
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [])

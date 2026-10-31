@@ -7,12 +7,14 @@ import { buildWelcome, type VisitRecord } from '../features/johnny/welcome'
 import { canBeUsual, getUsualMenu } from '../features/johnny/usualMenu'
 import { STYLE_MENU_CODES } from '../data/reserveLinks'
 import { UI_CATEGORIES } from '../data/styleCategories'
+import { getCustomerSession } from '../utils/customerSession'
 
 type UsualMenu = { code: string; name: string; title: string | null }
 /** null = 出さない。menu が null = ご来店はあるがメニューが分からない */
 export type Usual = { menu: UsualMenu | null } | null
 
-let cache: { at: number; visited: Promise<{ visited: boolean; menu: UsualMenu | null }> } | null = null
+// 来店の記録は会員（セッション）ごと。別の会員に切り替えたら読み直す（10/30 監査 R8）
+let cache: { at: number; owner: string | null; visited: Promise<{ visited: boolean; menu: UsualMenu | null }> } | null = null
 
 /** ホットペッパーのリンク用のスタイル：そのメニューのスタイルのうち、メニュー名を含むもの（パンチパーマ → バチバチパンチパーマ）、無ければ最初のもの */
 function styleTitleFor(code: string, name: string): string | null {
@@ -39,7 +41,8 @@ async function loadVisited(): Promise<{ visited: boolean; menu: UsualMenu | null
 export async function loadUsual(): Promise<Usual> {
   const reg = getUsualMenu()
   if (reg && canBeUsual(reg.code)) return { menu: { ...reg, title: styleTitleFor(reg.code, reg.name) } }
-  if (!cache || Date.now() - cache.at >= 5 * 60000) cache = { at: Date.now(), visited: loadVisited().catch(() => ({ visited: false, menu: null })) }
+  const owner = getCustomerSession()
+  if (!cache || cache.owner !== owner || Date.now() - cache.at >= 5 * 60000) cache = { at: Date.now(), owner, visited: loadVisited().catch(() => ({ visited: false, menu: null })) }
   const mine = cache
   const v = await mine.visited
   if (!v.visited && cache === mine) cache = null

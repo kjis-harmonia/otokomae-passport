@@ -22,7 +22,7 @@ function useLastVisit(): string | null {
 }
 
 export function V2Next({ onJohnny }: { onJohnny: () => void }) {
-  const { next, companions } = useNextVisit()
+  const { next, companions, status, reload } = useNextVisit()
   const names = companionNames()
   const holds = useGinpayHolds()
   const prepaid = heldFor(holds, next?.id)
@@ -60,6 +60,19 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
             <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={onJohnny}>変更・キャンセル（AI予約）</button>
             <a className="v2-btn v2-btn-quiet v2-glass" href={SHOP_PHONE_TEL}><Phone size={18} />お店に電話する</a>
           </div>
+        </section>
+      ) : status === 'loading' ? (
+        <section className="v2-panel v2-glass" aria-label="次のご予約" aria-busy="true">
+          <p className="v2-note" style={{ margin: 0 }}>ご予約を確認しています…</p>
+        </section>
+      ) : status === 'failed' ? (
+        // 確認できなかったときに「ご予約はありません」と言い切らない（10/30 監査 R3）
+        <section className="v2-panel v2-glass" aria-label="次のご予約">
+          <CalendarClock size={26} color="var(--v2-gold-deep)" />
+          <p className="v2-big" style={{ fontSize: 20, marginTop: 10 }}>ご予約を確認できませんでした</p>
+          <p className="v2-note" style={{ margin: '6px 0 16px' }}>電波のよい所で、もう一度お試しください。</p>
+          <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={reload}>再読み込み</button>
+          <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>お店に電話で確認する（{SHOP_PHONE_DISPLAY}）</a>
         </section>
       ) : (
         <section className="v2-panel v2-glass" aria-label="次のご予約">
