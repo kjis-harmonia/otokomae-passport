@@ -1,18 +1,26 @@
 // 本日のガチャ（10/29 慶一郎さん、10/30 動画を3部構成に）：下タブ「ガチャ」→「本日のガチャを回す」で演出の動画を画面いっぱいに流す。
 // 1部〜3部（INTRO、深海の秘宝：海に沈む神殿→光る球）→ タップ待ち（WAIT、くり返し）→ お客様が球をタップ → 3部 開放 → 真っ白 → 4部 銀ちゃん（OPEN、1本につないである）→ 結果。景品・1日1回はまだ決まっていないので、結果は「準備中」。
 // 動画は public/gacha（Gemini で作ったもの・縦 9:16）。INTRO の終わりは WAIT の始まりと同じコマ、WAIT は終わりと始まりを 0.5 秒重ねてくり返し。OPEN は開放→真っ白（0.75 秒で白へ）→スキューバの銀ちゃんが黄金チケットを掲げる（白から 0.5 秒で溶かす・10/30）。
-// 3本は別の video を重ねる。次の動画が実際に動き出してから前の動画を隠す（切り替えで黒や下絵が挟まらない）。開放はタップの位置がどこでも 0.5 秒で溶かして出す。
+// 3本は別の video を重ねる。次の動画が実際に動き出してから前の動画を隠す（切り替えで黒や下絵が挟まらない）。開放はタップのあと待ちを早送りで終わりまで進め、待ちの最後のコマ＝開放の最初のコマでつなぐ（11/1）。
 // iPhone は preload を守らず流しながら読むので、電波しだいでカクカクする（10/30「球体もカクカク」）。タブを開いたら3本とも先に全部読み、読み終わってからボタンを押せる。
 // 音は独立したWeb Audioのクロックでつなぐ。videoは常にミュートし、待機のループでAACの再始動やended待ちの無音を挟まない。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pointer, Sparkles, X } from 'lucide-react'
-import { GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers } from '../audio/gachaSoundtrack'
+import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
 
-const INTRO = '/gacha/gacha-intro.mp4'
-const INTRO_POSTER = '/gacha/gacha-intro.jpg'
-const WAIT = '/gacha/gacha-wait.mp4'
-const OPEN = '/gacha/gacha-open.mp4'
-const POSTER = '/gacha/gacha-wait.jpg'
+// 演出はテーマを開くたびにランダム（11/1）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
+// 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
+type Theme = { id: 'deep' | 'galaxy'; name: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string }
+const THEMES: Theme[] = [
+  { id: 'deep', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
+  // 銀河の音は1部の終わりがそのまま待ちの頭へ続く曲なので、重ねるのは短く。開放は 7.9 秒で真っ白になりきる。そこからチケットを飛ばす
+  { id: 'galaxy', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
+    audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg' },
+]
+// ?gacha=galaxy で決めうち（見比べる用）
+const pick = new URLSearchParams(location.search).get('gacha')
+const THEME = THEMES.find(t => t.id === pick) ?? THEMES[Math.floor(Math.random() * THEMES.length)]
+const { intro: INTRO, introPoster: INTRO_POSTER, wait: WAIT, open: OPEN, poster: POSTER } = THEME
 
 type Phase = 'idle' | 'intro' | 'tap' | 'open' | 'result'
 
@@ -47,7 +55,7 @@ async function loadAll(onProgress: (pct: number) => void, outerSignal: AbortSign
     const objectUrl = URL.createObjectURL(new Blob(parts as BlobPart[], { type: 'video/mp4' }))
     created.push(objectUrl)
     return objectUrl
-  })), loadGachaAudio(signal)])
+  })), loadGachaAudio(signal, THEME.audio)])
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
   cache = { urls: Object.fromEntries(FILES.map((u, k) => [u, urls[k]])), audio }
   return cache
@@ -71,6 +79,7 @@ export function V2Gacha() {
   const wait = useRef<HTMLVideoElement>(null)
   const burst = useRef<HTMLVideoElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
+  const [ticket, setTicket] = useState(false) // 銀河：黄金チケットが飛んできた
   const phaseRef = useRef<Phase>('idle')
   const sound = useRef<GachaSoundtrack | null>(null)
   const introSoundStarted = useRef(false)
@@ -93,6 +102,7 @@ export function V2Gacha() {
   const close = useCallback(() => {
     if (waitStop.current) clearTimeout(waitStop.current)
     waitStop.current = null
+    setTicket(false)
     for (const v of [intro.current, wait.current, burst.current]) v?.pause()
     sound.current?.stop()
     move('idle')
@@ -105,13 +115,16 @@ export function V2Gacha() {
     const w = wait.current
     const b = burst.current
     if (!i || !w || !b) return
-    sound.current ??= new GachaSoundtrack(gachaAudioContext(), cache.audio)
+    sound.current ??= new GachaSoundtrack(gachaAudioContext(), cache.audio, THEME.introFade)
     sound.current.unlock() // Keep the iPhone audio unlock inside the user's gesture.
     introSoundStarted.current = false
     openSoundStarted.current = false
     rewind(b)
     rewind(i)
     rewind(w)
+    w.loop = true
+    w.playbackRate = 1
+    setTicket(false)
     setTop('intro')
     move('intro')
     void play(i).catch(close)
@@ -137,21 +150,27 @@ export function V2Gacha() {
       setTop('burst')
       waitStop.current = setTimeout(() => w.pause(), 600) // Only the visual fade; audio has its own scheduled crossfade.
     }
+    const waitEnded = () => { if (phaseRef.current === 'open') void play(b).catch(close) } // 早送りで終わりまで来たら開放へ
     const burstEnded = () => { if (phaseRef.current === 'open') move('result') }
+    const burstTime = () => { if (phaseRef.current !== 'idle' && THEME.ticketAt != null && b.currentTime >= THEME.ticketAt) setTicket(true) }
     const hide = () => { if (document.hidden) close() }
     i.addEventListener('playing', introPlaying)
     i.addEventListener('ended', introEnded)
     w.addEventListener('playing', waitPlaying)
+    w.addEventListener('ended', waitEnded)
     b.addEventListener('playing', burstPlaying)
     b.addEventListener('ended', burstEnded)
+    b.addEventListener('timeupdate', burstTime)
     document.addEventListener('visibilitychange', hide)
     window.addEventListener('pagehide', close)
     return () => {
       i.removeEventListener('playing', introPlaying)
       i.removeEventListener('ended', introEnded)
       w.removeEventListener('playing', waitPlaying)
+      w.removeEventListener('ended', waitEnded)
       b.removeEventListener('playing', burstPlaying)
       b.removeEventListener('ended', burstEnded)
+      b.removeEventListener('timeupdate', burstTime)
       document.removeEventListener('visibilitychange', hide)
       window.removeEventListener('pagehide', close)
       if (waitStop.current) clearTimeout(waitStop.current)
@@ -161,12 +180,18 @@ export function V2Gacha() {
     }
   }, [close, move])
 
+  // 開放の動画は待ちの最後のコマから始まる。待ちの途中から切り替えると球の中の模様や光の輪が違い、別の球に見える（11/1 慶一郎さん「宝珠別物やね?」）。
+  // タップしたら待ちを早送り（最大4倍・だいたい0.6秒）で終わりまで進め、最後のコマから開放へそのままつなぐ。音は開放が動き出したところで交差させる
   const open = () => {
+    const w = wait.current
     const b = burst.current
-    if (phaseRef.current !== 'tap' || !b) return
+    if (phaseRef.current !== 'tap' || !w || !b) return
     move('open')
     sound.current?.unlock()
-    void play(b).catch(close)
+    const left = w.duration - w.currentTime
+    if (!Number.isFinite(left) || left < 0.1) { w.pause(); void play(b).catch(close); return }
+    w.loop = false
+    w.playbackRate = Math.min(4, Math.max(1, left / 0.6))
   }
 
   const showing = phase !== 'idle'
@@ -182,13 +207,30 @@ export function V2Gacha() {
       </section>
       <p className="v2-gacha-note">音が出ます。音量にご注意ください。</p>
 
-      <div className={`v2-gacha-stage${showing ? ' is-on' : ''}`} aria-hidden={!showing} onClick={open}>
+      <div className={`v2-gacha-stage v2-gacha-${THEME.id}${showing ? ' is-on' : ''}`} aria-hidden={!showing} onClick={open}>
         <video ref={wait} src={src?.[WAIT]} poster={POSTER} loop muted playsInline preload="auto" />
         <video ref={intro} src={src?.[INTRO]} poster={INTRO_POSTER} className={top === 'intro' ? '' : 'is-off'} muted playsInline preload="auto" />
         <video ref={burst} src={src?.[OPEN]} className={`v2-gacha-burst${top === 'burst' ? ' is-on' : ''}`} muted playsInline preload="auto" />
+        {ticket && (
+          <div className="v2-ticket-scene" aria-hidden>
+            <img src={POSTER} alt="" className="v2-ticket-sky" />
+            <div className="v2-ticket-fly">
+              <div className="v2-ticket-face">
+                {/* 柄は割引券と同じ大理石（銀河は黒×金・11/1 慶一郎さん） */}
+                <div className="v2-ticket" style={THEME.ticket ? { backgroundImage: `url(${THEME.ticket})` } : undefined}>
+                  <div className="v2-ticket-main"><b>{THEME.name}</b><span>銀二郎</span></div>
+                  <div className="v2-ticket-stub"><span>No.</span><b>{String(new Date().getDate()).padStart(2, '0')}</b></div>
+                </div>
+              </div>
+              {/* 回るあいだに見える裏側（表の文字が左右反対に透けないように） */}
+              <div className="v2-ticket-face is-back"><div className="v2-ticket v2-ticket-back" style={THEME.ticket ? { backgroundImage: `url(${THEME.ticket})` } : undefined}><b>銀二郎</b></div></div>
+            </div>
+            {Array.from({ length: 14 }, (_, k) => <i key={k} className="v2-ticket-spark" style={{ ['--k' as string]: k }} />)}
+          </div>
+        )}
         {phase === 'tap' && <p className="v2-gacha-tap"><Pointer size={30} strokeWidth={1.6} aria-hidden />光る球をタップ</p>}
         {phase === 'result' && (
-          <div className="v2-gacha-result" onClick={e => e.stopPropagation()}>
+          <div className={`v2-gacha-result${ticket ? ' is-ticket' : ''}`} onClick={e => e.stopPropagation()}>
             <Sparkles size={28} />
             <b>景品は準備中です</b>
             <span>もうすぐ始まります。お楽しみに。</span>

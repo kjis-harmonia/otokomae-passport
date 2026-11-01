@@ -4,6 +4,7 @@ export const GACHA_AUDIO_FILES = {
   wait: '/gacha/gacha-wait-audio.wav',
   open: '/gacha/gacha-open-audio.m4a',
 } as const
+export type GachaAudioFiles = Record<keyof typeof GACHA_AUDIO_FILES, string>
 export type GachaAudioBuffers = Record<keyof typeof GACHA_AUDIO_FILES, AudioBuffer>
 
 let context: AudioContext | null = null
@@ -12,9 +13,9 @@ export function gachaAudioContext(): AudioContext {
   return context
 }
 
-export async function loadGachaAudio(signal: AbortSignal): Promise<GachaAudioBuffers> {
+export async function loadGachaAudio(signal: AbortSignal, files: GachaAudioFiles = GACHA_AUDIO_FILES): Promise<GachaAudioBuffers> {
   const ctx = gachaAudioContext()
-  const entries = await Promise.all(Object.entries(GACHA_AUDIO_FILES).map(async ([key, url]) => {
+  const entries = await Promise.all(Object.entries(files).map(async ([key, url]) => {
     const res = await fetch(url, { signal })
     if (!res.ok) throw new Error(`gacha audio: ${res.status}`)
     const buffer = await ctx.decodeAudioData(await res.arrayBuffer())
@@ -41,10 +42,13 @@ export class GachaSoundtrack {
   private readonly master: GainNode
   private voices = new Set<Voice>()
   private waiting: Voice | null = null
+  private readonly introFade: number
 
-  constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers) {
+  // introFade: a theme whose intro already runs into the first bar of the wait loop needs only a short overlap.
+  constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE) {
     this.ctx = ctx
     this.buffers = buffers
+    this.introFade = introFade
     this.master = ctx.createGain()
     this.master.gain.value = 0.8 // Headroom for two equal-power voices and AAC reconstruction peaks.
     this.master.connect(ctx.destination)
@@ -96,7 +100,7 @@ export class GachaSoundtrack {
   startIntro(at = this.ctx.currentTime, offset = 0): void {
     this.stop(at)
     const remaining = Math.max(0.01, this.buffers.intro.duration - offset)
-    const fade = Math.min(INTRO_CROSSFADE, remaining)
+    const fade = Math.min(this.introFade, remaining)
     const join = at + remaining - fade
     const intro = this.voice(this.buffers.intro, at, offset)
     this.fade(intro, curve(false), join, fade)
