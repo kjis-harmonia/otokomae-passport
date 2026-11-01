@@ -10,12 +10,15 @@ import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, 
 
 // 演出はテーマを開くたびにランダム（11/1）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
-type Theme = { id: 'deep' | 'galaxy'; name: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean }
+type Theme = { id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean }
 const THEMES: Theme[] = [
   { id: 'deep', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
   // 銀河の音は1部の終わりがそのまま待ちの頭へ続く曲なので、重ねるのは短く。開放は 7.9 秒で真っ白になりきる。そこからチケットを飛ばす
   { id: 'galaxy', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
     audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg', hold: true }, // 保留中（11/1「宇宙編微妙やな」）。ランダムには出さない
+  // 恐竜編：レックスの咆哮→大草原→洞窟→光る足跡。開放は足跡から光の柱→真っ白→鳳凰編の走る銀ちゃん（1本につないである・11/2）
+  { id: 'dino', name: '太古の覇王', tap: '光る足跡をタップ', intro: '/gacha/dino/intro.mp4', introPoster: '/gacha/dino/intro.jpg', wait: '/gacha/dino/wait.mp4', open: '/gacha/dino/open.mp4', poster: '/gacha/dino/wait.jpg',
+    audio: { intro: '/gacha/dino/intro-audio.m4a', wait: '/gacha/dino/wait-audio.wav', open: '/gacha/dino/open-audio.m4a' } },
 ]
 // ?gacha=galaxy で決めうち（見比べる用・保留中のテーマも出せる）
 const pick = new URLSearchParams(location.search).get('gacha')
@@ -228,7 +231,7 @@ export function V2Gacha() {
             {Array.from({ length: 14 }, (_, k) => <i key={k} className="v2-ticket-spark" style={{ ['--k' as string]: k }} />)}
           </div>
         )}
-        {phase === 'tap' && <p className="v2-gacha-tap"><Pointer size={30} strokeWidth={1.6} aria-hidden />光る球をタップ</p>}
+        {phase === 'tap' && <p className="v2-gacha-tap"><Pointer size={30} strokeWidth={1.6} aria-hidden />{THEME.tap ?? '光る球をタップ'}</p>}
         {phase === 'result' && (
           <div className={`v2-gacha-result${ticket ? ' is-ticket' : ''}`} onClick={e => e.stopPropagation()}>
             <Sparkles size={28} />
