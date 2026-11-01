@@ -46,3 +46,12 @@ test('all video tags stay muted and hidden/closed playback is cleaned up', () =>
   assert(s.includes("window.addEventListener('pagehide', close)"))
   assert(s.includes('sound.current?.dispose()'))
 })
+test('all gacha MP4s use the mobile-compatible H.264 High profile, not High 4:4:4', () => {
+  for (const name of ['intro', 'wait', 'open']) {
+    const bytes = fs.readFileSync(new URL(`../public/gacha/gacha-${name}.mp4`, import.meta.url))
+    const avc = bytes.indexOf(Buffer.from('avcC'))
+    assert(avc >= 0, `${name}: missing AVC configuration`)
+    assert.equal(bytes[avc + 4], 1)
+    assert.equal(bytes[avc + 5], 100, `${name}: expected H.264 High (8-bit 4:2:0)`)
+  }
+})
