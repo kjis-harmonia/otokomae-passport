@@ -200,9 +200,8 @@ export function V2Gacha() {
     <div className="v2-page">
       <h1 className="v2-title">本日のガチャ</h1>
       <section className="v2-gacha-card">
-        <img src={POSTER} alt="" className="v2-gacha-poster" />
+        <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
-          <p className="v2-gacha-lead">今日の運だめし。</p>
           <button type="button" className="v2-gacha-start" onClick={start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />本日のガチャを回す</> : `準備しています ${pct}%`}</button>
         </div>
       </section>
