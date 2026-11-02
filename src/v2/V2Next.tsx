@@ -3,7 +3,7 @@
 // AI予約は投げた時点で「予約確定」（サロンボードへの転記はお店の仕事なので、お客様には見せない）。
 import { useEffect, useState } from 'react'
 import { CalendarClock, Phone, Scissors } from 'lucide-react'
-import { formatVisit, useNextReservation } from '../features/johnny/nextReservation'
+import { companionNames, formatVisit, useNextVisit } from '../features/johnny/nextReservation'
 import { heldFor, useGinpayHolds } from '../features/ginpay/holds'
 import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { hasCustomerSession } from '../utils/customerSession'
@@ -22,8 +22,10 @@ function useLastVisit(): string | null {
 }
 
 export function V2Next({ onJohnny }: { onJohnny: () => void }) {
-  const next = useNextReservation()
-  const prepaid = heldFor(useGinpayHolds(), next?.id)
+  const { next, companions, status, reload } = useNextVisit()
+  const names = companionNames()
+  const holds = useGinpayHolds()
+  const prepaid = heldFor(holds, next?.id)
   const visit = next ? formatVisit(next.starts_at) : null
   const last = useLastVisit()
   const days = last ? getDaysUntilRecommended(last) : null
@@ -40,12 +42,37 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
             <span style={{ color: 'var(--v2-sub)' }}>担当：{next.staff_name}</span>
             {prepaid != null && <span style={{ color: 'var(--v2-gold-deep)', fontWeight: 700 }}>✓ 銀Pay 仮支払い済み ¥{prepaid.toLocaleString()}<br /><small style={{ fontWeight: 400, color: 'var(--v2-sub)' }}>ご来店時にレジで会員QRを読むと、お支払いが確定します</small></span>}
           </div>
+          {/* お連れ様の予約（同じ日のほかの予約・10/30 慶一郎さん） */}
+          {companions.map(c => {
+            const paid = heldFor(holds, c.id)
+            return (
+              <div key={c.id} style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--v2-line)', display: 'grid', gap: 4, fontSize: 15 }}>
+                <span className="v2-label" style={{ margin: 0 }}>{names[c.id] ? `お連れ様（${names[c.id]}様）` : 'お連れ様'}</span>
+                <span><b style={{ color: 'var(--v2-gold-deep)' }}>{formatVisit(c.starts_at).time}〜</b>{' '}{c.items.map(i => i.name).join('・')}</span>
+                <span style={{ color: 'var(--v2-sub)' }}>担当：{c.staff_name}</span>
+                {paid != null && <span style={{ color: 'var(--v2-gold-deep)', fontWeight: 700 }}>✓ 銀Pay 仮支払い済み ¥{paid.toLocaleString()}</span>}
+              </div>
+            )
+          })}
           {/* AI予約は受けた時点で確定。サロンボードへの転記はお店の仕事。重なったときだけお店から電話する（そのことを1行だけ） */}
           {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、お店からお電話します。</p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
             <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={onJohnny}>変更・キャンセル（AI予約）</button>
             <a className="v2-btn v2-btn-quiet v2-glass" href={SHOP_PHONE_TEL}><Phone size={18} />お店に電話する</a>
           </div>
+        </section>
+      ) : status === 'loading' ? (
+        <section className="v2-panel v2-glass" aria-label="次のご予約" aria-busy="true">
+          <p className="v2-note" style={{ margin: 0 }}>ご予約を確認しています…</p>
+        </section>
+      ) : status === 'failed' ? (
+        // 確認できなかったときに「ご予約はありません」と言い切らない（10/30 監査 R3）
+        <section className="v2-panel v2-glass" aria-label="次のご予約">
+          <CalendarClock size={26} color="var(--v2-gold-deep)" />
+          <p className="v2-big" style={{ fontSize: 20, marginTop: 10 }}>ご予約を確認できませんでした</p>
+          <p className="v2-note" style={{ margin: '6px 0 16px' }}>電波のよい所で、もう一度お試しください。</p>
+          <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={reload}>再読み込み</button>
+          <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>お店に電話で確認する（{SHOP_PHONE_DISPLAY}）</a>
         </section>
       ) : (
         <section className="v2-panel v2-glass" aria-label="次のご予約">

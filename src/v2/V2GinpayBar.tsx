@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { ChevronRight, Wallet } from 'lucide-react'
 import { getCustomerGinpayLedger, yen } from '../utils/ginpayApi'
 import { useGinpayHolds } from '../features/ginpay/holds'
+import { getCustomerSession } from '../utils/customerSession'
 
 export function V2GinpayBar({ onOpen }: { onOpen: () => void }) {
   const [balance, setBalance] = useState<number | null | undefined>(undefined)
@@ -13,11 +14,22 @@ export function V2GinpayBar({ onOpen }: { onOpen: () => void }) {
 
   useEffect(() => {
     let alive = true
-    const load = () => getCustomerGinpayLedger(1).then(l => { if (alive) setBalance(l.balance) }).catch(() => { if (alive) setBalance(null) })
+    let gen = 0
+    let shownFor = getCustomerSession()
+    const load = () => {
+      // いちばん新しい頼みで、同じ会員の応答だけ使う（古い応答で上書きしない・10/30 監査 R2）
+      const my = ++gen
+      const owner = getCustomerSession()
+      // 会員が変わったら、前の人の残高はすぐ消して「…」に戻す（11/1 再監査）
+      if (owner !== shownFor) { shownFor = owner; setBalance(undefined) }
+      const current = () => alive && my === gen && getCustomerSession() === owner
+      getCustomerGinpayLedger(1).then(l => { if (current()) setBalance(l.balance) }).catch(() => { if (current()) setBalance(null) })
+    }
     load()
     const reload = () => { if (document.visibilityState === 'visible') load() }
     document.addEventListener('visibilitychange', reload)
-    return () => { alive = false; document.removeEventListener('visibilitychange', reload) }
+    window.addEventListener('ginjiro:customer-session-changed', load)
+    return () => { alive = false; document.removeEventListener('visibilitychange', reload); window.removeEventListener('ginjiro:customer-session-changed', load) }
   }, [])
 
   return (

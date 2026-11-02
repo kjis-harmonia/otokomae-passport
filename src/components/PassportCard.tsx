@@ -246,6 +246,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   letterSpacing: '0.06em',
                   textShadow: '0 1px 0 rgba(255,255,255,0.8)',
                   marginBottom: 6,
+                  overflowWrap: 'anywhere', // 長い英字の名前も切らずに折り返す（10/30 監査 R6）
                 }}>
                   {memberName}
                   {/* 「様」— 会員名の約52%サイズ、シルバー系 */}

@@ -8,7 +8,7 @@ import type { TicketRow } from '../data/ticket'
 import { GINJIRO_CLASSICS, GINPARA, SPECIAL_PERM, type CouponDefinition } from '../data/wallet'
 import { isPermOnlyCoupon } from './welcomeCoupon'
 import { supabase } from '../lib/supabase'
-import { callCustomerRpc, hasCustomerSession } from './customerSession'
+import { callCustomerRpc, getCustomerSession } from './customerSession'
 
 /** プレミアムクーポンの対象メニュー（アプリのメニューの code） */
 const PREMIUM_BY_MENU: Record<string, CouponDefinition> = {
@@ -35,23 +35,28 @@ let rules: PriceRules | null = null
 let loading: Promise<void> | null = null
 
 // ── お客様ごとの「いつもの」料金（店で最後に払った、券を引く前のメニューの金額）。払ったことのあるメニューだけ ──
-let personal: Map<string, number> | null = null
-let personalLoading: Promise<void> | null = null
+// 会員（セッション）ごとに覚える。別の会員に切り替えたら前の人の料金は使わない（10/30 監査 R8）
+let personal: { owner: string; prices: Map<string, number> } | null = null
+let personalLoading: { owner: string; done: Promise<void> } | null = null
 function ensurePersonalPrices(): Promise<void> {
   // ログインしていない人には聞かない（聞くとログインの案内が出てしまう）
-  if (personal || !hasCustomerSession()) return Promise.resolve()
-  personalLoading ??= (async () => {
+  const owner = getCustomerSession()
+  if (!owner || personal?.owner === owner) return Promise.resolve()
+  if (personalLoading?.owner === owner) return personalLoading.done
+  const done = (async () => {
     try {
       const list = await callCustomerRpc<{ menu_code: string; price: number }[]>('customer_personal_prices')
-      if (Array.isArray(list)) personal = new Map(list.map(x => [x.menu_code, x.price]))
+      if (Array.isArray(list) && getCustomerSession() === owner) personal = { owner, prices: new Map(list.map(x => [x.menu_code, x.price])) }
     } catch { /* 読めなければメニューの料金のまま */ }
-    finally { personalLoading = null }
+    finally { if (personalLoading?.owner === owner) personalLoading = null }
   })()
-  return personalLoading
+  personalLoading = { owner, done }
+  return done
 }
 /** そのお客様の「いつもの」料金（払ったことが無ければ null） */
 export function personalPrice(code: string): number | null {
-  return personal?.get(code) ?? null
+  const owner = getCustomerSession()
+  return owner && personal?.owner === owner ? personal.prices.get(code) ?? null : null
 }
 
 /** サーバーの料金表（とお客様ごとの料金）を読む（1回だけ。失敗したら次に呼ばれたときにもう一度） */

@@ -343,7 +343,7 @@ function ticketCard(list: TicketRow[], status: 'active' | 'expired' | 'used', no
   let statusLabel: string
   if (status === 'used')         statusLabel = rep.used_at ? `USED · ${fmtYmd(rep.used_at)}` : 'USED'
   else if (status === 'expired') statusLabel = '期限切れ'
-  else if (expiresAt)            statusLabel = `有効期限 ${fmtYmd(expiresAt)}`
+  else if (expiresAt)            statusLabel = `${fmtYmd(expiresAt)}まで` // 「有効期限 」を付けると狭い画面で日付が欠ける（10/30 監査）
   else                           statusLabel = '有効期限なし'
 
   // 期限が近い券ほど前（期限なしは最後）

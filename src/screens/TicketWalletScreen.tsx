@@ -170,6 +170,8 @@ export function TicketWalletScreen({
   // undefined = loading
   const [lastVisitDate, setLastVisitDate] = useState<string | null | undefined>(undefined)
   const [tickets,       setTickets]       = useState<TicketRow[] | null>(null)
+  // 券を読めなかった（通信失敗）。0枚とは分ける：「ありません」と出すと券が消えたと思われる（10/30 監査 R7）
+  const [ticketsFailed, setTicketsFailed] = useState(false)
   // 当日すでに使った割引種別（null = 未使用）
   const [todayUsedType, setTodayUsedType] = useState<string | null>(null)
   const [now,           setNow]           = useState(() => new Date())
@@ -194,17 +196,19 @@ export function TicketWalletScreen({
   const [xferring,          setXferring]          = useState(false)
   const [xferError,         setXferError]         = useState<string | null>(null)
   const [copied,            setCopied]            = useState(false)
+  const [cancelFailed,      setCancelFailed]      = useState(false)
+  const [shareFailed,       setShareFailed]       = useState(false)
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
   const refreshTickets = useCallback(() => {
     getUserTickets(userId)
-      .then(setTickets)
-      .catch(() => setTickets([]))
+      .then(list => { setTickets(list); setTicketsFailed(false) })
+      .catch(() => setTicketsFailed(true)) // 読めた券があればそのまま見せる
   }, [userId])
 
   const refreshVisit = useCallback(() => {
-    fetchLastVisitDateForUser(userId).then(d => setLastVisitDate(d ?? null))
+    fetchLastVisitDateForUser(userId).then(d => setLastVisitDate(d ?? null)).catch(() => setLastVisitDate(prev => prev === undefined ? null : prev))
   }, [userId])
 
   const refreshTodayUsed = useCallback(async () => {
@@ -246,7 +250,7 @@ export function TicketWalletScreen({
 
   // ── Cards ───────────────────────────────────────────────────────────────────
 
-  const loading = lastVisitDate === undefined || tickets === null
+  const loading = lastVisitDate === undefined || (tickets === null && !ticketsFailed)
   const maintenance = getMaintenanceState(lastVisitDate ?? null, now)
   const premium     = getPremiumState(now)
 
@@ -393,6 +397,8 @@ export function TicketWalletScreen({
     try {
       const token = await initiateTransfer(ticket.id)
       setDetailId(null)
+      setShareFailed(false)
+      setCancelFailed(false)
       setTransferToken(token)
       setTransferTicket(ticket)
     } catch (err) {
@@ -405,8 +411,14 @@ export function TicketWalletScreen({
 
   async function handleCancelTransfer() {
     if (transferTicket) {
-      try { await cancelTransfer(transferTicket.id) } catch { /* ignore */ }
+      // 取りやめを確かめられないうちは閉じない：リンクがまだ使えるかもしれない（10/30 監査 R9）
+      try { await cancelTransfer(transferTicket.id) } catch {
+        setCancelFailed(true)
+        return
+      }
     }
+    setCancelFailed(false)
+    setShareFailed(false)
     setTransferToken(null)
     setTransferTicket(null)
     refreshTickets()
@@ -424,8 +436,9 @@ export function TicketWalletScreen({
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       }
-    } catch {
-      // Share cancellation and clipboard permission denial do not need user-facing errors.
+    } catch (err) {
+      // 共有をやめただけなら何も出さない。送れなかったときは、リンクを選んでコピーできるように出す
+      if (!(err instanceof DOMException && err.name === 'AbortError')) setShareFailed(true)
     }
   }
 
@@ -614,6 +627,8 @@ export function TicketWalletScreen({
         <div style={{ marginTop: 14 }}>
           {loading ? (
             <DeckSkeleton />
+          ) : tickets === null ? (
+            <LoadFailed onRetry={() => { setTicketsFailed(false); refreshTickets() }} />
           ) : showCutSpecials ? (
             <CutSpecialCouponSection onCallClick={handleCutSpecialCallClick} />
           ) : cards.length === 0 ? (
@@ -779,6 +794,17 @@ export function TicketWalletScreen({
                   style={{ width: '100%', padding: '12px 0', borderRadius: 12, background: 'rgba(255,180,0,0.09)', border: '1px solid rgba(255,180,0,0.3)', fontSize: 12, fontWeight: 700, color: '#FFB400', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
                   {copied ? 'コピーしました' : 'リンクを送る'}
                 </button>
+                {shareFailed && (
+                  <p style={{ fontSize: 11, color: 'rgba(31,28,24,0.7)', lineHeight: 1.6, textAlign: 'left' }}>
+                    リンクを送れませんでした。下のリンクを長押ししてコピーしてください。
+                    <span style={{ display: 'block', marginTop: 4, padding: '6px 8px', borderRadius: 8, background: 'rgba(31,28,24,0.05)', overflowWrap: 'anywhere', userSelect: 'all', WebkitUserSelect: 'all' }}>{transferUrl}</span>
+                  </p>
+                )}
+                {cancelFailed && (
+                  <p role="alert" style={{ fontSize: 12, color: '#C0504A', lineHeight: 1.6 }}>
+                    取りやめを確認できませんでした。電波のよい所でもう一度押してください。
+                  </p>
+                )}
                 <button type="button" onClick={handleCancelTransfer} className="wallet-cta"
                   style={{ width: '100%', padding: '12px 0', borderRadius: 12, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)', fontSize: 12, color: 'rgba(31,28,24,0.66)', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
                   取りやめる
@@ -1445,6 +1471,30 @@ function DeckSkeleton() {
       <div style={{ ...block, height: CARD_HEIGHT }} />
       <div style={{ ...block, height: CARD_STRIP, marginTop: 50, opacity: 0.6 }} />
       <div style={{ ...block, height: CARD_STRIP, marginTop: -8, opacity: 0.35 }} />
+    </div>
+  )
+}
+
+function LoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div style={{
+      margin: '0 16px', height: CARD_HEIGHT,
+      borderRadius: 24,
+      border: '1px dashed rgba(201,162,74,0.22)',
+      background: 'rgba(31,28,24,0.04)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      padding: '0 28px', textAlign: 'center',
+    }}>
+      <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: 'rgba(31,28,24,0.86)', letterSpacing: '0.08em' }}>
+        チケットを読み込めませんでした
+      </p>
+      <p style={{ fontSize: 12, color: 'rgba(31,28,24,0.68)', lineHeight: 1.8, marginTop: 10 }}>
+        電波のよい所で、もう一度お試しください。
+      </p>
+      <button type="button" onClick={onRetry} className="wallet-cta"
+        style={{ marginTop: 16, padding: '10px 28px', borderRadius: 12, background: 'rgba(255,180,0,0.09)', border: '1px solid rgba(255,180,0,0.3)', fontSize: 12, fontWeight: 700, color: '#9A7400', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
+        再読み込み
+      </button>
     </div>
   )
 }

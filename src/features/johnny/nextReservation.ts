@@ -30,9 +30,8 @@ function readCached(): CustomerReservation | null {
   } catch { return null }
 }
 
-function writeCached(r: CustomerReservation | null): void {
+function writeCached(r: CustomerReservation | null, owner = currentOwner()): void {
   try {
-    const owner = currentOwner()
     if (r && owner) localStorage.setItem(KEY, JSON.stringify({ owner, r }))
     else localStorage.removeItem(KEY)
   } catch { /* 表示用なので保存できなくても続ける */ }
@@ -43,33 +42,77 @@ export function rememberReservation(r: CustomerReservation): void {
   window.dispatchEvent(new Event(EVENT))
 }
 
+/** お連れ様の予約（端末に覚えて、一覧・確認で「お連れ様」と出す） */
+const COMPANION_KEY = 'ginjiro_companion_reservations'
+export function companionIds(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(COMPANION_KEY) ?? '[]'); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] } catch { return [] }
+}
+export function rememberCompanion(id: string, name?: string): void {
+  try {
+    localStorage.setItem(COMPANION_KEY, JSON.stringify([...companionIds(), id].slice(-30)))
+    if (name) localStorage.setItem(COMPANION_NAMES_KEY, JSON.stringify({ ...companionNames(), [id]: name }))
+  } catch { /* 表示用なので保存できなくても続ける */ }
+}
+
+/** お連れ様のお名前（予約 id → 名前）。お店には予約のメモで届く。お客様の画面では端末に覚えた名前を出す */
+const COMPANION_NAMES_KEY = 'ginjiro_companion_names'
+export function companionNames(): Record<string, string> {
+  try { const v = JSON.parse(localStorage.getItem(COMPANION_NAMES_KEY) ?? '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, string> : {} } catch { return {} }
+}
+
 export function pickNext(list: readonly CustomerReservation[]): CustomerReservation | null {
   return [...list].filter(r => isUpcoming(r)).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0] ?? null
 }
 
 /** 次の予約。サーバーの一覧が取れたらそれを正とし、取れなければ端末に覚えた予約 */
 export function useNextReservation(): CustomerReservation | null {
-  const [next, setNext] = useState<CustomerReservation | null>(() => readCached())
+  return useNextVisit().next
+}
+
+/** 予約一覧の読み込み状態。'failed' のときは「予約はありません」と言い切らない（10/30 監査 R3） */
+export type VisitStatus = 'loading' | 'ok' | 'failed'
+type Visit = { next: CustomerReservation | null; companions: CustomerReservation[]; status: VisitStatus; reload: () => void }
+
+/** 次の来店：自分の予約と、同じ日のお連れ様の予約（10/30 慶一郎さん「お連れ様追加の情報がのってない」）。
+ *  予約はおひとり1つまでなので、同じ日のほかの予約はお連れ様の分。自分の分は、お連れ様として覚えた予約を除いたいちばん早いもの */
+export function useNextVisit(): Visit {
+  const [visit, setVisit] = useState<Omit<Visit, 'reload'>>(() => ({ next: readCached(), companions: [], status: hasCustomerSession() ? 'loading' : 'ok' }))
+  const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
     let alive = true
+    let gen = 0
     const load = () => {
-      setNext(readCached())
-      if (!hasCustomerSession()) return
+      // 会員の切替・遅い応答：頼んだときの会員と、いちばん新しい頼みの応答だけ使う（10/30 監査 R1）
+      const my = ++gen
+      const owner = currentOwner()
+      const cached = readCached()
+      if (!hasCustomerSession()) { setVisit({ next: cached, companions: [], status: 'ok' }); return }
+      setVisit(v => ({ next: cached, companions: cached && v.next?.id === cached.id ? v.companions : [], status: v.status === 'ok' && v.next?.id === cached?.id ? 'ok' : 'loading' }))
       bookingAssistantApi().reservations()
         .then(list => {
-          if (!alive) return
-          const n = pickNext(list)
-          setNext(n)
-          writeCached(n)
+          if (!alive || my !== gen || owner !== currentOwner()) return
+          const marked = companionIds()
+          const n = pickNext(list.filter(r => !marked.includes(r.id))) ?? pickNext(list)
+          const companions = n ? list.filter(r => r.id !== n.id && isUpcoming(r) && sameDay(r.starts_at, n.starts_at)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
+          setVisit({ next: n, companions, status: 'ok' })
+          writeCached(n, owner)
         })
-        .catch(() => { /* 通信できないときは覚えている予約のまま */ })
+        .catch(() => { if (alive && my === gen) setVisit(v => ({ ...v, status: 'failed' })) }) // 覚えている予約はそのまま見せる
     }
     load()
+    const onStorage = (e: StorageEvent) => { if (e.key === null || e.key === 'ginjiro_customer_session' || e.key === USER_ID_KEY) load() }
     window.addEventListener(EVENT, load)
     window.addEventListener('ginjiro:customer-session-changed', load)
-    return () => { alive = false; window.removeEventListener(EVENT, load); window.removeEventListener('ginjiro:customer-session-changed', load) }
-  }, [])
-  return next
+    window.addEventListener('storage', onStorage)
+    return () => { alive = false; window.removeEventListener(EVENT, load); window.removeEventListener('ginjiro:customer-session-changed', load); window.removeEventListener('storage', onStorage) }
+  }, [reloadKey])
+  return { ...visit, reload: () => setReloadKey(k => k + 1) }
+}
+
+/** 日本時間で同じ日か */
+function sameDay(a: string, b: string): boolean {
+  const d = (iso: string) => new Date(new Date(iso).getTime() + 9 * 3600000).toISOString().slice(0, 10)
+  return d(a) === d(b)
 }
 
 const WD = ['日', '月', '火', '水', '木', '金', '土']
