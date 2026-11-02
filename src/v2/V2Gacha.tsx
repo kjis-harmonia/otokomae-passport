@@ -131,7 +131,7 @@ export function V2Gacha() {
     move('idle')
   }, [move])
 
-  // 選ばずに閉じた日：演出はもう見せず、最後の場面（券を差し出す銀ちゃん）から選ぶ画面を開き直す（11/3）
+  // 選ばずに閉じた当選（日付が変わっても残る・11/3）：演出はもう見せず、最後の場面（券を差し出す銀ちゃん）から選ぶ画面を開き直す（11/3）
   const pending = !!gacha?.today && gacha.today.choice === null && !!gacha.held
   const resume = () => {
     const b = burst.current
@@ -239,16 +239,16 @@ export function V2Gacha() {
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
-          <button type="button" className="v2-gacha-start" onClick={pending ? resume : start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />{pending ? '当選した券を選ぶ' : gacha?.today?.choice ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
-          {pending && <p className="v2-gacha-again">本日の当選券がまだ選ばれていません</p>}
-          {gacha?.today?.choice && <p className="v2-gacha-again">次のガチャは明日 0:00 から回せます</p>}
+          <button type="button" className="v2-gacha-start" onClick={pending ? resume : start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />{pending ? '当選した券を選ぶ' : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
+          {pending && <p className="v2-gacha-again">当選した券がまだ選ばれていません</p>}
+          {gacha?.today?.choice && !gacha.repeat && <p className="v2-gacha-again">次のガチャは明日 0:00 から回せます</p>}
         </div>
       </section>
       {gacha?.held && (
         <section className="v2-gacha-held" aria-label="お持ちのガチャ券">
           <span>お持ちのガチャ券</span>
           <b>{gacha.held.title}</b>
-          <small>{gachaDays(gacha.held)}・{gachaUntil(gacha.held.expires_at)}<br />アプリのご予約でお使いいただけます</small>
+          <small>{gachaDays(gacha.held)}・{gachaUntil(gacha.held.expires_at)}<br />AI予約でご利用いただけます</small>
         </section>
       )}
       <p className="v2-gacha-note">音が出ます。音量にご注意ください。<br />ガチャは1日1回、ガチャ券は1枚までお持ちいただけます。</p>
@@ -345,7 +345,7 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
           </button>
         </div>
         <button type="button" className="v2-gold-btn" disabled={!pick || keeping} onClick={() => pick && onChoose(pick)}>{keeping ? '保存しています…' : '決定する'}</button>
-        <small className="v2-gacha-fine">どちらもアプリのご予約でお使いいただけます。<br />閉じても、今日中ならあとから選べます。</small>
+        <small className="v2-gacha-fine">どちらもAI予約でご利用いただけます。<br />閉じても、あとから選べます。</small>
       </>
     )
   }
@@ -354,7 +354,7 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
       <Head prize={prize} />
       {choice === 'old' && held
         ? <span>現在お持ちのガチャ券（{held.title}）を残しました。</span>
-        : held && <span>ガチャ券をお渡ししました。<br />{gachaDays(held)}・{gachaUntil(held.expires_at)}<br />アプリのご予約でお使いいただけます。</span>}
+        : held && <span>ガチャ券をお渡ししました。<br />{gachaDays(held)}・{gachaUntil(held.expires_at)}<br />AI予約でご利用いただけます。</span>}
       <button type="button" className="v2-gold-btn" onClick={onClose}>閉じる<ChevronRight size={20} strokeWidth={1.8} aria-hidden /></button>
     </>
   )

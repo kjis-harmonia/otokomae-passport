@@ -15,6 +15,7 @@ export type GachaChoice = 'auto' | 'new' | 'old'
 export type GachaState = {
   today: { id: string; prize: GachaPrize; choice: GachaChoice | null } | null
   held: GachaHeld | null
+  repeat?: boolean // true＝何回でも引ける（Staging の試し用）
   error?: string
 }
 
