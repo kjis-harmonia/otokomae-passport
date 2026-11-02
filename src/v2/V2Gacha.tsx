@@ -1,11 +1,13 @@
 // 本日のガチャ（10/29 慶一郎さん、10/30 動画を3部構成に）：下タブ「ガチャ」→「本日のガチャを回す」で演出の動画を画面いっぱいに流す。
-// 1部〜3部（INTRO、深海の秘宝：海に沈む神殿→光る球）→ タップ待ち（WAIT、くり返し）→ お客様が球をタップ → 3部 開放 → 真っ白 → 4部 銀ちゃん（OPEN、1本につないである）→ 結果。景品・1日1回はまだ決まっていないので、結果は「準備中」。
+// 1部〜3部（INTRO、深海の秘宝：海に沈む神殿→光る球）→ タップ待ち（WAIT、くり返し）→ お客様が球をタップ → 3部 開放 → 真っ白 → 4部 銀ちゃん（OPEN、1本につないである）→ 結果。
+// 景品（11/3）：回し始めたらサーバーで抽選（1日1回・同じ日は同じ結果）。演出のあいだに結果が届き、最後にガチャ券を見せる。券を持っていれば、どちらを残すか選んでもらう。
 // 動画は public/gacha（Gemini で作ったもの・縦 9:16）。INTRO の終わりは WAIT の始まりと同じコマ、WAIT は終わりと始まりを 0.5 秒重ねてくり返し。OPEN は開放→真っ白（0.75 秒で白へ）→スキューバの銀ちゃんが黄金チケットを掲げる（白から 0.5 秒で溶かす・10/30）。
 // 3本は別の video を重ねる。次の動画が実際に動き出してから前の動画を隠す（切り替えで黒や下絵が挟まらない）。開放はタップのあと待ちを早送りで終わりまで進め、待ちの最後のコマ＝開放の最初のコマでつなぐ（11/1）。
 // iPhone は preload を守らず流しながら読むので、電波しだいでカクカクする（10/30「球体もカクカク」）。タブを開いたら3本とも先に全部読み、読み終わってからボタンを押せる。
 // 音は独立したWeb Audioのクロックでつなぐ。videoは常にミュートし、待機のループでAACの再始動やended待ちの無音を挟まない。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pointer, Sparkles, X } from 'lucide-react'
+import { canUseGacha, drawGacha, gachaDays, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
 
 // 演出はテーマを開くたびにランダム（11/1）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
@@ -95,6 +97,23 @@ export function V2Gacha() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const move = useCallback((next: Phase) => { phaseRef.current = next; setPhase(next) }, [])
+  const [gacha, setGacha] = useState<GachaState | null>(null) // 今日の結果と持ち券
+  const [drawn, setDrawn] = useState<GachaState | 'error' | null>(null) // 今回回した結果（演出のあいだに届く）
+  const [keeping, setKeeping] = useState(false)
+
+  useEffect(() => {
+    if (!canUseGacha()) return
+    let live = true
+    loadGacha().then(s => { if (live) setGacha(s) }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
+  const choose = async (choice: 'new' | 'old') => {
+    if (keeping) return
+    setKeeping(true)
+    try { const s = await keepGacha(choice); setGacha(s); setDrawn(s) } catch { /* 選べなければそのまま。もう一度押せる */ }
+    finally { setKeeping(false) }
+  }
 
   useEffect(() => {
     if (src) return
@@ -129,6 +148,8 @@ export function V2Gacha() {
     w.loop = true
     w.playbackRate = 1
     setTicket(false)
+    setDrawn(null)
+    drawGacha().then(s => { setDrawn(s); setGacha(s) }).catch(() => setDrawn('error'))
     setTop('intro')
     move('intro')
     void play(i).catch(close)
@@ -205,10 +226,18 @@ export function V2Gacha() {
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
-          <button type="button" className="v2-gacha-start" onClick={start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />本日のガチャを回す</> : `準備しています ${pct}%`}</button>
+          <button type="button" className="v2-gacha-start" onClick={start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />{gacha?.today?.choice ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
+          {gacha?.today?.choice && <p className="v2-gacha-again">次のガチャは明日 0:00 から回せます</p>}
         </div>
       </section>
-      <p className="v2-gacha-note">音が出ます。音量にご注意ください。</p>
+      {gacha?.held && (
+        <section className="v2-gacha-held" aria-label="お持ちのガチャ券">
+          <span>お持ちのガチャ券</span>
+          <b>{gacha.held.title}</b>
+          <small>{gachaDays(gacha.held)}・{gachaUntil(gacha.held.expires_at)}<br />アプリのご予約でお使いいただけます</small>
+        </section>
+      )}
+      <p className="v2-gacha-note">音が出ます。音量にご注意ください。<br />ガチャは1日1回、ガチャ券は1枚までお持ちいただけます。</p>
 
       <div className={`v2-gacha-stage v2-gacha-${THEME.id}${showing ? ' is-on' : ''}`} aria-hidden={!showing} onClick={open}>
         <video ref={wait} src={src?.[WAIT]} poster={POSTER} loop muted playsInline preload="auto" />
@@ -234,14 +263,47 @@ export function V2Gacha() {
         {phase === 'tap' && <p className="v2-gacha-tap"><Pointer size={30} strokeWidth={1.6} aria-hidden />{THEME.tap ?? '光る球をタップ'}</p>}
         {phase === 'result' && (
           <div className={`v2-gacha-result${ticket ? ' is-ticket' : ''}`} onClick={e => e.stopPropagation()}>
-            <Sparkles size={28} />
-            <b>景品は準備中です</b>
-            <span>もうすぐ始まります。お楽しみに。</span>
-            <button type="button" onClick={close}>閉じる</button>
+            <GachaResult drawn={drawn} keeping={keeping} onChoose={choose} onClose={close} />
           </div>
         )}
         {showing && <button type="button" className="v2-gacha-close" aria-label="閉じる" onClick={e => { e.stopPropagation(); close() }}><X size={22} /></button>}
       </div>
     </div>
+  )
+}
+
+const RANK: Record<GachaPrize['rank'], string | null> = { normal: null, rare: '当たり', legend: '大当たり' }
+
+/** 結果：出た券。券を持っていたら、どちらを残すか選んでもらう */
+function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState | 'error' | null; keeping: boolean; onChoose: (c: 'new' | 'old') => void; onClose: () => void }) {
+  if (drawn === 'error') {
+    return <><b>結果を受け取れませんでした</b><span>電波の良いところで、もう一度お試しください。本日の結果は変わりません。</span><button type="button" onClick={onClose}>閉じる</button></>
+  }
+  if (!drawn?.today) return <span>結果を受け取っています…</span>
+  const { prize, choice } = drawn.today
+  const held = drawn.held
+  const rank = RANK[prize.rank]
+  if (choice === null && held) {
+    return (
+      <>
+        {rank && <em className="v2-gacha-rank">{rank}</em>}
+        <b>{prize.title}</b>
+        <span>ガチャ券は1枚だけお持ちいただけます。<br />どちらを残しますか？</span>
+        <div className="v2-gacha-pick">
+          <button type="button" disabled={keeping} onClick={() => onChoose('new')}><small>新しい券</small><strong>{prize.title}</strong><small>{gachaDays(prize)}・30日間</small></button>
+          <button type="button" disabled={keeping} onClick={() => onChoose('old')}><small>今の券</small><strong>{held.title}</strong><small>{gachaDays(held)}・{gachaUntil(held.expires_at)}</small></button>
+        </div>
+      </>
+    )
+  }
+  return (
+    <>
+      {rank && <em className="v2-gacha-rank">{rank}</em>}
+      <b>{prize.title}</b>
+      {choice === 'old' && held
+        ? <span>今の券（{held.title}）を残しました。</span>
+        : held && <span>ガチャ券をお渡ししました。<br />{gachaDays(held)}・{gachaUntil(held.expires_at)}<br />アプリのご予約でお使いいただけます。</span>}
+      <button type="button" onClick={onClose}>閉じる</button>
+    </>
   )
 }

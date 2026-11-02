@@ -397,15 +397,36 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 
 
 /* 本日のガチャ：カードから、縦の動画を画面いっぱいに。開放（burst）は待ちの上に重ね、動き出してから見せる */
-.v2-gacha-card { position: relative; overflow: hidden; border-radius: 28px; background: #120c06; border: 1px solid rgba(201,162,74,.45); box-shadow: 0 18px 40px rgba(60,40,10,.22); }
-/* 銀ちゃんとガチャマシンの絵（下端は台の色に溶かす） */
-.v2-gacha-poster { display: block; width: 100%; aspect-ratio: 1086 / 1100; object-fit: cover; -webkit-mask-image: linear-gradient(180deg, #000 88%, transparent); mask-image: linear-gradient(180deg, #000 88%, transparent); }
-.v2-gacha-body { padding: 4px 18px 18px; }
-.v2-gacha-start { width: 100%; min-height: 56px; border-radius: 30px; border: 1px solid #e2c27f; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
-  background: linear-gradient(135deg, #8a6420, #e7c77e 55%, #b38834); color: #2a1c08; font: 700 17px/1 var(--v2-serif); letter-spacing: .1em; box-shadow: 0 0 24px rgba(231,199,126,.45); }
+.v2-gacha-card { position: relative; overflow: hidden; border-radius: 28px; background: #fff; border: 1px solid var(--v2-line); box-shadow: 0 12px 30px rgba(60,40,10,.10); }
+/* 銀ちゃんとガチャマシンの絵（11/3 白背景の絵に差し替え。カードも白にして絵の地とつなげる） */
+.v2-gacha-poster { display: block; width: 100%; aspect-ratio: 1086 / 815; object-fit: cover; }
+.v2-gacha-body { padding: 0 18px 20px; }
+/* 「本日のガチャを回す」（11/3 慶一郎さん）：シャンパンゴールドの立体ボタン。
+   上品なゴールドのグラデーション・外周に極細の金の線・上側にほんの少しの光の反射・下に柔らかい影。押すと軽く沈む */
+.v2-gacha-start { position: relative; width: 100%; min-height: 58px; border-radius: 30px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+  border: .5px solid #b8944f; color: #3a2a12; font: 700 17px/1 var(--v2-serif); letter-spacing: .12em; -webkit-tap-highlight-color: transparent;
+  background: linear-gradient(180deg, #f6e7c4 0%, #e9d1a0 45%, #d7b77c 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.85), inset 0 -1px 0 rgba(140,104,48,.25), 0 1px 0 #b8944f, 0 6px 14px rgba(120,88,36,.22), 0 2px 4px rgba(120,88,36,.18);
+  transition: transform .08s ease, box-shadow .08s ease; }
+/* 上側の光の反射（上の3割だけ、うっすら） */
+.v2-gacha-start::before { content: ''; position: absolute; inset: 1px 1px auto; height: 42%; border-radius: 29px 29px 60% 60% / 29px 29px 14px 14px; background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0)); pointer-events: none; }
+.v2-gacha-start:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 2px rgba(120,88,36,.25), 0 1px 0 #b8944f, 0 2px 5px rgba(120,88,36,.18); }
 .v2-gacha-start:disabled { cursor: default; opacity: .7; }
-.v2-gacha-note { margin: 12px 0 0; text-align: center; font-size: 12px; color: var(--v2-sub); }
-.v2-gacha-stage { position: fixed; inset: 0; z-index: 300; background: #000; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .35s ease; }
+.v2-gacha-note { margin: 12px 0 0; text-align: center; font-size: 12px; line-height: 1.6; color: var(--v2-sub); }
+.v2-gacha-again { margin: 10px 0 0; text-align: center; font-size: 13px; color: var(--v2-sub); }
+/* 持っているガチャ券（1枚だけ）：文字だけで静かに */
+.v2-gacha-held { margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: #fff; border: 1px solid var(--v2-line); display: grid; gap: 2px; }
+.v2-gacha-held span { font-size: 12px; color: var(--v2-sub); }
+.v2-gacha-held b { font: 700 18px/1.4 var(--v2-serif); }
+.v2-gacha-held small { font-size: 12px; color: var(--v2-sub); line-height: 1.5; }
+.v2-gacha-rank { font: 700 13px/1 var(--v2-serif); font-style: normal; letter-spacing: .3em; margin-right: -.3em; color: #e2c27f; }
+.v2-gacha-pick { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.v2-gacha-result .v2-gacha-pick button { margin: 0; min-height: 0; padding: 12px 8px; border-radius: 16px; display: grid; gap: 4px; justify-items: center; letter-spacing: .04em; }
+.v2-gacha-pick button:disabled { opacity: .5; }
+.v2-gacha-pick small { font: 400 11px/1.3 var(--v2-sans); color: rgba(242,230,200,.7); letter-spacing: 0; }
+.v2-gacha-pick strong { font: 700 15px/1.35 var(--v2-serif); word-break: keep-all; overflow-wrap: anywhere; }
+.v2-gacha-result b, .v2-gacha-held b { word-break: keep-all; overflow-wrap: anywhere; }
+.v2-gacha-stage { position: fixed; inset: 0; z-index: 300; background: #000; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .2s ease; }
 .v2-gacha-stage.is-on { opacity: 1; visibility: visible; pointer-events: auto; }
 .v2-gacha-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .v2-gacha-stage video.is-off { opacity: 0; }
