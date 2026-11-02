@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronRight, Pointer, Sparkles, X } from 'lucide-react'
 import { canUseGacha, drawGacha, gachaDays, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
+import { afterPresentedFrame } from '../features/gacha/presentedFrame'
 
 // 演出はガチャ画面を開くたびにランダム（11/1、11/3 アプリを開き直さなくても画面ごとに選び直す）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
@@ -19,8 +20,8 @@ const THEMES: Theme[] = [
   { id: 'galaxy', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
     audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg', hold: true }, // 保留中（11/1「宇宙編微妙やな」）。ランダムには出さない
   // 恐竜編：レックスの咆哮→大草原→洞窟→光る足跡。開放は足跡から光の柱→真っ白→鳳凰編の走る銀ちゃん（1本につないである・11/2）
-  { id: 'dino', name: '太古の覇王', tap: '光る足跡をタップ', intro: '/gacha/dino/intro.mp4', introPoster: '/gacha/dino/intro.jpg', wait: '/gacha/dino/wait.mp4', open: '/gacha/dino/open.mp4', poster: '/gacha/dino/wait.jpg',
-    audio: { intro: '/gacha/dino/intro-audio.m4a', wait: '/gacha/dino/wait-audio.wav', open: '/gacha/dino/open-audio.m4a' } },
+  { id: 'dino', name: '太古の覇王', tap: '光る足跡をタップ', intro: '/gacha/dino/intro.mp4?v=seam2', introPoster: '/gacha/dino/intro.jpg?v=seam2', wait: '/gacha/dino/wait.mp4?v=seam2', open: '/gacha/dino/open.mp4?v=seam2', poster: '/gacha/dino/wait.jpg?v=seam2',
+    audio: { intro: '/gacha/dino/intro-audio.m4a?v=seam2', wait: '/gacha/dino/wait-audio.wav', open: '/gacha/dino/open-audio.m4a?v=seam2' } },
 ]
 // ?gacha=galaxy で決めうち（見比べる用・保留中のテーマも出せる）
 const pick = new URLSearchParams(location.search).get('gacha')
@@ -96,6 +97,7 @@ export function V2Gacha() {
   const introSoundStarted = useRef(false)
   const openSoundStarted = useRef(false)
   const waitStop = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reveals = useRef(new Set<() => void>())
   const [top, setTop] = useState<'intro' | 'wait' | 'burst'>('intro') // いま前に出ている動画
   const [src, setSrc] = useState<Record<string, string> | null>(cache?.urls ?? null)
   const [pct, setPct] = useState(0)
@@ -128,6 +130,8 @@ export function V2Gacha() {
   }, [src, attempt, THEME])
 
   const close = useCallback(() => {
+    reveals.current.forEach(cancel => cancel())
+    reveals.current.clear()
     if (waitStop.current) clearTimeout(waitStop.current)
     waitStop.current = null
     setTicket(false)
@@ -178,20 +182,28 @@ export function V2Gacha() {
     const w = wait.current
     const b = burst.current
     if (!i || !w || !b) return
+    const pendingReveals = reveals.current
+    const presented = (v: HTMLVideoElement, reveal: () => void) => {
+      const cancel = afterPresentedFrame(v, () => { pendingReveals.delete(cancel); reveal() })
+      pendingReveals.add(cancel)
+    }
     // 1部・2部の最後のコマを出したまま待ちを流し、動き出したら入れ替える
     const introPlaying = () => {
       if (phaseRef.current !== 'intro' || introSoundStarted.current) return
       introSoundStarted.current = true
-      sound.current?.startIntro(undefined, i.currentTime)
+      presented(i, () => { if (phaseRef.current === 'intro') sound.current?.startIntro(undefined, i.currentTime) })
     }
     const introEnded = () => { if (phaseRef.current === 'intro') { move('tap'); void play(w).catch(close) } }
-    const waitPlaying = () => { if (phaseRef.current === 'tap') setTop('wait') }
+    const waitPlaying = () => { if (phaseRef.current === 'tap') presented(w, () => { if (phaseRef.current === 'tap') setTop('wait') }) }
     const burstPlaying = () => {
       if (phaseRef.current !== 'open' || openSoundStarted.current) return
       openSoundStarted.current = true
-      sound.current?.open(undefined, b.currentTime)
-      setTop('burst')
-      waitStop.current = setTimeout(() => w.pause(), 600) // Only the visual fade; audio has its own scheduled crossfade.
+      presented(b, () => {
+        if (phaseRef.current !== 'open') return
+        sound.current?.open(undefined, b.currentTime)
+        setTop('burst')
+        waitStop.current = setTimeout(() => w.pause(), 600) // Only the visual fade; audio has its own scheduled crossfade.
+      })
     }
     const waitEnded = () => { if (phaseRef.current === 'open') void play(b).catch(close) } // 早送りで終わりまで来たら開放へ
     const burstEnded = () => { if (phaseRef.current === 'open') move('result') }
@@ -217,11 +229,13 @@ export function V2Gacha() {
       document.removeEventListener('visibilitychange', hide)
       window.removeEventListener('pagehide', close)
       if (waitStop.current) clearTimeout(waitStop.current)
+      pendingReveals.forEach(cancel => cancel())
+      pendingReveals.clear()
       sound.current?.dispose()
       sound.current = null
       for (const v of [i, w, b]) v.pause()
     }
-  }, [close, move])
+  }, [close, move, THEME])
 
   // 開放の動画は待ちの最後のコマから始まる。待ちの途中から切り替えると球の中の模様や光の輪が違い、別の球に見える（11/1 慶一郎さん「宝珠別物やね?」）。
   // タップしたら待ちを早送り（最大4倍・だいたい0.6秒）で終わりまで進め、最後のコマから開放へそのままつなぐ。音は開放が動き出したところで交差させる
@@ -231,6 +245,9 @@ export function V2Gacha() {
     if (phaseRef.current !== 'tap' || !w || !b) return
     move('open')
     sound.current?.unlock()
+    // This edit opens from the same stone, with a short lit transition. Keep
+    // the live loop at normal speed underneath the reveal, even on an early tap.
+    if (THEME.id === 'dino') { void play(b).catch(close); return }
     const left = w.duration - w.currentTime
     if (!Number.isFinite(left) || left < 0.1) { w.pause(); void play(b).catch(close); return }
     w.loop = false

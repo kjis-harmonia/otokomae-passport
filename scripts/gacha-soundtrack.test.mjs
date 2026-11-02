@@ -48,10 +48,87 @@ test('all video tags stay muted and hidden/closed playback is cleaned up', () =>
 })
 test('all gacha MP4s use the mobile-compatible H.264 High profile, not High 4:4:4', () => {
   for (const name of ['intro', 'wait', 'open']) {
-    const bytes = fs.readFileSync(new URL(`../public/gacha/gacha-${name}.mp4`, import.meta.url))
+    for (const path of [`gacha-${name}.mp4`, `dino/${name}.mp4`]) {
+    const bytes = fs.readFileSync(new URL(`../public/gacha/${path}`, import.meta.url))
     const avc = bytes.indexOf(Buffer.from('avcC'))
     assert(avc >= 0, `${name}: missing AVC configuration`)
     assert.equal(bytes[avc + 4], 1)
     assert.equal(bytes[avc + 5], 100, `${name}: expected H.264 High (8-bit 4:2:0)`)
+    }
   }
+})
+
+function frameFixture(native = true) {
+  const source = fs.readFileSync(new URL('../src/features/gacha/presentedFrame.ts', import.meta.url), 'utf8')
+  const module = { exports: {} }
+  let next = 1
+  const frames = new Map()
+  const paints = new Map()
+  const cancelled = []
+  const video = native ? {
+    requestVideoFrameCallback(fn) { const id = next++; frames.set(id, fn); return id },
+    cancelVideoFrameCallback(id) { cancelled.push(id); frames.delete(id) },
+  } : {}
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText,
+    { exports: module.exports, requestAnimationFrame(fn) { const id = next++; paints.set(id, fn); return id }, cancelAnimationFrame(id) { cancelled.push(id); paints.delete(id) } })
+  const paint = () => { const batch = [...paints.values()]; paints.clear(); batch.forEach(fn => fn()) }
+  return { after: module.exports.afterPresentedFrame, video, frames, paints, paint, cancelled }
+}
+
+test('next video stays hidden until an actual decoder frame is presented', () => {
+  const { after, video, frames } = frameFixture()
+  let shown = 0
+  after(video, () => shown++)
+  assert.equal(shown, 0)
+  const callback = [...frames.values()][0]
+  callback()
+  assert.equal(shown, 1)
+  callback()
+  assert.equal(shown, 1)
+})
+
+test('closing cancels a pending reveal and a late callback cannot reopen it', () => {
+  const { after, video, frames, cancelled } = frameFixture()
+  let shown = 0
+  const cancel = after(video, () => shown++)
+  const late = [...frames.values()][0]
+  cancel()
+  assert.equal(frames.size, 0)
+  assert.equal(cancelled.length, 1)
+  late()
+  assert.equal(shown, 0)
+})
+
+test('older WebKit keeps the outgoing picture for two paint opportunities', () => {
+  const { after, video, paint } = frameFixture(false)
+  let shown = 0
+  after(video, () => shown++)
+  paint()
+  assert.equal(shown, 0)
+  paint()
+  assert.equal(shown, 1)
+})
+
+test('fallback reveal is cancellable between its two paints', () => {
+  const { after, video, paint, paints } = frameFixture(false)
+  let shown = 0
+  const cancel = after(video, () => shown++)
+  paint()
+  cancel()
+  paint()
+  assert.equal(shown, 0)
+  assert.equal(paints.size, 0)
+})
+
+test('a cancelled previous run cannot reveal over the next run', () => {
+  const { after, video, frames } = frameFixture()
+  const shown = []
+  const cancel = after(video, () => shown.push('old'))
+  const old = [...frames.values()][0]
+  cancel()
+  after(video, () => shown.push('new'))
+  old()
+  assert.deepEqual(shown, [])
+  ;[...frames.values()][0]()
+  assert.deepEqual(shown, ['new'])
 })
