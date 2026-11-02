@@ -9,18 +9,19 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronRight, Pointer, Sparkles, X } from 'lucide-react'
 import { canUseGacha, drawGacha, gachaDays, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
+import { isStaging } from '../utils/env'
 import { afterPresentedFrame } from '../features/gacha/presentedFrame'
 
 // 演出はガチャ画面を開くたびにランダム（11/1、11/3 アプリを開き直さなくても画面ごとに選び直す）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
-type Theme = { id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean }
+type Theme = { short: string; id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean }
 const THEMES: Theme[] = [
-  { id: 'deep', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
+  { id: 'deep', short: '深海編', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
   // 銀河の音は1部の終わりがそのまま待ちの頭へ続く曲なので、重ねるのは短く。開放は 7.9 秒で真っ白になりきる。そこからチケットを飛ばす
-  { id: 'galaxy', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
+  { id: 'galaxy', short: '銀河編', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
     audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg', hold: true }, // 保留中（11/1「宇宙編微妙やな」）。ランダムには出さない
   // 恐竜編：レックスの咆哮→大草原→洞窟→光る足跡。開放は足跡から光の柱→真っ白→鳳凰編の走る銀ちゃん（1本につないである・11/2）
-  { id: 'dino', name: '太古の覇王', tap: '光る足跡をタップ', intro: '/gacha/dino/intro.mp4?v=seam2', introPoster: '/gacha/dino/intro.jpg?v=seam2', wait: '/gacha/dino/wait.mp4?v=seam2', open: '/gacha/dino/open.mp4?v=seam2', poster: '/gacha/dino/wait.jpg?v=seam2',
+  { id: 'dino', short: '恐竜編', name: '太古の覇王', tap: '光る足跡をタップ', intro: '/gacha/dino/intro.mp4?v=seam2', introPoster: '/gacha/dino/intro.jpg?v=seam2', wait: '/gacha/dino/wait.mp4?v=seam2', open: '/gacha/dino/open.mp4?v=seam2', poster: '/gacha/dino/wait.jpg?v=seam2',
     audio: { intro: '/gacha/dino/intro-audio.m4a?v=seam2', wait: '/gacha/dino/wait-audio.wav', open: '/gacha/dino/open-audio.m4a?v=seam2' } },
 ]
 // ?gacha=galaxy で決めうち（見比べる用・保留中のテーマも出せる）
@@ -30,8 +31,8 @@ const LIVE = THEMES.filter(t => !t.hold)
 const LAST_KEY = "ginjiro-gacha-last-theme"
 const readLast = () => { try { return localStorage.getItem(LAST_KEY) } catch { return null } }
 const saveLast = (id: string) => { try { localStorage.setItem(LAST_KEY, id) } catch { /* 覚えられなくても回せる */ } }
-const pickTheme = () => {
-  const fixed = THEMES.find(t => t.id === pick)
+const pickTheme = (chosen: Theme["id"] | null) => {
+  const fixed = THEMES.find(t => t.id === (chosen ?? pick))
   if (fixed) return fixed
   const last = readLast()
   const pool = LIVE.filter(t => t.id !== last)
@@ -94,9 +95,15 @@ const play = (v: HTMLVideoElement) => {
 }
 const rewind = (v: HTMLVideoElement) => { v.pause(); v.currentTime = 0 }
 
+// Staging だけ：演出を選んで見られる（11/3 慶一郎さん「海底編、恐竜編で見たいけん、ボタン設置して」）。選び直すと画面ごと作り直す
 export function V2Gacha() {
-  const [THEME] = useState(pickTheme)
-  useEffect(() => { if (!pick) saveLast(THEME.id) }, [THEME])
+  const [chosen, setChosen] = useState<Theme["id"] | null>(null)
+  return <GachaScreen key={chosen ?? "auto"} chosen={chosen} onChoose={isStaging() ? setChosen : undefined} />
+}
+
+function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoose?: (id: Theme["id"]) => void }) {
+  const [THEME] = useState(() => pickTheme(chosen))
+  useEffect(() => { if (!pick && !chosen) saveLast(THEME.id) }, [THEME, chosen])
   const { intro: INTRO, introPoster: INTRO_POSTER, wait: WAIT, open: OPEN, poster: POSTER } = THEME
   const cache = caches[THEME.id] ?? null
   const intro = useRef<HTMLVideoElement>(null)
@@ -276,6 +283,12 @@ export function V2Gacha() {
           <button type="button" className="v2-gacha-start" onClick={pending ? resume : start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />{pending ? '当選した券を選ぶ' : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
           {pending && <p className="v2-gacha-again">当選した券がまだ選ばれていません</p>}
           {gacha?.today?.choice && !gacha.repeat && <p className="v2-gacha-again">次のガチャは明日 0:00 から回せます</p>}
+          {onChoose && (
+            <div className="v2-gacha-themes" role="group" aria-label="演出を選ぶ（Staging）">
+              <span>Staging：演出を選ぶ</span>
+              {LIVE.map(t => <button key={t.id} type="button" aria-pressed={t.id === THEME.id} onClick={() => onChoose(t.id)}>{t.short}</button>)}
+            </div>
+          )}
         </div>
       </section>
       {gacha?.held && (

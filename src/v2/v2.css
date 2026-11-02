@@ -533,3 +533,8 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-campaign-hide input:checked + i { background: #f8f6f1; border-color: #f8f6f1; }
 .v2-campaign-hide input:focus-visible + i { outline: 2px solid #d8bd86; outline-offset: 2px; }
 .v2-campaign-close { height: 44px; padding: 0 4px; border: 0; background: none; color: #fff; font: 600 14px/1 var(--v2-sans); cursor: pointer; }
+/* Staging だけ：演出を選ぶ（11/3） */
+.v2-gacha-themes { margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.v2-gacha-themes span { width: 100%; text-align: center; font-size: 12px; color: var(--v2-sub); }
+.v2-gacha-themes button { min-width: 96px; min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--v2-line, #ddd); background: #fff; color: var(--v2-sub); font: 600 14px/1 var(--v2-sans); }
+.v2-gacha-themes button[aria-pressed="true"] { border-color: #b8944f; color: #6b5226; background: #fbf5e8; }
