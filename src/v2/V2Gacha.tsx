@@ -10,7 +10,7 @@ import { ChevronRight, Pointer, Sparkles, X } from 'lucide-react'
 import { canUseGacha, drawGacha, gachaDays, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
 
-// 演出はテーマを開くたびにランダム（11/1）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
+// 演出はガチャ画面を開くたびにランダム（11/1、11/3 アプリを開き直さなくても画面ごとに選び直す）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
 type Theme = { id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean }
 const THEMES: Theme[] = [
@@ -25,15 +25,16 @@ const THEMES: Theme[] = [
 // ?gacha=galaxy で決めうち（見比べる用・保留中のテーマも出せる）
 const pick = new URLSearchParams(location.search).get('gacha')
 const LIVE = THEMES.filter(t => !t.hold)
-const THEME = THEMES.find(t => t.id === pick) ?? LIVE[Math.floor(Math.random() * LIVE.length)]
-const { intro: INTRO, introPoster: INTRO_POSTER, wait: WAIT, open: OPEN, poster: POSTER } = THEME
+const pickTheme = () => THEMES.find(t => t.id === pick) ?? LIVE[Math.floor(Math.random() * LIVE.length)]
 
 type Phase = 'idle' | 'intro' | 'tap' | 'open' | 'result'
 
-const FILES = [INTRO, WAIT, OPEN]
-let cache: { urls: Record<string, string>; audio: GachaAudioBuffers } | null = null
-async function loadAll(onProgress: (pct: number) => void, outerSignal: AbortSignal) {
-  if (cache) return cache
+type Loaded = { urls: Record<string, string>; audio: GachaAudioBuffers }
+const caches: Partial<Record<Theme["id"], Loaded>> = {} // 一度読んだテーマはアプリを閉じるまで持っておく
+async function loadAll(THEME: Theme, onProgress: (pct: number) => void, outerSignal: AbortSignal) {
+  const FILES = [THEME.intro, THEME.wait, THEME.open]
+  const had = caches[THEME.id]
+  if (had) return had
   const controller = new AbortController()
   const abort = () => controller.abort()
   outerSignal.addEventListener('abort', abort)
@@ -63,8 +64,9 @@ async function loadAll(onProgress: (pct: number) => void, outerSignal: AbortSign
     return objectUrl
   })), loadGachaAudio(signal, THEME.audio)])
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-  cache = { urls: Object.fromEntries(FILES.map((u, k) => [u, urls[k]])), audio }
-  return cache
+  const loaded = { urls: Object.fromEntries(FILES.map((u, k) => [u, urls[k]])), audio }
+  caches[THEME.id] = loaded
+  return loaded
   } catch (error) {
     controller.abort()
     created.forEach(url => URL.revokeObjectURL(url))
@@ -81,6 +83,9 @@ const play = (v: HTMLVideoElement) => {
 const rewind = (v: HTMLVideoElement) => { v.pause(); v.currentTime = 0 }
 
 export function V2Gacha() {
+  const [THEME] = useState(pickTheme)
+  const { intro: INTRO, introPoster: INTRO_POSTER, wait: WAIT, open: OPEN, poster: POSTER } = THEME
+  const cache = caches[THEME.id] ?? null
   const intro = useRef<HTMLVideoElement>(null)
   const wait = useRef<HTMLVideoElement>(null)
   const burst = useRef<HTMLVideoElement>(null)
@@ -118,9 +123,9 @@ export function V2Gacha() {
   useEffect(() => {
     if (src) return
     const ac = new AbortController()
-    loadAll(setPct, ac.signal).then(ready => { if (!ac.signal.aborted) setSrc(ready.urls) }).catch(() => { if (!ac.signal.aborted) setLoadFailed(true) })
+    loadAll(THEME, setPct, ac.signal).then(ready => { if (!ac.signal.aborted) setSrc(ready.urls) }).catch(() => { if (!ac.signal.aborted) setLoadFailed(true) })
     return () => ac.abort()
-  }, [src, attempt])
+  }, [src, attempt, THEME])
 
   const close = useCallback(() => {
     if (waitStop.current) clearTimeout(waitStop.current)
