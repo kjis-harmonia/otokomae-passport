@@ -315,8 +315,8 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
         <Head prize={prize} />
         <span>ガチャ券は1枚だけお持ちいただけます。<br />どちらを残しますか？</span>
         <div className="v2-gacha-pick">
-          <button type="button" disabled={keeping} onClick={() => onChoose('new')}><small>新しい券</small><strong>{prize.title}</strong><small>{gachaDays(prize)}・30日間</small></button>
-          <button type="button" disabled={keeping} onClick={() => onChoose('old')}><small>今の券</small><strong>{held.title}</strong><small>{gachaDays(held)}・{gachaUntil(held.expires_at)}</small></button>
+          <button type="button" disabled={keeping} onClick={() => onChoose('new')}><small>新しいガチャ券</small><strong>{prize.title}</strong><small>{gachaDays(prize)}・30日間</small></button>
+          <button type="button" disabled={keeping} onClick={() => onChoose('old')}><small>現在お持ちのガチャ券</small><strong>{held.title}</strong><small>{gachaDays(held)}・{gachaUntil(held.expires_at)}</small></button>
         </div>
       </>
     )
@@ -325,7 +325,7 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
     <>
       <Head prize={prize} />
       {choice === 'old' && held
-        ? <span>今の券（{held.title}）を残しました。</span>
+        ? <span>現在お持ちのガチャ券（{held.title}）を残しました。</span>
         : held && <span>ガチャ券をお渡ししました。<br />{gachaDays(held)}・{gachaUntil(held.expires_at)}<br />アプリのご予約でお使いいただけます。</span>}
       <button type="button" className="v2-gold-btn" onClick={onClose}>閉じる<ChevronRight size={20} strokeWidth={1.8} aria-hidden /></button>
     </>
