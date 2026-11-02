@@ -419,13 +419,6 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gacha-held span { font-size: 12px; color: var(--v2-sub); }
 .v2-gacha-held b { font: 700 18px/1.4 var(--v2-serif); }
 .v2-gacha-held small { font-size: 12px; color: var(--v2-sub); line-height: 1.5; }
-.v2-gacha-rank { font: 700 13px/1 var(--v2-serif); font-style: normal; letter-spacing: .3em; margin-right: -.3em; color: #e2c27f; }
-.v2-gacha-pick { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
-.v2-gacha-result .v2-gacha-pick button { margin: 0; min-height: 0; padding: 12px 8px; border-radius: 16px; display: grid; gap: 4px; justify-items: center; letter-spacing: .04em; }
-.v2-gacha-pick button:disabled { opacity: .5; }
-.v2-gacha-pick small { font: 400 11px/1.3 var(--v2-sans); color: rgba(242,230,200,.7); letter-spacing: 0; }
-.v2-gacha-pick strong { font: 700 15px/1.35 var(--v2-serif); word-break: keep-all; overflow-wrap: anywhere; }
-.v2-gacha-result b, .v2-gacha-held b { word-break: keep-all; overflow-wrap: anywhere; }
 .v2-gacha-stage { position: fixed; inset: 0; z-index: 300; background: #000; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .2s ease; }
 .v2-gacha-stage.is-on { opacity: 1; visibility: visible; pointer-events: auto; }
 .v2-gacha-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -439,13 +432,41 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gacha-tap svg { transform: rotate(-12deg); filter: drop-shadow(0 0 8px rgba(120,230,255,.95)); animation: v2-gacha-poke 1.4s ease-in-out infinite; }
 @keyframes v2-gacha-pulse { 0%, 100% { opacity: .7; transform: scale(.98); } 50% { opacity: 1; transform: scale(1.03); } }
 @keyframes v2-gacha-poke { 0%, 100% { transform: rotate(-12deg) translateY(4px); } 50% { transform: rotate(-12deg) translateY(-6px); } }
-/* 結果は下に出す（4部の銀ちゃんを隠さない） */
-.v2-gacha-result { position: absolute; left: 24px; right: 24px; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); max-width: 360px; margin: 0 auto; padding: 28px 22px 22px; border-radius: 26px; text-align: center;
-  background: linear-gradient(160deg, #1a1108, #0a0603); border: 1px solid rgba(226,194,127,.6); color: #e2c27f; display: grid; gap: 10px; justify-items: center;
-  animation: v2-gacha-in .5s .2s ease-out both; }
-.v2-gacha-result b { font: 700 20px/1.4 var(--v2-serif); color: #f2e6c8; letter-spacing: .06em; }
-.v2-gacha-result span { font-size: 14px; color: rgba(242,230,200,.75); }
-.v2-gacha-result button { margin-top: 8px; width: 100%; min-height: 48px; border-radius: 24px; border: 1px solid rgba(226,194,127,.5); background: rgba(226,194,127,.12); color: #f2e6c8; font: 700 15px/1 var(--v2-serif); letter-spacing: .14em; cursor: pointer; }
+/* 結果のポップは下に出す（動画の銀ちゃんと金のチケットを隠さない） */
+/* 黒×金のパネル：外周は金のグラデーションの細い枠、内側にもう1本うすい金の線、上に少しだけ光沢 */
+.v2-gacha-result { position: absolute; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); max-width: 420px; margin: 0 auto; padding: 22px 20px 20px; border-radius: 26px; text-align: center;
+  border: 2px solid transparent; color: #f2e6c8; display: grid; gap: 10px; justify-items: center;
+  background: linear-gradient(180deg, #2b2620 0%, #15110d 55%, #0d0a08 100%) padding-box, linear-gradient(135deg, #f8e6b4, #b8873d 30%, #fff1c8 55%, #9c7330 80%, #e9cd8c) border-box;
+  box-shadow: inset 0 0 0 1px rgba(255,226,160,.18), 0 18px 40px rgba(60,40,15,.35), 0 0 0 1px rgba(255,236,190,.35);
+  animation: v2-gacha-in .5s .25s ease-out both; }
+.v2-gacha-result::before { content: ''; position: absolute; inset: 0 0 auto; height: 38%; border-radius: 24px 24px 50% 50% / 24px 24px 18px 18px; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0)); pointer-events: none; }
+.v2-gacha-rank { display: flex; align-items: center; gap: 10px; font: 700 21px/1 var(--v2-serif); font-style: normal; letter-spacing: .14em; color: #e9cd8c; }
+.v2-laurel { width: 20px; height: 33px; color: #d9b46a; }
+.v2-laurel.is-flip { transform: scaleX(-1); }
+/* 景品名：金の文字（上が明るく下が深い金） */
+.v2-gacha-result .v2-gacha-prize { font: 800 clamp(26px, 8.6vw, 36px)/1.3 var(--v2-serif); letter-spacing: .04em; word-break: keep-all; overflow-wrap: anywhere;
+  background: linear-gradient(180deg, #fff8e2 10%, #f0d79c 45%, #c99a4d 75%, #e8c784); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+/* 景品名の下の細い金の線（まん中だけ少し明るく） */
+.v2-gacha-rule { display: block; width: 78%; height: 1px; margin: -2px 0 2px; background: linear-gradient(90deg, transparent, rgba(226,190,120,.7) 25%, #fff0c8 50%, rgba(226,190,120,.7) 75%, transparent); }
+.v2-gacha-result span { font-size: 14px; line-height: 1.7; color: rgba(248,240,225,.9); }
+/* 閉じる：シャンパンゴールドの立体ボタン（ガチャを回すボタンと同じ作り）＋右に矢印 */
+.v2-gold-btn { position: relative; margin-top: 6px; width: 100%; min-height: 54px; border-radius: 28px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+  border: .5px solid #b8944f; color: #3a2a12; font: 700 18px/1 var(--v2-serif); letter-spacing: .14em; -webkit-tap-highlight-color: transparent;
+  background: linear-gradient(180deg, #f8ebc9 0%, #ebd3a1 45%, #d2ae6d 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.85), inset 0 -1px 0 rgba(140,104,48,.25), 0 1px 0 #8a6a30, 0 6px 14px rgba(0,0,0,.35);
+  transition: transform .08s ease, box-shadow .08s ease; }
+.v2-gold-btn::before { content: ''; position: absolute; inset: 1px 14px auto; height: 40%; border-radius: 20px 20px 50% 50% / 20px 20px 10px 10px; background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0)); pointer-events: none; }
+.v2-gold-btn:active { transform: translateY(2px); box-shadow: inset 0 1px 2px rgba(120,88,36,.3), 0 1px 0 #8a6a30, 0 2px 5px rgba(0,0,0,.3); }
+/* どちらを残すか：2枚の券を細い金の枠で */
+.v2-gacha-pick { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.v2-gacha-pick button { min-height: 0; padding: 12px 8px; border-radius: 16px; display: grid; gap: 4px; justify-items: center; cursor: pointer; color: #f2e6c8;
+  border: 1px solid rgba(226,190,120,.55); background: rgba(255,236,190,.06); box-shadow: inset 0 1px 0 rgba(255,236,190,.12); transition: transform .08s ease; }
+.v2-gacha-pick button:active:not(:disabled) { transform: translateY(1px); background: rgba(255,236,190,.12); }
+.v2-gacha-pick button:disabled { opacity: .5; }
+.v2-gacha-pick small { font: 400 11px/1.3 var(--v2-sans); color: rgba(242,230,200,.7); }
+.v2-gacha-pick strong { font: 700 15px/1.35 var(--v2-serif); word-break: keep-all; overflow-wrap: anywhere; }
+.v2-gacha-held b { word-break: keep-all; overflow-wrap: anywhere; }
 /* 銀河の秘宝：タップ待ちの文字は星の白金色で光らせる */
 .v2-gacha-galaxy .v2-gacha-tap { text-shadow: 0 0 10px rgba(255,240,200,.95), 0 0 24px rgba(255,215,140,.8), 0 2px 6px rgba(0,0,0,.7); }
 .v2-gacha-galaxy .v2-gacha-tap svg { filter: drop-shadow(0 0 8px rgba(255,230,170,.95)); }

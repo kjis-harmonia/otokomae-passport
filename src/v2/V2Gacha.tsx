@@ -6,7 +6,7 @@
 // iPhone は preload を守らず流しながら読むので、電波しだいでカクカクする（10/30「球体もカクカク」）。タブを開いたら3本とも先に全部読み、読み終わってからボタンを押せる。
 // 音は独立したWeb Audioのクロックでつなぐ。videoは常にミュートし、待機のループでAACの再始動やended待ちの無音を挟まない。
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pointer, Sparkles, X } from 'lucide-react'
+import { ChevronRight, Pointer, Sparkles, X } from 'lucide-react'
 import { canUseGacha, drawGacha, gachaDays, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
 
@@ -262,6 +262,7 @@ export function V2Gacha() {
         )}
         {phase === 'tap' && <p className="v2-gacha-tap"><Pointer size={30} strokeWidth={1.6} aria-hidden />{THEME.tap ?? '光る球をタップ'}</p>}
         {phase === 'result' && (
+          // 結果のポップ（11/3 慶一郎さんの見本：黒×金のパネル）。上の銀ちゃんと金のチケットは動画のまま
           <div className={`v2-gacha-result${ticket ? ' is-ticket' : ''}`} onClick={e => e.stopPropagation()}>
             <GachaResult drawn={drawn} keeping={keeping} onChoose={choose} onClose={close} />
           </div>
@@ -274,20 +275,44 @@ export function V2Gacha() {
 
 const RANK: Record<GachaPrize['rank'], string | null> = { normal: null, rare: '当たり', legend: '大当たり' }
 
+/** 月桂樹の枝（左向き。右は CSS で反転） */
+function Laurel({ flip }: { flip?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 40" className={`v2-laurel${flip ? ' is-flip' : ''}`} aria-hidden>
+      <path d="M17 38C8 32 6 20 10 4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      {[[9.5, 8, -40], [8.3, 14, -30], [7.8, 20, -20], [8.5, 26, -5], [10.5, 31.5, 15]].map(([x, y, r], k) => (
+        <g key={k}>
+          <ellipse cx={x - 3.2} cy={y} rx="3.6" ry="1.5" transform={`rotate(${r} ${x} ${y})`} fill="currentColor" />
+          <ellipse cx={x + 3} cy={y - 1.5} rx="3.2" ry="1.3" transform={`rotate(${(r as number) - 60} ${x} ${y})`} fill="currentColor" />
+        </g>
+      ))}
+    </svg>
+  )
+}
+
+function Head({ prize }: { prize: GachaPrize }) {
+  const rank = RANK[prize.rank]
+  return (
+    <>
+      {rank && <em className="v2-gacha-rank"><Laurel />{rank}<Laurel flip /></em>}
+      <b className="v2-gacha-prize">{prize.title}</b>
+      <i className="v2-gacha-rule" aria-hidden />
+    </>
+  )
+}
+
 /** 結果：出た券。券を持っていたら、どちらを残すか選んでもらう */
 function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState | 'error' | null; keeping: boolean; onChoose: (c: 'new' | 'old') => void; onClose: () => void }) {
   if (drawn === 'error') {
-    return <><b>結果を受け取れませんでした</b><span>電波の良いところで、もう一度お試しください。本日の結果は変わりません。</span><button type="button" onClick={onClose}>閉じる</button></>
+    return <><b>結果を受け取れませんでした</b><span>電波の良いところで、もう一度お試しください。本日の結果は変わりません。</span><button type="button" className="v2-gold-btn" onClick={onClose}>閉じる</button></>
   }
   if (!drawn?.today) return <span>結果を受け取っています…</span>
   const { prize, choice } = drawn.today
   const held = drawn.held
-  const rank = RANK[prize.rank]
   if (choice === null && held) {
     return (
       <>
-        {rank && <em className="v2-gacha-rank">{rank}</em>}
-        <b>{prize.title}</b>
+        <Head prize={prize} />
         <span>ガチャ券は1枚だけお持ちいただけます。<br />どちらを残しますか？</span>
         <div className="v2-gacha-pick">
           <button type="button" disabled={keeping} onClick={() => onChoose('new')}><small>新しい券</small><strong>{prize.title}</strong><small>{gachaDays(prize)}・30日間</small></button>
@@ -298,12 +323,11 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
   }
   return (
     <>
-      {rank && <em className="v2-gacha-rank">{rank}</em>}
-      <b>{prize.title}</b>
+      <Head prize={prize} />
       {choice === 'old' && held
         ? <span>今の券（{held.title}）を残しました。</span>
         : held && <span>ガチャ券をお渡ししました。<br />{gachaDays(held)}・{gachaUntil(held.expires_at)}<br />アプリのご予約でお使いいただけます。</span>}
-      <button type="button" onClick={onClose}>閉じる</button>
+      <button type="button" className="v2-gold-btn" onClick={onClose}>閉じる<ChevronRight size={20} strokeWidth={1.8} aria-hidden /></button>
     </>
   )
 }
