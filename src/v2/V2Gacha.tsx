@@ -26,7 +26,18 @@ const THEMES: Theme[] = [
 // ?gacha=galaxy で決めうち（見比べる用・保留中のテーマも出せる）
 const pick = new URLSearchParams(location.search).get('gacha')
 const LIVE = THEMES.filter(t => !t.hold)
-const pickTheme = () => THEMES.find(t => t.id === pick) ?? LIVE[Math.floor(Math.random() * LIVE.length)]
+// 前回と同じ演出は続けない（11/3 慶一郎さん「海底編しか流れん」：半々のくじだと同じものが何回も続くことがある）
+const LAST_KEY = "ginjiro-gacha-last-theme"
+const readLast = () => { try { return localStorage.getItem(LAST_KEY) } catch { return null } }
+const saveLast = (id: string) => { try { localStorage.setItem(LAST_KEY, id) } catch { /* 覚えられなくても回せる */ } }
+const pickTheme = () => {
+  const fixed = THEMES.find(t => t.id === pick)
+  if (fixed) return fixed
+  const last = readLast()
+  const pool = LIVE.filter(t => t.id !== last)
+  const from = pool.length ? pool : LIVE
+  return from[Math.floor(Math.random() * from.length)]
+}
 
 type Phase = 'idle' | 'intro' | 'tap' | 'open' | 'result'
 
@@ -85,6 +96,7 @@ const rewind = (v: HTMLVideoElement) => { v.pause(); v.currentTime = 0 }
 
 export function V2Gacha() {
   const [THEME] = useState(pickTheme)
+  useEffect(() => { if (!pick) saveLast(THEME.id) }, [THEME])
   const { intro: INTRO, introPoster: INTRO_POSTER, wait: WAIT, open: OPEN, poster: POSTER } = THEME
   const cache = caches[THEME.id] ?? null
   const intro = useRef<HTMLVideoElement>(null)
