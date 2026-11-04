@@ -7,7 +7,7 @@
 // 音は独立したWeb Audioのクロックでつなぐ。videoは常にミュートし、待機のループでAACの再始動やended待ちの無音を挟まない。
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronRight, Pointer, Sparkles, X } from 'lucide-react'
-import { canUseGacha, drawGacha, gachaDays, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
+import { canUseGacha, drawGacha, gachaDays, gachaReservedLabel, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
 import { isStaging } from '../utils/env'
 import { afterPresentedFrame } from '../features/gacha/presentedFrame'
@@ -280,8 +280,8 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
-          <button type="button" className="v2-gacha-start" onClick={pending ? resume : start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />{pending ? '当選した券を選ぶ' : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
-          {pending && <p className="v2-gacha-again">当選した券がまだ選ばれていません</p>}
+          <button type="button" className="v2-gacha-start" onClick={pending ? resume : start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />{pending ? (gacha?.held?.reserved ? '当選した券を見る' : '当選した券を選ぶ') : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
+          {pending && <p className="v2-gacha-again">{gacha?.held?.reserved ? '新しい券は、ご来店のあとに受け取れます' : '当選した券がまだ選ばれていません'}</p>}
           {gacha?.today?.choice && !gacha.repeat && <p className="v2-gacha-again">次のガチャは明日 0:00 から回せます</p>}
           {onChoose && (
             <div className="v2-gacha-themes" role="group" aria-label="演出を選ぶ（Staging）">
@@ -295,7 +295,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         <section className="v2-gacha-held" aria-label="お持ちのガチャ券">
           <span>お持ちのガチャ券</span>
           <b>{gacha.held.title}</b>
-          <small>{gachaDays(gacha.held)}・{gachaUntil(gacha.held.expires_at)}<br />AI予約でご利用いただけます</small>
+          <small>{gachaDays(gacha.held)}・{gachaUntil(gacha.held.expires_at)}<br />{gacha.held.reserved ? `${gachaReservedLabel(gacha.held.reserved.starts_at)}で使います` : 'AI予約でご利用いただけます'}</small>
         </section>
       )}
       <p className="v2-gacha-note">音が出ます。音量にご注意ください。<br />ガチャは1日1回、ガチャ券は1枚までお持ちいただけます。</p>
@@ -366,12 +366,26 @@ function Head({ prize }: { prize: GachaPrize }) {
 function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState | 'error' | null; keeping: boolean; onChoose: (c: 'new' | 'old') => void; onClose: () => void }) {
   // どちらを残すか：カードをタップで選ぶ（金の枠）→「決定する」。押し間違いで高い券を手放さないよう2段にする（11/3）
   const [pick, setPick] = useState<'new' | 'old' | null>(null)
+  const [decline, setDecline] = useState(false) // 「新しい券は受け取らない」は2回押しで
   if (drawn === 'error') {
     return <><b>結果を受け取れませんでした</b><span>電波の良いところで、もう一度お試しください。本日の結果は変わりません。</span><button type="button" className="v2-gold-btn" onClick={onClose}>閉じる</button></>
   }
   if (!drawn?.today) return <span>結果を受け取っています…</span>
   const { prize, choice } = drawn.today
   const held = drawn.held
+  // 今の券が予約に付いている：交換はできない（銀Pay の仮支払いとずれるため）。来店して使ったあとに新しい券を受け取れる（11/4）
+  if (choice === null && held?.reserved) {
+    return (
+      <>
+        <Head prize={prize} />
+        <span>現在お持ちのガチャ券（{held.title}）は、<br />{gachaReservedLabel(held.reserved.starts_at)}で使います。<br />新しい券は、ご来店のあとに受け取れます。</span>
+        <button type="button" className="v2-gold-btn" onClick={onClose}>閉じる<ChevronRight size={20} strokeWidth={1.8} aria-hidden /></button>
+        <button type="button" className="v2-gacha-decline" disabled={keeping} onClick={() => (decline ? onChoose('old') : setDecline(true))}>
+          {keeping ? '保存しています…' : decline ? 'もう一度押すと、新しい券は受け取りません' : '新しい券は受け取らない'}
+        </button>
+      </>
+    )
+  }
   if (choice === null && held) {
     return (
       <>

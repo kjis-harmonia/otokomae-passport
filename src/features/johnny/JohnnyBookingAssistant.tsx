@@ -32,7 +32,8 @@ import { pushState } from '../../utils/webPush'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
 import { TICKET_TYPE_LABELS } from '../../data/ticket'
-import { clearCouponPlan, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
+import { clearCouponPlan, gachaNote, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
+import { attachGacha, canUseGacha, loadGacha, type GachaHeld } from '../gacha/gachaApi'
 import { suspendBgm } from '../../audio/bgm'
 import { observeVisibleViewport } from '../../utils/visibleViewport'
 import { infoRequest, isMaintenanceBookingRequest, type InfoRequest } from './infoRequest'
@@ -72,7 +73,7 @@ type Step =
   /** 担当（指名）を選ぶ：確定の前に必ず聞く。avail はその時間にその担当が空いているか */
   | { k: 'pickStaff'; next: ConfirmStep; avail?: Record<string, boolean>; note?: string }
   | { k: 'booking'; menu: MenuOption; slot: Slot }
-  | { k: 'done'; reservation: CustomerReservation; changedFrom?: CustomerReservation; oldKept?: boolean; companion?: CustomerReservation; companionFailed?: boolean; ginpay?: number | 'failed' }
+  | { k: 'done'; reservation: CustomerReservation; changedFrom?: CustomerReservation; oldKept?: boolean; companion?: CustomerReservation; companionFailed?: boolean; ginpay?: number | 'failed'; gacha?: string }
   /** お連れ様：メニューを聞く → 2人分の確認（お連れ様は予約者の時間から一番早く。togetherAt：お二人同時に入れる時刻） */
   | { k: 'companionMenu'; primary: PartyPrimary }
   /** お連れ様のお名前を聞く（お店の予約のメモに入れる・10/30 慶一郎さん「お連れ様の名前が不明のまま」） */
@@ -244,6 +245,16 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // 予約の AI：使えなくなったら、この画面のあいだは決まった規則の JOHNNY で続ける
   const aiOnRef = useRef(true)
   const couponPickRef = useRef<{ key: string; ids: string[] }>({ key: '', ids: [] })
+  // ガチャ券（1枚）：確認画面で使えれば自動で付ける。gachaPlanRef＝付ける予定の確認画面（メニューと時刻）
+  const [gachaHeld, setGachaHeld] = useState<GachaHeld | null>(null)
+  const gachaHeldRef = useRef<GachaHeld | null>(null)
+  useEffect(() => { gachaHeldRef.current = gachaHeld }, [gachaHeld])
+  const gachaPlanRef = useRef('')
+  /** 予約に券を付ける（付いたら券の名前。付かなければ undefined。予約は取れているので失敗しても止めない） */
+  const attachGachaTo = useCallback(async (reservationId: string): Promise<string | undefined> => {
+    try { const s = await attachGacha(reservationId); setGachaHeld(s.held); return s.held?.reserved?.id === reservationId ? s.held.title : undefined }
+    catch { return undefined }
+  }, [])
   const turnsRef = useRef<AgentTurn[]>([{ role: 'assistant', text: 'いつのご来店をご希望ですか？' }])
   const [myReservations, setMyReservations] = useState<CustomerReservation[]>([])
   // ご本人の予約は1つまで（お連れ様の予約は数えない）。新しく予約するときに本人の予約があれば「キャンセルしてこちらにしますか？」＝変更として確定する
@@ -642,8 +653,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       if (payAmount > 0) {
         try { await holdGinpay(reservation.id, payAmount); ginpayResult = payAmount } catch { ginpayResult = 'failed' }
       }
+      // ガチャ券：確認画面で付けていたら。変更で元の予約に付いていたら、新しい予約に付け直す（使えなければ外れる）
+      const gachaPlan = gachaPlanRef.current
+      gachaPlanRef.current = ''
+      const gacha = gachaPlan === pickKey || (change && gachaHeldRef.current?.reserved?.id === change.id)
+        ? await attachGachaTo(reservation.id) : undefined
       api.reservations().then(setMyReservations).catch(() => {})
-      setStep({ k: 'done', reservation, changedFrom: change, oldKept, ginpay: ginpayResult })
+      setStep({ k: 'done', reservation, changedFrom: change, oldKept, ginpay: ginpayResult, gacha })
     } catch (err) {
       const code = err instanceof RpcError ? err.code : ''
       if (code === 'ai_booking_paused') {
@@ -665,7 +681,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       // 確定まで届いたか分からない（通信切れなど）：「失敗」とは言わず、予約一覧で確かめる
       setStep({ k: 'unknown', menu, slot })
     }
-  }, [api, search, stopListening])
+  }, [api, search, stopListening, attachGachaTo])
 
   const cancelReservation = useCallback(async (reservation: CustomerReservation) => {
     setStep({ k: 'cancelling', reservation })
@@ -763,6 +779,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     if (plan.amount > 0 && plan.key === `${s.primary.menu.code}|${s.primary.slot.starts_at}`) {
       try { await holdGinpay(reservation.id, plan.amount); ginpayResult = plan.amount } catch { ginpayResult = 'failed' }
     }
+    const gachaPlan = gachaPlanRef.current
+    gachaPlanRef.current = ''
+    const gacha = gachaPlan === `${s.primary.menu.code}|${s.primary.slot.starts_at}` ? await attachGachaTo(reservation.id) : undefined
     let companion: CustomerReservation | undefined
     try {
       // お連れ様も担当を決めて取る（指名なしは無い）。予約者と違う担当から順に、空いている人で押さえる
@@ -779,8 +798,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       }
     } catch { /* 下で伝える */ }
     api.reservations().then(setMyReservations).catch(() => {})
-    setStep({ k: 'done', reservation, companion, companionFailed: !companion, ginpay: ginpayResult })
-  }, [api, stopListening])
+    setStep({ k: 'done', reservation, companion, companionFailed: !companion, ginpay: ginpayResult, gacha })
+  }, [api, stopListening, attachGachaTo])
 
   const verifyUnknown = useCallback(async (menu: MenuOption, slot: Slot) => {
     setStep({ k: 'booking', menu, slot })
@@ -1131,15 +1150,25 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [handleText, pickFromOverview, search])
 
   /** 確認画面のお会計と、使える券 */
-  const confirmPrice = useMemo((): { key: string; usable: TicketRow[]; selected: TicketRow[]; price: PriceBreakdown } | null => {
+  // 確認画面に入るたびに持ち券を読み直す（ガチャの画面で引いた・交換したばかりのことがある）
+  const onConfirm = step.k === 'confirm'
+  useEffect(() => {
+    if (!onConfirm || !canUseGacha()) return
+    let alive = true
+    loadGacha().then(s => { if (alive) setGachaHeld(s.held) }).catch(() => {})
+    return () => { alive = false }
+  }, [onConfirm])
+  const confirmPrice = useMemo((): { key: string; usable: TicketRow[]; selected: TicketRow[]; price: PriceBreakdown; gachaNote: string | null } | null => {
     if (step.k !== 'confirm' || step.change) return null
     const key = `${step.menu.code}|${step.slot.starts_at}`
     const usable = usableTickets(myTickets, step.slot.starts_at, step.menu.code)
     const ids = couponPick.key === key ? couponPick.ids : []
     const selected = usable.filter(t => ids.includes(t.id))
-    const price = priceFor(step.menu.code, step.menu.price, step.slot.starts_at, selected)
-    return price ? { key, usable, selected, price } : null
-  }, [step, myTickets, couponPick])
+    // 確定すると入れ替わる予約（ご予約は1つ）にガチャ券が付いていれば、新しい予約に付け直す
+    const changeOf = (step.change ?? ownActive ?? undefined)?.id
+    const price = priceFor(step.menu.code, step.menu.price, step.slot.starts_at, selected, gachaHeld, changeOf)
+    return price ? { key, usable, selected, price, gachaNote: gachaNote(gachaHeld, step.menu.code, step.slot.starts_at, changeOf) } : null
+  }, [step, myTickets, couponPick, gachaHeld, ownActive])
   // 銀Pay で払える（口座があり、使える額がお会計以上）なら、選んでいる間は確定のあとに押さえる
   const ginpayChoice = confirmPrice && ginpay && confirmPrice.price.total > 0
     ? { available: ginpay.available, enough: ginpay.available >= confirmPrice.price.total, on: payGinpay && ginpay.available >= confirmPrice.price.total }
@@ -1148,7 +1177,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // 確認画面にいる間だけ書き換える（確定を押すと画面が「予約中」に変わるので、そこで消さない。使ったら book 側で消す）
   useEffect(() => {
     if (confirmPrice) ginpayPlanRef.current = ginpayOn ? { key: confirmPrice.key, amount: confirmPrice.price.total } : { key: '', amount: 0 }
-  }, [confirmPrice, ginpayOn])
+    if (confirmPrice) gachaPlanRef.current = gachaHeld && confirmPrice.gachaNote === null ? confirmPrice.key : ''
+  }, [confirmPrice, ginpayOn, gachaHeld])
   const toggleCoupon = (key: string, id: string) => setCouponPick(p => {
     const ids = p.key === key ? p.ids : []
     return { key, ids: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] }
@@ -1550,6 +1580,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'confirm' && confirmPrice && (
               <PriceBox menuName={step.menu.name} price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
+                gacha={gachaHeld && confirmPrice.gachaNote === null ? gachaHeld.title : null} gachaNote={confirmPrice.gachaNote}
                 onToggle={id => toggleCoupon(confirmPrice.key, id)} ginpay={ginpayChoice} onGinpay={() => setPayGinpay(v => !v)} />
             )}
             {step.k === 'confirm' && !step.change && <p style={{ margin: '10px 2px 0', fontSize: 12, lineHeight: 1.6, color: C.secondary }}>{BOOKING_RULE_NOTE}</p>}
@@ -1564,6 +1595,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
 
             {step.k === 'done' && <ReservationSummary r={step.reservation} />}
+            {step.k === 'done' && step.gacha && (
+              <p style={{ width: '100%', margin: '10px 0 0', padding: '12px 14px', borderRadius: 14, background: C.fill, fontSize: 14, lineHeight: 1.6, color: C.text }}>
+                ガチャ券（{step.gacha}）をこのご予約で使います。<br /><span style={{ color: C.secondary, fontSize: 13 }}>ご来店時のお会計で引かれます。</span>
+              </p>
+            )}
             {step.k === 'done' && step.ginpay !== undefined && (
               <p style={{ width: '100%', margin: '10px 0 0', padding: '12px 14px', borderRadius: 14, background: step.ginpay === 'failed' ? C.fill : 'rgba(168,130,63,0.10)', fontSize: 14, lineHeight: 1.6, color: C.text }}>
                 {step.ginpay === 'failed'
@@ -1988,8 +2024,10 @@ function couponSpeech(price: PriceBreakdown | null, usableCount: number): string
 }
 
 /** お会計（プレミアムクーポン・選んだ券）と、使える券のボタン */
-function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpay }: {
+function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpay, gacha, gachaNote }: {
   menuName: string; price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void
+  /** 自動で付くガチャ券の名前（付かなければ null）と、付かない理由 */
+  gacha?: string | null; gachaNote?: string | null
   /** 銀Pay の仮支払い（口座があるときだけ）。enough：使える額がお会計以上 */
   ginpay?: { available: number; enough: boolean; on: boolean } | null; onGinpay?: () => void
 }) {
@@ -2001,6 +2039,7 @@ function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpa
         <SummaryRow label={`料金（${menuName}）`} value={yenOf(price.normal ?? price.base)} />
         {price.normal != null && p && <SummaryRow label={p.def.title} value={`−${yenOf(price.normal - price.base)}`} />}
         {selected.map(t => <SummaryRow key={t.id} label={TICKET_TYPE_LABELS[t.type]} value={`−${yenOf(t.amount)}`} />)}
+        {gacha && <SummaryRow label={`ガチャ券（${gacha}）`} value={`−${yenOf(price.gacha)}`} />}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 54, padding: '0 16px', borderTop: `0.5px solid ${C.separator}` }}>
           <span style={{ fontSize: 15, color: C.secondary }}>{ginpay?.on ? 'お会計（銀Pay）' : 'お会計（店頭で）'}</span>
           <span style={{ fontSize: 22, fontWeight: 700 }}>{yenOf(price.total)}</span>
@@ -2028,6 +2067,9 @@ function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpa
         <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>
           {ginpay ? `お支払いは店頭で。銀Payの使える額（${yenOf(ginpay.available)}）が足りないため、今すぐの支払いはできません。` : 'お支払いは店頭で。現金・カードのほか、銀Payも使えます。'}
         </p>
+      )}
+      {gachaNote && (
+        <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>{gachaNote}</p>
       )}
       {p && !p.eligible && (
         <p style={{ margin: '8px 4px 0', fontSize: 13, color: C.secondary, lineHeight: 1.5 }}>

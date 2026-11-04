@@ -6,8 +6,8 @@ import { idempotencyKey } from '../../utils/ginpayApi'
 import { checkoutAttemptSnapshot, subscribeCheckoutAttempt, readCheckoutAttempt, sameCheckout, settleCheckout, startNextCheckout, withCheckoutLock, type CheckoutAttempt } from '../../utils/checkoutAttempt'
 import type { ClientCandidate, CustomerApi } from '../../utils/customerApi'
 import {
-  checkoutErrorMessage, saleTotals, TICKET_BLOCK_LABEL,
-  type Catalog, type CatalogItem, type CheckoutApi, type CheckoutContext, type PaymentMethod, type Sale, type SaleLine,
+  checkoutErrorMessage, gachaAmount, saleTotals, TICKET_BLOCK_LABEL,
+  type Catalog, type CatalogItem, type CheckoutApi, type CheckoutContext, type CheckoutTicket, type PaymentMethod, type Sale, type SaleLine,
 } from '../../utils/checkoutApi'
 import { PrimaryButton } from './ledgerUi'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
@@ -54,6 +54,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const [lines, setLines] = useState<Line[]>([])
   const [editing, setEditing] = useState<number | null>(null)
   const [ticketIds, setTicketIds] = useState<string[]>([])
+  const [useGacha, setUseGacha] = useState(true)
   // 店舗端末：会計を開いたあとに下の一覧で選んだ券も、この会計に入れる（10/27：選んでも差し引かれなかった）
   const latestInitial = useRef(initialTicketIds)
   useEffect(() => { latestInitial.current = initialTicketIds }, [initialTicketIds])
@@ -154,7 +155,15 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
 
   const clientInfo = ctx?.reservation ? ctx.client : client ?? null
   const tickets = clientInfo ? ctx?.tickets ?? [] : []
-  const chosenTickets = tickets.filter(t => ticketIds.includes(t.id))
+  // 予約に付いたガチャ券：最初から使う状態。券の一覧に並べ、外すこともできる（11/4）
+  const gachaOf = ctx?.reservation ? ctx.gacha ?? null : null
+  const gachaOff = gachaOf ? gachaAmount(gachaOf, lines) : null
+  const gachaTicket: CheckoutTicket | null = gachaOf
+    ? { id: 'gacha', type: 'gacha', title: `ガチャ券 ${gachaOf.title}`, amount: gachaOff ?? 0, expires_at: null, blocked: gachaOff === null ? 'gacha_menu' : null }
+    : null
+  const listed = gachaTicket ? [gachaTicket, ...tickets] : tickets
+  const gachaOn = !!gachaTicket && !gachaTicket.blocked && useGacha
+  const chosenTickets = listed.filter(t => t.id === 'gacha' ? gachaOn : ticketIds.includes(t.id))
   const manualAmount = manual ? Math.max(0, parseInt(manual.amount || '0', 10) || 0) : 0
   const totals = useMemo(() => saleTotals(lines, chosenTickets, manualAmount), [lines, chosenTickets, manualAmount])
   const paid = !!ctx?.paid_sale_id
@@ -182,6 +191,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const ticketSum = chosenTickets.reduce((n, t) => n + t.amount, 0)
   const ticketOver = Math.max(0, ticketSum - Math.max(0, beforeTickets))
   function toggleTicket(id: string, type: string) {
+    if (id === 'gacha') { setUseGacha(v => !v); return }
     // 割引券・漢トク券は何枚でも種類をまたいでも使える。メンテナンスクーポンだけはほかの券と一緒に使えない
     setTicketIds(ids => ids.includes(id) ? ids.filter(x => x !== id)
       : type === 'coupon' ? [id]
@@ -240,6 +250,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       const proposed: CheckoutAttempt = attempt ?? { version: 1, backend: api.backend, customerLabel: clientInfo?.name ?? ctx?.reservation?.customer_name ?? '匿名', operator: api.operator(), createdAt: new Date().toISOString(), input: {
         reservation_id: ctx?.reservation?.id, client_id: ctx?.reservation ? undefined : client?.id,
         stylist_id: stylistId!, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.source === 'manual' && !l.name.trim() ? 'オプション' : l.name.trim() || l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
+        use_gacha: gachaOn || undefined,
         manual_discount: manualAmount > 0 ? { amount: manualAmount, label: manual!.label.trim() } : undefined,
         payment_method: method!, expected_total: Math.max(0, totals.total), idempotency_key: saleKey,
         ginpay_account_id: method === 'ginpay' ? ginpayAccount?.id : undefined,
@@ -367,10 +378,10 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               </div>
 
               {/* クーポン（App 会員）・値引き */}
-              {tickets.length > 0 && (
+              {listed.length > 0 && (
                 <div style={{ marginTop: 8 }}>
-                  {tickets.map(t => {
-                    const on = ticketIds.includes(t.id)
+                  {listed.map(t => {
+                    const on = t.id === 'gacha' ? gachaOn : ticketIds.includes(t.id)
                     const permOnly = !hasPerm && welcomeIds.includes(t.id)
                     const off = !!t.blocked || permOnly
                     return (

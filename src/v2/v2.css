@@ -473,6 +473,8 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gacha-pick button[aria-pressed="true"] em { color: #f0d79c; }
 .v2-gold-btn:disabled { opacity: .45; cursor: default; }
 .v2-gacha-fine { font-size: 12px; line-height: 1.6; color: rgba(248,240,225,.7); }
+.v2-gacha-decline { min-height: 44px; padding: 0 12px; border: 0; background: none; cursor: pointer; font-size: 13px; color: rgba(248,240,225,.7); text-decoration: underline; text-underline-offset: 3px; -webkit-tap-highlight-color: transparent; }
+.v2-gacha-decline:disabled { opacity: .6; }
 .v2-gacha-held b { word-break: keep-all; overflow-wrap: anywhere; }
 /* 銀河の秘宝：タップ待ちの文字は星の白金色で光らせる */
 .v2-gacha-galaxy .v2-gacha-tap { text-shadow: 0 0 10px rgba(255,240,200,.95), 0 0 24px rgba(255,215,140,.8), 0 2px 6px rgba(0,0,0,.7); }

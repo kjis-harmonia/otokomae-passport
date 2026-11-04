@@ -9,6 +9,7 @@ import { GINJIRO_CLASSICS, GINPARA, SPECIAL_PERM, type CouponDefinition } from '
 import { isPermOnlyCoupon } from './welcomeCoupon'
 import { supabase } from '../lib/supabase'
 import { callCustomerRpc, getCustomerSession } from './customerSession'
+import type { GachaHeld } from '../features/gacha/gachaApi'
 
 /** プレミアムクーポンの対象メニュー（アプリのメニューの code） */
 const PREMIUM_BY_MENU: Record<string, CouponDefinition> = {
@@ -127,11 +128,36 @@ export interface PriceBreakdown {
   base: number
   premium: PremiumApplied | null
   ticketsTotal: number
+  /** ガチャ券の値引き（予約に自動で付く・無ければ 0） */
+  gacha: number
   total: number
 }
 
+/** ガチャ券をこの予約に使えないときのひとこと（持っていない・使えるなら null） */
+export function gachaNote(held: GachaHeld | null | undefined, menuCode: string, startsAt: string, changeOf?: string): string | null {
+  if (!held || gachaOff(held, menuCode, startsAt, 0, changeOf) !== null) return null
+  const name = `ガチャ券（${held.title}）`
+  if (held.reserved && held.reserved.id !== changeOf) {
+    const d = new Date(Date.parse(held.reserved.starts_at) + 9 * 3600000)
+    return `${name}は、${d.getUTCMonth() + 1}月${d.getUTCDate()}日のご予約で使います。`
+  }
+  if (Date.parse(held.expires_at) <= Date.parse(startsAt)) return `${name}は、このご予約の日には期限が切れています。`
+  if (held.weekday_only && isWeekendOrHoliday(startsAt)) return `${name}は、平日のご予約で使えます。`
+  if (held.menu_codes) return `${name}は、${held.free_menu ?? '対象のメニュー'}のご予約で使えます。`
+  return `${name}は、メンテナンスカットには使えません。`
+}
+
+/** ガチャ券をこの予約に使うときの値引き額（使えなければ null）。サーバーの gacha_unfit と同じ条件 */
+export function gachaOff(held: GachaHeld | null | undefined, menuCode: string, startsAt: string, base: number | null, changeOf?: string): number | null {
+  if (!held || (held.reserved && held.reserved.id !== changeOf)) return null
+  if (Date.parse(held.expires_at) <= Date.parse(startsAt)) return null
+  if (held.weekday_only && isWeekendOrHoliday(startsAt)) return null
+  if (held.menu_codes ? !held.menu_codes.includes(menuCode) : menuCode === 'maintenance') return null
+  return held.amount ?? base
+}
+
 /** お会計：メニューの料金（menuPrice＝アプリの料金）・プレミアム・選んだ券から */
-export function priceFor(menuCode: string, menuPrice: number | null, startsAt: string, selected: readonly TicketRow[]): PriceBreakdown | null {
+export function priceFor(menuCode: string, menuPrice: number | null, startsAt: string, selected: readonly TicketRow[], gachaHeld?: GachaHeld | null, changeOf?: string): PriceBreakdown | null {
   // そのお客様が払ったことのあるメニューは、その人の料金
   const mine = personalPrice(menuCode)
   const premium = mine != null ? null : premiumFor(menuCode, startsAt)
@@ -139,7 +165,8 @@ export function priceFor(menuCode: string, menuPrice: number | null, startsAt: s
   const base = mine ?? (premium ? (premium.eligible ? premium.memberPrice : premium.normalPrice) : menuPrice)
   if (base == null) return null
   const ticketsTotal = selected.reduce((a, t) => a + t.amount, 0)
-  return { normal: premium?.eligible ? premium.normalPrice : null, base, premium, ticketsTotal, total: Math.max(0, base - ticketsTotal) }
+  const gacha = gachaOff(gachaHeld, menuCode, startsAt, base, changeOf) ?? 0
+  return { normal: premium?.eligible ? premium.normalPrice : null, base, premium, ticketsTotal, gacha, total: Math.max(0, base - ticketsTotal - gacha) }
 }
 
 // ── 選んだ券を端末に覚える（予約の日まで） ──
