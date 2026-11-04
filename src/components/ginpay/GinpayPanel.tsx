@@ -55,6 +55,17 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
   useEffect(() => { if (startCharging || pending) void openCharge() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tier = useMemo(() => tiers?.find(t => t.cash === cash) ?? null, [tiers, cash])
+  // 取消・返金で全額戻った取引（「取消」「返金」を出さない・11/4 Sランク点検 ST-04）
+  const fullyReversed = useMemo(() => {
+    const left = new Map<string, number>()
+    for (const t of ledger?.transactions ?? []) if (t.status === 'posted' && t.type !== 'void' && t.type !== 'refund') left.set(t.id, t.amount)
+    for (const t of ledger?.transactions ?? []) {
+      if (t.status === 'posted' && (t.type === 'void' || t.type === 'refund') && t.original_transaction_id && left.has(t.original_transaction_id)) {
+        left.set(t.original_transaction_id, (left.get(t.original_transaction_id) ?? 0) + t.amount)
+      }
+    }
+    return new Set([...left].filter(([, v]) => v === 0).map(([id]) => id))
+  }, [ledger])
   const canCharge = !!api.chargeTier
   const bonusBalance = ledger?.accounts.reduce((sum, a) => sum + (a.bonus_balance ?? 0), 0) ?? 0
 
@@ -241,7 +252,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
           <div style={{ paddingTop: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 6 }}>履歴</h3>
             {ledger.transactions.length === 0 ? <p style={msgStyle(C.mute)}>履歴はありません</p> : ledger.transactions.map((tx) => (
-              <TransactionRow key={tx.id} tx={tx} canReverse={!!api.void || !!api.refund} onReverse={setReverse} />
+              <TransactionRow key={tx.id} tx={tx} canReverse={!!api.void || !!api.refund} reversed={fullyReversed.has(tx.id)} onReverse={setReverse} />
             ))}
           </div>
         </>
@@ -292,16 +303,18 @@ interface ReverseState {
   unsure?: boolean
 }
 
-function TransactionRow({ tx, canReverse, onReverse }: {
+function TransactionRow({ tx, canReverse, reversed, onReverse }: {
   tx: GinpayTransaction
   canReverse: boolean
+  /** 取消・返金で全額戻っている */
+  reversed: boolean
   onReverse: (state: ReverseState) => void
 }) {
   const amountColor = tx.amount < 0 ? C.text : C.sub
   // 会計に紐付いた取引（会計の支払いと、その取消の戻し）は、会計の取消で会計と一緒に戻す（GINPay 側だけでは戻さない）
   const saleLinked = !!tx.accounting_session_id
-  const canRefund = canReverse && !saleLinked && tx.status === 'posted' && tx.type === 'payment' && tx.amount < 0
-  const canVoid = canReverse && !saleLinked && tx.status === 'posted' && tx.type !== 'void'
+  const canRefund = canReverse && !reversed && !saleLinked && tx.status === 'posted' && tx.type === 'payment' && tx.amount < 0
+  const canVoid = canReverse && !reversed && !saleLinked && tx.status === 'posted' && tx.type !== 'void'
   return (
     <div style={txRowStyle}>
       <span style={{ minWidth: 0 }}>
@@ -316,6 +329,7 @@ function TransactionRow({ tx, canReverse, onReverse }: {
       </span>
       <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: amountColor }}>
         {tx.amount > 0 ? '+' : ''}{yen(tx.amount)}
+        {reversed && <span style={{ display: 'block', marginTop: 4, fontSize: 12, color: C.mute }}>取消済み</span>}
         {(canRefund || canVoid) && (
           <span style={{ display: 'block', marginTop: 4 }}>
             {canRefund && <button type="button" onClick={() => onReverse({ kind: 'refund', transaction: tx, amount: String(Math.abs(tx.amount)), reason: '', error: null, key: idempotencyKey('staff-refund') })} style={smallLink}>返金</button>}
