@@ -35,6 +35,11 @@ export const canUseGacha = hasCustomerSession
 export const loadGacha = async () => check(await callCustomerRpc<GachaState>('customer_gacha_state'))
 export const drawGacha = async () => check(await callCustomerRpc<GachaState>('customer_gacha_draw'))
 export const keepGacha = async (choice: 'new' | 'old') => check(await callCustomerRpc<GachaState>('customer_gacha_keep', { p_choice: choice }))
+/** お連れ様の予約をご本人の予約につなぐ（工程③。無料券をお連れ様に使えるのはつながった予約だけ） */
+export const linkCompanion = async (primaryId: string, companionId: string) => {
+  const r = await callCustomerRpc<{ ok?: boolean; error?: string }>('customer_link_companion', { p_primary: primaryId, p_companion: companionId })
+  if (r?.error) throw new Error(r.error)
+}
 export const attachGacha = async (reservationId: string) => check(await callCustomerRpc<GachaState>('customer_gacha_attach', { p_reservation_id: reservationId }))
 
 /** 「11月10日（火）のご予約」 */

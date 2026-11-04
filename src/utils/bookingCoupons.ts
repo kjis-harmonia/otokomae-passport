@@ -143,7 +143,8 @@ export function gachaNote(held: GachaHeld | null | undefined, menuCode: string, 
   }
   if (Date.parse(held.expires_at) <= Date.parse(startsAt)) return `${name}は、このご予約の日には期限が切れています。`
   if (held.weekday_only && isWeekendOrHoliday(startsAt)) return `${name}は、平日のご予約で使えます。`
-  if (held.menu_codes) return `${name}は、${held.free_menu ?? '対象のメニュー'}のご予約で使えます。`
+  // 無料券はお連れ様1名にも使える（工程③）
+  if (held.menu_codes) return `${name}は、${held.free_menu ?? '対象のメニュー'}のご予約で使えます。${held.free_menu ? 'お連れ様のご予約にも使えます。' : ''}`
   return `${name}は、メンテナンスカットには使えません。`
 }
 
