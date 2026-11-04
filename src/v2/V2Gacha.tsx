@@ -96,8 +96,29 @@ const play = (v: HTMLVideoElement) => {
 const rewind = (v: HTMLVideoElement) => { v.pause(); v.currentTime = 0 }
 
 // Staging だけ：演出を選んで見られる（11/3 慶一郎さん「海底編、恐竜編で見たいけん、ボタン設置して」）。選び直すと画面ごと作り直す
+// 解禁日（11/5 慶一郎さん「ガチャ解禁は11/11って決まってる」）。それまで本番はタブを開くと「準備中」だけ出す（動画も読まない）。Staging は試すのでいつでも開く
+// サーバーも app_private.gacha_settings.opens_on より前は抽選しない（customer_gacha_draw → not_open）
+const GACHA_OPENS = '2026-11-11'
+const gachaOpen = () => isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS
+
+function GachaSoon() {
+  return (
+    <div className="v2-page">
+      <h1 className="v2-title">本日のガチャ</h1>
+      <section className="v2-gacha-card">
+        <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
+        <div className="v2-gacha-body">
+          <p className="v2-big" style={{ fontSize: 20, textAlign: 'center' }}>ただいま準備中です</p>
+          <p className="v2-note" style={{ textAlign: 'center', margin: '6px 0 0' }}>11月11日（水）からお楽しみいただけます。</p>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export function V2Gacha() {
   const [chosen, setChosen] = useState<Theme["id"] | null>(null)
+  if (!gachaOpen()) return <GachaSoon />
   return <GachaScreen key={chosen ?? "auto"} chosen={chosen} onChoose={isStaging() ? setChosen : undefined} />
 }
 
