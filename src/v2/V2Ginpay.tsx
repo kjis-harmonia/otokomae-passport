@@ -25,6 +25,8 @@ export function V2Ginpay({ onBack, onShowQr }: { onBack: () => void; onShowQr: (
     return () => { alive = false }
   }, [])
 
+  const allSuspended = ledger !== null && ledger.accounts.length > 0 && ledger.accounts.every(account => account.status === 'suspended')
+
   return (
     <div className="v2-page">
       <button type="button" className="v2-back" onClick={onBack}><ChevronLeft size={18} />戻る</button>
@@ -39,7 +41,7 @@ export function V2Ginpay({ onBack, onShowQr }: { onBack: () => void; onShowQr: (
         {state === 'signedOut' && <p className="v2-note" style={{ marginTop: 6 }}>店頭で本人確認が済むと、残高が表示されます。</p>}
         {state === 'error' && <p className="v2-note" style={{ marginTop: 6 }}>表示できませんでした。通信を確認してください。</p>}
         {ledger && !ledger.consistent && <p className="v2-note" style={{ marginTop: 6, color: '#a3402f' }}>残高の確認が必要です。店舗へお声がけください。</p>}
-        <p className="v2-note" style={{ margin: '14px 0 14px' }}>お支払い・チャージは店頭で。会員QR をスタッフにお見せください。</p>
+        <p className="v2-note" style={{ margin: '14px 0 14px' }}>{allSuspended ? 'この銀Payは現在お使いいただけません。くわしくはお店にお問い合わせください。' : 'お支払い・チャージは店頭で。会員QR をスタッフにお見せください。'}</p>
         <button type="button" className="v2-btn v2-btn-gold" onClick={onShowQr}><QrCode size={18} />会員QR を表示する</button>
       </section>
 

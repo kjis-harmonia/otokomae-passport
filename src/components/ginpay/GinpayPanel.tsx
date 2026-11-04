@@ -10,6 +10,7 @@ import {
   yen,
 } from '../../utils/ginpayApi'
 import { rpcErrorMessage } from '../../utils/staffSession'
+import { clearPendingCharge, readPendingCharge, savePendingCharge } from '../../utils/pendingGinpayCharge'
 import { C, SANS, inputStyle, linkStyle } from '../booking/ledgerTheme'
 import { Field, PrimaryButton, SecondaryButton } from '../booking/ledgerUi'
 
@@ -28,12 +29,17 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
   const [chargeOpen, setChargeOpen] = useState(false)
   // 店頭チャージは現金で、決まった段階から選ぶ（特典はサーバーが足す）
   const [tiers, setTiers] = useState<GinpayChargeTier[] | null>(null)
-  const [cash, setCash] = useState<number | null>(null)
-  const [memo, setMemo] = useState('')
-  const [confirmingCharge, setConfirmingCharge] = useState(false)
+  // 結果が分からないまま残っているチャージ（このお客様の分）。あれば同じ内容で「結果を確かめる」から始める（11/4）
+  const [pending] = useState(() => { const p = readPendingCharge(); return p?.clientId === clientId ? p : null })
+  const [otherPending] = useState(() => { const p = readPendingCharge(); return !!p && p.clientId !== clientId })
+  const [cash, setCash] = useState<number | null>(pending?.cash ?? null)
+  const [memo, setMemo] = useState(pending?.memo ?? '')
+  const [confirmingCharge, setConfirmingCharge] = useState(!!pending)
   // チャージの確認ごとに1つのキー（通信の再試行で二重にチャージしない）
-  const [chargeKey, setChargeKey] = useState<string | null>(null)
-  const [chargeAccountId, setChargeAccountId] = useState<string | null>(null)
+  const [chargeKey, setChargeKey] = useState<string | null>(pending?.key ?? null)
+  const [chargeAccountId, setChargeAccountId] = useState<string | null>(pending?.accountId ?? null)
+  // 送ったが結果が分からない：金額・口座・メモの選び直しと「やめる」を止め、同じキーで確かめるだけにする
+  const [unsure, setUnsure] = useState(!!pending)
   const [reverse, setReverse] = useState<ReverseState | null>(null)
 
   const load = useCallback(async () => {
@@ -46,9 +52,20 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
   }, [api, clientId])
 
   useEffect(() => { void load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect
-  useEffect(() => { if (startCharging) void openCharge() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (startCharging || pending) void openCharge() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tier = useMemo(() => tiers?.find(t => t.cash === cash) ?? null, [tiers, cash])
+  // 取消・返金で全額戻った取引（「取消」「返金」を出さない・11/4 Sランク点検 ST-04）
+  const fullyReversed = useMemo(() => {
+    const left = new Map<string, number>()
+    for (const t of ledger?.transactions ?? []) if (t.status === 'posted' && t.type !== 'void' && t.type !== 'refund') left.set(t.id, t.amount)
+    for (const t of ledger?.transactions ?? []) {
+      if (t.status === 'posted' && (t.type === 'void' || t.type === 'refund') && t.original_transaction_id && left.has(t.original_transaction_id)) {
+        left.set(t.original_transaction_id, (left.get(t.original_transaction_id) ?? 0) + t.amount)
+      }
+    }
+    return new Set([...left].filter(([, v]) => v === 0).map(([id]) => id))
+  }, [ledger])
   const canCharge = !!api.chargeTier
   const bonusBalance = ledger?.accounts.reduce((sum, a) => sum + (a.bonus_balance ?? 0), 0) ?? 0
 
@@ -71,18 +88,28 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
       setMessage(null)
       return
     }
-    if (!ensureActor()) return
+    if (!ensureActor() || !chargeKey) return
+    // 送る前に端末へ覚える（覚えられなければ送らない：結果が分からなくなったときに二重チャージを防げないため）
+    if (!savePendingCharge({ clientId, cash: tier.cash, memo, accountId: needsAccountChoice ? chargeAccount?.id ?? null : null, key: chargeKey })) {
+      setMessage('この端末に記録できないため、チャージを送れません。ブラウザの設定（プライベートブラウズなど）を確かめてください。')
+      return
+    }
     setLoading(true)
     setMessage(null)
     try {
       const res = await api.chargeTier({
         clientId, cash: tier.cash, memo: memo.trim() || undefined,
-        accountId: needsAccountChoice ? chargeAccount?.id : undefined, idempotencyKey: chargeKey ?? undefined,
+        accountId: needsAccountChoice ? chargeAccount?.id : undefined, idempotencyKey: chargeKey,
       })
       if (!res.ok) {
+        // サーバーが断った（チャージされていない）。覚えたものは消して、選び直せるようにする
+        clearPendingCharge(chargeKey)
+        setUnsure(false)
         setMessage(ginpayErrorMessage(res.error))
         return
       }
+      clearPendingCharge(chargeKey)
+      setUnsure(false)
       setCash(null)
       setMemo('')
       setConfirmingCharge(false)
@@ -91,8 +118,10 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
       setChargeOpen(false)
       setMessage(`現金 ${yen(tier.cash)} を受け取り、${yen(tier.cash + tier.bonus)} をチャージしました。`)
       await load()
-    } catch (err) {
-      setMessage(rpcErrorMessage(err, 'チャージに失敗しました。'))
+    } catch {
+      // 届いたかどうか分からない（通信切れなど）。失敗とは言わず、同じ内容で確かめてもらう
+      setUnsure(true)
+      setMessage('通信が切れて、チャージできたか確かめられませんでした。現金はお預かりしたまま、「結果を確かめる」を押してください。同じ内容で確かめるので、二重にはなりません。')
     } finally {
       setLoading(false)
     }
@@ -108,8 +137,8 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
     setLoading(true)
     try {
       const res = reverse.kind === 'refund'
-        ? await api.refund?.({ transactionId: reverse.transaction.id, amount: parseYenInput(reverse.amount) ?? 0, reason: reverse.reason.trim() })
-        : await api.void?.({ transactionId: reverse.transaction.id, reason: reverse.reason.trim() })
+        ? await api.refund?.({ transactionId: reverse.transaction.id, amount: parseYenInput(reverse.amount) ?? 0, reason: reverse.reason.trim(), idempotencyKey: reverse.key })
+        : await api.void?.({ transactionId: reverse.transaction.id, reason: reverse.reason.trim(), idempotencyKey: reverse.key })
       if (!res) return
       if (!res.ok) {
         setReverse({ ...reverse, error: ginpayErrorMessage(res.error) })
@@ -118,8 +147,9 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
       setReverse(null)
       setMessage(reverse.kind === 'refund' ? '返金を記録しました。' : '取消を記録しました。')
       await load()
-    } catch (err) {
-      setReverse({ ...reverse, error: rpcErrorMessage(err, '処理に失敗しました。') })
+    } catch {
+      // 届いたかどうか分からない：金額・理由を変えずに同じキーで確かめてもらう（押し直しても二重にならない）
+      setReverse({ ...reverse, unsure: true, error: `通信が切れて、${reverse.kind === 'refund' ? '返金' : '取消'}できたか確かめられませんでした。「結果を確かめる」を押してください。同じ内容で確かめるので、二重にはなりません。` })
     } finally {
       setLoading(false)
     }
@@ -160,6 +190,9 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
 
           {canCharge && (
             <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
+              {otherPending && (
+                <p style={msgStyle(C.danger)}>ほかのお客様のチャージで、結果を確かめていないものがあります。そのお客様を開いて「結果を確かめる」を押してください。</p>
+              )}
               {!chargeOpen ? (
                 <button type="button" onClick={() => void openCharge()} style={linkStyle}>チャージ</button>
               ) : (
@@ -168,7 +201,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                     <Field label="チャージ先">
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {activeAccounts.map((a) => (
-                          <button key={a.id} type="button" onClick={() => { setChargeAccountId(a.id); setConfirmingCharge(false) }} style={{
+                          <button key={a.id} type="button" disabled={unsure} onClick={() => { setChargeAccountId(a.id); setConfirmingCharge(false) }} style={{
                             minHeight: 42, padding: '0 14px', borderRadius: 8, border: `1px solid ${chargeAccountId === a.id ? C.text : C.lineStrong}`,
                             background: chargeAccountId === a.id ? C.text : C.bg, color: chargeAccountId === a.id ? C.bg : C.text,
                             fontFamily: SANS, fontSize: 13, cursor: 'pointer',
@@ -183,7 +216,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                         {tiers.map((t) => {
                           const on = cash === t.cash
                           return (
-                            <button key={t.cash} type="button" aria-pressed={on} onClick={() => { setCash(t.cash); setConfirmingCharge(false) }} style={{
+                            <button key={t.cash} type="button" aria-pressed={on} disabled={unsure && !on} onClick={() => { if (!unsure) { setCash(t.cash); setConfirmingCharge(false) } }} style={{
                               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
                               minHeight: 52, padding: '0 16px', borderRadius: 10, border: `1px solid ${on ? C.text : C.lineStrong}`,
                               background: on ? C.text : C.bg, color: on ? C.bg : C.text,
@@ -198,7 +231,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                     )}
                   </Field>
                   <Field label="メモ">
-                    <input value={memo} onChange={e => setMemo(e.target.value)} maxLength={200} style={inputStyle} />
+                    <input value={memo} onChange={e => setMemo(e.target.value)} maxLength={200} style={inputStyle} disabled={unsure} />
                   </Field>
                   {confirmingCharge && (
                     <p style={{ marginTop: 10, fontSize: 14, lineHeight: 1.7 }}>
@@ -206,9 +239,9 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                     </p>
                   )}
                   <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                    <SecondaryButton onClick={() => { setChargeOpen(false); setConfirmingCharge(false); setMessage(null) }} disabled={loading}>やめる</SecondaryButton>
+                    {!unsure && <SecondaryButton onClick={() => { setChargeOpen(false); setConfirmingCharge(false); setMessage(null) }} disabled={loading}>やめる</SecondaryButton>}
                     <PrimaryButton onClick={() => void submitCharge()} disabled={loading || !tier || (needsAccountChoice && !chargeAccount)} style={{ flex: 2 }}>
-                      {loading ? '処理中…' : confirmingCharge ? 'チャージ確定' : '確認へ'}
+                      {loading ? '処理中…' : unsure ? '結果を確かめる' : confirmingCharge ? 'チャージ確定' : '確認へ'}
                     </PrimaryButton>
                   </div>
                 </div>
@@ -219,7 +252,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
           <div style={{ paddingTop: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 6 }}>履歴</h3>
             {ledger.transactions.length === 0 ? <p style={msgStyle(C.mute)}>履歴はありません</p> : ledger.transactions.map((tx) => (
-              <TransactionRow key={tx.id} tx={tx} canReverse={!!api.void || !!api.refund} onReverse={setReverse} />
+              <TransactionRow key={tx.id} tx={tx} canReverse={!!api.void || !!api.refund} reversed={fullyReversed.has(tx.id)} onReverse={setReverse} />
             ))}
           </div>
         </>
@@ -237,18 +270,18 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
             {reverse.kind === 'refund' && (
               <Field label="返金額">
                 <input value={reverse.amount} onChange={e => setReverse({ ...reverse, amount: e.target.value.replace(/[^\d]/g, ''), error: null })}
-                  inputMode="numeric" style={inputStyle} />
+                  inputMode="numeric" style={inputStyle} disabled={reverse.unsure} />
               </Field>
             )}
             <Field label="理由">
               <input value={reverse.reason} onChange={e => setReverse({ ...reverse, reason: e.target.value, error: null })}
-                maxLength={200} style={inputStyle} autoFocus />
+                maxLength={200} style={inputStyle} autoFocus disabled={reverse.unsure} />
             </Field>
             {reverse.error && <p style={msgStyle(C.danger)}>{reverse.error}</p>}
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <SecondaryButton onClick={() => setReverse(null)} disabled={loading}>やめる</SecondaryButton>
+              {!reverse.unsure && <SecondaryButton onClick={() => setReverse(null)} disabled={loading}>やめる</SecondaryButton>}
               <PrimaryButton danger onClick={() => void submitReverse()} disabled={loading || !reverse.reason.trim() || (reverse.kind === 'refund' && !parseYenInput(reverse.amount))} style={{ flex: 2 }}>
-                {loading ? '処理中…' : reverse.kind === 'refund' ? '返金する' : '取消する'}
+                {loading ? '処理中…' : reverse.unsure ? '結果を確かめる' : reverse.kind === 'refund' ? '返金する' : '取消する'}
               </PrimaryButton>
             </div>
           </div>
@@ -264,18 +297,24 @@ interface ReverseState {
   amount: string
   reason: string
   error: string | null
+  /** 画面を開くごとに1つ。押し直しても同じキーで送る */
+  key: string
+  /** 送ったが結果が分からない（通信切れ） */
+  unsure?: boolean
 }
 
-function TransactionRow({ tx, canReverse, onReverse }: {
+function TransactionRow({ tx, canReverse, reversed, onReverse }: {
   tx: GinpayTransaction
   canReverse: boolean
+  /** 取消・返金で全額戻っている */
+  reversed: boolean
   onReverse: (state: ReverseState) => void
 }) {
   const amountColor = tx.amount < 0 ? C.text : C.sub
   // 会計に紐付いた取引（会計の支払いと、その取消の戻し）は、会計の取消で会計と一緒に戻す（GINPay 側だけでは戻さない）
   const saleLinked = !!tx.accounting_session_id
-  const canRefund = canReverse && !saleLinked && tx.status === 'posted' && tx.type === 'payment' && tx.amount < 0
-  const canVoid = canReverse && !saleLinked && tx.status === 'posted' && tx.type !== 'void'
+  const canRefund = canReverse && !reversed && !saleLinked && tx.status === 'posted' && tx.type === 'payment' && tx.amount < 0
+  const canVoid = canReverse && !reversed && !saleLinked && tx.status === 'posted' && tx.type !== 'void'
   return (
     <div style={txRowStyle}>
       <span style={{ minWidth: 0 }}>
@@ -290,10 +329,11 @@ function TransactionRow({ tx, canReverse, onReverse }: {
       </span>
       <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: amountColor }}>
         {tx.amount > 0 ? '+' : ''}{yen(tx.amount)}
+        {reversed && <span style={{ display: 'block', marginTop: 4, fontSize: 12, color: C.mute }}>取消済み</span>}
         {(canRefund || canVoid) && (
           <span style={{ display: 'block', marginTop: 4 }}>
-            {canRefund && <button type="button" onClick={() => onReverse({ kind: 'refund', transaction: tx, amount: String(Math.abs(tx.amount)), reason: '', error: null })} style={smallLink}>返金</button>}
-            {canVoid && <button type="button" onClick={() => onReverse({ kind: 'void', transaction: tx, amount: '', reason: '', error: null })} style={smallLink}>取消</button>}
+            {canRefund && <button type="button" onClick={() => onReverse({ kind: 'refund', transaction: tx, amount: String(Math.abs(tx.amount)), reason: '', error: null, key: idempotencyKey('staff-refund') })} style={smallLink}>返金</button>}
+            {canVoid && <button type="button" onClick={() => onReverse({ kind: 'void', transaction: tx, amount: '', reason: '', error: null, key: idempotencyKey('staff-void') })} style={smallLink}>取消</button>}
           </span>
         )}
       </span>

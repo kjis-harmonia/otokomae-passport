@@ -4,6 +4,19 @@ import {checkJohnnyStoreAccess} from '../supabase/functions/_shared/johnny-store
 const session='local-member-session-'.repeat(3)
 let handler,paidCalls=0,dbCalls=0
 const realFetch=globalThis.fetch
+import {readFile} from 'node:fs/promises'
+import {stripTypeScriptTypes} from 'node:module'
+
+// Load the actual Deno entry, including parameter properties, without changing
+// production code or enabling transform flags for unrelated test processes.
+async function loadEdgeEntry(name,environment){
+ const entry=new URL('../supabase/functions/'+name+'/index.ts',import.meta.url)
+ let source=stripTypeScriptTypes(await readFile(entry,'utf8'),{mode:'transform'})
+ source=source.replaceAll("'../_shared/johnny-store-access.ts'",JSON.stringify(new URL('../supabase/functions/_shared/johnny-store-access.ts',import.meta.url).href))
+ if(name==='johnny-agent')source=source.replaceAll("'./agent.ts'",JSON.stringify(new URL('./agent.ts',entry).href))
+ assert.doesNotMatch(source,/from\s*['"]\.\.?\//,'Entry imports must resolve to the real source files')
+ await import('data:text/javascript;base64,'+Buffer.from(source+'\n// environment: '+environment).toString('base64'))
+}
 try{
  for(const base of ['https://kfufxzmucjljjouzpumi.supabase.co','https://ufyzynpmkxytnhebombq.supabase.co']){
   assert.deepEqual(await checkJohnnyStoreAccess(base,'fixture','short',()=>{throw Error('must not call')}),{status:401,error:'customer_auth_required'})
@@ -18,12 +31,12 @@ try{
    assert.equal(url,base+'/rest/v1/rpc/customer_store_access_status');dbCalls++
    return Response.json({verified:false})
   }
-  await import('../supabase/functions/johnny-agent/index.ts?environment='+new URL(base).hostname)
+  await loadEdgeEntry('johnny-agent',new URL(base).hostname)
   for(const input of [{session,message:'明日予約したい'},{session,audio:'fixture',mime:'audio/webm'},{session,speak:'こんにちは'},{session,audio:'fixture',transcribe_only:true}]){
    const response=await handler(new Request('https://local.invalid',{method:'POST',body:JSON.stringify(input)}))
    assert.equal(response.status,403);assert.equal((await response.json()).error,'store_verification_required')
   }
-  await import('../supabase/functions/johnny-style-advice/index.ts?environment='+new URL(base).hostname)
+  await loadEdgeEntry('johnny-style-advice',new URL(base).hostname)
   const consult=await handler(new Request('https://local.invalid',{method:'POST',body:JSON.stringify({session,message:'髪型を相談したい',menus:[]})}))
   assert.equal(consult.status,403)
  }

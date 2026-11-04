@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { rpcErrorMessage } from '../../utils/staffSession'
+import { RpcError, rpcErrorMessage } from '../../utils/staffSession'
 import { yen } from '../../utils/bookingApi'
 import { reservationSaleLines } from '../../utils/checkoutPricing'
 import { idempotencyKey } from '../../utils/ginpayApi'
@@ -262,7 +262,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       else { if (method === 'ginpay') playCue('ginpayPaid'); onDone(res) } // 銀Pay 払いの確定：「銀ペイ」
     } catch (err) {
       if (!mounted.current) return
-      setError(err instanceof Error ? err.message : rpcErrorMessage(err))
+      setError(checkoutFailureMessage(err))
     } finally { submitting.current = false; if (mounted.current) setBusy(false) }
   }
 
@@ -272,7 +272,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       await startNextCheckout(attempt.input.idempotency_key)
       setError(null); setSaleKey(idempotencyKey('checkout'))
       setLines([]); setManual(null); setMethod(null); methodPicked.current = false; setTicketIds([]); setReload(n => n + 1)
-    } catch (err) { setError(err instanceof Error ? err.message : '前の会計を確認できません。') }
+    } catch (err) { setError(checkoutFailureMessage(err, '前の会計を確認できません。')) }
   }
 
   return (
@@ -704,3 +704,16 @@ const lineBtn: CSSProperties = {
   background: 'none', border: 'none', borderBottom: `1px solid ${C.line}`, color: C.text, fontFamily: SANS, textAlign: 'left', cursor: 'pointer',
 }
 const smallLabel: CSSProperties = { display: 'block', fontSize: 12, color: C.sub, marginBottom: 4 }
+
+/** 会計の確定・確認で失敗したときにスタッフへ出す文（11/4 Sランク点検：通信切れで「TypeError: Failed to fetch」がそのまま出ていた） */
+function checkoutFailureMessage(err: unknown, fallback?: string): string {
+  const message = err instanceof Error ? err.message : ''
+  // 通信切れ（Chrome: Failed to fetch／Safari: Load failed／Firefox: NetworkError）：届いたかどうか分からない。RpcError に包まれて来ることもある
+  if (err instanceof TypeError || /failed to fetch|load failed|networkerror|network request failed/i.test(message)) {
+    return '通信が切れて、会計できたか確かめられませんでした。「前回の会計結果を確認」を押してください。同じ内容で確かめるので、二重にはなりません。'
+  }
+  if (err instanceof RpcError) return rpcErrorMessage(err, fallback)
+  // 端末の中で作った日本語の案内（会計の記録・ほかの画面で会計中など）はそのまま
+  if (/[ぁ-んァ-ン一-龥]/.test(message)) return message
+  return fallback ?? rpcErrorMessage(err)
+}
