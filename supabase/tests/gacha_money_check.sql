@@ -169,6 +169,15 @@ begin
   log := log || pg_temp.chk('無料券はお連れ様に使える', pg_temp.err(public.customer_gacha_attach(T, B)), 'ok');
   log := log || pg_temp.chk('お連れ様の会計は 0円', (pg_temp.sale(B, null, iper, 0, true, 'k-c1')->>'total'), '0');
 
+  log := log || E'── 前の日の当選を今日選ぶ\n';
+  delete from app_private.gacha_holdings where user_id = U;
+  update app_private.gacha_draws set choice = 'old' where user_id = U and choice is null;
+  delete from app_private.gacha_draws where user_id = U and draw_date = app_private.today_jst();
+  perform pg_temp.give(U, 'off300');
+  insert into app_private.gacha_draws (user_id, draw_date, prize_code) values (U, app_private.today_jst() - 1, 'off500');
+  j := public.customer_gacha_keep(T, 'new');
+  log := log || pg_temp.chk('選んだ当選が返事に入る（画面が止まらない）', (j->'today'->'prize'->>'code') || '/' || (j->'today'->>'choice'), 'off500/new');
+
   log := log || E'── 景品の表の守り\n';
   begin
     insert into app_private.gacha_prizes (code, title, amount, weight) values ('bad', '額なし', null, 0);

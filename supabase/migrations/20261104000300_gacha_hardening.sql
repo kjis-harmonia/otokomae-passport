@@ -253,3 +253,31 @@ begin
 end;
 $$;
 revoke all on function app_private.gacha_settle(text) from public, anon, authenticated;
+
+-- 4) 選んだあとの返事に、選んだ当選を必ず入れる（11/4 Staging：前の日の当選を今日選ぶと、返事の today が空になり「結果を受け取っています…」で止まった）
+create or replace function public.customer_gacha_keep(p_session text, p_choice text)
+returns json language plpgsql security definer set search_path = '' as $$
+declare v_user text := app_private.session_user_id(p_session); d app_private.gacha_draws; h app_private.gacha_holdings; v jsonb;
+begin
+  if v_user is null then return json_build_object('error', 'not_signed_in'); end if;
+  if p_choice not in ('new', 'old') then return json_build_object('error', 'bad_choice'); end if;
+  perform pg_advisory_xact_lock(hashtext('gacha:' || v_user));
+  d := app_private.gacha_pending(v_user);
+  if d.id is not null then
+    select * into h from app_private.gacha_holdings where user_id = v_user and used_at is null and expires_at > now() for update;
+    if p_choice = 'new' and h.user_id is not null and (app_private.gacha_active_reservation(h.reservation_id)).id is not null then
+      return json_build_object('error', 'held_reserved');
+    end if;
+    if p_choice = 'new' or h.user_id is null then
+      perform app_private.gacha_hold(v_user, d.id);
+    end if;
+    update app_private.gacha_draws set choice = p_choice, decided_at = now() where id = d.id;
+  end if;
+  v := app_private.gacha_state(v_user)::jsonb;
+  if d.id is not null and v->'today' = 'null'::jsonb then
+    v := jsonb_set(v, '{today}', (select jsonb_build_object('id', x.id, 'prize', app_private.gacha_prize_json(p), 'choice', x.choice, 'draw_date', x.draw_date)
+      from app_private.gacha_draws x join app_private.gacha_prizes p on p.code = x.prize_code where x.id = d.id));
+  end if;
+  return v::json;
+end;
+$$;

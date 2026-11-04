@@ -370,7 +370,16 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
   if (drawn === 'error') {
     return <><b>結果を受け取れませんでした</b><span>電波の良いところで、もう一度お試しください。本日の結果は変わりません。</span><button type="button" className="v2-gold-btn" onClick={onClose}>閉じる</button></>
   }
-  if (!drawn?.today) return <span>結果を受け取っています…</span>
+  if (!drawn) return <span>結果を受け取っています…</span>
+  // 返事は届いたが当選が入っていない（ふつうは起きない）：止まらずに、持っている券を見せて閉じられるようにする（11/4）
+  if (!drawn.today) {
+    return (
+      <>
+        {drawn.held ? <span>お持ちのガチャ券：{drawn.held.title}<br />{gachaDays(drawn.held)}・{gachaUntil(drawn.held.expires_at)}</span> : <span>保存しました。</span>}
+        <button type="button" className="v2-gold-btn" onClick={onClose}>閉じる<ChevronRight size={20} strokeWidth={1.8} aria-hidden /></button>
+      </>
+    )
+  }
   const { prize, choice } = drawn.today
   const held = drawn.held
   // 今の券が予約に付いている：交換はできない（銀Pay の仮支払いとずれるため）。来店して使ったあとに新しい券を受け取れる（11/4）
