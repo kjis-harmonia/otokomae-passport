@@ -26,6 +26,16 @@ export interface CustomerReservation {
   items: { menu_code: string; name: string; duration_min: number; price: number | null }[]
   /** 2時間前を切ってアプリでキャンセルしたとき：AI 予約を再開できる日（YYYY-MM-DD） */
   ai_paused_until?: string
+  /** お連れ様の予約なら、ご本人の予約の id（DB でつないだもの・11/4） */
+  companion_of?: string | null
+  /** お連れ様のお名前（予約メモ「お連れ様：〇〇様」から） */
+  companion_name?: string | null
+}
+
+/** お連れ様の予約をご本人の予約につなぐ（つながらなくても予約はそのまま。別の端末でも見分けられるように） */
+export async function linkCompanion(primaryId: string, companionId: string): Promise<void> {
+  const r = await callCustomerRpc<{ ok?: boolean; error?: string }>('customer_link_companion', { p_primary: primaryId, p_companion: companionId })
+  if (r?.error) throw new Error(r.error)
 }
 
 /** AI 予約が止まっているか（当日キャンセル・無断キャンセルのあと30日） */
