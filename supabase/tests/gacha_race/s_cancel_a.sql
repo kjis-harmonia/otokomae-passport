@@ -1,0 +1,1 @@
+select public.customer_cancel_reservation('race-cust-token2-0123456789abcdef012345678', 'ac3d008f-e09e-4d7e-8656-dc5661c8829e')::text || ' ｜開始 ' || to_char(statement_timestamp() at time zone 'Asia/Tokyo', 'HH24:MI:SS.MS') || ' 終了 ' || to_char(clock_timestamp() at time zone 'Asia/Tokyo', 'HH24:MI:SS.MS') as r;

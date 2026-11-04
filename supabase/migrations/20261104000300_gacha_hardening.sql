@@ -237,3 +237,19 @@ begin
 end;
 $function$
 ;
+
+-- 3) 保留の当選を自動で受け取る前に、持ち券の行を押さえる（同時試験 R8：会計の取消と重なると、取消で戻った券を上書きしていた）。
+--    取消や会計が進行中なら終わるのを待ち、そのあとの状態で決め直す
+create or replace function app_private.gacha_settle(p_user text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare d app_private.gacha_draws;
+begin
+  perform 1 from app_private.gacha_holdings where user_id = p_user for update;
+  d := app_private.gacha_pending(p_user);
+  if d.id is not null and app_private.gacha_held_json(p_user) is null then
+    perform app_private.gacha_hold(p_user, d.id);
+    update app_private.gacha_draws set choice = 'new', decided_at = now() where id = d.id;
+  end if;
+end;
+$$;
+revoke all on function app_private.gacha_settle(text) from public, anon, authenticated;

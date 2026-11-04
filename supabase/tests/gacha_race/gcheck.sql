@@ -1,0 +1,3 @@
+select json_build_object('balance', (select balance_cached from public.ginpay_accounts where client_id = 'c8f53738-85a6-4aec-828f-f8d0cb51cfe2' and status = 'active'),
+  'hold_A', (select string_agg(status || ':' || amount, ',') from app_private.ginpay_holds where reservation_id = 'ac3d008f-e09e-4d7e-8656-dc5661c8829e' and updated_at > now() - interval '10 minutes'),
+  'paid_ginpay', (select coalesce(sum(amount), 0) from public.ginpay_transactions where accounting_session_id in (select id from public.accounting_sessions where reservation_id = 'ac3d008f-e09e-4d7e-8656-dc5661c8829e' and status = 'completed') and type = 'payment'))::text as r;

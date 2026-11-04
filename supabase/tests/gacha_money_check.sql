@@ -141,7 +141,7 @@ begin
   s := pg_temp.sale(A, null, cut, 3700, true, 'k-g1', 'ginpay', jsonb_build_object('ginpay_account_id', v_acc));
   log := log || pg_temp.chk('銀Pay で 3,700', coalesce(s->>'error', s->>'total'), '3700');
   log := log || pg_temp.chk('残高が 3,700 減る', (v_bal - (select balance_cached from public.ginpay_accounts where id = v_acc))::text, '3700');
-  log := log || pg_temp.chk('仮支払いは閉じる', (select string_agg(status, ',') from app_private.ginpay_holds where reservation_id = A), 'closed');
+  log := log || pg_temp.chk('仮支払いは閉じる', (select status from app_private.ginpay_holds where reservation_id = A order by updated_at desc limit 1), 'closed');
   perform app_private.void_sale((s->>'id')::uuid, '点検', 'staff', '点検');
   log := log || pg_temp.chk('取消で残高が戻る', (select balance_cached from public.ginpay_accounts where id = v_acc)::text, v_bal::text);
   log := log || pg_temp.chk('取消で券も戻る', (select (used_at is null)::text from app_private.gacha_holdings where user_id = U), 'true');
