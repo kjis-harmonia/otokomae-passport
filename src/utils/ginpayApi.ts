@@ -87,8 +87,9 @@ export interface GinpayClientApi {
   chargeTiers?(): Promise<GinpayChargeTier[]>
   /** 段階チャージ（現金）。特典はサーバーが段階の表から足す */
   chargeTier?(input: { clientId: string; cash: number; memo?: string; accountId?: string; idempotencyKey?: string }): Promise<GinpayResult>
-  refund?(input: { transactionId: string; amount: number; reason: string }): Promise<GinpayResult>
-  void?(input: { transactionId: string; reason: string }): Promise<GinpayResult>
+  /** idempotencyKey は返金・取消の画面を開くごとに1つ（返事が消えて押し直しても二重にしない・11/4） */
+  refund?(input: { transactionId: string; amount: number; reason: string; idempotencyKey?: string }): Promise<GinpayResult>
+  void?(input: { transactionId: string; reason: string; idempotencyKey?: string }): Promise<GinpayResult>
   adjustment?(input: { clientId: string; amount: number; reason: string; accountId?: string }): Promise<GinpayResult>
 }
 
@@ -178,13 +179,13 @@ export function createStaffGinpayApi(actor: () => string): GinpayClientApi {
       p_amount: input.amount,
       p_staff_name: actor(),
       p_reason: input.reason,
-      p_idempotency_key: idempotencyKey('staff-refund'),
+      p_idempotency_key: input.idempotencyKey ?? idempotencyKey('staff-refund'),
     })),
     void: (input) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_void', {
       p_transaction_id: input.transactionId,
       p_staff_name: actor(),
       p_reason: input.reason,
-      p_idempotency_key: idempotencyKey('staff-void'),
+      p_idempotency_key: input.idempotencyKey ?? idempotencyKey('staff-void'),
     })),
     adjustment: (input) => asGinpayResult(() => callStaffRpc<GinpayTransaction>('staff_ginpay_adjustment', {
       p_client_id: input.clientId,
@@ -203,12 +204,12 @@ export const hqGinpayApi: GinpayClientApi = {
     p_transaction_id: input.transactionId,
     p_amount: input.amount,
     p_reason: input.reason,
-    p_idempotency_key: idempotencyKey('hq-refund'),
+    p_idempotency_key: input.idempotencyKey ?? idempotencyKey('hq-refund'),
   })),
   void: (input) => asGinpayResult(() => callHqRpc<GinpayTransaction>('hq_ginpay_void', {
     p_transaction_id: input.transactionId,
     p_reason: input.reason,
-    p_idempotency_key: idempotencyKey('hq-void'),
+    p_idempotency_key: input.idempotencyKey ?? idempotencyKey('hq-void'),
   })),
   adjustment: (input) => asGinpayResult(() => callHqRpc<GinpayTransaction>('hq_ginpay_adjustment', {
     p_client_id: input.clientId,
