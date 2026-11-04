@@ -37,7 +37,8 @@ async function race(first, second) {
 
 const cases = [
   { name: 'R1 会計の確定中に、お客様が券を交換', prep: [], a: 's_sale_sleep.sql', b: 's_keep_new.sql',
-    want: (r, s) => json(r.rb)?.error === 'held_reserved' && s.sales_A === 1 && s.paid_A === 3700 && s.gacha_used_in_sales === 1 },
+    // 2本目は、1本目より先に見れば held_reserved、鍵を待って1本目のあとに進めば（券はもう使われたので）新しい券を受け取る。どちらでも会計は1回・券は1枚だけ使う
+    want: (r, s) => (json(r.rb)?.error === 'held_reserved' || (times(r.rb)[1] >= times(r.ra)[1] && json(r.rb)?.held?.code === 'off500' && /^off500 used=false/.test(s.holding))) && s.sales_A === 1 && s.paid_A === 3700 && s.gacha_used_in_sales === 1 },
   { name: 'R2 同じ予約を2台の端末で同時に会計', prep: [], a: 's_sale_sleep.sql', b: 's_sale2.sql',
     want: (r, s) => json(r.rb)?.error === 'already_paid' && s.sales_A === 1 && s.paid_A === 3700 && s.gacha_used_in_sales === 1 },
   { name: 'R3 会計の確定中に、お客様が別の予約へ券を付ける', prep: [], a: 's_sale_sleep.sql', b: 's_attach_b.sql',
@@ -55,7 +56,8 @@ const cases = [
 ]
 
 let ng = 0
-for (const c of cases) {
+const only = process.argv[2]
+for (const c of cases.filter(c => !only || c.name.startsWith(only + ' '))) {
   await query('setup.sql')
   const g0 = c.ginpay ? json(await query('gcheck.sql')) : null
   for (const f of c.prep) await query(f)
@@ -66,7 +68,8 @@ for (const c of cases) {
   const ok = r.overlap && c.want(r, s, g0, g1, pend)
   if (!ok) ng++
   console.log(`${ok ? 'OK' : 'NG'}  ${c.name}${r.overlap ? '' : '（重ならなかった）'}`)
-  if (!ok) console.log(`    1本目：${r.ra.slice(0, 160)}\n    2本目：${r.rb.slice(0, 160)}\n    状態：${JSON.stringify(s)} ${g1 ? JSON.stringify(g1) : ''} 保留=${pend}`)
+  if (!ok) console.log(`    1本目：${r.ra.slice(0, 160)}\n    2本目：${r.rb.slice(0, 160)}\n    時刻：1本目 ${times(r.ra).map(x=>x.toFixed(2)).join("〜")} ／ 2本目 ${times(r.rb).map(x=>x.toFixed(2)).join("〜")}
+    状態：${JSON.stringify(s)} ${g1 ? JSON.stringify(g1) : ''} 保留=${pend}`)
 }
 await query('teardown.sql')
 console.log(ng ? `NG ${ng} 件` : '全部 OK')
