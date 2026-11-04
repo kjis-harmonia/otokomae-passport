@@ -111,13 +111,11 @@ test('同じブラウザの別タブによる同時送信を待ち行列へ入�
 test('会員QRはサーバー名を維持し、通信失敗を初回登録と扱わない', async () => {
   let registrations = 0
   const api = { lookup: async () => ({ customer: { name: '訂正済み氏名' } }), register: async () => { registrations++; return { customer: { name: '古い氏名' } } } }
-  const existing = await resolveMemberQr('member-a', '古い氏名', false, api)
+  const existing = await resolveMemberQr('member-a', '古い氏名', api)
   assert.equal(existing.customer.name, '訂正済み氏名'); assert.equal(registrations, 0)
-  await assert.rejects(resolveMemberQr('member-a', '古い氏名', false, { ...api, lookup: async () => { throw Error('offline') } }), /offline/)
+  await assert.rejects(resolveMemberQr('member-a', '古い氏名', { ...api, lookup: async () => { throw Error('offline') } }), /offline/)
   assert.equal(registrations, 0)
-  await assert.rejects(resolveMemberQr('member-a', '古い氏名', true, { ...api, lookup: async () => ({ customer: null }) }), /会員情報/)
-  assert.equal(registrations, 0)
-  await resolveMemberQr('new-member', '初回氏名', false, { ...api, lookup: async () => ({ customer: null }) })
+  await resolveMemberQr('new-member', '初回氏名', { ...api, lookup: async () => ({ customer: null }) })
   assert.equal(registrations, 1)
 })
 

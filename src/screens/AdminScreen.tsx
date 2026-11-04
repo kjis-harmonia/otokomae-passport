@@ -1,5 +1,4 @@
 import { pendingIssuance, prepareIssuance, resolveIssuance, withIssuanceLock, type PendingIssuance } from '../utils/ticketIssuance'
-import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
 import {StaffStoreApproval} from '../features/customerAccess/StoreVerification'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
@@ -459,7 +458,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
     // 登録に失敗した状態では発行・使用に進ませない。
     let ctx
     try {
-      ctx = await resolveMemberQr(passportData.userId, passportData.name, !!passportData.storeRequestId && CUSTOMER_ACCESS_ENABLED, {
+      ctx = await resolveMemberQr(passportData.userId, passportData.name, {
         lookup: getCustomerContextForStaff, register: registerCustomerWithContext,
       })
       setScannedData({ ...passportData, name: ctx.customer!.name })
