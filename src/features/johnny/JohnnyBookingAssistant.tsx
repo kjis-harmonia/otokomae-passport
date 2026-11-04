@@ -33,7 +33,7 @@ import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
 import { TICKET_TYPE_LABELS } from '../../data/ticket'
 import { clearCouponPlan, gachaNote, gachaOff, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
-import { attachGacha, canUseGacha, linkCompanion, loadGacha, type GachaHeld } from '../gacha/gachaApi'
+import { attachGacha, canUseGacha, loadGacha, type GachaHeld } from '../gacha/gachaApi'
 import { suspendBgm } from '../../audio/bgm'
 import { observeVisibleViewport } from '../../utils/visibleViewport'
 import { infoRequest, isMaintenanceBookingRequest, type InfoRequest } from './infoRequest'
@@ -803,6 +803,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     let gachaFor: string | undefined
     let companion: CustomerReservation | undefined
+    let linked = false
     try {
       // お連れ様も担当を決めて取る（指名なしは無い）。予約者と違う担当から順に、空いている人で押さえる
       const staff = optionsRef.current?.staff ?? []
@@ -813,17 +814,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
           const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id)
           companion = await api.confirm(hold.hold_id, `お連れ様：${s.companion.name}様`)
           rememberCompanion(companion.id, s.companion.name)
-          try { await linkCompanion(reservation.id, companion.id) } catch { /* 端末の記録では見分けられる */ }
+          try { await linkCompanion(reservation.id, companion.id); linked = true } catch { /* 端末の記録では見分けられる。無料券はお連れ様に使えない */ }
           break
         } catch { /* 次の担当で試す */ }
       }
     } catch { /* 下で伝える */ }
-    if (companion) {
-      // お連れ様の予約をご本人の予約につなぐ（つながらなくても予約はそのまま）
-      let linked = false
-      try { await linkCompanion(reservation.id, companion.id); linked = true } catch { /* 無料券をお連れ様に使えないだけ */ }
-      if (linked && gachaTo === 'companion') { gacha = await attachGachaTo(companion.id); if (gacha) gachaFor = s.companion.name }
-    }
+    // 無料のガチャ券をお連れ様に（つながった予約だけ）
+    if (companion && linked && gachaTo === 'companion') { gacha = await attachGachaTo(companion.id); if (gacha) gachaFor = s.companion.name }
     const gachaFailed = selfFailed || (gachaTo === 'companion' && !gacha)
     api.reservations().then(setMyReservations).catch(() => {})
     setStep({ k: 'done', reservation, companion, companionFailed: !companion, ginpay: ginpayResult, gacha, gachaFor, gachaFailed })
