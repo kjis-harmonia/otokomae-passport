@@ -11,12 +11,12 @@ import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
 import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { normalizePhone } from '../../utils/customerContact'
-import { bookingAssistantApi, type AiBookingStatus, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
+import { bookingAssistantApi, linkCompanion, type AiBookingStatus, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
 import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
 import { isEmptyRequest, parseVisitRequest, parseYesNo, type VisitRequest } from './visitParser'
-import { companionIds, companionNames, forgetReservation, formatVisit, pickNext, rememberCompanion, rememberReservation } from './nextReservation'
+import { companionName as companionNameOf, forgetReservation, formatVisit, isCompanion, pickNext, rememberCompanion, rememberReservation } from './nextReservation'
 import { clearCurrentReservation, loadCurrentReservation } from '../../utils/currentReservation'
 import { heldFor, holdGinpay, useGinpayHolds, type GinpayHoldSummary } from '../ginpay/holds'
 import type { AgentAnswer, AgentShown, AgentTurn } from './agentClient'
@@ -258,7 +258,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const turnsRef = useRef<AgentTurn[]>([{ role: 'assistant', text: 'いつのご来店をご希望ですか？' }])
   const [myReservations, setMyReservations] = useState<CustomerReservation[]>([])
   // ご本人の予約は1つまで（お連れ様の予約は数えない）。新しく予約するときに本人の予約があれば「キャンセルしてこちらにしますか？」＝変更として確定する
-  const ownActive = useMemo(() => pickNext(myReservations.filter(r => !companionIds().includes(r.id))), [myReservations])
+  // ご本人の予約（お連れ様の予約は入れ替えの対象にしない。別の端末でも DB のつながりで見分ける）
+  const ownActive = useMemo(() => pickNext(myReservations.filter(r => !isCompanion(r))), [myReservations])
   // お電話のクーポン予約（端末に覚えた予約日つきのメモ）。AI 予約を取ったら、これと入れ替える（ご予約は1つ）
   const [phoneReservation] = useState(loadCurrentReservation)
   const ownActiveRef = useRef(ownActive)
@@ -812,6 +813,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
           const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id)
           companion = await api.confirm(hold.hold_id, `お連れ様：${s.companion.name}様`)
           rememberCompanion(companion.id, s.companion.name)
+          try { await linkCompanion(reservation.id, companion.id) } catch { /* 端末の記録では見分けられる */ }
           break
         } catch { /* 次の担当で試す */ }
       }
@@ -1530,7 +1532,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               <List>
                 {step.view.list.map(r => (
                   <Row key={r.id} onClick={() => handleText(`${visitLabel(r.starts_at)}の予約`)}
-                    title={visitLabel(r.starts_at)} detail={`${r.items.map(i => i.name).join('・')}${companionIds().includes(r.id) ? '（お連れ様）' : ''}`} />
+                    title={visitLabel(r.starts_at)} detail={`${r.items.map(i => i.name).join('・')}${isCompanion(r) ? '（お連れ様）' : ''}`} />
                 ))}
               </List>
             )}
@@ -2183,7 +2185,7 @@ function ReservationSummary({ r, companion }: { r: CustomerReservation; companio
   const names = r.items.map(i => i.name).join('・')
   return (
     <div style={{ width: '100%', marginTop: companion ? 12 : 24, borderRadius: 14, overflow: 'hidden', background: C.fill }}>
-      {(companion || companionIds().includes(r.id)) && <SummaryRow label="ご来店" value={companionNames()[r.id] ? `お連れ様（${companionNames()[r.id]}様）` : 'お連れ様'} />}
+      {(companion || isCompanion(r)) && <SummaryRow label="ご来店" value={companionNameOf(r) ? `お連れ様（${companionNameOf(r)}様）` : 'お連れ様'} />}
       <SummaryRow label="日時" value={visitLabel(r.starts_at)} />
       <SummaryRow label="メニュー" value={names} />
       <SummaryRow label="担当" value={r.staff_name} />

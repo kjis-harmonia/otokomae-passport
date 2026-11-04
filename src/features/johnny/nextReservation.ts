@@ -54,6 +54,15 @@ export function rememberCompanion(id: string, name?: string): void {
   } catch { /* 表示用なので保存できなくても続ける */ }
 }
 
+/** お連れ様の予約か。DB のつながり（companion_of）を正とし、古い予約は端末の記録でも見る（11/4） */
+export function isCompanion(r: CustomerReservation): boolean {
+  return !!r.companion_of || companionIds().includes(r.id)
+}
+/** お連れ様のお名前（端末に覚えた名前、無ければ予約メモの名前） */
+export function companionName(r: CustomerReservation): string | null {
+  return companionNames()[r.id] ?? r.companion_name ?? null
+}
+
 /** お連れ様のお名前（予約 id → 名前）。お店には予約のメモで届く。お客様の画面では端末に覚えた名前を出す */
 const COMPANION_NAMES_KEY = 'ginjiro_companion_names'
 export function companionNames(): Record<string, string> {
@@ -91,8 +100,7 @@ export function useNextVisit(): Visit {
       bookingAssistantApi().reservations()
         .then(list => {
           if (!alive || my !== gen || owner !== currentOwner()) return
-          const marked = companionIds()
-          const n = pickNext(list.filter(r => !marked.includes(r.id))) ?? pickNext(list)
+          const n = pickNext(list.filter(r => !isCompanion(r))) ?? pickNext(list)
           const companions = n ? list.filter(r => r.id !== n.id && isUpcoming(r) && sameDay(r.starts_at, n.starts_at)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
           setVisit({ next: n, companions, status: 'ok' })
           writeCached(n, owner)
