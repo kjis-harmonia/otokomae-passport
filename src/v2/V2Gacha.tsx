@@ -21,8 +21,8 @@ const THEMES: Theme[] = [
   { id: 'galaxy', short: '銀河編', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
     audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg', hold: true }, // 保留中（11/1「宇宙編微妙やな」）。ランダムには出さない
   // 恐竜編：レックスの咆哮→大草原→洞窟→光る足跡。開放は足跡から光の柱→真っ白→鳳凰編の走る銀ちゃん（1本につないである・11/2）
-  { id: 'dino', short: '恐竜編', name: '太古の覇王', tap: '光る足跡をタップ', intro: '/gacha/dino/intro.mp4?v=seam2', introPoster: '/gacha/dino/intro.jpg?v=seam2', wait: '/gacha/dino/wait.mp4?v=seam2', open: '/gacha/dino/open.mp4?v=seam2', poster: '/gacha/dino/wait.jpg?v=seam2',
-    audio: { intro: '/gacha/dino/intro-audio.m4a?v=seam2', wait: '/gacha/dino/wait-audio.wav', open: '/gacha/dino/open-audio.m4a?v=seam2' } },
+  { id: 'dino', short: '恐竜編', name: '太古の覇王', tap: '光る足跡をタップ', intro: '/gacha/dino/intro.mp4?v=cut8', introPoster: '/gacha/dino/intro.jpg?v=cut8', wait: '/gacha/dino/wait.mp4?v=seam2', open: '/gacha/dino/open.mp4?v=cut8', poster: '/gacha/dino/wait.jpg?v=seam2',
+    audio: { intro: '/gacha/dino/intro-audio.m4a?v=cut8', wait: '/gacha/dino/wait-audio.wav', open: '/gacha/dino/open-audio.m4a?v=cut8' } },
 ]
 // ?gacha=galaxy で決めうち（見比べる用・保留中のテーマも出せる）
 const pick = new URLSearchParams(location.search).get('gacha')
