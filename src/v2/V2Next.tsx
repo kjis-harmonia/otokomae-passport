@@ -25,7 +25,7 @@ function ReservationRetry({ onRetry }: { onRetry: () => void }) {
   return (
     <>
       <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={onRetry}>再読み込み</button>
-      <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>お店に電話で確認する（{SHOP_PHONE_DISPLAY}）</a>
+      <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', minHeight: 44, padding: '12px 0', marginTop: 2, fontSize: 13, color: 'var(--v2-sub)' }}>お店に電話で確認する（{SHOP_PHONE_DISPLAY}）</a>
     </>
   )
 }
