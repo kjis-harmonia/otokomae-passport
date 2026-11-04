@@ -21,6 +21,15 @@ function useLastVisit(): string | null {
   return last
 }
 
+function ReservationRetry({ onRetry }: { onRetry: () => void }) {
+  return (
+    <>
+      <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={onRetry}>再読み込み</button>
+      <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>お店に電話で確認する（{SHOP_PHONE_DISPLAY}）</a>
+    </>
+  )
+}
+
 export function V2Next({ onJohnny }: { onJohnny: () => void }) {
   const { next, companions, status, reload } = useNextVisit()
   const holds = useGinpayHolds()
@@ -33,7 +42,11 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
       <h1 className="v2-title">次回予約</h1>
       {next && visit ? (
         <section className="v2-panel v2-glass" aria-label="次のご予約">
-          <p className="v2-label">{next.status === 'confirmed' ? 'ご予約確定' : 'ご来店中'}</p>
+          {status === 'failed' ? (
+            <p className="v2-note">最新のご予約を確認できませんでした。前に確認した内容を表示しています。</p>
+          ) : (
+            <p className="v2-label">{status === 'loading' ? 'ご予約' : next.status === 'confirmed' ? 'ご予約確定' : 'ご来店中'}</p>
+          )}
           <p className="v2-big">{visit.relative ? `${visit.relative}・` : ''}{visit.date}</p>
           <p className="v2-big" style={{ color: 'var(--v2-gold-deep)' }}>{visit.time}〜</p>
           <div style={{ marginTop: 14, display: 'grid', gap: 6, fontSize: 15 }}>
@@ -56,8 +69,9 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           {/* AI予約は受けた時点で確定。サロンボードへの転記はお店の仕事。重なったときだけお店から電話する（そのことを1行だけ） */}
           {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、お店からお電話します。</p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
+            {status === 'failed' && <ReservationRetry onRetry={reload} />}
             <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={onJohnny}>変更・キャンセル（AI予約）</button>
-            <a className="v2-btn v2-btn-quiet v2-glass" href={SHOP_PHONE_TEL}><Phone size={18} />お店に電話する</a>
+            {status !== 'failed' && <a className="v2-btn v2-btn-quiet v2-glass" href={SHOP_PHONE_TEL}><Phone size={18} />お店に電話する</a>}
           </div>
         </section>
       ) : status === 'loading' ? (
@@ -70,8 +84,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           <CalendarClock size={26} color="var(--v2-gold-deep)" />
           <p className="v2-big" style={{ fontSize: 20, marginTop: 10 }}>ご予約を確認できませんでした</p>
           <p className="v2-note" style={{ margin: '6px 0 16px' }}>電波のよい所で、もう一度お試しください。</p>
-          <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={reload}>再読み込み</button>
-          <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>お店に電話で確認する（{SHOP_PHONE_DISPLAY}）</a>
+          <ReservationRetry onRetry={reload} />
         </section>
       ) : (
         <section className="v2-panel v2-glass" aria-label="次のご予約">
