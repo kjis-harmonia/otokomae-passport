@@ -922,7 +922,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   /** 確認画面で「いいえ」：AI なら次の希望を聞く、決まった規則なら日時から聞き直す */
   const declineConfirm = useCallback((menu?: MenuOption) => {
     if (aiOnRef.current) {
-      const say = 'かしこまりました。ほかにご希望の日時やメニューはありますか？'
+      // 毎回同じ文にしない（11/5 慶一郎さん「定型文過ぎる」）
+      const say = ['かしこまりました。ほかの日時やメニューにしましょうか？', 'わかりました。ご都合のいい日時があれば、教えてくださいね。', '承知しました。別の時間やメニューでもお探ししますよ。'][Math.floor(Math.random() * 3)]
       turnsRef.current = [...turnsRef.current, { role: 'user' as const, text: 'いいえ' }, { role: 'assistant' as const, text: say }].slice(-20)
       setStep({ k: 'ai', say, view: { kind: 'talk', handoff: false } })
       return
@@ -1423,8 +1424,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
       {/* 中央：JOHNNY・質問・聞き取った言葉・選択肢 */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 20px 16px' }}>
-        <div className="johnny-rider-wrap" style={{ marginTop: 'min(4vh, 32px)', width: '100%', display: 'flex', justifyContent: 'center' }}>
-          <JohnnyRider state={orb} width={compact ? 200 : 340} />
+        {/* 大きいときは左右の余白まで広げて、走り去るバイクが画面の端まで行ってから消える（枠の途中で消えない・11/5 慶一郎さん） */}
+        <div className="johnny-rider-wrap" style={{ marginTop: 'min(4vh, 32px)', alignSelf: 'stretch', marginLeft: compact ? 0 : -20, marginRight: compact ? 0 : -20, display: 'flex', justifyContent: 'center' }}>
+          <JohnnyRider state={orb} width={compact ? 200 : 480} />
         </div>
 
         <AnimatePresence mode="wait">
