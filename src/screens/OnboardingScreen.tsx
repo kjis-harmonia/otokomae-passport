@@ -1,7 +1,7 @@
 import {CUSTOMER_ACCESS_ENABLED} from '../features/customerAccess/passkeys'
 import {PasskeyLoginButton} from '../features/customerAccess/CustomerAccess'
 import {loadMemberStatus} from '../utils/storage'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { MemberStatus } from '../data/brand'
 import type { TicketRow } from '../data/ticket'
@@ -179,6 +179,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   const [focusedField, setFocusedField] = useState<'name' | 'phone' | null>(null)
   const [authBusy,setAuthBusy]=useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const submitInFlight = useRef(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const trimmedName = name.trim()
@@ -195,7 +196,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   }
 
   async function handleFinish() {
-    if (submitting||authBusy) return
+    if (submitInFlight.current||submitting||authBusy) return
     if (hasVisitedBefore === null) {
       setSubmitError('来店経験を選択してください。')
       setStep(1)
@@ -210,6 +211,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       return
     }
 
+    submitInFlight.current = true
     setSubmitting(true)
     setSubmitError(null)
 
@@ -230,6 +232,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
     } catch (err) {
       console.error('[Onboarding] failed:', err)
       setSubmitError(onboardingErrorMessage(err))
+      submitInFlight.current = false
       setSubmitting(false)
     }
   }
