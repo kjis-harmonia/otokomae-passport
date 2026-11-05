@@ -6,24 +6,55 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Check } from 'lucide-react'
 import { requestJohnny } from '../features/johnny/bookingIntent'
 import { getStoredValue, setStoredValue } from '../utils/storage'
+import { GachaShowcase } from './GachaShowcase'
 
-const CAMPAIGN = {
+type Campaign = {
+  id: string; image: string; wide?: boolean; alt: string; label: string; kicker: string; title: string; lead?: string; detail: string[]
+  action: { text: string; kind: 'johnny'; menuCode: string } | { text: string; kind: 'lineup' | 'gacha' }
+}
+
+const APACHI: Campaign = {
   id: 'apachi-2026-autumn',
   image: '/assets/styles/apachi.jpg',
   alt: 'APACHI　ショートピンパーマ × ホワイトメッシュ',
-  menuCode: 'perm-apache',
   label: 'APACHI',
   kicker: 'NEW MENU',
   title: '新メニュー登場',
   detail: ['季節限定', 'アパッチ', '¥18,000', '約4時間'],
+  action: { text: 'この髪型でAI予約する', kind: 'johnny', menuCode: 'perm-apache' },
 }
+
+// ガチャの告知（11/5 慶一郎さん）。11/11 より前は予告（ラインナップを見せる）、11/11〜11/30 は「はじまりました」（ガチャへ）。
+//   日付は Staging でも本当の日付で切り替える（予告を Staging で確かめられるように）。id が別なので、予告を止めた人にも開始の告知は出る
+const GACHA_OPENS = '2026-11-11'
+const GACHA_NEWS_UNTIL = '2026-11-30'
+const jstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
+const GACHA_SOON: Campaign = {
+  id: 'gacha-2026-11-soon', image: '/gacha/gacha-top.jpg', wide: true, alt: 'ガチャマシンと銀ちゃん', label: 'ガチャ',
+  kicker: 'COMING SOON', title: '11月11日（水）ガチャ解禁',
+  lead: 'APACHI・銀パラが無料になる券も入っています。',
+  detail: ['毎日1回無料', 'ハズレなし', 'AI予約で使える'],
+  action: { text: '今月のラインナップを見る', kind: 'lineup' },
+}
+const GACHA_OPEN: Campaign = {
+  ...GACHA_SOON, id: 'gacha-2026-11-open', kicker: 'NEW', title: 'ガチャ、はじまりました',
+  action: { text: 'ガチャを回す', kind: 'gacha' },
+}
+function pickCampaign(): Campaign {
+  const d = jstToday()
+  if (d < GACHA_OPENS) return GACHA_SOON
+  if (d <= GACHA_NEWS_UNTIL) return GACHA_OPEN
+  return APACHI
+}
+const CAMPAIGN = pickCampaign()
 const HIDE_KEY = 'ginjiro_campaign_hidden'
 let shownThisLaunch = false
 
-export function V2Campaign() {
+export function V2Campaign({ onGacha }: { onGacha: () => void }) {
   const reduce = useReducedMotion()
   const [open, setOpen] = useState(false)
   const [hide, setHide] = useState(false)
+  const [lineup, setLineup] = useState(false)
 
   // ホームが出てから少し待って出す（いきなり覆わない）
   useEffect(() => {
@@ -35,9 +66,16 @@ export function V2Campaign() {
   }, [])
 
   const close = () => { if (hide) setStoredValue(HIDE_KEY, CAMPAIGN.id); setOpen(false) }
-  const reserve = () => { close(); requestJohnny({ menuCode: CAMPAIGN.menuCode, label: CAMPAIGN.label }) }
+  const act = () => {
+    const a = CAMPAIGN.action
+    if (a.kind === 'lineup') { setLineup(true); return } // ラインナップを閉じたら、告知に戻る
+    close()
+    if (a.kind === 'johnny') requestJohnny({ menuCode: a.menuCode, label: CAMPAIGN.label })
+    else onGacha()
+  }
 
   return (
+    <>
     <AnimatePresence>
       {open && (
         <motion.div className="v2-campaign" role="dialog" aria-modal="true" aria-label={CAMPAIGN.label} onClick={close}
@@ -49,9 +87,10 @@ export function V2Campaign() {
               <span>{CAMPAIGN.kicker}</span>
               <h2>{CAMPAIGN.title}</h2>
             </header>
-            <img src={CAMPAIGN.image} alt={CAMPAIGN.alt} />
+            <img src={CAMPAIGN.image} alt={CAMPAIGN.alt} className={CAMPAIGN.wide ? 'is-wide' : undefined} />
+            {CAMPAIGN.lead && <p className="v2-campaign-lead">{CAMPAIGN.lead}</p>}
             <p className="v2-campaign-detail">{CAMPAIGN.detail.map(d => <span key={d}>{d}</span>)}</p>
-            <button type="button" className="v2-campaign-go" onClick={reserve}>この髪型でAI予約する</button>
+            <button type="button" className="v2-campaign-go" onClick={act}>{CAMPAIGN.action.text}</button>
             <div className="v2-campaign-foot">
               <label className="v2-campaign-hide">
                 <input type="checkbox" checked={hide} onChange={e => setHide(e.target.checked)} />
@@ -64,5 +103,7 @@ export function V2Campaign() {
         </motion.div>
       )}
     </AnimatePresence>
+    {lineup && <GachaShowcase onClose={() => setLineup(false)} />}
+    </>
   )
 }

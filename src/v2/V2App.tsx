@@ -98,7 +98,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
         })}
       </nav>
 
-      {isHome && <V2Campaign />}
+      {isHome && <V2Campaign onGacha={() => go('gacha')} />}
       <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} />
     </div>
   )
