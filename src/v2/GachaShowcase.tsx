@@ -99,7 +99,8 @@ export function GachaShowcase({ onClose }: { onClose: () => void }) {
                 ) : (
                   <div className={`v2-showcase-ticket is-${p.rank}`} aria-hidden={i !== index}>
                     <span className="v2-showcase-brand">GINJIRO</span>
-                    <b>{p.title}</b>
+                    {/* 「追加スキンフェード 無料」のような名前は、語の途中で折り返さず空白で改行する */}
+                    <b className={p.title.split(' ').some(w => w.length > 7) ? 'is-long' : ''}>{p.title.split(' ').map((w, k) => <span key={k}>{w}</span>)}</b>
                     {RANK[p.rank] && <em>{RANK[p.rank]}</em>}
                   </div>
                 )}
