@@ -9,7 +9,7 @@ import {checkJohnnyStoreAccess} from '../_shared/johnny-store-access.ts'
 //   ・予約の確定・キャンセル・変更はしない。ui の確認画面で「はい」が押されたら、アプリが RPC を呼ぶ
 //   ・名前・電話番号は AI に送らない。API キーは Secrets（OPENAI_API_KEY）だけ。無ければ 503（アプリは決まった規則の JOHNNY に切り替える）
 // モデルは OPENAI_MODEL（既定 gpt-6-luna）。
-import { runAgent, type AgentContext, type AgentTools, type DayOverview, type MenuInfo, type Reservation, type StaffInfo, type Turn } from './agent.ts'
+import { runAgent, type WalletTicket, type AgentContext, type AgentTools, type DayOverview, type MenuInfo, type Reservation, type StaffInfo, type Turn } from './agent.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
@@ -50,6 +50,27 @@ const json = (status: number, body: unknown) =>
 class RpcFailed extends Error { constructor(public code: string, public status: number) { super(code) } }
 
 /** お客様のセッションで RPC を呼ぶ。DB が { error } を返したら RpcFailed */
+interface TicketLite { type?: string; title?: string; amount?: number; used?: boolean; issued_by?: string | null; expires_at?: string | null; pending_transfer?: boolean }
+interface GachaHeldLite { title?: string; amount?: number | null; free_menu?: string | null; weekday_only?: boolean; expires_at?: string; reserved?: { starts_at?: string } | null }
+const jstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10)
+const jstAt = (iso: string) => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 16).replace('T', ' ')
+/** 使える券だけを短く（パーマ専用券の見分け方はアプリの welcomeCoupon.ts と同じ） */
+function walletOf(tickets: TicketLite[] | null, held: GachaHeldLite | null): WalletTicket[] {
+  const now = Date.now()
+  const out: WalletTicket[] = []
+  if (held?.title && held.expires_at && Date.parse(held.expires_at) > now) {
+    const rule = [held.free_menu ? `${held.free_menu}が無料` : null, held.weekday_only ? '平日のみ' : null, held.free_menu ? null : 'メンテナンスカット以外'].filter(Boolean).join('・') || null
+    out.push({ kind: 'gacha', title: held.title, amount: held.amount ?? null, until: jstDay(new Date(Date.parse(held.expires_at) - 1).toISOString()), rule, reservedAt: held.reserved?.starts_at ? jstAt(held.reserved.starts_at) : null })
+  }
+  for (const t of Array.isArray(tickets) ? tickets : []) {
+    if ((t.type !== 'discount' && t.type !== 'otoku') || t.used || t.pending_transfer || !t.title) continue
+    if (t.expires_at && Date.parse(t.expires_at) <= now) continue
+    const permOnly = t.issued_by === 'system-welcome' || t.issued_by === 'system-perm-return' || t.title === '再来店パーマクーポン' || /Welcomeクーポン/.test(t.title)
+    out.push({ kind: t.type as 'discount' | 'otoku', title: t.title, amount: typeof t.amount === 'number' ? t.amount : null, until: t.expires_at ? jstDay(new Date(Date.parse(t.expires_at) - 1).toISOString()) : null, rule: permOnly ? 'パーマだけ・平日のみ' : 'メンテナンスカット以外' })
+  }
+  return out.slice(0, 8)
+}
+
 async function rpc<T>(name: string, session: string, args: Record<string, unknown> = {}): Promise<T> {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
     method: 'POST',
@@ -176,11 +197,14 @@ Deno.serve(async (req) => {
   try {
     // セッションの確認と、予約できるメニュー・スタッフを一度に
     // 「いつもの」用に、これまでの予約も同時に読む（いちばん新しい過去の予約のメニュー）
-    const [allOpts, past, visits, lastVisit] = await Promise.all([
+    const [allOpts, past, visits, lastVisit, tickets, gacha] = await Promise.all([
       rpc<{ menus: MenuInfo[]; staff: StaffInfo[] }>('customer_booking_options', session),
       rpc<CustomerReservation[]>('customer_list_reservations', session).catch(() => [] as CustomerReservation[]),
       rpc<{ visit_date?: string; menu_code: string | null }[] | null>('customer_recent_visits', session).catch(() => null),
       rpc<string | null>('customer_get_last_visit', session).catch(() => null),
+      // 券（会話でお得な使い方をすすめる・11/5）。読めなければ券の話をしないだけ
+      rpc<TicketLite[] | null>('customer_get_tickets', session).catch(() => null),
+      rpc<{ held?: GachaHeldLite | null } | null>('customer_gacha_state', session).catch(() => null),
     ])
     // メンテナンスカット（maintenance）は、前回のご来店（QR の来店登録）から14日以内のお客様だけ（アプリの画面と同じ）
     const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
@@ -200,6 +224,7 @@ Deno.serve(async (req) => {
       now: new Date().toISOString(),
       menus: opts.menus,
       staff: opts.staff,
+      wallet: walletOf(tickets, gacha?.held ?? null),
       lastMenuCode: usualMenu(visits ?? [], opts.menus) ?? last?.items[0]?.menu_code ?? null,
       shown: cleanShown(body.shown, opts.menus, opts.staff),
     }

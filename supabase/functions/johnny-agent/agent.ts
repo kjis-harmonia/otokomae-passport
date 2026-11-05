@@ -25,8 +25,47 @@ export interface AgentContext {
   menus: MenuInfo[]
   staff: StaffInfo[]
   lastMenuCode: string | null
+  /** お客様が今持っていて使える券（ガチャ券・割引券・漢トク券）。会話で自然にすすめる（11/5） */
+  wallet?: WalletTicket[]
   /** 直前に画面に出している候補（「2つ目で」「さっきの11時」に使う） */
   shown?: { menu_code?: string; times?: string[]; staff_id?: string | null; confirm?: ShownConfirm }
+}
+
+export interface WalletTicket {
+  kind: 'gacha' | 'discount' | 'otoku'
+  title: string
+  /** 何円引き（無料券は null） */
+  amount: number | null
+  /** 使える最後の日（YYYY-MM-DD・日本時間）。期限なしは null */
+  until: string | null
+  /** 使える条件（「平日のみ」「パーマだけ」「アイパーが無料」など） */
+  rule: string | null
+  /** ガチャ券がもう付いている予約の日時（YYYY-MM-DD HH:MM） */
+  reservedAt?: string | null
+}
+
+/** 券の一覧（プロンプト用） */
+export function describeWallet(list: readonly WalletTicket[] | undefined, today: string): string {
+  if (!list?.length) return 'なし（券の話はしない）'
+  return list.map(t => {
+    const left = t.until ? Math.round((Date.parse(t.until + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000) : null
+    const kind = t.kind === 'gacha' ? 'ガチャ券' : t.kind === 'otoku' ? '漢トク券' : '割引券'
+    return `- ${kind}「${t.title}」${t.amount ? `${t.amount}円引き` : ''}${t.until ? `・${t.until}まで（あと${left}日）` : '・期限なし'}${t.rule ? `・${t.rule}` : ''}${t.reservedAt ? `・${t.reservedAt} の予約に付いている` : ''}`
+  }).join('\n')
+}
+
+/**
+ * 券の話は1つの会話で1回だけ（同じ券を毎回言うとしつこい）。前の返事で言った券の文は消す。
+ * お客様が券のことを聞いたときは消さない。文を消して空になるなら元のまま
+ */
+export function onceAboutTickets(say: string, history: readonly Turn[], wallet: readonly WalletTicket[] | undefined, utterance: string): string {
+  if (!wallet?.length || /券|クーポン|割引|ガチャ/.test(utterance)) return say
+  const said = history.filter(t => t.role === 'assistant').map(t => t.text).join('\n')
+  const words = wallet.flatMap(t => [t.kind === 'gacha' ? 'ガチャ券' : null, t.title.length >= 3 ? t.title : null]).filter((w): w is string => !!w)
+  const repeated = words.filter(w => said.includes(w))
+  if (!repeated.length) return say
+  const kept = (say.match(/[^。！？!?]+[。！？!?]?/g) ?? [say]).filter(x => !repeated.some(w => x.includes(w)) && !(/券/.test(x) && /自動で付き|確認画面で選べ/.test(x))).join('').trim()
+  return kept || say
 }
 
 export interface Turn { role: 'user' | 'assistant'; text: string }
@@ -253,6 +292,18 @@ ${menus}
 # スタッフ（id・名前）
 ${staff}
 
+# お客様が持っている券（使える分だけ）
+${describeWallet(ctx.wallet, now.date)}
+
+# 券のすすめ方（お得に使ってもらう。押し売りはしない）
+- 券の話は、同じ会話で同じ券を1回だけ。直前までの会話で言った券はもう言わない。
+- 確認画面（confirm_booking・confirm_change）を出すとき、その日とメニューで使える券があれば、say の最後にひとこと添える。ガチャ券は「ガチャ券（500円引き）がこのご予約に自動で付きます」、割引券・漢トク券は「お持ちの〇〇も、確認画面で選べますよ」。
+- 期限が14日以内の券があって日がまだ決まっていないときは、候補を出すときにひとこと（例：「12月5日までのガチャ券もありますよ」）。
+- 条件（平日のみ・パーマだけ・メニューの指定）に合わない予約には、その券をすすめない。平日のみの券を持っていて土日を選んだときだけ、「平日なら〇〇も使えますよ」と1回だけ言ってよい。
+- 予約に付いているガチャ券は、ほかの予約にはすすめない。
+- 券の名前・金額・期限は上の一覧のとおりに言う。一覧に無い券・割引を言わない。券が「なし」なら券の話をしない。
+- お客様が「券ある？」「クーポン使える？」と聞いたら、一覧をもとに短く答える。
+
 最後は必ず respond を呼ぶ。`
 }
 
@@ -451,7 +502,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
       try { args = JSON.parse(call.function.arguments || '{}') } catch { /* 空のまま */ }
       if (call.function.name === 'respond') {
         const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { topic: utterance.normalize('NFKC').match(/パーマ|ぱーま|カラー|白髪|フェード|顔そり|顔剃り|眉/)?.[0]?.replace('ぱーま', 'パーマ').replace('白髪', 'カラー').replace('顔剃り', '顔そり') ?? null, period: time ? null : readPeriod(utterance) ?? (dates.length && !readDates(utterance, today).length && prevUser ? readPeriod(prevUser) : null), asksHours: /何時(?:から|まで)|営業時間|受付時間|開店|閉店/.test(utterance), menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, waitlist: waitlistTalk, declined: !waitlistTalk && !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), pickIndex: pickIndexOf(utterance, ctx.shown?.times?.length ?? 0), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects === 0, 2 - rejects++)
-        if (checked.ok) return { say: checked.say, ui: checked.ui, tool_calls: toolCalls }
+        if (checked.ok) return { say: onceAboutTickets(checked.say, history, ctx.wallet, utterance), ui: checked.ui, tool_calls: toolCalls }
         // 道具に無い時刻・予約を出そうとした：理由を返して、もう一度考えさせる
         if (DEBUG) console.error(`[reject] ${checked.error} :: ${JSON.stringify(args.ui)}`)
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: checked.error }) })
