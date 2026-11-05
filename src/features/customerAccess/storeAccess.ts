@@ -4,6 +4,7 @@ import {clearCustomerSession,getCustomerSession} from '../../utils/customerSessi
 import {getUserId} from '../../utils/userId'
 import {adoptMember,CUSTOMER_ACCESS_ENABLED} from './passkeys'
 import {useCustomerAccessSession} from './useCustomerAccessSession'
+import {currentStoreRequest,sameStoreRequestOwner,validStoreRequest,type StoreRequest,type StoreRequestSnapshot} from './storeRequestState'
 
 export type StoreAccessMode='checking'|'verified'|'unverified'|'unauthenticated'|'error'
 export function useStoreAccess(){
@@ -20,41 +21,45 @@ export function useStoreAccess(){
   const mode:StoreAccessMode=!CUSTOMER_ACCESS_ENABLED?'verified':!session?'unauthenticated':result?.session!==session?'checking':result.failed?'error':result.verified?'verified':'unverified'
   return {mode,refresh:()=>setTick(n=>n+1)}
 }
-interface StoreRequest {id:string;proof:string;user_id:string;expires_in:number}
 export function useStoreRequest(enabled:boolean){
   const session=useCustomerAccessSession(),userId=getUserId()
-  const [request,setRequest]=useState<StoreRequest|null>(null),[error,setError]=useState(''),[tick,setTick]=useState(0)
+  const [snapshot,setSnapshot]=useState<StoreRequestSnapshot|null>(null),[tick,setTick]=useState(0)
   useEffect(()=>{
     if(!CUSTOMER_ACCESS_ENABLED||!enabled)return
     let alive=true,checking=false,expires=0
     const expectedSession=session
+    const owner={session,userId,revision:tick}
+    const currentMember=()=>getCustomerSession()===expectedSession&&getUserId()===userId
+    const show=(request:StoreRequest|null,error:string)=>setSnapshot({...owner,request,error})
     let pending:StoreRequest|null=null
     async function poll(){
-      if(!alive||checking||!pending)return
-      if(Date.now()>=expires){setError('確認用QRの期限が切れました。更新して読み取ってもらってください。');return}
+      if(!alive||checking||!pending||!currentMember())return
+      if(Date.now()>=expires){show(pending,'確認用QRの期限が切れました。更新して読み取ってもらってください。');return}
       checking=true
       try{
         const member=await callRpc<{pending?:boolean;user_id:string;name:string;session:string}>('customer_store_access_claim',{p_request_id:pending.id,p_proof:pending.proof})
         if(!alive)return
-        if(member.pending){setError('');return}
+        if(!currentMember()){alive=false;return}
+        if(member.pending){show(pending,'');return}
         if(member.user_id!==pending.user_id)throw Error('wrong_member')
         if(getCustomerSession()!==expectedSession){alive=false;return}
         adoptMember(member);alive=false
         window.dispatchEvent(new Event('ginjiro:store-verified'))
-      }catch(error){if(import.meta.env.DEV)console.warn('store_claim_failed',error instanceof RpcError?error.code:'unexpected');if(alive)setError('確認できませんでした。QRを更新して、もう一度お試しください。')}
+      }catch(error){if(import.meta.env.DEV)console.warn('store_claim_failed',error instanceof RpcError?error.code:'unexpected');if(alive&&currentMember())show(pending,'確認できませんでした。QRを更新して、もう一度お試しください。')}
       finally{checking=false}
     }
     void callRpc<StoreRequest>('customer_store_access_start',{p_user_id:userId,p_session:session}).then(r=>{
-      if(!alive)return
-      if(typeof r.id!=='string'||typeof r.proof!=='string'||r.user_id!==userId)throw Error('invalid_request')
-      pending=r;expires=Date.now()+r.expires_in*1000;setRequest(r);setError('');void poll()
-    }).catch(()=>{if(alive)setError('確認用QRを準備できませんでした。通信を確認して更新してください。')})
+      if(!alive||!currentMember())return
+      if(!validStoreRequest(r,userId))throw Error('invalid_request')
+      pending=r;expires=Date.now()+r.expires_in*1000;show(r,'');void poll()
+    }).catch(()=>{if(alive&&currentMember())show(null,'確認用QRを準備できませんでした。通信を確認して更新してください。')})
     const timer=window.setInterval(()=>void poll(),2500)
     const visible=()=>{if(!document.hidden)void poll()}
     document.addEventListener('visibilitychange',visible)
-    return()=>{alive=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',visible)}
+    return()=>{alive=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',visible);setSnapshot(previous=>previous&&sameStoreRequestOwner(previous,owner)?null:previous)}
   },[enabled,userId,session,tick])
-  return {request:enabled?request:null,error,refresh:()=>{setRequest(null);setError('');setTick(n=>n+1)}}
+  const current=currentStoreRequest(snapshot,{session,userId,revision:tick},CUSTOMER_ACCESS_ENABLED&&enabled)
+  return {...current,refresh:()=>{setSnapshot(null);setTick(n=>n+1)}}
 }
 export function approveStoreAccess(requestId:string,userId:string,staffName:string){
   return callStaffRpc<{ok:boolean}>('staff_approve_store_access',{p_request_id:requestId,p_user_id:userId,p_staff_name:staffName})
