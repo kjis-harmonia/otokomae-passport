@@ -433,13 +433,19 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 @keyframes v2-gacha-pulse { 0%, 100% { opacity: .7; transform: scale(.98); } 50% { opacity: 1; transform: scale(1.03); } }
 @keyframes v2-gacha-poke { 0%, 100% { transform: rotate(-12deg) translateY(4px); } 50% { transform: rotate(-12deg) translateY(-6px); } }
 /* 結果のポップは下に出す（動画の銀ちゃんと金のチケットを隠さない） */
-/* 黒×金のパネル：外周は金のグラデーションの細い枠、内側にもう1本うすい金の線、上に少しだけ光沢 */
-.v2-gacha-result { position: absolute; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); max-width: 420px; margin: 0 auto; padding: 22px 20px 20px; border-radius: 26px; text-align: center;
-  border: 2px solid transparent; color: #f2e6c8; display: grid; gap: 10px; justify-items: center;
-  background: linear-gradient(180deg, #2b2620 0%, #15110d 55%, #0d0a08 100%) padding-box, linear-gradient(135deg, #f8e6b4, #b8873d 30%, #fff1c8 55%, #9c7330 80%, #e9cd8c) border-box;
-  box-shadow: inset 0 0 0 1px rgba(255,226,160,.18), 0 18px 40px rgba(60,40,15,.35), 0 0 0 1px rgba(255,236,190,.35);
+/* すりガラスのパネル（11/5 慶一郎さん「iPhone のこんな感じ」）：後ろの絵をぼかして透かす、うす墨のガラス。ふちは白い光の線、上のふちに映りこみ。
+   どの演出の絵（白い背景の銀ちゃん・暗い海や草原）の上でも金と白の文字が読めるよう、ガラスは少し墨をのせる。ぼかしが効かない端末は濃いめの墨にする */
+.v2-gacha-result { position: absolute; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); max-width: 420px; margin: 0 auto; padding: 22px 20px 20px; border-radius: 30px; text-align: center;
+  color: #f2e6c8; display: grid; gap: 10px; justify-items: center; isolation: isolate;
+  border: 1px solid rgba(255,255,255,.42);
+  background: linear-gradient(180deg, rgba(58,48,38,.50) 0%, rgba(26,21,16,.60) 60%, rgba(16,13,10,.66) 100%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -1px 0 rgba(255,255,255,.12), inset 0 0 0 1px rgba(255,255,255,.06), 0 20px 44px rgba(20,14,6,.32);
   animation: v2-gacha-in .5s .25s ease-out both; }
-.v2-gacha-result::before { content: ''; position: absolute; inset: 0 0 auto; height: 38%; border-radius: 24px 24px 50% 50% / 24px 24px 18px 18px; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0)); pointer-events: none; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .v2-gacha-result { background: linear-gradient(180deg, rgba(48,40,32,.92), rgba(18,14,10,.95)); }
+}
+.v2-gacha-result::before { content: ''; position: absolute; inset: 0 0 auto; height: 42%; border-radius: 29px 29px 50% 50% / 29px 29px 22px 22px; background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0)); pointer-events: none; z-index: -1; }
 .v2-gacha-rank { display: flex; align-items: center; gap: 10px; font: 700 21px/1 var(--v2-serif); font-style: normal; letter-spacing: .14em; color: #e9cd8c; }
 .v2-laurel { width: 20px; height: 33px; color: #d9b46a; }
 .v2-laurel.is-flip { transform: scaleX(-1); }
