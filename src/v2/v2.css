@@ -435,17 +435,20 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 /* 結果のポップは下に出す（動画の銀ちゃんと金のチケットを隠さない） */
 /* すりガラスのパネル（11/5 慶一郎さん「iPhone のこんな感じ」）：後ろの絵をぼかして透かす、うす墨のガラス。ふちは白い光の線、上のふちに映りこみ。
    どの演出の絵（白い背景の銀ちゃん・暗い海や草原）の上でも金と白の文字が読めるよう、ガラスは少し墨をのせる。ぼかしが効かない端末は濃いめの墨にする */
-.v2-gacha-result { position: absolute; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); max-width: 420px; margin: 0 auto; padding: 22px 20px 20px; border-radius: 30px; text-align: center;
+.v2-gacha-result { position: absolute; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); max-width: 420px; margin: 0 auto; padding: 24px 20px 20px; border-radius: 36px; text-align: center;
   color: #f2e6c8; display: grid; gap: 10px; justify-items: center; isolation: isolate;
   border: 1px solid rgba(255,255,255,.42);
   background: linear-gradient(180deg, rgba(58,48,38,.50) 0%, rgba(26,21,16,.60) 60%, rgba(16,13,10,.66) 100%);
   -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -1px 0 rgba(255,255,255,.12), inset 0 0 0 1px rgba(255,255,255,.06), 0 20px 44px rgba(20,14,6,.32);
+  box-shadow: inset 0 3px 2px rgba(255,255,255,.7), inset 0 16px 28px rgba(255,255,255,.13), inset 0 -6px 14px rgba(0,0,0,.28), inset 0 -16px 28px rgba(255,255,255,.05), inset 0 0 0 1px rgba(255,255,255,.06), 0 24px 48px rgba(20,14,6,.34), 0 2px 6px rgba(20,14,6,.18);
   animation: v2-gacha-in .5s .25s ease-out both; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .v2-gacha-result { background: linear-gradient(180deg, rgba(48,40,32,.92), rgba(18,14,10,.95)); }
 }
-.v2-gacha-result::before { content: ''; position: absolute; inset: 0 0 auto; height: 42%; border-radius: 29px 29px 50% 50% / 29px 29px 22px 22px; background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0)); pointer-events: none; z-index: -1; }
+/* ぷくっと（11/5「もっとぷくっと可愛く」）：左上と右下に、ふくらんだガラスの光の点 */
+.v2-gacha-result::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
+  background: radial-gradient(60% 30% at 18% 0%, rgba(255,255,255,.22), rgba(255,255,255,0) 70%), radial-gradient(40% 22% at 88% 100%, rgba(255,255,255,.12), rgba(255,255,255,0) 70%); }
+.v2-gacha-result::before { content: ''; position: absolute; inset: 0 0 auto; height: 42%; border-radius: 35px 35px 50% 50% / 35px 35px 26px 26px; background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0)); pointer-events: none; z-index: -1; }
 .v2-gacha-rank { display: flex; align-items: center; gap: 10px; font: 700 21px/1 var(--v2-serif); font-style: normal; letter-spacing: .14em; color: #e9cd8c; }
 .v2-laurel { width: 20px; height: 33px; color: #d9b46a; }
 .v2-laurel.is-flip { transform: scaleX(-1); }
@@ -466,8 +469,9 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gold-btn:active { transform: translateY(2px); box-shadow: inset 0 1px 2px rgba(120,88,36,.3), 0 1px 0 #8a6a30, 0 2px 5px rgba(0,0,0,.3); }
 /* どちらを残すか（11/3 改善）：明るめの2枚のカード・大きめの文字。タップで金の枠＝選択中 →「決定する」 */
 .v2-gacha-pick { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
-.v2-gacha-pick button { position: relative; min-height: 0; padding: 14px 10px 12px; border-radius: 16px; display: grid; gap: 6px; justify-items: center; align-content: start; cursor: pointer; color: #fbf3e2; text-align: center;
-  border: 1px solid rgba(255,236,190,.28); background: linear-gradient(180deg, rgba(255,246,226,.16), rgba(255,246,226,.08)); -webkit-tap-highlight-color: transparent;
+.v2-gacha-pick button { position: relative; min-height: 0; padding: 14px 10px 12px; border-radius: 24px; display: grid; gap: 6px; justify-items: center; align-content: start; cursor: pointer; color: #fbf3e2; text-align: center;
+  border: 1px solid rgba(255,255,255,.30); background: radial-gradient(90% 55% at 50% 0%, rgba(255,255,255,.28), rgba(255,255,255,0) 72%), linear-gradient(180deg, rgba(255,246,226,.14), rgba(255,246,226,.06)); -webkit-tap-highlight-color: transparent;
+  box-shadow: inset 0 2px 2px rgba(255,255,255,.55), inset 0 -5px 10px rgba(0,0,0,.28), 0 8px 16px rgba(0,0,0,.2);
   transition: border-color .15s ease, box-shadow .15s ease, background .15s ease, transform .08s ease; }
 .v2-gacha-pick button:active:not(:disabled) { transform: scale(.98); }
 /* 選んでいるカードは金のネオンで光らせる（11/5 慶一郎さん「枠をネオンで光らせたらわかりやすい」）。光はゆっくり息をする。動きを減らす設定なら光ったまま止める */
