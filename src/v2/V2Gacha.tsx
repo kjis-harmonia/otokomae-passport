@@ -102,8 +102,8 @@ const rewind = (v: HTMLVideoElement) => { v.pause(); v.currentTime = 0 }
 const GACHA_OPENS = '2026-11-11'
 const gachaOpen = () => isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS
 
+// 今月のラインナップも解禁日まで見せない（11/6 慶一郎さん「今月のラインナップも見れないようにして」）
 function GachaSoon() {
-  const [lineup, setLineup] = useState(false)
   return (
     <div className="v2-page">
       <section className="v2-gacha-card">
@@ -113,8 +113,6 @@ function GachaSoon() {
           <p className="v2-note" style={{ textAlign: 'center', margin: '6px 0 0' }}>11月11日（水）からお楽しみいただけます。</p>
         </div>
       </section>
-      <button type="button" className="v2-gacha-lineup-btn" onClick={() => setLineup(true)}>今月のラインナップ</button>
-      {lineup && <GachaShowcase onClose={() => setLineup(false)} />}
     </div>
   )
 }

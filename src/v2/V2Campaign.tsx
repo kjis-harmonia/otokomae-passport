@@ -10,7 +10,7 @@ import { GachaShowcase } from './GachaShowcase'
 
 type Campaign = {
   id: string; image: string; wide?: boolean; kaikin?: boolean; alt: string; label: string; kicker: string; title: string; lead?: string; detail: string[]
-  action: { text: string; kind: 'johnny'; menuCode: string } | { text: string; kind: 'lineup' | 'gacha' }
+  action?: { text: string; kind: 'johnny'; menuCode: string } | { text: string; kind: 'lineup' | 'gacha' }
 }
 
 const APACHI: Campaign = {
@@ -34,7 +34,7 @@ const GACHA_SOON: Campaign = {
   kicker: 'COMING SOON', title: '11月11日（水）ガチャ解禁',
   lead: 'APACHI・銀パラが無料になる券も入っています。',
   detail: ['毎日1回無料', 'ハズレなし', 'AI予約で使える'],
-  action: { text: '今月のラインナップを見る', kind: 'lineup' },
+  // 解禁日までは中身（ラインナップ）を見せない。ボタンは出さず「閉じる」だけ（11/6 慶一郎さん）
 }
 const GACHA_OPEN: Campaign = {
   ...GACHA_SOON, id: 'gacha-2026-11-open', kicker: 'NEW', title: 'ガチャ、はじまりました',
@@ -90,6 +90,7 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
   const close = () => { if (hide) setStoredValue(HIDE_KEY, CAMPAIGN.id); setOpen(false) }
   const act = () => {
     const a = CAMPAIGN.action
+    if (!a) return
     if (a.kind === 'lineup') { setLineup(true); return } // ラインナップを閉じたら、告知に戻る
     close()
     if (a.kind === 'johnny') requestJohnny({ menuCode: a.menuCode, label: CAMPAIGN.label })
@@ -118,7 +119,7 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
             )}
             {CAMPAIGN.lead && <p className="v2-campaign-lead">{CAMPAIGN.lead}</p>}
             <p className="v2-campaign-detail">{CAMPAIGN.detail.map(d => <span key={d}>{d}</span>)}</p>
-            <button type="button" className="v2-campaign-go" onClick={act}>{CAMPAIGN.action.text}</button>
+            {CAMPAIGN.action && <button type="button" className="v2-campaign-go" onClick={act}>{CAMPAIGN.action.text}</button>}
             <div className="v2-campaign-foot">
               <label className="v2-campaign-hide">
                 <input type="checkbox" checked={hide} onChange={e => setHide(e.target.checked)} />
