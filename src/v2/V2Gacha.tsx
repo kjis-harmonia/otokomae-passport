@@ -11,6 +11,7 @@ import { canUseGacha, drawGacha, gachaDays, gachaReservedLabel, gachaUntil, keep
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
 import { isStaging } from '../utils/env'
 import { afterPresentedFrame } from '../features/gacha/presentedFrame'
+import { GachaShowcase } from './GachaShowcase'
 
 // 演出はガチャ画面を開くたびにランダム（11/1、11/3 アプリを開き直さなくても画面ごとに選び直す）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
@@ -102,9 +103,9 @@ const GACHA_OPENS = '2026-11-11'
 const gachaOpen = () => isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS
 
 function GachaSoon() {
+  const [lineup, setLineup] = useState(false)
   return (
     <div className="v2-page">
-      <h1 className="v2-title">本日のガチャ</h1>
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
@@ -112,6 +113,8 @@ function GachaSoon() {
           <p className="v2-note" style={{ textAlign: 'center', margin: '6px 0 0' }}>11月11日（水）からお楽しみいただけます。</p>
         </div>
       </section>
+      <button type="button" className="v2-gacha-lineup-btn" onClick={() => setLineup(true)}>今月のラインナップ</button>
+      {lineup && <GachaShowcase onClose={() => setLineup(false)} />}
     </div>
   )
 }
@@ -147,6 +150,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const [gacha, setGacha] = useState<GachaState | null>(null) // 今日の結果と持ち券
   const [drawn, setDrawn] = useState<GachaState | 'error' | null>(null) // 今回回した結果（演出のあいだに届く）
   const [keeping, setKeeping] = useState(false)
+  const [lineup, setLineup] = useState(false) // 今月のラインナップ（3D ショーケース）
 
   useEffect(() => {
     if (!canUseGacha()) return
@@ -297,7 +301,6 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const showing = phase !== 'idle'
   return (
     <div className="v2-page">
-      <h1 className="v2-title">本日のガチャ</h1>
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
@@ -312,6 +315,8 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
           )}
         </div>
       </section>
+      <button type="button" className="v2-gacha-lineup-btn" onClick={() => setLineup(true)}>今月のラインナップ</button>
+      {lineup && <GachaShowcase onClose={() => setLineup(false)} />}
       {gacha?.held && (
         <section className="v2-gacha-held" aria-label="お持ちのガチャ券">
           <span>お持ちのガチャ券</span>

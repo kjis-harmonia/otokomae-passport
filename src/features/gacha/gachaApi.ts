@@ -2,6 +2,7 @@
 // ガチャ券は1枚だけ持てる。新しい券が出たら今の券とどちらを残すかをお客様が選ぶ（customer_gacha_keep）。
 // 11/4 工程②：AI 予約の確認で使える券なら自動で付ける（customer_gacha_attach）。付いた券は予約が終わるまで交換できない。
 import { callCustomerRpc, hasCustomerSession } from '../../utils/customerSession'
+import { supabase } from '../../lib/supabase'
 
 export type GachaPrize = {
   code: string
@@ -32,6 +33,12 @@ function check(s: GachaState): GachaState {
 }
 
 export const canUseGacha = hasCustomerSession
+/** 今月のラインナップ（ログインなしで読める・確率は出さない） */
+export async function loadLineup(): Promise<GachaPrize[]> {
+  const { data, error } = await supabase.rpc('gacha_lineup')
+  if (error || !Array.isArray(data)) throw new Error(error?.message ?? 'lineup_failed')
+  return data as GachaPrize[]
+}
 export const loadGacha = async () => check(await callCustomerRpc<GachaState>('customer_gacha_state'))
 export const drawGacha = async () => check(await callCustomerRpc<GachaState>('customer_gacha_draw'))
 export const keepGacha = async (choice: 'new' | 'old') => check(await callCustomerRpc<GachaState>('customer_gacha_keep', { p_choice: choice }))
