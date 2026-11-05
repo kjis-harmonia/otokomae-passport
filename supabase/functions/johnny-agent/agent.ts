@@ -42,6 +42,30 @@ export interface WalletTicket {
   rule: string | null
   /** ガチャ券がもう付いている予約の日時（YYYY-MM-DD HH:MM） */
   reservedAt?: string | null
+  /** ガチャ券：使えるメニュー（null＝メンテナンスカット以外どれでも）・平日だけか */
+  menus?: string[] | null
+  weekdayOnly?: boolean
+}
+
+/** 祝日（土日以外）。アプリの bookingCoupons.ts と同じ。毎年見直す */
+const HOLIDAYS = new Set(['2026-11-23', '2027-01-01', '2027-01-11', '2027-02-11', '2027-02-23', '2027-03-22', '2027-04-29', '2027-05-03', '2027-05-04', '2027-05-05'])
+
+/** その予約にガチャ券が本当に自動で付くか（customer_gacha_attach と同じ条件の、言葉のための確認） */
+export function gachaFits(t: WalletTicket, menuCode: string, startsAt: string): boolean {
+  if (t.kind !== 'gacha' || t.reservedAt) return false
+  const p = jstParts(startsAt)
+  if (t.until && p.date > t.until) return false
+  if (t.weekdayOnly && (p.wd === '土' || p.wd === '日' || HOLIDAYS.has(p.date))) return false
+  return t.menus?.length ? t.menus.includes(menuCode) : menuCode !== 'maintenance'
+}
+
+/** 「ガチャ券が自動で付きます」は、本当に付くときだけ言わせる（AI の思い込みで言わせない） */
+export function checkGachaClaim(say: string, ui: AgentUi, wallet: readonly WalletTicket[] | undefined): string {
+  if (!/ガチャ券/.test(say)) return say
+  const fits = (ui.type === 'confirm_booking' || ui.type === 'confirm_change') && (wallet ?? []).some(t => gachaFits(t, ui.menu_code, ui.starts_at))
+  if (fits) return say
+  const kept = (say.match(/[^。！？!?]+[。！？!?]?/g) ?? [say]).filter(x => !(/ガチャ券/.test(x) && /自動|付き|付けて|使われ|適用/.test(x))).join('').trim()
+  return kept || say
 }
 
 /** 券の一覧（プロンプト用） */
@@ -502,7 +526,7 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
       try { args = JSON.parse(call.function.arguments || '{}') } catch { /* 空のまま */ }
       if (call.function.name === 'respond') {
         const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { topic: utterance.normalize('NFKC').match(/パーマ|ぱーま|カラー|白髪|フェード|顔そり|顔剃り|眉/)?.[0]?.replace('ぱーま', 'パーマ').replace('白髪', 'カラー').replace('顔剃り', '顔そり') ?? null, period: time ? null : readPeriod(utterance) ?? (dates.length && !readDates(utterance, today).length && prevUser ? readPeriod(prevUser) : null), asksHours: /何時(?:から|まで)|営業時間|受付時間|開店|閉店/.test(utterance), menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, waitlist: waitlistTalk, declined: !waitlistTalk && !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), pickIndex: pickIndexOf(utterance, ctx.shown?.times?.length ?? 0), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects === 0, 2 - rejects++)
-        if (checked.ok) return { say: onceAboutTickets(checked.say, history, ctx.wallet, utterance), ui: checked.ui, tool_calls: toolCalls }
+        if (checked.ok) return { say: onceAboutTickets(checkGachaClaim(checked.say, checked.ui, ctx.wallet), history, ctx.wallet, utterance), ui: checked.ui, tool_calls: toolCalls }
         // 道具に無い時刻・予約を出そうとした：理由を返して、もう一度考えさせる
         if (DEBUG) console.error(`[reject] ${checked.error} :: ${JSON.stringify(args.ui)}`)
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: checked.error }) })

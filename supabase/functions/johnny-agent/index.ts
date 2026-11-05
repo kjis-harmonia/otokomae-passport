@@ -51,7 +51,7 @@ class RpcFailed extends Error { constructor(public code: string, public status: 
 
 /** お客様のセッションで RPC を呼ぶ。DB が { error } を返したら RpcFailed */
 interface TicketLite { type?: string; title?: string; amount?: number; used?: boolean; issued_by?: string | null; expires_at?: string | null; pending_transfer?: boolean }
-interface GachaHeldLite { title?: string; amount?: number | null; free_menu?: string | null; weekday_only?: boolean; expires_at?: string; reserved?: { starts_at?: string } | null }
+interface GachaHeldLite { menu_codes?: string[] | null; title?: string; amount?: number | null; free_menu?: string | null; weekday_only?: boolean; expires_at?: string; reserved?: { starts_at?: string } | null }
 const jstDay = (iso: string) => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10)
 const jstAt = (iso: string) => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 16).replace('T', ' ')
 /** 使える券だけを短く（パーマ専用券の見分け方はアプリの welcomeCoupon.ts と同じ） */
@@ -60,7 +60,7 @@ function walletOf(tickets: TicketLite[] | null, held: GachaHeldLite | null): Wal
   const out: WalletTicket[] = []
   if (held?.title && held.expires_at && Date.parse(held.expires_at) > now) {
     const rule = [held.free_menu ? `${held.free_menu}が無料` : null, held.weekday_only ? '平日のみ' : null, held.free_menu ? null : 'メンテナンスカット以外'].filter(Boolean).join('・') || null
-    out.push({ kind: 'gacha', title: held.title, amount: held.amount ?? null, until: jstDay(new Date(Date.parse(held.expires_at) - 1).toISOString()), rule, reservedAt: held.reserved?.starts_at ? jstAt(held.reserved.starts_at) : null })
+    out.push({ kind: 'gacha', title: held.title, amount: held.amount ?? null, until: jstDay(new Date(Date.parse(held.expires_at) - 1).toISOString()), rule, reservedAt: held.reserved?.starts_at ? jstAt(held.reserved.starts_at) : null, menus: Array.isArray(held.menu_codes) ? held.menu_codes : null, weekdayOnly: !!held.weekday_only })
   }
   for (const t of Array.isArray(tickets) ? tickets : []) {
     if ((t.type !== 'discount' && t.type !== 'otoku') || t.used || t.pending_transfer || !t.title) continue
