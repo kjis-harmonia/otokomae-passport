@@ -17,10 +17,22 @@ export interface CheckoutTicket {
   amount: number
   expires_at: string | null
   /** 今日使えない理由（使えるなら null） */
-  blocked: 'transfer_pending' | 'welcome_weekend' | 'daily_rule' | null
+  blocked: 'transfer_pending' | 'welcome_weekend' | 'daily_rule' | 'gacha_menu' | null
+}
+/** 予約に付いたガチャ券（お客様が AI 予約で付けた券。11/4） */
+export interface CheckoutGacha {
+  title: string
+  /** 値引き額（無料券は null＝対象メニューの料金） */
+  amount: number | null
+  free_menu: string | null
+  /** 使えるメニュー（null＝どれでも） */
+  menu_codes: string[] | null
+  weekday_only: boolean
 }
 export interface CheckoutContext {
   reservation: Reservation | null
+  /** 予約に付いたガチャ券（無ければ null。DB が古いと無い） */
+  gacha?: CheckoutGacha | null
   /** すでに確定済みの会計（同じ予約は2回会計できない） */
   paid_sale_id: string | null
   client: { id: string; name: string; app_linked: boolean } | null
@@ -64,6 +76,8 @@ export interface SaleInput {
   stylist_id: string
   items: SaleLine[]
   ticket_ids: string[]
+  /** 予約に付いたガチャ券を使う */
+  use_gacha?: boolean
   manual_discount?: { amount: number; label: string }
   payment_method: PaymentMethod
   expected_total: number
@@ -136,7 +150,7 @@ export interface SalesApi {
 
 export const PAYMENT_LABEL: Record<string, string> = { cash: '現金', card: 'カード', credit: 'カード', qr: 'QR等', other: 'その他', ginpay: 'GINPay' }
 export const TICKET_BLOCK_LABEL: Record<string, string> = {
-  transfer_pending: '譲渡中', welcome_weekend: '土日は使えません', daily_rule: '本日は別の割引を利用済み',
+  transfer_pending: '譲渡中', welcome_weekend: '土日は使えません', daily_rule: '本日は別の割引を利用済み', gacha_menu: '対象のメニューがありません',
 }
 
 export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
@@ -152,6 +166,9 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   welcome_weekend: 'パーマのクーポン（Welcome・再来店）は平日のみ使えます。',
   welcome_perm_only: 'パーマのクーポン（Welcome・再来店）はパーマのメニューのときだけ使えます。',
   daily_rule: '本日はすでに別の割引を利用済みです。',
+  gacha_invalid: 'ガチャ券が使えませんでした（使用済み・予約から外れています）。画面を開き直してください。',
+  gacha_weekday: 'このガチャ券は平日のみ使えます。',
+  gacha_menu: 'ガチャ券の対象のメニューが会計にありません。',
   stylist_required: '担当を選んでください。',
   invalid_payment_method: '支払方法を選んでください。',
   operator_required: '操作者を選んでください。',
@@ -170,6 +187,13 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
 
 export function checkoutErrorMessage(code: string): string {
   return CHECKOUT_ERROR_MESSAGE[code] ?? '処理に失敗しました。通信環境を確認して再度お試しください。'
+}
+
+/** ガチャ券の値引き額（DB の finalize_sale と同じ計算）。対象メニューが会計に無ければ null */
+export function gachaAmount(g: CheckoutGacha, lines: SaleLine[]): number | null {
+  const line = g.menu_codes ? lines.find(l => (l.source === 'reservation' || l.source === 'service_menu') && !!l.ref_id && g.menu_codes!.includes(l.ref_id)) : undefined
+  if (g.menu_codes && !line) return null
+  return g.amount ?? Math.min(line!.unit_price, line!.unit_price * line!.quantity - line!.discount)
 }
 
 /** 画面の合計（確定時に DB が同じ計算で照合する） */

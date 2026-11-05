@@ -25,8 +25,71 @@ export interface AgentContext {
   menus: MenuInfo[]
   staff: StaffInfo[]
   lastMenuCode: string | null
+  /** お客様が今持っていて使える券（ガチャ券・割引券・漢トク券）。会話で自然にすすめる（11/5） */
+  wallet?: WalletTicket[]
   /** 直前に画面に出している候補（「2つ目で」「さっきの11時」に使う） */
   shown?: { menu_code?: string; times?: string[]; staff_id?: string | null; confirm?: ShownConfirm }
+}
+
+export interface WalletTicket {
+  kind: 'gacha' | 'discount' | 'otoku'
+  title: string
+  /** 何円引き（無料券は null） */
+  amount: number | null
+  /** 使える最後の日（YYYY-MM-DD・日本時間）。期限なしは null */
+  until: string | null
+  /** 使える条件（「平日のみ」「パーマだけ」「アイパーが無料」など） */
+  rule: string | null
+  /** ガチャ券がもう付いている予約の日時（YYYY-MM-DD HH:MM） */
+  reservedAt?: string | null
+  /** ガチャ券：使えるメニュー（null＝メンテナンスカット以外どれでも）・平日だけか */
+  menus?: string[] | null
+  weekdayOnly?: boolean
+}
+
+/** 祝日（土日以外）。アプリの bookingCoupons.ts と同じ。毎年見直す */
+const HOLIDAYS = new Set(['2026-11-23', '2027-01-01', '2027-01-11', '2027-02-11', '2027-02-23', '2027-03-22', '2027-04-29', '2027-05-03', '2027-05-04', '2027-05-05'])
+
+/** その予約にガチャ券が本当に自動で付くか（customer_gacha_attach と同じ条件の、言葉のための確認） */
+export function gachaFits(t: WalletTicket, menuCode: string, startsAt: string): boolean {
+  if (t.kind !== 'gacha' || t.reservedAt) return false
+  const p = jstParts(startsAt)
+  if (t.until && p.date > t.until) return false
+  if (t.weekdayOnly && (p.wd === '土' || p.wd === '日' || HOLIDAYS.has(p.date))) return false
+  return t.menus?.length ? t.menus.includes(menuCode) : menuCode !== 'maintenance'
+}
+
+/** 「ガチャ券が自動で付きます」は、本当に付くときだけ言わせる（AI の思い込みで言わせない） */
+export function checkGachaClaim(say: string, ui: AgentUi, wallet: readonly WalletTicket[] | undefined): string {
+  if (!/ガチャ券/.test(say)) return say
+  const fits = (ui.type === 'confirm_booking' || ui.type === 'confirm_change') && (wallet ?? []).some(t => gachaFits(t, ui.menu_code, ui.starts_at))
+  if (fits) return say
+  const kept = (say.match(/[^。！？!?]+[。！？!?]?/g) ?? [say]).filter(x => !(/ガチャ券/.test(x) && /自動|付き|付けて|使われ|適用/.test(x))).join('').trim()
+  return kept || say
+}
+
+/** 券の一覧（プロンプト用） */
+export function describeWallet(list: readonly WalletTicket[] | undefined, today: string): string {
+  if (!list?.length) return 'なし（券の話はしない）'
+  return list.map(t => {
+    const left = t.until ? Math.round((Date.parse(t.until + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 86400000) : null
+    const kind = t.kind === 'gacha' ? 'ガチャ券' : t.kind === 'otoku' ? '漢トク券' : '割引券'
+    return `- ${kind}「${t.title}」${t.amount ? `${t.amount}円引き` : ''}${t.until ? `・${t.until}まで（あと${left}日）` : '・期限なし'}${t.rule ? `・${t.rule}` : ''}${t.reservedAt ? `・${t.reservedAt} の予約に付いている` : ''}`
+  }).join('\n')
+}
+
+/**
+ * 券の話は1つの会話で1回だけ（同じ券を毎回言うとしつこい）。前の返事で言った券の文は消す。
+ * お客様が券のことを聞いたときは消さない。文を消して空になるなら元のまま
+ */
+export function onceAboutTickets(say: string, history: readonly Turn[], wallet: readonly WalletTicket[] | undefined, utterance: string): string {
+  if (!wallet?.length || /券|クーポン|割引|ガチャ/.test(utterance)) return say
+  const said = history.filter(t => t.role === 'assistant').map(t => t.text).join('\n')
+  const words = wallet.flatMap(t => [t.kind === 'gacha' ? 'ガチャ券' : null, t.title.length >= 3 ? t.title : null]).filter((w): w is string => !!w)
+  const repeated = words.filter(w => said.includes(w))
+  if (!repeated.length) return say
+  const kept = (say.match(/[^。！？!?]+[。！？!?]?/g) ?? [say]).filter(x => !repeated.some(w => x.includes(w)) && !(/券/.test(x) && /自動で付き|確認画面で選べ/.test(x))).join('').trim()
+  return kept || say
 }
 
 export interface Turn { role: 'user' | 'assistant'; text: string }
@@ -213,12 +276,24 @@ ${week}
 - お客様の言葉の日付は、メッセージに添えた「日付の読み」があればそれを使う。
 - 「事前に調べた結果」として道具の結果が渡されていれば、それを使う。足りないときだけ道具を呼ぶ。
 - メニューは下の表の code だけを使う。表に無いメニューは作らない。料金と時間は表の数字だけを言う。
-- 話す言葉（say）は日本語で、短く、話し言葉で。2〜3文、80字くらいまで。時刻は「18時半」「11時15分」のように読む。日付は「今日」「明日」「10月20日の火曜」のように言う。
+- 時刻は「18時半」「11時15分」のように読む。日付は「今日」「明日」「10月20日の火曜」のように言う。
 - 1回の返事で、お客様が次に答えることは1つだけにする。
-- 予約と関係ない話・医療の話はしない。分からない・できないこと（3人以上の予約、遠い先の予約など）は、お電話（090-2800-5425）をご案内する（ui: handoff）。
+- 予約と関係ない雑談には、ひとことだけ返して予約の話に戻る。医療の話はしない。分からない・できないこと（3人以上の予約、遠い先の予約など）は、お電話（090-2800-5425）をご案内する（ui: handoff）。
+
+# 話し方（11/5 慶一郎さん「定型文過ぎる」）
+- お店の受付の人が、なじみのお客様と話す感じ。やわらかいていねい語（「〜ですよ」「〜ですね」「〜しましょうか」）。方言・執事口調・かしこまりすぎは使わない。
+- 最初の一言で、お客様の言葉を受け止める。「髪が伸びてきた」「寒くなった」「楽しみ」などには、短くひとこと返してから本題へ（例：「冷えてきましたね。」「伸びてくると気になりますよね。」）。決まった前置きを毎回つけない。
+- 案内の文や指図の言い方にしない。「メニューを選んでください」「受付しています」「希望の時刻を選んでください」は使わず、「〜はいかがですか？」「どれにしましょう？」のように聞く。
+- 直前の自分の返事と同じ言い回し・同じ始まり方をくり返さない。
+- お客様の言葉に入っている条件（「夕方」「仕事帰り」「土曜」「いつもの」「テイテイさん」など）は、必ず返事と候補に入れる。時間帯の目安：朝＝11時まで、昼＝11〜14時、夕方＝16時から、夜・仕事帰り＝18時から。
+- 「いつもの」「前回と同じ」は、メニューの名前を言って確かめる（例：「いつもの通常カットですね。」）。
+- メニューらしい言葉（「フェードで」「バリカンで全部」など）を言われたら、聞き返して止めない。いちばん近いメニューで空きの候補（ui: slots）を出し、「〇〇でよろしければ、この時間が空いています」のように添える。確かめの言葉だけで終わらせない。
+- 受付時間は、聞かれたときか、その日の受付が短いときだけ言う。
+- お礼やあいさつには、温かく短く返す。そこで次の予約を押しつけない。
+- 長さは2〜3文、100字くらいまで。
 
 # 進め方（先回りして提案する）
-- 日だけ・「空いてる？」だけ → day_overview で見て、受付時間と、入れられるメニューと一番早い時刻を2〜3個言い、ui: menus（空きのあるメニューだけ）。その日に空きが無ければ次の日も見て案内する。
+- 日だけ・「空いてる？」だけ → day_overview で見て、空いている時間帯をざっくり言い（例：「午前中は空きが多いです」）、何をされるか聞く。ui: menus（空きのあるメニューだけ）。時間帯の条件（夕方など）があれば、その時間帯の空きだけを言う。その日に空きが無ければ次の日も見て案内する。
 - メニューだけ（日時なし） → next_slots で一番早い空きを探し、間をあけて2〜3個言い、ui: slots。
 - 日とメニュー（時刻なし） → その日の空きから時刻を2〜4個（ui: slots）。その日に空きが無ければ next_slots で次の日以降（ui: slots）。
 - 日時とメニューの両方 → slots で確かめる（事前に調べた結果に requested_free があればそれが答え）。ぴったり空いていれば ui: confirm_booking（「朝一」はその日のいちばん早い空きで confirm_booking）。埋まっていれば近い時刻や次の日を提案（ui: slots）。
@@ -241,6 +316,18 @@ ${menus}
 
 # スタッフ（id・名前）
 ${staff}
+
+# お客様が持っている券（使える分だけ）
+${describeWallet(ctx.wallet, now.date)}
+
+# 券のすすめ方（お得に使ってもらう。押し売りはしない）
+- 券の話は、同じ会話で同じ券を1回だけ。直前までの会話で言った券はもう言わない。
+- 確認画面（confirm_booking・confirm_change）を出すとき、その日とメニューで使える券があれば、say の最後にひとこと添える。ガチャ券は「ガチャ券（500円引き）がこのご予約に自動で付きます」、割引券・漢トク券は「お持ちの〇〇も、確認画面で選べますよ」。
+- 期限が14日以内の券があって日がまだ決まっていないときは、候補を出すときにひとこと（例：「12月5日までのガチャ券もありますよ」）。
+- 条件（平日のみ・パーマだけ・メニューの指定）に合わない予約には、その券をすすめない。平日のみの券を持っていて土日を選んだときだけ、「平日なら〇〇も使えますよ」と1回だけ言ってよい。
+- 予約に付いているガチャ券は、ほかの予約にはすすめない。
+- 券の名前・金額・期限は上の一覧のとおりに言う。一覧に無い券・割引を言わない。券が「なし」なら券の話をしない。
+- お客様が「券ある？」「クーポン使える？」と聞いたら、一覧をもとに短く答える。
 
 最後は必ず respond を呼ぶ。`
 }
@@ -322,16 +409,20 @@ const BOOKING_WORDS = /\d|[一二三四五六七八九十]+時|日|曜|時|今|�
  * 予約と関係ない短い雑談（あいさつ・お礼・天気・JOHNNY のこと・笑い）には、AI を使わずに決まった返事をする（AI の料金がかからない）。
  * 予約の言葉が少しでも入っていれば null（AI が読む）
  */
-export function smallTalkReply(utterance: string): string | null {
+export function smallTalkReply(utterance: string, rand: () => number = Math.random): string | null {
   const t = utterance.normalize('NFKC').trim()
   if (!t || t.length > 30 || BOOKING_WORDS.test(t)) return null
-  if (/ありがと|サンキュー|助かり|助かった|感謝/.test(t)) return 'こちらこそ、ありがとうございます！ほかにご予約のご希望はありますか？'
-  if (/天気|晴れ|雨|暑い|寒い|雪|台風|涼し/.test(t)) return 'ほんとですね！せっかくなので、ご来店の日時はお決まりですか？'
-  if (/こんにちは|こんばんは|おはよう|もしもし|どうも|やあ|ハロー|hello|^hi\b|よろしく/i.test(t)) return 'こんにちは、JOHNNY です！ご希望の日時やメニューをお聞かせください。'
-  if (/(あなた|あんた|お前|おまえ|君|きみ).*(誰|だれ|何者)|AI|ロボット|何者|人間なの/.test(t)) return '銀二郎のご予約係、JOHNNY です。ご希望の日時やメニューをお聞かせください。'
-  if (/^(笑|w+|ww|草|ははは|あはは|へへ|ふふ)|笑$/.test(t)) return 'ありがとうございます！ご予約のご希望はありますか？'
-  if (/ばか|バカ|アホ|うるさい|黙れ|きらい|嫌い/.test(t)) return '失礼しました。ご予約のお手伝いができればうれしいです。ご希望の日時をお聞かせください。'
-  if (/元気|調子|げんき/.test(t)) return 'おかげさまで元気です！ご来店のご希望はありますか？'
+  // 毎回同じ返事にならないよう、いくつかの言い方から選ぶ（11/5 慶一郎さん「定型文過ぎる」）
+  const one = (...v: string[]) => v[Math.floor(rand() * v.length) % v.length]
+  if (/ありがと|サンキュー|助かり|助かった|感謝/.test(t)) return one('こちらこそ、ありがとうございます！お会いできるのを楽しみにしています。', 'どういたしまして！またいつでも声をかけてくださいね。', 'ありがとうございます！何かあれば、いつでもどうぞ。')
+  if (/暑い|暑く/.test(t)) return one('暑い日が続きますね。さっぱり短めにするのもいいですよ。', 'ほんと暑いですね。お体に気をつけてくださいね。')
+  if (/寒い|寒く|冷え|雪/.test(t)) return one('冷えてきましたね。お体に気をつけてくださいね。', 'ほんと寒くなりましたね。あたたかくしてお過ごしください。')
+  if (/天気|晴れ|雨|台風|涼し/.test(t)) return one('ほんとですね。お出かけのときは気をつけてくださいね。', 'そうですね。ご来店の日の天気もよいといいですね。')
+  if (/こんにちは|こんばんは|おはよう|もしもし|どうも|やあ|ハロー|hello|^hi\b|よろしく/i.test(t)) return one('こんにちは、JOHNNY です！ご予約のことなら、なんでもどうぞ。', 'こんにちは！いつごろ来られそうですか？', 'どうも、JOHNNY です。今日はどうされましたか？')
+  if (/(あなた|あんた|お前|おまえ|君|きみ).*(誰|だれ|何者)|AI|ロボット|何者|人間なの/.test(t)) return '銀二郎のご予約係、JOHNNY です。日にちやメニューを言っていただければ、空きをお探ししますよ。'
+  if (/^(笑|w+|ww|草|ははは|あはは|へへ|ふふ)|笑$/.test(t)) return one('ふふ、ありがとうございます！', 'うれしいです！ほかにも何かあれば、どうぞ。')
+  if (/ばか|バカ|アホ|うるさい|黙れ|きらい|嫌い/.test(t)) return '失礼しました。ご予約のお手伝いができればうれしいです。'
+  if (/元気|調子|げんき/.test(t)) return one('おかげさまで元気です！お客様もお元気そうでなによりです。', '元気にしています！今日はどうされましたか？')
   return null
 }
 
@@ -435,8 +526,8 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
       let args: Record<string, unknown> = {}
       try { args = JSON.parse(call.function.arguments || '{}') } catch { /* 空のまま */ }
       if (call.function.name === 'respond') {
-        const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, waitlist: waitlistTalk, declined: !waitlistTalk && !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), pickIndex: pickIndexOf(utterance, ctx.shown?.times?.length ?? 0), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects === 0, 2 - rejects++)
-        if (checked.ok) return { say: checked.say, ui: checked.ui, tool_calls: toolCalls }
+        const checked = validate(args, ctx, seenTimes, seenReservations, overviews, { topic: utterance.normalize('NFKC').match(/パーマ|ぱーま|カラー|白髪|フェード|顔そり|顔剃り|眉/)?.[0]?.replace('ぱーま', 'パーマ').replace('白髪', 'カラー').replace('顔剃り', '顔そり') ?? null, period: time ? null : readPeriod(utterance) ?? (dates.length && !readDates(utterance, today).length && prevUser ? readPeriod(prevUser) : null), asksHours: /何時(?:から|まで)|営業時間|受付時間|開店|閉店/.test(utterance), menu: menu?.code ?? null, said: !!said, staffId: staffHit?.id ?? null, time: time === 'first' ? null : time, aboutReservation, cancel: cancelTalk, waitlist: waitlistTalk, declined: !waitlistTalk && !!ctx.shown?.confirm && !time && !staffHit && !said && dates.length === 0 && /^(?:いいえ|いや|違う|ちがう|だめ)[。、!！ぁー]*(?:です|ます)?[。!！]*$|やめ|考え|けっこう|結構|いらない|また今度|大丈夫です|キャンセル/.test(utterance.normalize('NFKC').trim()), dates: dates.map(d => d.date), pickIndex: pickIndexOf(utterance, ctx.shown?.times?.length ?? 0), picking: !!ctx.shown?.times?.length && /つ目|番目|最初|最後|それで|そこで|そこに|その時間/.test(utterance) }, rejects === 0, 2 - rejects++)
+        if (checked.ok) return { say: onceAboutTickets(checkGachaClaim(checked.say, checked.ui, ctx.wallet), history, ctx.wallet, utterance), ui: checked.ui, tool_calls: toolCalls }
         // 道具に無い時刻・予約を出そうとした：理由を返して、もう一度考えさせる
         if (DEBUG) console.error(`[reject] ${checked.error} :: ${JSON.stringify(args.ui)}`)
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: checked.error }) })
@@ -472,7 +563,17 @@ export async function runAgent(ctx: AgentContext, history: Turn[], utterance: st
 
 type Checked = { ok: true; say: string; ui: AgentUi } | { ok: false; error: string }
 
-interface Heard { waitlist: boolean; pickIndex: number | null; menu: string | null; said: boolean; staffId: string | null; time: string | null; aboutReservation: boolean; cancel: boolean; declined: boolean; dates: string[]; picking: boolean }
+/** 時間帯の言葉（「夕方」など）。from 以降の空きを先に出す */
+export function readPeriod(utterance: string): { word: string; from: string } | null {
+  const t = utterance.normalize('NFKC')
+  if (/仕事(?:帰り|終わり|のあと|の後)|夜/.test(t)) return { word: /仕事/.test(t) ? 'お仕事帰り' : '夜', from: '18:00' }
+  if (/夕方|夕がた/.test(t)) return { word: '夕方', from: '16:00' }
+  if (/午後/.test(t)) return { word: '午後', from: '12:00' }
+  if (/お昼|昼(?:間|から|すぎ|過ぎ|ごろ|頃)?/.test(t)) return { word: 'お昼', from: '11:00' }
+  return null
+}
+
+interface Heard { topic?: string | null; period?: { word: string; from: string } | null; asksHours?: boolean; waitlist: boolean; pickIndex: number | null; menu: string | null; said: boolean; staffId: string | null; time: string | null; aboutReservation: boolean; cancel: boolean; declined: boolean; dates: string[]; picking: boolean }
 
 function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: Map<string, Set<string>>, reservations: Reservation[] | null, overviews: Map<string, DayOverview>, heard: Heard, strict: boolean, rejectsLeft = 0): Checked {
   const mentioned = heard.menu
@@ -557,18 +658,33 @@ function validate(args: Record<string, unknown>, ctx: AgentContext, seenTimes: M
       }
       const first = new Map<string, string>()
       const at = heard.time && heard.dates.includes(o.date) ? toIso(o.date, heard.time) : null
-      o.groups.forEach(g => { const sorted = [...g.slots].sort(); const pick = at ? sorted.find(x => sameInstant(x, at)) ?? sorted.find(x => Date.parse(x) >= Date.parse(at)) : sorted[0]; if (pick) g.codes.forEach(c => first.set(c, pick)) })
+      const period = !at && heard.period && heard.dates.includes(o.date) ? heard.period : null
+      const periodAt = period ? toIso(o.date, period.from) : null
+      const pickFrom = (from: string | null) => { first.clear(); o.groups.forEach(g => { const sorted = [...g.slots].sort(); const pick = at ? sorted.find(x => sameInstant(x, at)) ?? sorted.find(x => Date.parse(x) >= Date.parse(at)) : from ? sorted.find(x => Date.parse(x) >= Date.parse(from)) : sorted[0]; if (pick) g.codes.forEach(c => first.set(c, pick)) }) }
+      pickFrom(periodAt)
+      const periodHit = !!periodAt && first.size > 0
+      if (periodAt && first.size === 0) pickFrom(null)
       if (first.size === 0) return { ok: false, error: `${o.date} は空きがありません。別の日を day_overview で調べてください` }
       // AI が選んだもの・前回のメニューのほかは、おもなメニューだけ（顔そり・オプション・前髪だけ は出さない）
       const order = [...picked.filter(c => first.has(c) && (isMainMenu(c) || c === heard.menu)), ...(ctx.lastMenuCode && first.has(ctx.lastMenuCode) ? [ctx.lastMenuCode] : []), ...ctx.menus.map(m => m.code).filter(c => first.has(c) && isMainMenu(c))]
       const items = [...new Set(order)].map(c => ({ menu_code: c, first_time: first.get(c) ?? null }))
       // 言葉は実際の空きから作る（AI が受付の開始時刻を空きと取り違えて「8時から」と言い、一覧は 9:00 だった・10/28）
       const earliest = items.map(i => i.first_time).filter((x): x is string => !!x).sort((a, b) => Date.parse(a) - Date.parse(b))[0]
-      const hours = o.hours ? `${dayWord(o.date, ctx.now)}は${spokenTime(o.hours.start.slice(0, 5))}から${spokenTime(o.hours.end.slice(0, 5))}まで受付しています。` : ''
+      const day = dayWord(o.date, ctx.now)
+      const hours = heard.asksHours && o.hours ? `${day}は${spokenTime(o.hours.start.slice(0, 5))}から${spokenTime(o.hours.end.slice(0, 5))}まで受け付けています。` : ''
       const exact = !!at && items.some(i => i.first_time && sameInstant(i.first_time, at))
-      const lead = at ? (exact ? `${spokenTime(heard.time!)}に入れられるメニューです。` : `${spokenTime(heard.time!)}は埋まっていて、そのあとの空きです。`)
-        : earliest ? `いちばん早い空きは${spokenTime(jstParts(earliest).time)}からです。` : ''
-      return { ok: true, say: `${hours}${lead}メニューを選んでください。`, ui: { type: 'menus', items, date: o.date } }
+      const e = earliest ? spokenTime(jstParts(earliest).time) : null
+      const lead = at ? (exact ? `${day}の${spokenTime(heard.time!)}、空いていますよ。` : `${spokenTime(heard.time!)}は埋まっていて、そのあとなら${e}から空いています。`)
+        : period ? (periodHit ? `${day}の${period.word}なら、${e}から空いていますよ。` : `${day}の${period.word}は埋まっていますが、${e}なら空いています。`)
+        : e ? `${day}は${e}から空いていますよ。` : ''
+      // 「冷えてきましたね」のような、AI の最初のひとこと（時刻・空き・料金を含まないものだけ）は残す
+      const greet = (say.match(/^[^。！？!?]*[。！？!?]/)?.[0] ?? '').trim()
+      const opener = greet && greet.length <= 28 && !/[0-9０-９]|時|分|空|円|受付|メニュー|予約|今日|明日|あした|あさって|月|曜|週|朝|昼|夕|夜|ですね。$/.test(greet) ? greet : ''
+      const usualName = ctx.lastMenuCode && items.some(i => i.menu_code === ctx.lastMenuCode) ? ctx.menus.find(m => m.code === ctx.lastMenuCode)?.name ?? null : null
+      // 「パーマ」など種類だけ言われたときは、その種類から選んでもらう（いつものカットを勧めない）
+      const usual = usualName && (!heard.topic || usualName.includes(heard.topic)) ? usualName : null
+      const ask = usual ? `いつもの${usual}にしますか？` : heard.topic ? `どの${heard.topic}にしましょう？` : 'メニューは何にしましょう？'
+      return { ok: true, say: `${opener}${hours}${lead}${ask}`, ui: { type: 'menus', items, date: o.date } }
     }
     case 'slots': {
       if (!menuOk(u.menu_code)) return { ok: false, error: typeof u.menu_code === 'string' ? 'slots の menu_code がメニュー表にありません' : 'ui に menu_code（メニュー表の code）を必ず書いてください' }

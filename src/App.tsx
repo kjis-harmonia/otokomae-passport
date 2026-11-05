@@ -40,7 +40,8 @@ const PASSKEY_SETUP_PROMPT_KEY = 'ginjiro_passkey_setup_prompt_v1'
 type AppPhase = 'onboarding' | 'app'
 
 // Staging だけ：?preview=v2 で、登録なしに V2.0 の画面を見られる（GPT など AI に見せる用）。本番では効かない
-const PREVIEW_V2 = isStaging() && new URLSearchParams(window.location.search).get('preview') === 'v2'
+// Staging は会員登録なしでそのまま開く（10/29 慶一郎さん）。登録の流れを試すときだけ ?onboarding=1。本番は今までどおり
+const PREVIEW_V2 = isStaging() && new URLSearchParams(window.location.search).get('onboarding') !== '1'
 type TransferPhase = 'preview' | 'accepting' | 'done' | 'error'
 
 function isShopUnlocked(): boolean {
@@ -316,7 +317,7 @@ function App() {
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
     // 下タブの SHOP（番号入力のあと）は予約の画面を開く。ショップのページへは行かない
     if (requestedTab === 'shop') return 'reserve'
-    const valid: NavTab[] = ['home', 'qr', 'next', 'reserve', 'mypage', 'tickets']
+    const valid: NavTab[] = ['home', 'qr', 'next', 'gacha', 'reserve', 'mypage', 'tickets']
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
   const setActiveTab = useCallback((tab: NavTab) => {

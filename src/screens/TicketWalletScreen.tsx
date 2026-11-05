@@ -1492,7 +1492,7 @@ function LoadFailed({ onRetry }: { onRetry: () => void }) {
         電波のよい所で、もう一度お試しください。
       </p>
       <button type="button" onClick={onRetry} className="wallet-cta"
-        style={{ marginTop: 16, padding: '10px 28px', borderRadius: 12, background: 'rgba(255,180,0,0.09)', border: '1px solid rgba(255,180,0,0.3)', fontSize: 12, fontWeight: 700, color: '#9A7400', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
+        style={{ minHeight: 44, marginTop: 16, padding: '10px 28px', borderRadius: 12, background: 'rgba(255,180,0,0.09)', border: '1px solid rgba(255,180,0,0.3)', fontSize: 12, fontWeight: 700, color: '#9A7400', fontFamily: SERIF, letterSpacing: '0.14em', cursor: 'pointer' }}>
         再読み込み
       </button>
     </div>

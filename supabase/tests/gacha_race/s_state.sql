@@ -1,0 +1,1 @@
+select (public.customer_gacha_state('race-cust-token2-0123456789abcdef012345678')->'held'->>'code') || ' ｜開始 ' || to_char(statement_timestamp() at time zone 'Asia/Tokyo', 'HH24:MI:SS.MS') || ' 終了 ' || to_char(clock_timestamp() at time zone 'Asia/Tokyo', 'HH24:MI:SS.MS') as r;

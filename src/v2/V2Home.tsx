@@ -150,7 +150,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
           {list.length > 1 && <div className="v2-dots" aria-hidden="true">{list.map((item, i) => <i key={item.key} className={i === index ? 'on' : ''} />)}</div>}
           {hpUrl && (
             <p style={{ textAlign: 'center', margin: '6px 0 0' }}>
-              <a href={hpUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--v2-faint)' }}>HOT PEPPER Beauty で予約する</a>
+              <a href={hpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '13px 12px', margin: '-8px 0 -14px', fontSize: 12, color: 'var(--v2-faint)' }}>HOT PEPPER Beauty で予約する</a>
             </p>
           )}
         </motion.div>
