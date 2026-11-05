@@ -58,8 +58,9 @@ function Kaikin({ reduce }: { reduce: boolean | null }) {
   return (
     <div className="v2-kaikin-stage">
       <motion.p className="v2-kaikin-date" {...rise(0.15)}>2026.11.11 WED</motion.p>
-      <motion.h2 className="v2-kaikin-title" {...(reduce ? {} : { initial: { opacity: 0, scale: 1.12, letterSpacing: '0.5em' }, animate: { opacity: 1, scale: 1, letterSpacing: '0.12em' }, transition: { duration: 1.1, delay: 0.35, ease: [0.16, 1, 0.3, 1] as const } })}>
-        <small>ガチャ</small>解禁
+      <motion.h2 className="v2-kaikin-title" {...(reduce ? {} : { initial: { opacity: 0, scale: 1.25 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.55, delay: 0.35, ease: [0.2, 1.4, 0.4, 1] as const } })}>
+        {/* 筆文字の「解禁」（11/5 慶一郎さんが GPT で作った書）。読み上げは文字で */}
+        <small>ガチャ</small><img src="/gacha/kaikin-brush.png" alt="解禁" draggable={false} />
       </motion.h2>
       <motion.p className="v2-kaikin-count" {...rise(0.9)}>
         {soon ? (n <= 1 ? <>いよいよ<b>明日</b>解禁</> : <>解禁まで あと<b>{n}</b>日</>) : jstToday() === GACHA_OPENS ? <><b>本日</b>解禁</> : <>ただいま解禁中</>}
@@ -81,6 +82,7 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
     if (shownThisLaunch || getStoredValue<string>(HIDE_KEY, '') === CAMPAIGN.id) return
     const img = new Image()
     img.src = CAMPAIGN.image
+    if (CAMPAIGN.kaikin) new Image().src = '/gacha/kaikin-brush.png'
     const t = window.setTimeout(() => { shownThisLaunch = true; setOpen(true) }, 700)
     return () => window.clearTimeout(t)
   }, [])
