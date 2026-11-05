@@ -566,18 +566,19 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gacha-lineup-btn:active { transform: scale(.99); }
 /* Apple の製品の並べ方のように：明るい面・券を1枚ずつ大きく・下に名前。横にすべらせると、まん中へ来る券が正面を向く */
 .v2-showcase { position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column; align-items: center; padding: calc(env(safe-area-inset-top, 0px) + 60px) 0 calc(env(safe-area-inset-bottom, 0px) + 28px);
-  background: #f5f5f7; color: #1d1d1f; overflow: hidden; animation: v2-showcase-in .25s ease-out both; }
+  background: #f5f5f7; color: #1d1d1f; overflow: hidden; animation: v2-showcase-in .25s ease-out both;
+  --sc-w: min(256px, 66vw); --sc-slot: calc(var(--sc-w) + 20px); }
 @keyframes v2-showcase-in { from { opacity: 0 } to { opacity: 1 } }
 .v2-showcase h2 { margin: 0; padding: 0 20px; font: 700 28px/1.25 var(--v2-serif); letter-spacing: .04em; }
 .v2-showcase-sub { margin: 6px 0 0; font-size: 14px; color: #6e6e73; letter-spacing: .06em; }
 .v2-showcase-msg { margin: 40% 0 0; font-size: 14px; color: #6e6e73; text-align: center; }
 .v2-showcase-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 14px; width: 44px; height: 44px; border-radius: 22px; border: 0; background: rgba(0,0,0,.06); color: #1d1d1f; display: grid; place-items: center; cursor: pointer; }
 .v2-showcase-track { width: 100%; margin-top: auto; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; perspective: 900px;
-  padding: 30px calc(50% - 110px) 34px; box-sizing: border-box; -webkit-overflow-scrolling: touch; }
+  padding: 26px calc(50% - var(--sc-slot) / 2) 30px; box-sizing: border-box; -webkit-overflow-scrolling: touch; }
 .v2-showcase-track::-webkit-scrollbar { display: none; }
-.v2-showcase-slot { flex: 0 0 220px; scroll-snap-align: center; display: flex; justify-content: center; transform-style: preserve-3d; cursor: pointer; }
+.v2-showcase-slot { flex: 0 0 var(--sc-slot); scroll-snap-align: center; display: flex; justify-content: center; transform-style: preserve-3d; cursor: pointer; }
 /* 景品の券：横長のチケット。左右に切りかき（半円）。床にやわらかい影 */
-.v2-showcase-ticket { position: relative; width: 200px; height: 260px; border-radius: 22px; box-sizing: border-box; padding: 40px 16px 84px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center;
+.v2-showcase-ticket { position: relative; width: var(--sc-w); height: calc(var(--sc-w) * 1.3); border-radius: 22px; box-sizing: border-box; padding: 40px 16px 84px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center;
   transition: transform .08s linear, opacity .08s linear; will-change: transform;
   background: linear-gradient(160deg, #ffffff 0%, #f1efe9 100%); border: 1px solid rgba(0,0,0,.06);
   box-shadow: inset 0 1px 0 #fff, 0 22px 34px -16px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.06);
@@ -585,7 +586,7 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
           mask: radial-gradient(circle 12px at 0 72%, #0000 98%, #000) left / 51% 100% no-repeat, radial-gradient(circle 12px at 100% 72%, #0000 98%, #000) right / 51% 100% no-repeat; }
 .v2-showcase-ticket::after { content: ''; position: absolute; left: 22px; right: 22px; top: 72%; border-top: 1.5px dashed rgba(0,0,0,.12); }
 .v2-showcase-brand { position: absolute; top: 18px; font: 700 10px/1 var(--v2-sans); letter-spacing: .32em; color: rgba(0,0,0,.35); }
-.v2-showcase-ticket b { position: relative; z-index: 1; font: 800 24px/1.3 var(--v2-serif); color: #1d1d1f; word-break: keep-all; overflow-wrap: anywhere; padding: 0 4px; }
+.v2-showcase-ticket b { position: relative; z-index: 1; font: 800 27px/1.3 var(--v2-serif); color: #1d1d1f; word-break: keep-all; overflow-wrap: anywhere; padding: 0 4px; }
 .v2-showcase-ticket em { position: absolute; bottom: 20px; font: 700 12px/1 var(--v2-sans); font-style: normal; letter-spacing: .18em; padding: 6px 12px; border-radius: 13px; }
 .v2-showcase-ticket.is-legend { background: linear-gradient(155deg, #fff3cf 0%, #f0d08a 38%, #fff0c4 55%, #c99a4d 100%); border-color: rgba(150,110,40,.35); }
 .v2-showcase-ticket.is-legend b { color: #4a3410; }
