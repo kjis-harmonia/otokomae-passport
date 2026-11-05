@@ -152,13 +152,21 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
   const [step, setStep] = useState<Step>(CUSTOMER_ACCESS_ENABLED ? 'ask' : startWithCode ? 'code' : 'ask')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  const bindInFlight = useRef(false)
   const [error, setError] = useState<string | null>(null)
+  const dismiss = () => {
+    if (busy || bindInFlight.current) return
+    if (step === 'done') onClose()
+    else onLater()
+  }
 
   const submit = useCallback(async () => {
-    if (busy || !/^[0-9]{6}$/.test(code)) return
+    if (bindInFlight.current || busy || !/^[0-9]{6}$/.test(code)) return
+    bindInFlight.current = true
     setBusy(true)
     setError(null)
     const r = await bindWithCode(getUserId(), code)
+    bindInFlight.current = false
     setBusy(false)
     if (r.ok) {
       setStep('done')
@@ -174,7 +182,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
       ref={viewportRef}
       className="ticket-bind-backdrop"
       style={{ position: 'fixed', left: 0, right: 0, top: 'var(--customer-visual-top, 0px)', height: 'var(--customer-visual-height, 100%)', zIndex, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}
-      onClick={step === 'done' ? onClose : onLater}
+      onClick={dismiss}
     >
       <motion.div
         className="ticket-bind-dialog"
@@ -190,7 +198,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
           boxShadow: '0 20px 56px rgba(0,0,0,0.8)',
         }}
       >
-        {CUSTOMER_ACCESS_ENABLED&&step==='ask'?<><h2 style={{color:IVORY,fontSize:20,marginBottom:16}}>会員情報で続ける</h2><PasskeyLoginButton onSignedIn={()=>{onBound?.();onClose()}}/><button type="button" onClick={()=>setStep('code')} className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}}>別の方法で引き継ぐ</button><button type="button" className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}} onClick={onLater}>あとで</button></>:step === 'done' ? (
+        {CUSTOMER_ACCESS_ENABLED&&step==='ask'?<><h2 style={{color:IVORY,fontSize:20,marginBottom:16}}>会員情報で続ける</h2><PasskeyLoginButton disabled={busy} onBusyChange={setBusy} onSignedIn={()=>{onBound?.();onClose()}}/><button type="button" disabled={busy} onClick={()=>setStep('code')} className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}}>別の方法で引き継ぐ</button><button type="button" disabled={busy} className="access-text" style={{minHeight:44,color:'#aaa',background:'none',border:0}} onClick={dismiss}>あとで</button></>:step === 'done' ? (
           <>
             <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: IVORY, marginBottom: 16 }}>引き継ぎが完了しました</p>
             <DialogButton primary onClick={onClose}>閉じる</DialogButton>
@@ -204,7 +212,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
                   以前からお持ちのチケットをこの端末で使うには、引き継ぎが必要です。
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <DialogButton onClick={onLater}>あとで</DialogButton>
+                  <DialogButton onClick={dismiss}>あとで</DialogButton>
                   <DialogButton primary onClick={() => setStep('code')}>引き継ぐ</DialogButton>
                 </div>
               </>
@@ -218,6 +226,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
                   autoComplete="one-time-code"
                   maxLength={6}
                   value={code}
+                  disabled={busy}
                   onChange={e => { setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6)); setError(null) }}
                   onKeyDown={e => { if (e.key === 'Enter') void submit() }}
                   placeholder="6桁のコード"
@@ -230,7 +239,7 @@ function PreviousTicketsDialog({ startWithCode = false, onLater, onClose, onBoun
                 />
                 {error && <p className="ticket-bind-error" style={{ fontSize: 12, color: '#F0A8A0', marginTop: 8, lineHeight: 1.6 }}>{error}</p>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
-                  <DialogButton onClick={onLater}>あとで</DialogButton>
+                  <DialogButton disabled={busy} onClick={dismiss}>あとで</DialogButton>
                   <DialogButton primary disabled={busy || code.length !== 6} onClick={() => { void submit() }}>
                     {busy ? '確認中…' : '引き継ぐ'}
                   </DialogButton>
