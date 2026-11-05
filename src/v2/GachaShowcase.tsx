@@ -18,7 +18,7 @@ const PHOTO: Record<string, string> = {
 }
 
 export function GachaShowcase({ onClose }: { onClose: () => void }) {
-  const [list, setList] = useState<GachaPrize[] | 'error' | null>(null)
+  const [list, setList] = useState<(GachaPrize & { value?: number | null })[] | 'error' | null>(null)
   const [index, setIndex] = useState(0)
   const track = useRef<HTMLDivElement>(null)
 
@@ -109,7 +109,9 @@ export function GachaShowcase({ onClose }: { onClose: () => void }) {
           {now && (
             <div className="v2-showcase-caption" aria-live="polite">
               <b>{now.title}</b>
-              <small>{now.free_menu ? `${now.free_menu}が1回無料` : `お会計から${(now.amount ?? 0).toLocaleString('ja-JP')}円引き`}・{now.weekday_only ? '平日のみ' : '土日もご利用いただけます'}</small>
+              {/* 特典の強さ → 使える条件（11/5 慶一郎さん「お会計から1,000円引き／土日利用OK・AI予約限定」） */}
+              <strong>{now.free_menu ? `${now.free_menu}が1回無料${now.value ? `（${now.value.toLocaleString('ja-JP')}円分）` : ''}` : `お会計から${(now.amount ?? 0).toLocaleString('ja-JP')}円引き`}</strong>
+              <small>{now.weekday_only ? '平日のみ' : '土日利用OK'}・AI予約限定</small>
             </div>
           )}
           <div className="v2-showcase-dots" aria-hidden="true">{items.map((p, i) => <i key={p.code} className={i === index ? 'on' : ''} />)}</div>

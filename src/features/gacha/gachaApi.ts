@@ -34,10 +34,10 @@ function check(s: GachaState): GachaState {
 
 export const canUseGacha = hasCustomerSession
 /** 今月のラインナップ（ログインなしで読める・確率は出さない） */
-export async function loadLineup(): Promise<GachaPrize[]> {
+export async function loadLineup(): Promise<(GachaPrize & { value?: number | null })[]> {
   const { data, error } = await supabase.rpc('gacha_lineup')
   if (error || !Array.isArray(data)) throw new Error(error?.message ?? 'lineup_failed')
-  return data as GachaPrize[]
+  return data as (GachaPrize & { value?: number | null })[]
 }
 export const loadGacha = async () => check(await callCustomerRpc<GachaState>('customer_gacha_state'))
 export const drawGacha = async () => check(await callCustomerRpc<GachaState>('customer_gacha_draw'))
