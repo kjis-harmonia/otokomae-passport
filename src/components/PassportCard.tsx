@@ -3,6 +3,7 @@ import {StoreRequestNotice} from '../features/customerAccess/StoreVerification'
 import { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { getUserId } from '../utils/userId'
+import { repairUserIdFromSession } from '../utils/customerSession'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
@@ -55,6 +56,9 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
   const storeAccess=useStoreAccess()
   const storeRequest=useStoreRequest(storeAccess.mode!=='verified'&&storeAccess.mode!=='error')
   const memberStatus = loadMemberStatus()
+  // 端末の会員番号がログインの鍵の会員とずれていたら合わせてから QR を作り直す（11/6：古い状態の端末で QR に別の番号が出た）
+  const [, setRepaired] = useState(0)
+  useEffect(() => { void repairUserIdFromSession().then(ok => { if (ok) setRepaired(n => n + 1) }) }, [])
   const userId = getUserId()
 
   const [lastVisitDate, setLastVisitDate] = useState<string | null>(null)
