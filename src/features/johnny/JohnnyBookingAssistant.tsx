@@ -67,6 +67,8 @@ type Step =
   | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption; label?: string; calendar?: boolean }
   /** 「2名以上で予約する」から：まず何名様か（ご本人を含めて 2〜3名・11/6 慶一郎さん「まず、何名か聞かんとね」） */
   | { k: 'partySize'; menu?: MenuOption }
+  /** 次回予約の「変更・キャンセル」から（11/7 慶一郎さん「変更・キャンセル押したら『おかえりなさい』はえぐい」） */
+  | { k: 'manage'; reservation: CustomerReservation }
   /** グループ予約の本体（GroupFlow：日にち → AI の提案 → メニュー → 確認） */
   | { k: 'group'; size: 2 | 3; menu: MenuOption | null }
   /** グループ予約の結果（お連れ様ごとに取れたか） */
@@ -136,12 +138,14 @@ interface Props {
   initialLabel?: string | null
   /** ホームの「いつもの」から（メニューが分からなければ、いつものメニューを聞いて登録する） */
   initialUsual?: boolean
+  /** 次回予約の「変更・キャンセル」から：最初に「日時を変える・メニューを変える・キャンセルする」を出す */
+  initialManage?: boolean
   /** ホームの「2名以上で予約する」から：ご本人の日時と担当が決まったら、お連れ様のメニューを聞く */
   initialGroup?: boolean
 }
 
 /** 「戻る」で戻れる画面（読み込み中・送信中・終わった画面は数えない） */
-const BACKABLE = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'pickStaff', 'companionMenu', 'companionName', 'confirmParty', 'ai', 'askUsual', 'usualSaved'])
+const BACKABLE = new Set<Step['k']>(['welcome', 'manage', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'pickStaff', 'companionMenu', 'companionName', 'confirmParty', 'ai', 'askUsual', 'usualSaved'])
 /** 戻り先にできる画面。担当が決まっていない確認画面は、すぐ担当の画面に差し替わるので数えない（戻るとまた担当の画面になってしまう） */
 // 担当の画面は、空きを確かめ終わったものだけ戻り先にする（確かめる前の画面へ戻ると、また確かめて「どちらも埋まっています」へ
 //   進み直し、戻るを押しても抜けられなかった・10/29 慶一郎さん）
@@ -238,7 +242,7 @@ const pausedStep = (s?: AiBookingStatus | null): Step => ({ k: 'ai', say: paused
 
 const BUSINESS_ERRORS = new Set(['slot_taken', 'too_late', 'date_not_open', 'invalid_starts_at', 'menu_not_available', 'hold_expired', 'hold_not_found'])
 
-export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null, initialLabel = null, initialUsual = false, initialGroup = false }: Props) {
+export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null, initialLabel = null, initialUsual = false, initialGroup = false, initialManage = false }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
     if (viewportRef.current) return observeVisibleViewport(viewportRef.current)
@@ -469,6 +473,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // メンテナンスカットのお知らせ（JOHNNY のお知らせ）をまだ受け取っていない端末だけ「登録しますか？」と聞く
   const [pushAsk, setPushAsk] = useState(false)
   useEffect(() => { pushState().then(st => setPushAsk(st === 'off' || st === 'needs-install'), () => {}) }, [])
+  // 次回予約の「変更・キャンセル」から：自分の予約が読めたら、最初に何をするかを出す
+  const manageRef = useRef(initialManage)
+  useEffect(() => {
+    if (!manageRef.current || !ownActive || (step.k !== 'welcome' && step.k !== 'loading')) return
+    manageRef.current = false
+    goingBackRef.current = true
+    setStep({ k: 'manage', reservation: ownActive }) // eslint-disable-line react-hooks/set-state-in-effect -- 開いたときの1回だけ
+  }, [ownActive, step])
   // 「2名以上で予約する」から：ご本人の日時と担当が決まったら（確認の手前）、そのままお連れ様のメニューへ
   const groupRef = useRef(initialGroup)
   // 何名様か（ご本人を含めて）。3 なら、2人目の予約のあとそのまま3人目へ
@@ -1397,6 +1409,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         return { title, sub: follow ?? '例：明日の15時、今日か明日の夕方', speech: follow ? `${title}${follow}` : title, listen: true }
       }
       case 'askMenu': return { title: groupRef.current && partySizeRef.current ? 'ご本人のメニューはどれにしますか？' : 'メニューはどれにしますか？', speech: 'メニューはどれにしますか？', listen: true }
+      case 'manage': return { title: 'ご予約の変更・キャンセル', sub: `${visitLabel(step.reservation.starts_at)}・${step.reservation.items.map(i => i.name).join('・')}`, speech: 'ご予約の変更ですね。日時を変えるか、メニューを変えるか、キャンセルするかをお選びください。' }
       case 'partySize': return { title: '何名様でご予約ですか？', sub: 'ご本人を含めて3名様までお取りできます', speech: '何名様でご予約ですか？', listen: true }
       case 'group': return { title: groupTitle.title, sub: groupTitle.sub }
       case 'groupDone': {
@@ -1550,7 +1563,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const doneUsual = doneMenu && (usualDone === doneMenu.code || usualNow?.code !== doneMenu.code) ? doneMenu : undefined
   const canTalk = ['pickStaff', 'welcome', 'askWhen', 'askMenu', 'partySize', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'companionName', 'confirmParty', 'askUsual'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
-  const compact = ['group', 'groupDone', 'partySize', 'pickStaff', 'welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'companionName', 'confirmParty', 'askUsual', 'usualSaved'].includes(step.k)
+  const compact = ['manage', 'group', 'groupDone', 'partySize', 'pickStaff', 'welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'companionName', 'confirmParty', 'askUsual', 'usualSaved'].includes(step.k)
     || (step.k === 'ai' && step.view.kind !== 'talk') || (step.k === 'askWhen' && !!step.calendar)
   const voiceOff = voice.listen === 'unsupported' || voice.listen === 'denied'
 
@@ -1672,6 +1685,16 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               </List>
             )}
 
+            {step.k === 'manage' && (
+              <>
+                <ReservationSummary r={step.reservation} />
+                <List>
+                  <Row onClick={() => { const menu = menus.find(m => m.code === step.reservation.items[0]?.menu_code); if (menu) setStep({ k: 'askWhen', again: 'menu', menu }); else setStep({ k: 'askWhen' }) }} title="日時を変える" detail="同じメニューで ›" />
+                  <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true }, then: 'when' })} title="メニューを変える" detail="›" />
+                  <Row onClick={() => setStep({ k: 'confirmCancel', reservation: step.reservation, say: 'このご予約をキャンセルしますか？' })} title="キャンセルする" detail="›" />
+                </List>
+              </>
+            )}
             {step.k === 'group' && options && (
               <GroupFlow key={`${step.size}|${step.menu?.code ?? ''}`} api={api} menus={menus} staff={options.staff ?? []} size={step.size} primaryMenu={step.menu}
                 members={usualMembers} windowDays={options.settings.booking_window_days ?? 60} onBook={p => void bookGroup(p)} onTitle={setGroupTitle}
