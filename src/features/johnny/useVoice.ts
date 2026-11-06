@@ -87,7 +87,8 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
   const [notice, setNotice] = useState<string | null>(null)
   const [speaking, setSpeaking] = useState(false)
   const [muted, setMutedState] = useState<boolean>(() => {
-    try { return localStorage.getItem(MUTE_KEY) === '1' } catch { return false }
+    // 最初は読み上げなし（11/7 慶一郎さん「読み上げ遅いし、不安な人もいるから標準では無音、右上で有音に」）。右上で有音にした人だけ読み上げる
+    try { return localStorage.getItem(MUTE_KEY) !== '0' } catch { return true }
   })
   const recRef = useRef<RecognitionLike | null>(null)
   const finalRef = useRef('')
