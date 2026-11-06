@@ -403,13 +403,36 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   <div role="note" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(151,115,43,0.08)', border: '1px solid rgba(151,115,43,0.35)', fontSize: 14, lineHeight: 1.6 }}>
                     <b>お客様がAI予約で選んだ券</b><br />
                     {groups.map(([title, g]) => <span key={title} style={{ display: 'block' }}>{title} × {g.n}枚（−{yen(g.amt)}）</span>)}
-                    <span style={{ fontSize: 12, color: C.sub }}>下の券に ✓ を付けています。お会計は下の合計のとおりです。</span>
+                    <span style={{ fontSize: 12, color: C.sub }}>下の券の枚数に入れています。お会計は下の合計のとおりです。</span>
                   </div>
                 )
               })()}
               {listed.length > 0 && (
                 <div data-guide="co-tickets" style={{ marginTop: 8 }}>
-                  {listed.map(t => {
+                  {/* 同じ券（名前・金額・使える状態が同じ）は1行にまとめて − 枚数 ＋（11/6 慶一郎さん：予約の画面と同じに）。ガチャ券は1枚なので ✓ のまま */}
+                  {ticketGroups(listed.filter(t => t.id !== 'gacha'), t => (!hasPerm && welcomeIds.includes(t.id)) || !!t.blocked).map(g => {
+                    const first = g.items[0]
+                    const on = g.items.filter(t => ticketIds.includes(t.id))
+                    const permOnly = !hasPerm && welcomeIds.includes(first.id)
+                    const off = !!first.blocked || permOnly
+                    const btn = (dis: boolean): CSSProperties => ({ width: 40, height: 40, borderRadius: 20, border: `1px solid ${C.lineStrong}`, background: 'transparent', color: dis ? C.mute : C.text, fontSize: 20, lineHeight: 1, cursor: dis ? 'default' : 'pointer' })
+                    return (
+                      <div key={g.key} style={{ ...lineBtn, cursor: 'default', opacity: off ? 0.55 : 1 }}>
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 14 }}>{first.title}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: C.mute }}>{first.blocked ? TICKET_BLOCK_LABEL[first.blocked] : permOnly ? 'パーマのときだけ使えます' : `1枚 −${yen(first.amount)}・お持ち ${g.items.length}枚`}</span>
+                        </span>
+                        {!off && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            <button type="button" aria-label={`${first.title}を1枚減らす`} disabled={on.length === 0} onClick={() => toggleTicket(on[on.length - 1].id, first.type)} style={btn(on.length === 0)}>−</button>
+                            <span aria-live="polite" style={{ minWidth: 40, textAlign: 'center', fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{on.length}枚</span>
+                            <button type="button" aria-label={`${first.title}を1枚増やす`} disabled={on.length >= g.items.length} onClick={() => { const next = g.items.find(t => !ticketIds.includes(t.id)); if (next) toggleTicket(next.id, first.type) }} style={btn(on.length >= g.items.length)}>＋</button>
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {listed.filter(t => t.id === 'gacha').map(t => {
                     const on = t.id === 'gacha' ? gachaOn : ticketIds.includes(t.id)
                     const permOnly = !hasPerm && welcomeIds.includes(t.id)
                     const off = !!t.blocked || permOnly
@@ -745,4 +768,16 @@ function checkoutFailureMessage(err: unknown, fallback?: string): string {
   // 端末の中で作った日本語の案内（会計の記録・ほかの画面で会計中など）はそのまま
   if (/[ぁ-んァ-ン一-龥]/.test(message)) return message
   return fallback ?? rpcErrorMessage(err)
+}
+
+/** 券を「名前・金額・使える状態」でまとめる（期限の近い順。会計の券の − 枚数 ＋ 用） */
+function ticketGroups<T extends { id: string; title: string; amount: number; type: string; expires_at?: string | null; blocked?: string | null }>(list: readonly T[], unusable: (t: T) => boolean): { key: string; items: T[] }[] {
+  const m = new Map<string, { key: string; items: T[] }>()
+  for (const t of [...list].sort((a, b) => (a.expires_at ?? '9999').localeCompare(b.expires_at ?? '9999'))) {
+    const key = `${t.type}|${t.title}|${t.amount}|${t.blocked ?? ''}|${unusable(t) ? 1 : 0}`
+    const g = m.get(key) ?? { key, items: [] }
+    g.items.push(t)
+    m.set(key, g)
+  }
+  return [...m.values()]
 }
