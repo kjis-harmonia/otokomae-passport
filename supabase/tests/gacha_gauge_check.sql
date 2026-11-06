@@ -44,6 +44,7 @@ begin
   update app_private.gacha_settings set repeat = false, gauge_opens_on = date '2026-11-01' where id = 1;
   delete from app_private.gacha_holdings where user_id = U;
   delete from app_private.gacha_gauge where user_id = U;
+  delete from app_private.gacha_gauge_log where user_id = U;
   perform pg_temp.unpay(A); perform pg_temp.unpay(B);
   perform pg_temp.place(A, TUE); perform pg_temp.place(B, TUE + interval '1 hour');
   update public.reservations set user_id = U, client_id = CL where id in (A, B);
@@ -54,9 +55,9 @@ begin
   log := log || pg_temp.chk('最初は 0pt', pg_temp.pt(T), '0');
   log := log || pg_temp.chk('ゲージに無い景品（100円引き）', pg_temp.err(public.customer_gacha_gauge_target(T, 'off100')), 'bad_target');
   log := log || pg_temp.chk('APACHI を狙う', pg_temp.err(public.customer_gacha_gauge_target(T, 'free-apachi')), 'ok');
-  log := log || pg_temp.chk('APACHI は 40pt', pg_temp.goal(T, 'free-apachi'), '40.0');
-  log := log || pg_temp.chk('銀パラは 40pt', pg_temp.goal(T, 'free-ginpara'), '40.0');
-  log := log || pg_temp.chk('パンチは 20pt', pg_temp.goal(T, 'free-punch'), '20.0');
+  log := log || pg_temp.chk('APACHI は 50pt', pg_temp.goal(T, 'free-apachi'), '50.0');
+  log := log || pg_temp.chk('銀パラは 50pt', pg_temp.goal(T, 'free-ginpara'), '50.0');
+  log := log || pg_temp.chk('パンチは 30pt', pg_temp.goal(T, 'free-punch'), '30.0');
   log := log || pg_temp.chk('500円引きは 5pt', pg_temp.goal(T, 'off500'), '5.0');
   log := log || pg_temp.chk('たまる前に受け取る', pg_temp.err(public.customer_gacha_gauge_claim(T)), 'not_enough');
 
@@ -103,7 +104,7 @@ begin
 
   log := log || E'── 受け取る\n';
   perform pg_temp.place(A, TUE); perform pg_temp.place(B, TUE + interval '1 hour');
-  update app_private.gacha_gauge set points = 40.5 where user_id = U;
+  update app_private.gacha_gauge set points = 50.5 where user_id = U;
   perform pg_temp.give(U, 'off100'); perform public.customer_gacha_attach(T, A);
   log := log || pg_temp.chk('予約に付いた券があるうちは受け取れない', pg_temp.err(public.customer_gacha_gauge_claim(T)), 'held_reserved');
   update app_private.gacha_holdings set reservation_id = null where user_id = U;
@@ -134,7 +135,7 @@ begin
   perform pg_temp.place(A, TUE); perform public.customer_gacha_attach(T, A);
   s := pg_temp.sale(A, jsonb_build_array(pg_temp.item('cut-regular', '通常カット', 4000)), 3900, true, 'gk-a5');
   log := log || pg_temp.chk('会計そのものは通る', coalesce(s->>'error', s->>'total'), '3900');
-  log := log || pg_temp.chk('解禁前の会計は付かない', (select points::text from app_private.gacha_gauge where user_id = U), '0.0');
+  log := log || pg_temp.chk('解禁前の会計は付かない（0.5 のまま）', (select points::text from app_private.gacha_gauge where user_id = U), '0.5');
 
   raise exception 'RESULT%', E'\n' || log;
 end $t$;

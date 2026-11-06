@@ -18,8 +18,8 @@ create table if not exists app_private.gacha_gauge_goals (
 revoke all on table app_private.gacha_gauge_goals from public, anon, authenticated;
 insert into app_private.gacha_gauge_goals (prize_code, points) values
   ('off500', 5), ('teitei1000', 10), ('skinfade', 10),
-  ('free-punch', 20), ('free-aipa', 20), ('free-nigro', 20),
-  ('free-apachi', 40), ('free-ginpara', 40)
+  ('free-punch', 30), ('free-aipa', 30), ('free-nigro', 30),
+  ('free-apachi', 50), ('free-ginpara', 50)
 on conflict (prize_code) do nothing;
 
 -- ポイントの付かないメニュー（子ども）
