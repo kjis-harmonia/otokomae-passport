@@ -277,6 +277,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // 手持ちの券と、確認画面で選んだ券（key：その確認画面のメニューと時刻）
   const [myTickets, setMyTickets] = useState<TicketRow[]>([])
   const [couponPick, setCouponPick] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] })
+  // 確認画面でガチャ券を使わないことにした（0枚にした・11/6）
+  const [skipGacha, setSkipGacha] = useState(false)
   // 銀Pay の仮支払い：確認画面で「銀Payで今すぐ支払う」を選ぶと、予約の確定のあとに残高を押さえる（支払いの確定はレジで会員QR を読んだとき）
   const ginpay = useGinpayHolds()
   const ginpayRef = useRef<GinpayHoldSummary | null>(ginpay)
@@ -1289,9 +1291,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const selected = usable.filter(t => ids.includes(t.id))
     // 確定すると入れ替わる予約（ご予約は1つ）にガチャ券が付いていれば、新しい予約に付け直す
     const changeOf = (step.change ?? ownActive ?? undefined)?.id
-    const price = priceFor(step.menu.code, step.menu.price, step.slot.starts_at, selected, gachaHeld, changeOf)
+    const price = priceFor(step.menu.code, step.menu.price, step.slot.starts_at, selected, skipGacha ? null : gachaHeld, changeOf)
     return price ? { key, usable, selected, price, gachaNote: gachaNote(gachaHeld, step.menu.code, step.slot.starts_at, changeOf) } : null
-  }, [step, myTickets, couponPick, gachaHeld, ownActive])
+  }, [step, myTickets, couponPick, gachaHeld, ownActive, skipGacha])
   // 銀Pay で払える（口座があり、使える額がお会計以上）なら、選んでいる間は確定のあとに押さえる
   const ginpayChoice = confirmPrice && ginpay && confirmPrice.price.total > 0
     ? { available: ginpay.available, enough: ginpay.available >= confirmPrice.price.total, on: payGinpay && ginpay.available >= confirmPrice.price.total }
@@ -1300,8 +1302,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // 確認画面にいる間だけ書き換える（確定を押すと画面が「予約中」に変わるので、そこで消さない。使ったら book 側で消す）
   useEffect(() => {
     if (confirmPrice) ginpayPlanRef.current = ginpayOn ? { key: confirmPrice.key, amount: confirmPrice.price.total, gachaOff: confirmPrice.price.gacha } : { key: '', amount: 0 }
-    if (confirmPrice) gachaPlanRef.current = gachaHeld && confirmPrice.gachaNote === null ? confirmPrice.key : ''
-  }, [confirmPrice, ginpayOn, gachaHeld])
+    if (confirmPrice) gachaPlanRef.current = gachaHeld && confirmPrice.gachaNote === null && !skipGacha ? confirmPrice.key : ''
+  }, [confirmPrice, ginpayOn, gachaHeld, skipGacha])
   const toggleCoupon = (key: string, id: string) => setCouponPick(p => {
     const ids = p.key === key ? p.ids : []
     return { key, ids: ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id] }
@@ -1749,7 +1751,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'confirm' && confirmPrice && (
               <PriceBox menuName={step.menu.name} price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
-                gacha={gachaHeld && confirmPrice.gachaNote === null ? gachaHeld.title : null} gachaNote={confirmPrice.gachaNote}
+                gacha={gachaHeld && confirmPrice.gachaNote === null ? gachaHeld.title : null} gachaOn={!skipGacha} onGacha={() => setSkipGacha(v => !v)} gachaNote={confirmPrice.gachaNote}
                 onToggle={id => toggleCoupon(confirmPrice.key, id)} ginpay={ginpayChoice} onGinpay={() => setPayGinpay(v => !v)} />
             )}
             {step.k === 'confirm' && !step.change && <p style={{ margin: '10px 2px 0', fontSize: 12, lineHeight: 1.6, color: C.secondary }}>{BOOKING_RULE_NOTE}</p>}
@@ -2293,10 +2295,12 @@ function couponSpeech(price: PriceBreakdown | null, usableCount: number): string
 }
 
 /** お会計（プレミアムクーポン・選んだ券）と、使える券のボタン */
-function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpay, gacha, gachaNote }: {
+function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpay, gacha, gachaOn = true, onGacha, gachaNote }: {
   menuName: string; price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void
   /** 自動で付くガチャ券の名前（付かなければ null）と、付かない理由 */
   gacha?: string | null; gachaNote?: string | null
+  /** ガチャ券を使うか（1枚まで）。onGacha で 0枚 ⇄ 1枚 */
+  gachaOn?: boolean; onGacha?: () => void
   /** 銀Pay の仮支払い（口座があるときだけ）。enough：使える額がお会計以上 */
   ginpay?: { available: number; enough: boolean; on: boolean } | null; onGinpay?: () => void
 }) {
@@ -2307,8 +2311,9 @@ function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpa
       <div style={{ borderRadius: 14, overflow: 'hidden', background: C.fill }}>
         <SummaryRow label={`料金（${menuName}）`} value={yenOf(price.normal ?? price.base)} />
         {price.normal != null && p && <SummaryRow label={p.def.title} value={`−${yenOf(price.normal - price.base)}`} />}
-        {selected.map(t => <SummaryRow key={t.id} label={TICKET_TYPE_LABELS[t.type]} value={`−${yenOf(t.amount)}`} />)}
-        {gacha && <SummaryRow label={`ガチャ券（${gacha}）`} value={`−${yenOf(price.gacha)}`} />}
+        {/* 同じ券はまとめて「漢トク券 × 3」（11/6 慶一郎さん「いっぱい並んでるの鬱陶しい」） */}
+        {ticketGroups(selected).map(g => <SummaryRow key={g.key} label={`${TICKET_TYPE_LABELS[g.type]}${g.items.length > 1 ? ` × ${g.items.length}` : ''}`} value={`−${yenOf(g.items.reduce((a, t) => a + t.amount, 0))}`} />)}
+        {gacha && gachaOn && <SummaryRow label={`ガチャ券（${gacha}）`} value={`−${yenOf(price.gacha)}`} />}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 54, padding: '0 16px', borderTop: `0.5px solid ${C.separator}` }}>
           <span style={{ fontSize: 15, color: C.secondary }}>{ginpay?.on ? 'お会計（銀Pay）' : 'お会計（店頭で）'}</span>
           <span style={{ fontSize: 22, fontWeight: 700 }}>{yenOf(price.total)}</span>
@@ -2345,26 +2350,56 @@ function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpa
           土日祝は 17:00〜19:00 のご来店なら {p.def.title} で {yenOf(p.memberPrice)} になります。
         </p>
       )}
-      {usable.length > 0 && (
-        <>
-          <p style={{ margin: '14px 4px 8px', fontSize: 13, color: C.secondary }}>使える券（押すと使う・もう一度押すと外す）</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {usable.map(t => {
-              const on = selected.some(s => s.id === t.id)
-              return (
-                <button key={t.id} type="button" aria-pressed={on} onClick={() => onToggle(t.id)} style={{
-                  padding: '9px 14px', borderRadius: 20, fontSize: 15, fontFamily: FONT, cursor: 'pointer',
-                  border: `1px solid ${on ? C.text : C.separator}`, background: on ? C.text : 'transparent', color: on ? C.bg : C.text,
-                }}>
-                  {TICKET_TYPE_LABELS[t.type]} {yenOf(t.amount)}
-                </button>
-              )
-            })}
-          </div>
-        </>
+      {/* 使う券：種類と金額ごとに1行、− 枚数 ＋（11/6 慶一郎さん）。押すたびに上のお会計も変わる。期限の近い券から使う */}
+      {(usable.length > 0 || (gacha && onGacha)) && (
+        <div style={{ marginTop: 14, borderRadius: 14, overflow: 'hidden', background: C.fill }}>
+          <p style={{ margin: 0, padding: '10px 16px 4px', fontSize: 13, color: C.secondary }}>使う券</p>
+          {gacha && onGacha && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 60, padding: '0 12px 0 16px', borderTop: `0.5px solid ${C.separator}` }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 16 }}>ガチャ券</span>
+                <span style={{ display: 'block', fontSize: 12, color: C.secondary }}>{gacha}・1回の予約に1枚</span>
+              </span>
+              <button type="button" aria-label="ガチャ券を使わない" disabled={!gachaOn} onClick={onGacha} style={{ width: 44, height: 44, borderRadius: 22, border: `1px solid ${C.separator}`, background: 'transparent', color: gachaOn ? C.text : C.tertiary, fontSize: 22, lineHeight: 1, cursor: gachaOn ? 'pointer' : 'default', fontFamily: FONT }}>−</button>
+              <span aria-live="polite" style={{ minWidth: 44, textAlign: 'center', fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{gachaOn ? 1 : 0}枚</span>
+              <button type="button" aria-label="ガチャ券を使う" disabled={gachaOn} onClick={onGacha} style={{ width: 44, height: 44, borderRadius: 22, border: `1px solid ${C.separator}`, background: 'transparent', color: gachaOn ? C.tertiary : C.text, fontSize: 22, lineHeight: 1, cursor: gachaOn ? 'default' : 'pointer', fontFamily: FONT }}>＋</button>
+            </div>
+          )}
+          {ticketGroups(usable).map(g => {
+            const on = g.items.filter(t => selected.some(x => x.id === t.id))
+            const n = on.length
+            const add = () => { const next = g.items.find(t => !on.some(x => x.id === t.id)); if (next) onToggle(next.id) }
+            const remove = () => { if (n > 0) onToggle(on[on.length - 1].id) }
+            const btn = (dis: boolean): CSSProperties => ({ width: 44, height: 44, borderRadius: 22, border: `1px solid ${C.separator}`, background: 'transparent', color: dis ? C.tertiary : C.text, fontSize: 22, lineHeight: 1, cursor: dis ? 'default' : 'pointer', fontFamily: FONT })
+            const label = TICKET_TYPE_LABELS[g.type]
+            return (
+              <div key={g.key} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 60, padding: '0 12px 0 16px', borderTop: `0.5px solid ${C.separator}` }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 16 }}>{label} {yenOf(g.items[0].amount)}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: C.secondary }}>お持ち {g.items.length}枚</span>
+                </span>
+                <button type="button" aria-label={`${label}を1枚減らす`} disabled={n === 0} onClick={remove} style={btn(n === 0)}>−</button>
+                <span aria-live="polite" style={{ minWidth: 44, textAlign: 'center', fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{n}枚</span>
+                <button type="button" aria-label={`${label}を1枚増やす`} disabled={n >= g.items.length} onClick={add} style={btn(n >= g.items.length)}>＋</button>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
+}
+
+/** 券を種類と金額でまとめる（期限の近い順） */
+function ticketGroups(list: readonly TicketRow[]): { key: string; type: TicketRow['type']; items: TicketRow[] }[] {
+  const m = new Map<string, { key: string; type: TicketRow['type']; items: TicketRow[] }>()
+  for (const t of [...list].sort((a, b) => (a.expires_at ?? '9999').localeCompare(b.expires_at ?? '9999'))) {
+    const key = `${t.type}|${t.amount}`
+    const g = m.get(key) ?? { key, type: t.type, items: [] }
+    g.items.push(t)
+    m.set(key, g)
+  }
+  return [...m.values()]
 }
 
 function Summary({ menu, slot, staffName, before, hidePrice }: { menu: MenuOption; slot: Slot; staffName?: string; before?: CustomerReservation; hidePrice?: boolean }) {
