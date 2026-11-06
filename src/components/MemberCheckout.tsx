@@ -28,6 +28,8 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paid, setPaid] = useState<Sale | null>(null)
+  // お会計で選んだメニュー（いつものメニューに登録する候補・11/6）
+  const [pickedMenu, setPickedMenu] = useState<string | null>(null)
   const opening = useRef(false)
   const [api] = useState(() => createStaffCheckoutApi(readActor))
   const [customers] = useState(() => createStaffCustomerApi(readActor))
@@ -70,7 +72,8 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
           <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#1c1f1d' }}>{yen(paid.total)}</span>
         </div>
         {error && <p style={{ marginTop: 8, fontSize: 13, color: '#b23a3a' }}>{error}</p>}
-        <button type="button" disabled={loading} onClick={() => { setPaid(null); void open(true) }}
+        <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />
+        <button type="button" disabled={loading} onClick={() => { setPaid(null); setPickedMenu(null); void open(true) }}
           style={{ width: '100%', marginTop: 12, minHeight: 48, borderRadius: 12, background: '#ffffff', border: '1px solid rgba(151,115,43,0.5)', color: '#1c1f1d', fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer' }}>
           もう1件お会計する（お子様・お連れ様）
         </button>
@@ -91,7 +94,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         onClose={() => setTarget(null)}
         onDone={sale => { setTarget(null); setPaid(sale); onPaid(sale) }}
         // お会計で選んだメニューを今日のメニューとして記録する（いつものメニュー・来店の記録に使う。失敗しても会計は続ける）
-        onMenuPicked={code => { void callStaffRpc('staff_set_visit_menu', { p_user_id: userId, p_menu_code: code, p_staff_name: staffName || null }).catch(() => {}) }}
+        onMenuPicked={code => { setPickedMenu(code); void callStaffRpc('staff_set_visit_menu', { p_user_id: userId, p_menu_code: code, p_staff_name: staffName || null }).catch(() => {}) }}
       />
     )
   }
@@ -116,5 +119,41 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
       </button>
       {error && <p role="alert" style={{ marginTop: 8, fontSize: 13, color: '#b23a3a', textAlign: 'left' }}>{error}</p>}
     </>
+  )
+}
+
+/** 会計のあと：お客様の「いつものメニュー」を登録する（11/6 慶一郎さん「次から楽じゃない？」）。
+ *  会計でメニューを選んでいればそれを出す（押すだけ）。任意金額のときは一覧から選ぶ。登録は会員の記録に残り、お客様のアプリの「いつもの」に出る */
+function UsualMenuRow({ userId, staffName, picked, loadMenus }: { userId: string; staffName: string; picked: string | null; loadMenus: () => Promise<{ id: string; name: string }[]> }) {
+  const [menus, setMenus] = useState<{ id: string; name: string }[] | null>(null)
+  const [code, setCode] = useState<string | null>(picked)
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  useEffect(() => { let live = true; void loadMenus().then(m => { if (live) setMenus(m) }).catch(() => { if (live) setMenus([]) }); return () => { live = false } }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const name = menus?.find(m => m.id === code)?.name
+  const save = async () => {
+    if (!code || state === 'saving') return
+    setState('saving')
+    try {
+      const r = await callStaffRpc<{ ok?: boolean; error?: string }>('staff_set_usual_menu', { p_user_id: userId, p_code: code, p_staff_name: staffName || null })
+      setState(r.ok ? 'saved' : 'error')
+    } catch { setState('error') }
+  }
+  if (state === 'saved') return <p style={{ marginTop: 12, fontSize: 13, color: '#246b52' }}>いつものメニューを「{name ?? code}」に登録しました。</p>
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(36,107,82,0.2)' }}>
+      <p style={{ fontSize: 12, color: '#5b625e', marginBottom: 6 }}>お客様のいつものメニュー（次からアプリの「いつもの」で予約できます）</p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <select value={code ?? ''} onChange={e => { setCode(e.target.value || null); setState('idle') }} aria-label="いつものメニュー"
+          style={{ flex: 1, minWidth: 0, minHeight: 44, borderRadius: 10, border: '1px solid rgba(0,0,0,0.15)', background: '#fff', padding: '0 10px', fontSize: 15, color: '#1c1f1d' }}>
+          <option value="">{menus ? 'メニューを選ぶ' : '読み込んでいます…'}</option>
+          {(menus ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        <button type="button" disabled={!code || state === 'saving'} onClick={() => void save()}
+          style={{ flex: 'none', minHeight: 44, padding: '0 16px', borderRadius: 10, border: 'none', background: code ? '#246b52' : 'rgba(0,0,0,0.12)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: code ? 'pointer' : 'default' }}>
+          {state === 'saving' ? '登録中…' : '登録する'}
+        </button>
+      </div>
+      {state === 'error' && <p style={{ marginTop: 6, fontSize: 12, color: '#b23a3a' }}>登録できませんでした。もう一度お試しください。</p>}
+    </div>
   )
 }
