@@ -2647,6 +2647,7 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
     if (!overview) { try { setOverview(await api.dayOverview(day!)) } catch { setOverview(null) } }
     setBusy(false)
     setPersons(p.at.map((t, i) => ({ menu: i === 0 ? planMenu : cut, name: null, at: new Date(t).toISOString(), staffId: p.staff[i] ?? null })))
+    slotCache.current = {}
     setIdx(0); setPendingMenu(null); setNameDraft(''); setPhase('menus')
   }
 
@@ -2666,18 +2667,64 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
 
   const setPerson = (patch: Partial<GroupPerson>) => setPersons(ps => ps.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
   const nextPerson = () => { setPendingMenu(null); setNameDraft(''); if (idx + 1 < size) setIdx(idx + 1); else setPhase('confirm') }
-  const chooseMenu = (m: MenuOption, at?: string) => {
-    if (idx === 0) { setPerson({ menu: m, ...(at ? { at } : {}) }); nextPerson(); return }
-    setPerson({ menu: m, ...(at ? { at } : {}) }); setPendingMenu(m)
+  // 担当ごと・メニューごとの空き（開始時刻）。選んだメニューで、全員の担当をその場で割り振り直す
+  //   （11/6 慶一郎さん「3名入れたけど田中さんのみ反映」：同時の2人目がパンチを選び、空いていた担当がご本人の担当とかぶっていた）
+  const slotCache = useRef<Record<string, Record<string, Set<number>>>>({})
+  const staffSlotsFor = async (code: string) => {
+    if (!slotCache.current[code]) {
+      const lists = await Promise.all(staffIds.map(async id => [id, new Set((await api.staffSlots(day!, code, id)).map(x => Date.parse(x.starts_at)))] as const))
+      slotCache.current[code] = Object.fromEntries(lists)
+    }
+    return slotCache.current[code]
   }
-  const chooseMember = (u: UsualMember) => {
+  /** 全員（menu・開始時刻）に、同じ担当の時間が重ならないよう担当を割り振る。無理なら null */
+  const assign = async (list: { menu: MenuOption; at: string }[]): Promise<string[] | null> => {
+    const avail = await Promise.all(list.map(p => staffSlotsFor(p.menu.code)))
+    const pick = (i: number, busy: Record<string, [number, number][]>): string[] | null => {
+      if (i === list.length) return []
+      const t = Date.parse(list[i].at), end = t + list[i].menu.duration_min * MIN
+      for (const id of staffIds) {
+        if (!avail[i][id]?.has(t) || (busy[id] ?? []).some(([a, b]) => t < b && a < end)) continue
+        const rest = pick(i + 1, { ...busy, [id]: [...(busy[id] ?? []), [t, end]] })
+        if (rest) return [id, ...rest]
+      }
+      return null
+    }
+    return pick(0, {})
+  }
+  /** この人のメニューを、希望の時刻（だめなら近い時刻、あとを優先）に入れて、全員の担当を割り振る */
+  const place = async (m: MenuOption, want: string): Promise<{ at: string; staff: string[] } | null> => {
+    const before = persons.slice(0, idx).map(p => ({ menu: p.menu, at: p.at }))
+    const lists = await staffSlotsFor(m.code)
+    const w = Date.parse(want)
+    const times = [...new Set(Object.values(lists).flatMap(s => [...s]))].sort((a, b) => (a >= w ? a - w : (w - a) * 3) - (b >= w ? b - w : (w - b) * 3))
+    for (const t of times.slice(0, 40)) {
+      const at = new Date(t).toISOString()
+      const staff = await assign([...before, { menu: m, at }])
+      if (staff) return { at, staff }
+    }
+    return null
+  }
+  const settle = async (m: MenuOption, name: string | null) => {
+    setBusy(true); setNote(null)
+    try {
+      const want = persons[idx].at
+      const r = await place(m, want)
+      if (!r) { setNote(`${name ? `${name}様の` : ''}${m.name}は、この日はほかの方と一緒に入れる時間がありません。ほかのメニューをお選びください。`); return false }
+      if (r.at !== want) setNote(`${name ? `${name}様の` : ''}${m.name}は ${formatVisit(r.at).time} からご案内できます。`)
+      setPersons(ps => ps.map((p, i) => (i < idx ? { ...p, staffId: r.staff[i] } : i === idx ? { ...p, menu: m, at: r.at, staffId: r.staff[i], ...(name ? { name } : {}) } : p)))
+      return true
+    } catch { setNote('空きを確かめられませんでした。もう一度お試しください。'); return false }
+    finally { setBusy(false) }
+  }
+  const chooseMenu = async (m: MenuOption) => {
+    if (busy || !(await settle(m, null))) return
+    if (idx === 0) nextPerson(); else setPendingMenu(m)
+  }
+  const chooseMember = async (u: UsualMember) => {
     const m = menus.find(x => x.code === u.menuCode)
-    if (!m) return
-    const at = persons[idx].at
-    const t = fits(m.code, at) ? at : (() => { const n = nextFit(m.code, at); return n ? new Date(n).toISOString() : null })()
-    if (!t) { setNote(`${u.name}様の${m.name}は、この日は入れる時間がありません。ほかのメニューをお選びください。`); return }
-    setNote(t !== at ? `${u.name}様の${m.name}は ${formatVisit(t).time} からご案内できます。` : null)
-    setPerson({ menu: m, name: u.name, at: t }); nextPerson()
+    if (!m || busy) return
+    if (await settle(m, u.name)) nextPerson()
   }
 
   const rowBtn: CSSProperties = { minHeight: 44, border: 'none', background: 'none', color: C.secondary, fontSize: 14, cursor: 'pointer' }
@@ -2725,7 +2772,7 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
           {idx > 0 && !pendingMenu && members.length > 0 && (
             <>
               <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>いつものメンバー</p>
-              <List>{members.filter(u => !persons.some((p, i) => i !== idx && p.name === u.name)).map(u => { const m = menus.find(x => x.code === u.menuCode); return m ? <Row key={u.name} onClick={() => chooseMember(u)} title={`${u.name}様`} detail={m.name} /> : null })}</List>
+              <List>{members.filter(u => !persons.some((p, i) => i !== idx && p.name === u.name)).map(u => { const m = menus.find(x => x.code === u.menuCode); return m ? <Row key={u.name} onClick={() => void chooseMember(u)} title={`${u.name}様`} detail={m.name} /> : null })}</List>
             </>
           )}
           {pendingMenu ? (
@@ -2743,7 +2790,7 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
                   const at = persons[idx].at
                   const ok = fits(m.code, at)
                   const later = ok ? null : nextFit(m.code, at)
-                  return <Row key={m.code} muted={!ok && !later} onClick={ok ? () => chooseMenu(m) : later ? () => chooseMenu(m, new Date(later).toISOString()) : undefined}
+                  return <Row key={m.code} muted={!ok && !later} onClick={ok || later ? () => void chooseMenu(m) : undefined}
                     title={m.name} note={idx === 0 && m.code === planMenu.code && primaryMenu ? 'いつもの' : undefined}
                     detail={ok ? `${m.duration_min}分・${yen(m)}` : later ? `${formatVisit(new Date(later).toISOString()).time}から入れます` : 'この日は難しいです'} />
                 })}
