@@ -63,7 +63,7 @@ type Step =
   /** 2回目以降：おかえりなさい（前回からの日数・メンテナンスカットの期限・いつものメニュー） */
   | { k: 'welcome'; w: Welcome }
   | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption; label?: string; calendar?: boolean }
-  | { k: 'askMenu'; req: VisitRequest }
+  | { k: 'askMenu'; req: VisitRequest; then?: 'when' }
   /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
   | { k: 'overview'; req: VisitRequest; advice: DayAdvice; note?: string }
   | { k: 'searching'; label?: string }
@@ -1102,7 +1102,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     if (s.k === 'askMenu') {
       const menu = matchMenu(text, menus)
-      if (menu) void search(s.req, menu)
+      // 日にちの画面の「メニューを変える」から来たときは、日にちの画面へ戻る（11/6）
+      if (menu && s.then === 'when') setStep({ k: 'askWhen', again: 'menu', menu })
+      else if (menu) void search(s.req, menu)
       else setStep({ ...s })
       return
     }
@@ -1479,6 +1481,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
             {step.k === 'askWhen' && step.again === 'menu' && step.menu && !step.calendar && step.menu.code !== 'maintenance' && (
               <List>
+                {/* いま選んでいるメニューと「変える」を一番上に（11/6 慶一郎さん「いつものでパンチパーマを適当に選んでる人は分かりづらい」） */}
+                <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true }, then: 'when' })}
+                  title={step.menu.name} note={yen(step.menu)} detail="変える ›" />
                 {/* 日にちを押すだけで進める（話さなくても予約できる・10/29 慶一郎さん）：今日・明日・明後日・もっと先 */}
                 {[0, 1, 2].map(i => {
                   const d = jstDate(i)
@@ -1493,7 +1498,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {step.k === 'askMenu' && (
               <List>
                 {menus.map(m => (
-                  <Row key={m.code} onClick={() => handleText(m.name)}
+                  <Row key={m.code} onClick={() => (step.then === 'when' ? setStep({ k: 'askWhen', again: 'menu', menu: m }) : handleText(m.name))}
                     title={m.name} detail={`${m.duration_min}分・${yen(m)}`} note={m.code === lastMenuCode ? '前回' : undefined} />
                 ))}
               </List>
