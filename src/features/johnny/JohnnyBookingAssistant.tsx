@@ -294,6 +294,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const shownRef = useRef<Step | null>(null)
   // お連れ様の担当（null＝おまかせ）。2人分の確認の画面で選ぶ
   // お二人の予約で、無料のガチャ券をどちらに使うか（null＝おまかせ：ご本人に使えればご本人、だめならお連れ様）
+  // 日にちを聞く前に選ぶ担当（11/6 慶一郎さん「メニュー、担当の後、施術日聞くか」）。'any'＝どちらでも（空いている担当に決める）。
+  // 最初はいつもの担当。選んだ担当の休みの日はカレンダーで押せず、空きもその担当の分だけ出す
+  const [wantStaff, setWantStaffState] = useState<string>(() => getUsualStaff() ?? 'any')
+  const wantStaffRef = useRef(wantStaff)
+  const setWantStaff = useCallback((v: string) => { wantStaffRef.current = v; setWantStaffState(v) }, [])
   const [partyGachaPick, setPartyGachaPick] = useState<'self' | 'companion' | null>(null)
   const partyGachaPickRef = useRef<'self' | 'companion' | null>(null)
   const pickPartyGacha = useCallback((v: 'self' | 'companion' | null) => { partyGachaPickRef.current = v; setPartyGachaPick(v) }, [])
@@ -484,7 +489,18 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep({ k: 'searching' })
     stopListening()
     try {
-      const picks = spreadSlots(await api.nextSlots(menu.code, from, 10), 3)
+      // 担当を選んでいれば、その担当の空きだけを近い日から（3週間先まで）
+      const want = wantStaffRef.current !== 'any' ? wantStaffRef.current : null
+      let found: Slot[] = []
+      if (want) {
+        for (let k = 0; k < 21 && found.length < 10; k += 3) {
+          const days = [0, 1, 2].map(i => addDays(from, k + i))
+          const got = await Promise.all(days.map(d => api.staffSlots(d, menu.code, want)))
+          for (const list of got) found = [...found, ...[...list].sort((x, y) => x.starts_at.localeCompare(y.starts_at))]
+        }
+        found = found.slice(0, 10)
+      } else found = await api.nextSlots(menu.code, from, 10)
+      const picks = spreadSlots(found, 3)
       if (picks.length === 0) { setStep({ k: 'askWhen', again: 'none', menu }); return }
       const dates = [...new Set(picks.map(x => slotDate(x.starts_at)))]
       setStep({ k: 'pick', req: { ...req, dates, time: null }, menu, offer: { kind: 'choices', slots: picks }, note, waitDate })
@@ -499,7 +515,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     stopListening()
     const req: VisitRequest = { dates: [date], time: null, range: null, earliest: false }
     try {
-      const slots = [...await api.slots(date, menu.code)].sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+      const want = wantStaffRef.current !== 'any' ? wantStaffRef.current : null
+      const slots = [...await (want ? api.staffSlots(date, menu.code, want) : api.slots(date, menu.code))].sort((a, b) => a.starts_at.localeCompare(b.starts_at))
       if (slots.length === 0) { void soonest(menu, req, addDays(date, 1), `${menu.name}は${dayWord(date)}は空きがありません。`, date); return }
       const n = Math.min(6, slots.length)
       const picks = n === 1 ? slots : [...new Set(Array.from({ length: n }, (_, i) => Math.round(i * (slots.length - 1) / (n - 1))))].map(i => slots[i])
@@ -599,7 +616,21 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     if (staff.length === 0) return
     if (staff.length === 1) { setStep({ ...step, staffId: staff[0].id, staffChosen: true }); return } // eslint-disable-line react-hooks/set-state-in-effect -- 担当が1人ならその人。2人以上なら確定の前に担当の画面へ差し替える
     // いつもの担当を登録している人は、担当の確認を省く（その担当がその時間に空いていなければ、担当の画面で選んでもらう・10/27 慶一郎さん）
-    const usual = step.change ? null : getUsualStaff()
+    // 日にちの前に選んだ担当があればその担当（どちらでもなら、その時間に空いている担当に決める）
+    const want = wantStaffRef.current
+    if (!step.change && want === 'any' && staff.length > 1) {
+      let alive = true
+      const at = Date.parse(step.slot.starts_at)
+      void Promise.all(staff.map(st => api.staffSlots(slotDate(step.slot.starts_at), step.menu.code, st.id).then(list => list.some(x => Date.parse(x.starts_at) === at), () => false)))
+        .then(free => {
+          if (!alive) return
+          const i = free.findIndex(Boolean)
+          if (i >= 0) setStep({ ...step, staffId: staff[i].id, staffChosen: true })
+          else setStep({ k: 'pickStaff', next: step })
+        })
+      return () => { alive = false }
+    }
+    const usual = step.change ? null : (want !== 'any' ? want : getUsualStaff())
     const usualStaff = usual ? staff.find(st => st.id === usual) : undefined
     if (usualStaff) {
       let alive = true
@@ -609,7 +640,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         .then(free => {
           if (!alive) return
           if (free) setStep({ ...step, staffId: usualStaff.id, staffChosen: true, usualStaff: true })
-          else setStep({ k: 'pickStaff', next: step, note: `いつもの担当の${usualStaff.name}は、この時間は空いていません。ほかの担当をお選びください。` })
+          else setStep({ k: 'pickStaff', next: step, note: `${usualStaff.name}は、この時間は空いていません。ほかの担当をお選びください。` })
         })
       return () => { alive = false }
     }
@@ -1476,7 +1507,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {/* メニューが決まったとき（「いつもの」など）：日にちを押して進める。前回のご来店から14日以内ならメンテナンスカットにも切り替えられる（過ぎていたら出さない） */}
             {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.calendar && (
-              <DayCalendar from={jstDate(3)} last={jstDate(options?.settings.booking_window_days ?? 60)} usual={options?.staff?.find(x => x.id === usualStaffId) ?? null} onPick={d => void pickDay(step.menu!, d)}
+              <DayCalendar from={jstDate(3)} last={jstDate(options?.settings.booking_window_days ?? 60)} staff={options?.staff?.find(x => x.id === wantStaff) ?? null} onPick={d => void pickDay(step.menu!, d)}
                 onSoonest={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(3), `${m.name}の、明々後日からの空きです。`) }} />
             )}
             {step.k === 'askWhen' && step.again === 'menu' && step.menu && !step.calendar && step.menu.code !== 'maintenance' && (
@@ -1484,6 +1515,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                 {/* いま選んでいるメニューと「変える」を一番上に（11/6 慶一郎さん「いつものでパンチパーマを適当に選んでる人は分かりづらい」） */}
                 <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true }, then: 'when' })}
                   title={step.menu.name} note={yen(step.menu)} detail="変える ›" />
+                {/* 担当（押すたびに テイテイ → 銀二郎 → どちらでも）。日にちはこの担当の出勤日から */}
+                {(options?.staff?.length ?? 0) > 1 && (
+                  <Row onClick={() => { const order = [...(options?.staff ?? []).map(st => st.id), 'any']; setWantStaff(order[(order.indexOf(wantStaff) + 1) % order.length]) }}
+                    title="担当" detail={`${options?.staff?.find(st => st.id === wantStaff)?.name ?? 'どちらでも'} ›`} />
+                )}
                 {/* 日にちを押すだけで進める（話さなくても予約できる・10/29 慶一郎さん）：今日・明日・明後日・もっと先 */}
                 {[0, 1, 2].map(i => {
                   const d = jstDate(i)
@@ -1990,12 +2026,11 @@ function SecondaryButton({ onClick, children }: { onClick: () => void; children:
 }
 
 /** もっと先の日のカレンダー（11/6 慶一郎さん）：1か月ずつ。選べるのは from〜last。押すとその日の空きを出す */
-function DayCalendar({ from, last, usual, onPick, onSoonest }: { from: string; last: string; usual: { id: string; name: string } | null; onPick: (d: string) => void; onSoonest: () => void }) {
+function DayCalendar({ from, last, staff, onPick, onSoonest }: { from: string; last: string; staff: { id: string; name: string } | null; onPick: (d: string) => void; onSoonest: () => void }) {
   const [month, setMonth] = useState(from.slice(0, 7)) // 'YYYY-MM'
-  // 担当の出勤（貼り紙の休み・店休日をそのまま反映）。誰も出勤しない日は押せない。いつもの担当の休みの日は薄く
+  // 担当の出勤（貼り紙の休み・店休日をそのまま反映）。誰も出勤しない日・選んだ担当の休みの日は押せない
   const [work, setWork] = useState<Record<string, string[]> | null>(null)
   useEffect(() => { let live = true; void loadWorkDays(from, last).then(w => { if (live) setWork(w) }); return () => { live = false } }, [from, last])
-  const usualOffSeen = !!usual && !!work && Object.entries(work).some(([d, ids]) => d.startsWith(month) && ids.length > 0 && !ids.includes(usual.id))
   const [y, m] = month.split('-').map(Number)
   const first = new Date(Date.UTC(y, m - 1, 1))
   const days = new Date(Date.UTC(y, m, 0)).getUTCDate()
@@ -2017,18 +2052,17 @@ function DayCalendar({ from, last, usual, onPick, onSoonest }: { from: string; l
         {cells.map((d, i) => {
           if (!d) return <span key={`e${i}`} />
           const ids = work?.[d]
-          const ok = d >= from && d <= last && (!work || (ids?.length ?? 0) > 0)
-          const usualOff = ok && !!usual && !!ids && !ids.includes(usual.id)
+          const ok = d >= from && d <= last && (!work || (staff ? !!ids?.includes(staff.id) : (ids?.length ?? 0) > 0))
           return (
             <button key={d} type="button" disabled={!ok} onClick={() => onPick(d)} aria-label={`${Number(d.slice(5, 7))}月${Number(d.slice(8, 10))}日`}
               style={{ height: 40, border: 'none', borderRadius: 20, background: 'transparent', fontSize: 16, fontFamily: FONT,
-                color: ok && !usualOff ? C.text : C.tertiary, textDecoration: !ok && d >= from && d <= last ? 'line-through' : 'none', cursor: ok ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>
+                color: ok ? C.text : C.tertiary, textDecoration: !ok && d >= from && d <= last ? 'line-through' : 'none', cursor: ok ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>
               {Number(d.slice(8, 10))}
             </button>
           )
         })}
       </div>
-      {usualOffSeen && <p style={{ margin: '6px 0 0', fontSize: 13, color: C.secondary, textAlign: 'center' }}>薄い日は{usual!.name}のお休みです</p>}
+      {staff && <p style={{ margin: '6px 0 0', fontSize: 13, color: C.secondary, textAlign: 'center' }}>線の日は{staff.name}のお休みです</p>}
       <button type="button" onClick={onSoonest} style={{ display: 'block', margin: '8px auto 0', minHeight: 44, border: 'none', background: 'none', color: C.secondary, fontSize: 14, cursor: 'pointer' }}>
         いちばん近い空きから探す
       </button>
