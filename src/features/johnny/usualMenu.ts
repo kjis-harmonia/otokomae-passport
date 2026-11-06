@@ -31,7 +31,19 @@ export function usualMenuOrder<T extends { code: string }>(menus: readonly T[]):
 /** 保存できたか（プライベートブラウズ・容量いっぱいなどで保存できないと false） */
 export function setUsualMenu(menu: UsualMenu): boolean {
   setStoredValue(USUAL_MENU_KEY, { code: menu.code, name: menu.name })
+  // 会員の記録にも残す（機種変更しても消えない・お店の登録より新しい方を使う・11/6）。届かなくても端末には残る
+  void import('../../utils/customerSession').then(({ callCustomerRpc, hasCustomerSession }) => { if (hasCustomerSession()) return callCustomerRpc('customer_set_usual_menu', { p_code: menu.code }) }).catch(() => {})
   return getUsualMenu()?.code === menu.code
+}
+
+/** 会員の記録のいつものメニュー（お店で登録したもの・ほかの端末で登録したもの）。読めなければ null */
+export async function fetchServerUsualMenu(): Promise<UsualMenu | null> {
+  try {
+    const { callCustomerRpc, hasCustomerSession } = await import('../../utils/customerSession')
+    if (!hasCustomerSession()) return null
+    const v = await callCustomerRpc<{ code?: string; name?: string } | null>('customer_usual_menu')
+    return v && typeof v.code === 'string' && typeof v.name === 'string' ? { code: v.code, name: v.name } : null
+  } catch { return null }
 }
 
 /** いつもの担当の id（登録していなければ null＝どちらでもいい・毎回聞く） */
