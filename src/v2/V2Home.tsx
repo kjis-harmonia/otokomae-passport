@@ -155,9 +155,10 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
             })}
           </div>
           {list.length > 1 && <div className="v2-dots" aria-hidden="true">{list.map((item, i) => <i key={item.key} className={i === index ? 'on' : ''} />)}</div>}
-          {hpUrl && (
-            <p style={{ textAlign: 'center', margin: '6px 0 0' }}>
-              <a href={hpUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', padding: '13px 12px', margin: '-8px 0 -14px', fontSize: 12, color: 'var(--v2-faint)' }}>HOT PEPPER Beauty で予約する</a>
+          {/* リンクの無いカード（2名以上など）でも同じ高さを残す。消えると下のボタンが詰まって「ガクッ」と動く（11/6 慶一郎さん） */}
+          {(hpUrl || list.some(x => x.kind !== 'group')) && (
+            <p style={{ textAlign: 'center', margin: '6px 0 0', visibility: hpUrl ? 'visible' : 'hidden' }} aria-hidden={!hpUrl}>
+              <a href={hpUrl} target="_blank" rel="noopener noreferrer" tabIndex={hpUrl ? undefined : -1} style={{ display: 'inline-block', padding: '13px 12px', margin: '-8px 0 -14px', fontSize: 12, color: 'var(--v2-faint)' }}>HOT PEPPER Beauty で予約する</a>
             </p>
           )}
         </motion.div>
