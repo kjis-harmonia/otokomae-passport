@@ -11,7 +11,7 @@ import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
 import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { normalizePhone } from '../../utils/customerContact'
-import { bookingAssistantApi, linkCompanion, type AiBookingStatus, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
+import { bookingAssistantApi, linkCompanion, loadWorkDays, type AiBookingStatus, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
 import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
@@ -62,7 +62,7 @@ type Step =
   | { k: 'contact'; name: string }
   /** 2回目以降：おかえりなさい（前回からの日数・メンテナンスカットの期限・いつものメニュー） */
   | { k: 'welcome'; w: Welcome }
-  | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption; label?: string }
+  | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption; label?: string; calendar?: boolean }
   | { k: 'askMenu'; req: VisitRequest }
   /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
   | { k: 'overview'; req: VisitRequest; advice: DayAdvice; note?: string }
@@ -313,7 +313,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       setBackList([]) // eslint-disable-line react-hooks/set-state-in-effect
       return
     }
-    if (!canReturnTo(step) || !prev || prev === step || prev.k === step.k) return
+    // カレンダーを開いたときは、同じ「日にち」の画面でも戻れるようにする（戻ると今日・明日・明後日の一覧）
+    const openedCalendar = step.k === 'askWhen' && !!step.calendar && prev?.k === 'askWhen' && !prev.calendar
+    if (!canReturnTo(step) || !prev || prev === step || (prev.k === step.k && !openedCalendar)) return
     historyRef.current = [...historyRef.current, prev].slice(-12)
     setBackList(historyRef.current)
   }, [step])
@@ -1238,6 +1240,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
           : step.again === 'menu' && step.menu ? `${step.menu.name}ですね。`
           : step.again === 'menu' && step.label ? `「${step.label}」ですね。`
           : 'いつのご来店をご希望ですか？'
+        if (step.calendar && step.menu) return { title: '日にちを選んでください', sub: `${step.menu.name}・空いている時間をお出しします`, speech: '日にちを選んでください。', listen: true }
         const follow = step.again === 'unclear' ? 'もう一度、ご希望の日時をお聞かせください。'
           : step.again === 'none' ? 'ほかのご希望の日時をお聞かせください。'
           : step.again === 'menu' ? 'いつのご来店をご希望ですか？' : undefined
@@ -1384,7 +1387,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const canTalk = ['pickStaff', 'welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'companionName', 'confirmParty', 'askUsual'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
   const compact = ['pickStaff', 'welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'companionName', 'confirmParty', 'askUsual', 'usualSaved'].includes(step.k)
-    || (step.k === 'ai' && step.view.kind !== 'talk')
+    || (step.k === 'ai' && step.view.kind !== 'talk') || (step.k === 'askWhen' && !!step.calendar)
   const voiceOff = voice.listen === 'unsupported' || voice.listen === 'denied'
 
   return (
@@ -1470,14 +1473,19 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
 
             {/* メニューが決まったとき（「いつもの」など）：日にちを押して進める。前回のご来店から14日以内ならメンテナンスカットにも切り替えられる（過ぎていたら出さない） */}
-            {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.menu.code !== 'maintenance' && (
+            {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.calendar && (
+              <DayCalendar from={jstDate(3)} last={jstDate(options?.settings.booking_window_days ?? 60)} usual={options?.staff?.find(x => x.id === usualStaffId) ?? null} onPick={d => void pickDay(step.menu!, d)}
+                onSoonest={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(3), `${m.name}の、明々後日からの空きです。`) }} />
+            )}
+            {step.k === 'askWhen' && step.again === 'menu' && step.menu && !step.calendar && step.menu.code !== 'maintenance' && (
               <List>
                 {/* 日にちを押すだけで進める（話さなくても予約できる・10/29 慶一郎さん）：今日・明日・明後日・もっと先 */}
                 {[0, 1, 2].map(i => {
                   const d = jstDate(i)
                   return <Row key={d} onClick={() => void pickDay(step.menu!, d)} title={['今日', '明日', '明後日'][i]} detail={`${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}（${'日月火水木金土'[new Date(`${d}T12:00:00Z`).getUTCDay()]}）`} />
                 })}
-                <Row onClick={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(3), `${m.name}の、明々後日からの空きです。`) }} title="もっと先の日" detail="近い空きから" />
+                {/* もっと先の日：カレンダーから日にちを選ぶ（11/6 慶一郎さん） */}
+                <Row onClick={() => setStep({ ...step, calendar: true })} title="もっと先の日" detail="カレンダーから" />
                 {maintLeft != null && maintenanceMenu && <Row onClick={startMaintenance} title="メンテナンスカット" detail={`${maintLeft === 0 ? '今日まで' : `あと${maintLeft}日`}・${yen(maintenanceMenu)}`} />}
               </List>
             )}
@@ -1847,6 +1855,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             <div style={{ width: 44 }} />
           </div>
         )}
+        {canTalk && step.k !== 'confirm' && step.k !== 'confirmCancel' && step.k !== 'confirmParty' && !voiceOff && !typing && (
+          <MicCaption listening={voice.listen === 'listening'} record={!!voice.recordMode} />
+        )}
         {canTalk && voice.listen === 'denied' && (
           <p style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>マイクが使えないため、文字で入力してください。</p>
         )}
@@ -1871,21 +1882,39 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   )
 }
 
+// マイク（11/6 慶一郎さん「起動してるのかしてないのか分かりづらい」）：
+// 聞いている間は金に塗って、外側に広がる輪と、中に動く音の棒を出す。止まっている時は黒にマイクの絵。下の一言（MicCaption）でも今の状態を出す
+const MIC_ON = '#A8823F'
 function MicButton({ listening, onClick }: { listening: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-label={listening ? '聞き取りを止める' : '話す'} aria-pressed={listening} style={{
       position: 'relative', width: 72, height: 72, borderRadius: 36, border: 'none', cursor: 'pointer',
-      background: listening ? C.bg : C.text, color: listening ? C.text : C.bg,
-      boxShadow: listening ? `inset 0 0 0 2px ${C.text}` : 'none',
+      background: listening ? MIC_ON : C.text, color: '#FFFFFF',
       display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent',
-      transition: 'background 0.2s, color 0.2s, box-shadow 0.2s',
+      transition: 'background 0.2s',
     }}>
-      {listening && (
-        <motion.span aria-hidden="true" style={{ position: 'absolute', inset: -6, borderRadius: 42, border: `1px solid ${C.tertiary}` }}
-          animate={{ scale: [1, 1.12, 1], opacity: [0.8, 0, 0.8] }} transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
-      )}
-      <Mic size={28} strokeWidth={2} />
+      {listening && [0, 0.8].map(d => (
+        <motion.span key={d} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 36, border: `2px solid ${MIC_ON}` }}
+          initial={{ scale: 1, opacity: 0.7 }} animate={{ scale: 1.5, opacity: 0 }} transition={{ duration: 1.6, delay: d, repeat: Infinity, ease: 'easeOut' }} />
+      ))}
+      {listening ? (
+        <span aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: 4, height: 28 }}>
+          {[0, 0.15, 0.3, 0.45].map(d => (
+            <motion.i key={d} style={{ display: 'block', width: 4, height: 24, borderRadius: 2, background: '#FFFFFF', transformOrigin: 'center' }}
+              animate={{ scaleY: [0.35, 1, 0.35] }} transition={{ duration: 0.9, delay: d, repeat: Infinity, ease: 'easeInOut' }} />
+          ))}
+        </span>
+      ) : <Mic size={28} strokeWidth={2} />}
     </button>
+  )
+}
+
+/** マイクの下の一言：いま聞いているか、どうすればいいか */
+function MicCaption({ listening, record }: { listening: boolean; record: boolean }) {
+  return (
+    <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 14, fontWeight: listening ? 600 : 400, color: listening ? C.text : C.secondary, textAlign: 'center' }}>
+      {listening ? (record ? '聞いています。話し終えたらタップ' : '聞いています。どうぞお話しください') : 'マイクをタップして話す'}
+    </p>
   )
 }
 
@@ -1953,6 +1982,53 @@ function PrimaryButton({ onClick, children, disabled = false }: { onClick: () =>
 
 function SecondaryButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return <button type="button" onClick={onClick} style={{ ...buttonBase, background: C.fill, color: C.text, fontWeight: 500 }}>{children}</button>
+}
+
+/** もっと先の日のカレンダー（11/6 慶一郎さん）：1か月ずつ。選べるのは from〜last。押すとその日の空きを出す */
+function DayCalendar({ from, last, usual, onPick, onSoonest }: { from: string; last: string; usual: { id: string; name: string } | null; onPick: (d: string) => void; onSoonest: () => void }) {
+  const [month, setMonth] = useState(from.slice(0, 7)) // 'YYYY-MM'
+  // 担当の出勤（貼り紙の休み・店休日をそのまま反映）。誰も出勤しない日は押せない。いつもの担当の休みの日は薄く
+  const [work, setWork] = useState<Record<string, string[]> | null>(null)
+  useEffect(() => { let live = true; void loadWorkDays(from, last).then(w => { if (live) setWork(w) }); return () => { live = false } }, [from, last])
+  const usualOffSeen = !!usual && !!work && Object.entries(work).some(([d, ids]) => d.startsWith(month) && ids.length > 0 && !ids.includes(usual.id))
+  const [y, m] = month.split('-').map(Number)
+  const first = new Date(Date.UTC(y, m - 1, 1))
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const cells: (string | null)[] = [...Array(first.getUTCDay()).fill(null),
+    ...Array.from({ length: days }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`)]
+  const shift = (n: number) => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(d.toISOString().slice(0, 7)) }
+  const canPrev = month > from.slice(0, 7)
+  const canNext = month < last.slice(0, 7)
+  const nav: CSSProperties = { width: 44, height: 44, border: 'none', background: 'none', fontSize: 22, color: C.text, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }
+  return (
+    <div style={{ width: '100%', marginTop: 20, borderRadius: 14, background: C.fill, padding: '8px 10px 12px', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button type="button" aria-label="前の月" disabled={!canPrev} onClick={() => shift(-1)} style={{ ...nav, opacity: canPrev ? 1 : 0.25 }}>‹</button>
+        <b style={{ fontSize: 17, fontWeight: 600 }}>{y}年{m}月</b>
+        <button type="button" aria-label="次の月" disabled={!canNext} onClick={() => shift(1)} style={{ ...nav, opacity: canNext ? 1 : 0.25 }}>›</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', rowGap: 4, textAlign: 'center' }}>
+        {'日月火水木金土'.split('').map(w => <span key={w} style={{ fontSize: 12, color: C.secondary, padding: '4px 0' }}>{w}</span>)}
+        {cells.map((d, i) => {
+          if (!d) return <span key={`e${i}`} />
+          const ids = work?.[d]
+          const ok = d >= from && d <= last && (!work || (ids?.length ?? 0) > 0)
+          const usualOff = ok && !!usual && !!ids && !ids.includes(usual.id)
+          return (
+            <button key={d} type="button" disabled={!ok} onClick={() => onPick(d)} aria-label={`${Number(d.slice(5, 7))}月${Number(d.slice(8, 10))}日`}
+              style={{ height: 40, border: 'none', borderRadius: 20, background: 'transparent', fontSize: 16, fontFamily: FONT,
+                color: ok && !usualOff ? C.text : C.tertiary, textDecoration: !ok && d >= from && d <= last ? 'line-through' : 'none', cursor: ok ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>
+              {Number(d.slice(8, 10))}
+            </button>
+          )
+        })}
+      </div>
+      {usualOffSeen && <p style={{ margin: '6px 0 0', fontSize: 13, color: C.secondary, textAlign: 'center' }}>薄い日は{usual!.name}のお休みです</p>}
+      <button type="button" onClick={onSoonest} style={{ display: 'block', margin: '8px auto 0', minHeight: 44, border: 'none', background: 'none', color: C.secondary, fontSize: 14, cursor: 'pointer' }}>
+        いちばん近い空きから探す
+      </button>
+    </div>
+  )
 }
 
 function List({ children }: { children: ReactNode }) {
