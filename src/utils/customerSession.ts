@@ -9,7 +9,7 @@
  */
 
 import { callRpc, isMissingRpc, RpcError } from './staffSession'
-import { setStoredValue } from './storage'
+import { getStoredValue, setStoredValue } from './storage'
 import { USER_ID_KEY } from './userId'
 
 const CUSTOMER_SESSION_KEY = 'ginjiro_customer_session'
@@ -112,4 +112,18 @@ export async function bindWithCode(userId: string, code: string): Promise<{ ok: 
     if (err instanceof RpcError && BIND_MESSAGES[err.code]) return { ok: false, message: BIND_MESSAGES[err.code] }
     return { ok: false, message: '通信できませんでした。電波の良い場所でもう一度お試しください。' }
   }
+}
+
+/** 端末の会員番号が、ログインの鍵（セッション）の会員とずれていたら、鍵の会員に合わせる（11/6：PC の古い状態で QR に別の番号が出て「ゲスト」ができた）。
+ *  合わせたら true。鍵が無い・読めないときは何もしない */
+export async function repairUserIdFromSession(): Promise<boolean> {
+  if (!hasCustomerSession()) return false
+  try {
+    const r = await callCustomerRpc<{ user_id?: string } | null>('customer_get_profile')
+    const owner = r?.user_id
+    if (!owner || getStoredValue<string | null>(USER_ID_KEY, null) === owner) return false
+    setStoredValue(USER_ID_KEY, owner)
+    window.dispatchEvent(new Event('ginjiro:customer-session-changed'))
+    return true
+  } catch { return false }
 }
