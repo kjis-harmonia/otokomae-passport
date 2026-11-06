@@ -7,6 +7,7 @@ import { Check } from 'lucide-react'
 import { requestJohnny } from '../features/johnny/bookingIntent'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { GachaShowcase } from './GachaShowcase'
+import { useThemeColor } from '../utils/themeColor'
 
 type Campaign = {
   id: string; image: string; wide?: boolean; kaikin?: boolean; alt: string; label: string; kicker: string; title: string; lead?: string; detail: string[]
@@ -74,6 +75,8 @@ let shownThisLaunch = false
 export function V2Campaign({ onGacha }: { onGacha: () => void }) {
   const reduce = useReducedMotion()
   const [open, setOpen] = useState(false)
+  // 開いている間は、上の帯（時計・電池）も暗い色に（11/6「上部、見切れてる」）
+  useThemeColor(open ? '#3c3a36' : null)
   const [hide, setHide] = useState(false)
   const [lineup, setLineup] = useState(false)
 
