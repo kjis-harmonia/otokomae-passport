@@ -25,14 +25,18 @@ function stylePrice(style: StyleCard): { price: number; normal: number | null } 
 
 const USUAL = 'いつもの'
 const USUAL_POSTER = '/assets/styles/itsumono.jpg'
+// 「いつもの」の2枚目：2名以上で予約する（11/6 慶一郎さんの絵）。押すとご本人の予約のあと、お連れ様（2名まで）を聞く
+const GROUP_POSTER = '/assets/styles/group-booking.jpg'
 
 /** カードに並べるもの：スタイルの写真か、「いつもの」のポスター（メニューは来店の記録で分かるときだけ） */
 type Item =
   | { key: string; kind: 'style'; style: StyleCard; code: string | null; label: string }
   | { key: string; kind: 'usual'; code: string | null; label: string; title: string | null }
+  | { key: string; kind: 'group'; code: string | null; label: string; title: string | null }
 
 function itemPrice(item: Item): { price: number; normal: number | null } | null {
   if (item.kind === 'style') return (item.code ? menuPrice(item.code) : null) ?? stylePrice(item.style)
+  if (item.kind === 'group') return null
   return item.code ? menuPrice(item.code) : null
 }
 
@@ -89,7 +93,8 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const cats = useMemo(() => [...(usual ? [USUAL] : []), ...UI_CATEGORIES.map(c => c.id)], [usual])
 
   const list = useMemo((): Item[] => {
-    if (cat === USUAL && usual) return [{ key: 'usual', kind: 'usual', code: usual.menu?.code ?? null, label: usual.menu?.name ?? '', title: usual.menu?.title ?? null }]
+    if (cat === USUAL && usual) return [{ key: 'usual', kind: 'usual', code: usual.menu?.code ?? null, label: usual.menu?.name ?? '', title: usual.menu?.title ?? null },
+      { key: 'group', kind: 'group', code: usual.menu?.code ?? null, label: usual.menu?.name ?? '', title: null }]
     const c = UI_CATEGORIES.find(x => x.id === cat) ?? UI_CATEGORIES[0]
     return c.titles.map(t => styles.find(s => s.title === t)).filter((s): s is StyleCard => !!s)
       .map((s): Item => ({ key: s.id, kind: 'style', style: s, code: getStyleMenuCode(s.title), label: s.title }))
@@ -112,7 +117,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const reserve = () => {
     // いつものでメニューが分からないときは、メニューを決めずに Johnny（おかえりなさい から聞く）
     if (!selected) { requestJohnny({ menuCode: null, label: '' }); return }
-    requestJohnny({ menuCode: selected.code, label: selected.label, usual: selected.kind === 'usual' })
+    requestJohnny({ menuCode: selected.code, label: selected.label, usual: selected.kind !== 'style', group: selected.kind === 'group' })
   }
   const price = selected ? itemPrice(selected) : null
   const hpTitle = selected?.kind === 'style' ? selected.style.title : selected?.title ?? null
@@ -136,12 +141,14 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
               const p = itemPrice(item)
               return (
                 <motion.article key={item.key} className="v2-card v2-glass" aria-current={i === index ? 'true' : undefined}
+                  onClick={item.kind === 'group' ? () => requestJohnny({ menuCode: item.code, label: item.label, usual: true, group: true }) : undefined}
+                  style={item.kind === 'group' ? { cursor: 'pointer' } : undefined}
                   initial={reduce ? false : { opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.32, delay: reduce ? 0 : Math.min(i, 4) * 0.05, ease: [0.22, 1, 0.36, 1] }}>
                   {/* 写真が主役：髪型の名前は写真に入っているので、写真の上には何も載せない（名前・値段は読み上げ用。値段は下のAI予約ボタンに出す） */}
                   <div className="v2-card-photo">
-                    <img src={item.kind === 'style' ? resolveStyleLibraryImageUrl(item.style) : USUAL_POSTER} alt="" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" />
-                    <h2 className="v2-sr">{item.kind === 'usual' ? `いつもの${item.label ? '（' + item.label + '）' : ''}` : item.label}{p ? `・${yen(p.price)}` : ''}</h2>
+                    <img src={item.kind === 'style' ? resolveStyleLibraryImageUrl(item.style) : item.kind === 'group' ? GROUP_POSTER : USUAL_POSTER} alt="" loading={i < 2 ? 'eager' : 'lazy'} decoding="async" />
+                    <h2 className="v2-sr">{item.kind === 'group' ? '2名以上で予約する' : item.kind === 'usual' ? `いつもの${item.label ? '（' + item.label + '）' : ''}` : item.label}{p ? `・${yen(p.price)}` : ''}</h2>
                   </div>
                 </motion.article>
               )
@@ -159,8 +166,9 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
       <button type="button" className="v2-cta v2-glass" onClick={reserve}>
         <span className="v2-cta-spark" aria-hidden="true"><Sparkle size={22} strokeWidth={1.6} /></span>
         <span className="v2-cta-text">
-          <b>{!selected ? 'AI予約' : selected.kind === 'usual' ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>
+          <b>{!selected ? 'AI予約' : selected.kind === 'group' ? '2名以上でAI予約する' : selected.kind === 'usual' ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>
           <small>{!selected ? 'ご希望を AI がお聞きします'
+            : selected.kind === 'group' ? 'ご本人＋お連れ様2名まで'
             : selected.kind === 'usual' && !selected.code ? 'ご希望を AI がお聞きします'
             : price ? <>{selected.kind === 'usual' ? selected.label + '　' : ''}<span className="v2-cta-price">{yen(price.price)}</span>{price.normal != null && price.normal !== price.price ? '　会員価格' : ''}</> : selected.label}</small>
         </span>

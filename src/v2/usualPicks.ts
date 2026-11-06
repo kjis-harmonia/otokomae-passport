@@ -4,7 +4,8 @@
 //   来店も登録も無いお客様には出さない。予約のメニューで推測はしない。
 import { bookingAssistantApi, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
 import { buildWelcome, type VisitRecord } from '../features/johnny/welcome'
-import { canBeUsual, getUsualMenu } from '../features/johnny/usualMenu'
+import { canBeUsual, fetchServerUsualMenu, getUsualMenu, USUAL_MENU_KEY } from '../features/johnny/usualMenu'
+import { setStoredValue } from '../utils/storage'
 import { STYLE_MENU_CODES } from '../data/reserveLinks'
 import { UI_CATEGORIES } from '../data/styleCategories'
 import { getCustomerSession } from '../utils/customerSession'
@@ -39,6 +40,12 @@ async function loadVisited(): Promise<{ visited: boolean; menu: UsualMenu | null
 /** 登録したいつものメニューは毎回読み直す（Johnny で登録した直後にも反映）。来店の記録は5分読み直さない
  *  ただし「まだ来店なし」「読めなかった」は覚えない：店で来店登録・初回の本人確認をした直後に出るように（10/27） */
 export async function loadUsual(): Promise<Usual> {
+  // 会員の記録（お店で登録・ほかの端末で登録）があればそれ。端末にも写しておく（Johnny の「今のいつもの」と揃える・11/6）
+  const server = await fetchServerUsualMenu()
+  if (server && canBeUsual(server.code)) {
+    if (getUsualMenu()?.code !== server.code) setStoredValue(USUAL_MENU_KEY, server)
+    return { menu: { ...server, title: styleTitleFor(server.code, server.name) } }
+  }
   const reg = getUsualMenu()
   if (reg && canBeUsual(reg.code)) return { menu: { ...reg, title: styleTitleFor(reg.code, reg.name) } }
   const owner = getCustomerSession()

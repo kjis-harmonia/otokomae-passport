@@ -245,3 +245,13 @@ export const demoBookingApi: BookingAssistantApi = {
 export function bookingAssistantApi(): BookingAssistantApi {
   return isDemoMode() ? demoBookingApi : customerBookingApi
 }
+
+/** カレンダー用：日ごとに出勤している担当の id（予約と同じ勤務の決まり・11/6）。読めなければ null（カレンダーは全部の日を出す） */
+export async function loadWorkDays(from: string, to: string): Promise<Record<string, string[]> | null> {
+  try {
+    const { supabase } = await import('../../lib/supabase')
+    const { data, error } = await supabase.rpc('booking_work_days', { p_from: from, p_to: to })
+    if (error || !Array.isArray(data)) return null
+    return Object.fromEntries((data as { date: string; staff: string[] }[]).map(x => [x.date, x.staff]))
+  } catch { return null }
+}
