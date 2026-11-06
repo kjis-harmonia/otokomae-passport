@@ -12,6 +12,7 @@ import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, 
 import { isStaging } from '../utils/env'
 import { afterPresentedFrame } from '../features/gacha/presentedFrame'
 import { GachaShowcase } from './GachaShowcase'
+import { GachaGauge } from './GachaGauge'
 
 // 演出はガチャ画面を開くたびにランダム（11/1、11/3 アプリを開き直さなくても画面ごとに選び直す）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
@@ -319,9 +320,10 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         <section className="v2-gacha-held" aria-label="お持ちのガチャ券">
           <span>お持ちのガチャ券</span>
           <b>{gacha.held.title}</b>
-          <small>{gachaDays(gacha.held)}・{gachaUntil(gacha.held.expires_at)}<br />{gacha.held.reserved ? `${gachaReservedLabel(gacha.held.reserved.starts_at)}で使います` : 'AI予約でご利用いただけます'}</small>
+          <small>{gachaDays(gacha.held)}・{gachaUntil(gacha.held.expires_at)}{gacha.held.self_only ? '・ご本人のみ' : ''}<br />{gacha.held.reserved ? `${gachaReservedLabel(gacha.held.reserved.starts_at)}で使います` : 'AI予約でご利用いただけます'}</small>
         </section>
       )}
+      {gacha && <GachaGauge state={gacha} onChange={setGacha} />}
       <p className="v2-gacha-note">音が出ます。音量にご注意ください。<br />ガチャは1日1回、ガチャ券は1枚までお持ちいただけます。</p>
 
       <div className={`v2-gacha-stage v2-gacha-${THEME.id}${showing ? ' is-on' : ''}`} aria-hidden={!showing} onClick={open}>
