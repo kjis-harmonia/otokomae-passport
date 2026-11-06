@@ -65,7 +65,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
 
   if (paid) {
     return (
-      <div style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: 'rgba(36,107,82,0.06)', border: '1px solid rgba(36,107,82,0.35)' }}>
+      <div data-guide="paid" style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: 'rgba(36,107,82,0.06)', border: '1px solid rgba(36,107,82,0.35)' }}>
         <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#246b52', marginBottom: 6 }}>完了</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
           <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#1c1f1d' }}>お会計済み（{PAYMENT_LABEL[paid.payment_method ?? ''] ?? paid.payment_method}）</span>
@@ -103,6 +103,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
     <>
       <button
         type="button"
+        data-guide="go-checkout"
         onClick={() => void open()}
         disabled={loading}
         style={{
@@ -140,7 +141,7 @@ function UsualMenuRow({ userId, staffName, picked, loadMenus }: { userId: string
   }
   if (state === 'saved') return <p style={{ marginTop: 12, fontSize: 13, color: '#246b52' }}>いつものメニューを「{name ?? code}」に登録しました。</p>
   return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(36,107,82,0.2)' }}>
+    <div data-guide="usual-menu" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(36,107,82,0.2)' }}>
       <p style={{ fontSize: 12, color: '#5b625e', marginBottom: 6 }}>お客様のいつものメニュー（次からアプリの「いつもの」で予約できます）</p>
       <div style={{ display: 'flex', gap: 8 }}>
         <select value={code ?? ''} onChange={e => { setCode(e.target.value || null); setState('idle') }} aria-label="いつものメニュー"

@@ -18,6 +18,8 @@ import { SbHotpepper } from './SbHotpepper'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
 import { announceVoice, playChime, unlockChime } from './sbChime'
+import { StaffGuide } from '../components/guide/StaffGuide'
+import { openStaffGuide } from '../components/guide/guideEvents'
 import './sb.css'
 
 const ACTOR = 'ginjiro_staff_name'
@@ -238,12 +240,13 @@ export function SbScreen() {
   }
   const list = archive === 'cancelled' ? cancelled : archive === 'transfer' ? toTransfer : ledger?.reservations ?? []
   return <div className={`sb-app${compact ? ' sb-compact' : ''}`}>
+    <StaffGuide />
     <header className="sb-toolbar"><h1><span className="sb-wordmark">銀二郎</span><span className="sb-mark">SB</span></h1>
       <div className="sb-date-nav"><button className="sb-nav" aria-label="前の日" title="前の日" onClick={() => setDate(addDaysToDateString(date, -1))}><ChevronLeft size={24} /></button>
         <label className="sb-date-label"><span>{jstDateLabel(date)}</span><input type="date" aria-label="予約表の日付" value={date} onChange={e => e.target.value && setDate(e.target.value)} /></label>
         <button className="sb-nav" aria-label="次の日" title="次の日" onClick={() => setDate(addDaysToDateString(date, 1))}><ChevronRight size={24} /></button><button className="sb-secondary sb-today" onClick={() => setDate(today)}>今日</button></div>
-      <div className="sb-toolbar-actions"><button className="sb-actor sb-bell" aria-pressed={push === 'on'} title={push === 'on' ? '予約のお知らせ：受け取り中（押すと止める）' : '予約のお知らせを受け取る'} onClick={() => void togglePush()}>{push === 'on' ? <Bell size={18} /> : <BellOff size={18} />}<span>{push === 'on' ? '通知オン' : '通知'}</span></button>
-        <button className="sb-primary" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} /><span className="sb-primary-label">新規予約</span></button></div>
+      <div className="sb-toolbar-actions"><button className="sb-actor" onClick={openStaffGuide}>使い方</button><button className="sb-actor sb-bell" aria-pressed={push === 'on'} title={push === 'on' ? '予約のお知らせ：受け取り中（押すと止める）' : '予約のお知らせを受け取る'} onClick={() => void togglePush()}>{push === 'on' ? <Bell size={18} /> : <BellOff size={18} />}<span>{push === 'on' ? '通知オン' : '通知'}</span></button>
+        <button className="sb-primary" data-guide="sb-new" disabled={blocked || !options} onClick={() => newBooking({ date: date < today ? today : date })}><Plus size={19} /><span className="sb-primary-label">新規予約</span></button></div>
     </header>
     <SbCommandBar options={options} disabled={blocked} onDraft={draft => {
       const day = draft.date < today ? today : draft.date
@@ -273,7 +276,7 @@ export function SbScreen() {
     {notice && <p className="sb-notice" role="status">{notice}</p>}
     {!ledger ? <div className="sb-empty">{error ? '予約表を表示できません。' : <><LoaderCircle size={18} className="sb-spin" />読み込み中…</>}</div>
       : view === 'list' ? <div className="sb-agenda"><ReservationList reservations={ledger.reservations} onPick={setSelectedId} /></div>
-      : <div className="sb-board-scroll" ref={scrollRef} role="region" aria-label="担当者別予約表"><div className="sb-grid" style={{ gridTemplateColumns: `${LABEL_W}px ${x(range.end)}px`, width: LABEL_W + x(range.end) }}>
+      : <div className="sb-board-scroll" data-guide="sb-board" ref={scrollRef} role="region" aria-label="担当者別予約表"><div className="sb-grid" style={{ gridTemplateColumns: `${LABEL_W}px ${x(range.end)}px`, width: LABEL_W + x(range.end) }}>
         <div className="sb-axis-name">担当者</div><div className="sb-axis">{Array.from({ length: (range.end - range.start) / 60 }, (_, i) => range.start + i * 60).map(m => <span key={m} style={{ left: x(m) + 8 }}>{Math.floor(m / 60)}:00</span>)}</div>
         {ledger.staff.map(staff => { const bookings = active.filter(r => r.staff_id === staff.id); const used = Math.max(0, ...bookings.map(r => r.booking_lane + 1)); const lanes = Math.max(2, used) /* ふだんは2段。同時に3件入った日だけ3段に増やす */
           return <StaffRow key={staff.id} drag={drag} staff={staff} lanes={lanes} reservations={bookings} ledger={ledger} date={date} range={range} nowMin={minutesNow} x={x} blocked={blocked}

@@ -223,3 +223,19 @@
 .st-operators { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
 .st-operators button { min-height: 56px; border-radius: 16px; border: 1px solid rgba(28, 31, 29, 0.12); background: #fff; color: #1c1f1d; font-family: "Shippori Mincho", "Noto Serif JP", "Hiragino Mincho ProN", serif; font-size: 18px; font-weight: 700; letter-spacing: 0.06em; cursor: pointer; }
 .st-operators button[aria-pressed="true"] { background: #1c1f1d; color: #fff; border-color: #1c1f1d; }
+
+/* 使い方ガイドの入口（メニューの上・各画面の右上） */
+.st-guide-open {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; margin: 4px 0 6px; padding: 12px 14px 12px 16px;
+  border: 1px solid #1c1f1d; border-radius: var(--st-radius); background: var(--st-bg); color: var(--st-ink); text-align: left;
+}
+.st-guide-open:active { background: var(--st-press); }
+.st-guide-open > span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.st-guide-open strong { font-size: 17px; font-weight: 600; }
+.st-guide-open small { font-size: 13px; color: var(--st-muted); }
+.st-guide-open > .lucide-chevron-right { flex: none; color: #c4c8c5; }
+.st-bar-guide {
+  margin-left: auto; min-height: 44px; padding: 0 14px; border: 1px solid rgba(0, 0, 0, 0.14); border-radius: 22px;
+  background: #fff; color: var(--st-ink); font-size: 15px; font-weight: 600;
+}
+.st-bar-guide:active { background: var(--st-press); }
