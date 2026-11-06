@@ -91,7 +91,7 @@ export function SbScreen() {
     catch { setError('予約設定を取得できません。SB用migrationの適用・端末認証を確認してください。') }
   }, [])
   // 新しい AI 予約・アプリでの取り消しの確認：誰かがサロンボードに反映して押すまで帯を出し、2分ごとに声で知らせる（確認は全端末で共通）
-  const [unacked, setUnacked] = useState<{ id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; sent_at: string; rescheduled?: boolean }[]>([])
+  const [unacked, setUnacked] = useState<{ id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; sent_at: string; rescheduled?: boolean; companion_name?: string | null }[]>([])
   const seen = useRef<Set<string> | null>(null)
   const lastVoice = useRef(0)
   const announce = (kind: 'new' | 'cancel' | 'final' = 'new') => { if (kind !== 'final' && Date.now() - lastVoice.current < 20_000) return; lastVoice.current = Date.now(); announceVoice(kind) }
@@ -432,7 +432,7 @@ function GinpayMark() {
   return <b className="sb-ginpay-mark" aria-label="銀Pay 支払い済み"><CircleCheck size={12} strokeWidth={2.4} />銀Pay</b>
 }
 
-type AlertItem = { id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; rescheduled?: boolean }
+type AlertItem = { id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; rescheduled?: boolean; companion_name?: string | null }
 /** 新しい AI 予約・アプリでの取り消しの帯。日付も出す（明日以降の予約をサロンボードの今日に入れない）。中身に合わせて「入れました／消しました」 */
 /** 帯の予約を押すと詳細（項目ごとのコピー）が開く */
 function NewAlert({ list, onAck, onOpen }: { list: AlertItem[]; onAck: () => void; onOpen: (id: string, day: string) => void }) {
@@ -442,7 +442,7 @@ function NewAlert({ list, onAck, onOpen }: { list: AlertItem[]; onAck: () => voi
   const title = [added.length ? `新しい予約 ${added.length}件` : '', removed.length ? `キャンセル ${removed.length}件` : ''].filter(Boolean).join('・')
   const label = !removed.length ? 'サロンボードに入れました' : !added.length ? 'サロンボードから消しました' : 'サロンボードに反映しました'
   return <div className={`sb-new-alert${removed.length ? ' is-cancel' : ''}`} role="alert"><Bell size={18} /><span><b>{title}</b>
-    {list.slice(0, 3).map(r => <button type="button" className="sb-alert-row" key={`${r.kind}:${r.id}`} onClick={() => onOpen(r.id, getJapanDateString(new Date(r.starts_at)))}>{r.kind === 'cancel' ? (r.rescheduled ? '日時変更（元の予約を消す） ' : '取消 ') : ''}{day(r.starts_at)} {jstTime(r.starts_at)} {r.customer_name}様（{r.staff_name}）<ChevronRight size={14} /></button>)}
+    {list.slice(0, 3).map(r => <button type="button" className="sb-alert-row" key={`${r.kind}:${r.id}`} onClick={() => onOpen(r.id, getJapanDateString(new Date(r.starts_at)))}>{r.kind === 'cancel' ? (r.rescheduled ? '日時変更（元の予約を消す） ' : '取消 ') : ''}{day(r.starts_at)} {jstTime(r.starts_at)} {r.companion_name ? `${r.companion_name}様（${r.customer_name}様のお連れ様）` : `${r.customer_name}様`}（{r.staff_name}）<ChevronRight size={14} /></button>)}
     {list.length > 3 && <small>ほか {list.length - 3}件</small>}</span>
     <button className="sb-primary" onClick={onAck}>{label}</button></div>
 }
