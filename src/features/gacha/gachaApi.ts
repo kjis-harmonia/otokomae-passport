@@ -18,12 +18,20 @@ export type GachaHeld = GachaPrize & {
   menu_codes?: string[] | null
   /** 付いている予約（まだ終わっていないもの） */
   reserved?: { id: string; starts_at: string } | null
+  /** ゲージで受け取った券（ご本人の予約だけ） */
+  self_only?: boolean
 }
-export type GachaChoice = 'auto' | 'new' | 'old'
+/** ゲージ（11/6）：ガチャ券を使ったご来店でポイントがたまり、狙う景品の分たまったら受け取れる */
+export type GachaGoal = GachaPrize & { points: number }
+/** 今月のガチャの分：引くたびに 0.1pt・月 cap まで。visited＝今月ポイントの付く来店があった（その月の分がゲージに入る） */
+export type GachaGaugeMonth = { draw_pt: number; cap: number; visited: boolean }
+export type GachaGauge = { open: false } | { open: true; points: number; target: string | null; goals: GachaGoal[]; month?: GachaGaugeMonth }
+export type GachaChoice ='auto' | 'new' | 'old'
 export type GachaState = {
   today: { id: string; prize: GachaPrize; choice: GachaChoice | null } | null
   held: GachaHeld | null
   repeat?: boolean // true＝何回でも引ける（Staging の試し用）
+  gauge?: GachaGauge
   error?: string
 }
 
@@ -42,6 +50,8 @@ export async function loadLineup(): Promise<(GachaPrize & { value?: number | nul
 export const loadGacha = async () => check(await callCustomerRpc<GachaState>('customer_gacha_state'))
 export const drawGacha = async () => check(await callCustomerRpc<GachaState>('customer_gacha_draw'))
 export const keepGacha = async (choice: 'new' | 'old') => check(await callCustomerRpc<GachaState>('customer_gacha_keep', { p_choice: choice }))
+export const setGaugeTarget = async (code: string) => check(await callCustomerRpc<GachaState>('customer_gacha_gauge_target', { p_code: code }))
+export const claimGauge = async () => check(await callCustomerRpc<GachaState>('customer_gacha_gauge_claim'))
 export const attachGacha = async (reservationId: string) => check(await callCustomerRpc<GachaState>('customer_gacha_attach', { p_reservation_id: reservationId }))
 
 /** 「11月10日（火）のご予約」 */

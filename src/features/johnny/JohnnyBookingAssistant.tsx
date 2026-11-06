@@ -2080,7 +2080,8 @@ function gachaDiscount(held: GachaHeld | null, price: number | null | undefined)
 function partyGachaFit(held: GachaHeld | null, s: { primary: PartyPrimary; companion: { menu: MenuOption; slot: Slot } }) {
   const changeOf = s.primary.replace?.id
   const self = gachaOff(held, s.primary.menu.code, s.primary.slot.starts_at, s.primary.menu.price, changeOf) !== null
-  const companion = !!held?.free_menu && gachaOff(held, s.companion.menu.code, s.companion.slot.starts_at, s.companion.menu.price, changeOf) !== null
+  // ゲージで受け取った券はご本人だけ（11/6 慶一郎さん：子どもで貯めてお父さんが使う形にしない）
+  const companion = !!held?.free_menu && !held.self_only && gachaOff(held, s.companion.menu.code, s.companion.slot.starts_at, s.companion.menu.price, changeOf) !== null
   return { self, companion }
 }
 
