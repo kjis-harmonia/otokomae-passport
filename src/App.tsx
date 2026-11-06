@@ -30,6 +30,8 @@ import { InstallGate, InstallGuide } from './components/InstallGuide'
 import { V2App } from './v2/V2App'
 import { needsInstallFirst } from './utils/installGuide'
 import { isStaging } from './utils/env'
+import { FirstGuide } from './v2/FirstGuide'
+const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 import { refreshPushIfGranted } from './utils/webPush'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -336,6 +338,13 @@ function App() {
     return()=>window.removeEventListener('ginjiro:customer-session-changed',changed)
   },[phase])
   const [welcomeCouponDialog, setWelcomeCouponDialog] = useState<{ name: string; ticket: TicketRow | null } | null>(null)
+  // 登録直後の最初の案内（11/6）：登録のときだけ1回。クーポンの案内のあとに出す。Staging は ?firstguide=new|visited で見られる
+  const [firstGuide, setFirstGuide] = useState<{ visited: boolean } | null>(() => {
+    const q = isStaging() ? new URLSearchParams(location.search).get('firstguide') : null
+    if (q === 'new' || q === 'visited') return { visited: q === 'visited' }
+    return getStoredValue<{ visited: boolean } | null>(FIRST_GUIDE_KEY, null)
+  })
+  const closeFirstGuide = () => { setStoredValue(FIRST_GUIDE_KEY, null); setFirstGuide(null) }
   const [ticketInitialFilter, setTicketInitialFilter] = useState<WalletFilter>('cut')
   const [ticketRefreshKey, setTicketRefreshKey] = useState(0)
   const [hasOpenModal, setHasOpenModal] = useState(false)
@@ -436,6 +445,9 @@ function App() {
     saveMemberStatus(nextStatus)
     setMemberStatus(nextStatus)
     setPhase('app')
+    const guide = { visited: !!payload?.hasVisitedBefore }
+    setStoredValue(FIRST_GUIDE_KEY, guide)
+    setFirstGuide(guide)
     // Face ID の案内はクーポンのあと、ホームで1回だけ出る（上の useEffect）。店頭確認のあとにも、未設定ならもう一度出る
     if (payload?.welcomeCouponIssued && payload.ticket) {
       setWelcomeCouponDialog({ name: nextStatus.memberName, ticket: payload.ticket })
@@ -466,6 +478,8 @@ function App() {
 
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。クーポンのあと） */}
           <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
+
+          {firstGuide && !welcomeCouponDialog && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
 
           <AnimatePresence>
             {welcomeCouponDialog && (
