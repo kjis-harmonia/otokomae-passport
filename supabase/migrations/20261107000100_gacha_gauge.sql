@@ -242,3 +242,138 @@ revoke all on function app_private.gacha_gauge_open(), app_private.gacha_gauge_p
 revoke all on function public.customer_gacha_gauge_target(text, text), public.customer_gacha_gauge_claim(text) from public;
 grant execute on function public.customer_gacha_gauge_target(text, text), public.customer_gacha_gauge_claim(text)
   to anon, authenticated, service_role;
+
+-- ── 毎日のガチャの分（11/6 慶一郎さん「アプリを毎日開いてもらうために、ガチャのたびに 0.1pt」「月の上限をこちらで決めとけばいい」）
+--   ・引くたびに 0.1pt、1か月に 1pt まで（日本時間の月）。ガチャそのものは今までどおり毎日引ける（上限はポイントだけ）
+--   ・その月にポイントの付く来店（ガチャ券を使い 3,000円から）があれば、その月の分が本物のポイントになる。来店のあとに引いた分もすぐ付く
+--   ・来店のない月の分は付かない（月が変わると消える）。来ずに貯めて、たまった時だけ来る形にしない
+--   ・その月の来店の会計を取り消し、同じ月にほかの来店も無ければ、その月の分も戻す
+create table if not exists app_private.gacha_gauge_month (
+  user_id  text not null,
+  month    date not null,
+  draw_pt  numeric(4,1) not null default 0,   -- その月に引いた分（上限まで）
+  credited numeric(4,1) not null default 0,   -- そのうち本物のポイントにした分
+  primary key (user_id, month)
+);
+revoke all on table app_private.gacha_gauge_month from public, anon, authenticated;
+alter table app_private.gacha_gauge_log drop constraint if exists gacha_gauge_log_kind_check;
+alter table app_private.gacha_gauge_log add constraint gacha_gauge_log_kind_check check (kind in ('earn', 'void', 'claim', 'draw', 'month', 'month_void'));
+
+create or replace function app_private.gacha_month_of(p_day date) returns date
+language sql immutable set search_path = '' as $$ select date_trunc('month', p_day)::date $$;
+
+/** その月にポイントの付いた来店があるか（取り消していないもの） */
+create or replace function app_private.gacha_gauge_visited(p_user text, p_month date) returns boolean
+language sql stable set search_path = '' as $$
+  select exists (select 1 from app_private.gacha_gauge_log e
+                 where e.user_id = p_user and e.kind = 'earn' and app_private.gacha_month_of((e.created_at at time zone 'Asia/Tokyo')::date) = p_month
+                   and not exists (select 1 from app_private.gacha_gauge_log v where v.sale_id = e.sale_id and v.kind = 'void'))
+$$;
+
+/** 引いたら 0.1pt（月の上限まで）。その月に来店があれば、すぐ本物のポイントにする */
+create or replace function app_private.gacha_gauge_on_draw()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_month date := app_private.gacha_month_of(new.draw_date); m app_private.gacha_gauge_month; v_add numeric;
+begin
+  begin
+    if not app_private.gacha_gauge_open() or v_month <> app_private.gacha_month_of(app_private.today_jst()) then return new; end if;
+    insert into app_private.gacha_gauge_month (user_id, month) values (new.user_id, v_month) on conflict do nothing;
+    select * into m from app_private.gacha_gauge_month where user_id = new.user_id and month = v_month for update;
+    v_add := least(0.1, 1.0 - m.draw_pt);
+    if v_add <= 0 then return new; end if;
+    update app_private.gacha_gauge_month set draw_pt = draw_pt + v_add where user_id = new.user_id and month = v_month;
+    insert into app_private.gacha_gauge_log (user_id, kind, points) values (new.user_id, 'draw', v_add);
+    if app_private.gacha_gauge_visited(new.user_id, v_month) then
+      update app_private.gacha_gauge_month set credited = credited + v_add where user_id = new.user_id and month = v_month;
+      insert into app_private.gacha_gauge (user_id, points) values (new.user_id, v_add)
+      on conflict (user_id) do update set points = app_private.gacha_gauge.points + excluded.points, updated_at = now();
+    end if;
+  exception when others then
+    raise warning 'gacha_gauge_on_draw %: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+revoke all on function app_private.gacha_gauge_on_draw() from public, anon, authenticated;
+drop trigger if exists gacha_gauge_on_draw on app_private.gacha_draws;
+create trigger gacha_gauge_on_draw after insert on app_private.gacha_draws for each row execute function app_private.gacha_gauge_on_draw();
+
+/** 会計が済んだ／取り消されたとき（来店の分に、その月のガチャの分を足す） */
+create or replace function app_private.gacha_gauge_on_sale()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare h app_private.gacha_holdings; r public.reservations; v_base bigint; v_pt numeric; l app_private.gacha_gauge_log;
+        v_month date := app_private.gacha_month_of(app_private.today_jst()); m app_private.gacha_gauge_month; v_add numeric;
+begin
+  begin
+    if new.status = 'completed' and old.status is distinct from 'completed' then
+      if not app_private.gacha_gauge_open() or new.reservation_id is null then return new; end if;
+      select * into h from app_private.gacha_holdings where used_sale_id = new.id;
+      if h.user_id is null then return new; end if;
+      select * into r from public.reservations where id = new.reservation_id;
+      -- ご本人の予約だけ（お連れ様の予約・ほかの会員の予約は付かない）
+      if r.id is null or r.companion_of is not null or r.user_id is distinct from h.user_id then return new; end if;
+      select coalesce(sum(i.price::bigint * i.quantity), 0) into v_base
+      from public.accounting_session_items i
+      where i.session_id = new.id and i.category in ('menu', 'option')
+        and not exists (select 1 from app_private.gacha_gauge_skip_menus s where s.menu_code = i.ref_id);
+      v_pt := app_private.gacha_gauge_points(v_base);
+      if v_pt <= 0 then return new; end if;
+      insert into app_private.gacha_gauge_log (user_id, kind, points, sale_id, base) values (h.user_id, 'earn', v_pt, new.id, v_base)
+      on conflict do nothing;
+      if not found then return new; end if;
+      -- その月のガチャの分（まだ本物にしていない分）
+      insert into app_private.gacha_gauge_month (user_id, month) values (h.user_id, v_month) on conflict do nothing;
+      select * into m from app_private.gacha_gauge_month where user_id = h.user_id and month = v_month for update;
+      v_add := greatest(0, m.draw_pt - m.credited);
+      if v_add > 0 then
+        update app_private.gacha_gauge_month set credited = draw_pt where user_id = h.user_id and month = v_month;
+        insert into app_private.gacha_gauge_log (user_id, kind, points, sale_id) values (h.user_id, 'month', v_add, new.id);
+      end if;
+      insert into app_private.gacha_gauge (user_id, points) values (h.user_id, v_pt + v_add)
+      on conflict (user_id) do update set points = app_private.gacha_gauge.points + excluded.points, updated_at = now();
+    elsif new.status = 'voided' and old.status = 'completed' then
+      select * into l from app_private.gacha_gauge_log where sale_id = new.id and kind = 'earn';
+      if l.id is null then return new; end if;
+      insert into app_private.gacha_gauge_log (user_id, kind, points, sale_id, base) values (l.user_id, 'void', -l.points, new.id, l.base)
+      on conflict do nothing;
+      if not found then return new; end if;
+      update app_private.gacha_gauge set points = points - l.points, updated_at = now() where user_id = l.user_id;
+      -- その月にほかの来店が残っていなければ、その月のガチャの分も戻す
+      v_month := app_private.gacha_month_of((l.created_at at time zone 'Asia/Tokyo')::date);
+      if not app_private.gacha_gauge_visited(l.user_id, v_month) then
+        select * into m from app_private.gacha_gauge_month where user_id = l.user_id and month = v_month for update;
+        if m.credited > 0 then
+          update app_private.gacha_gauge_month set credited = 0 where user_id = l.user_id and month = v_month;
+          update app_private.gacha_gauge set points = points - m.credited, updated_at = now() where user_id = l.user_id;
+          insert into app_private.gacha_gauge_log (user_id, kind, points, sale_id) values (l.user_id, 'month_void', -m.credited, new.id);
+        end if;
+      end if;
+    end if;
+  exception when others then
+    raise warning 'gacha_gauge_on_sale %: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+/** ゲージ（解禁前は open=false だけ）。month＝今月のガチャの分（上限・来店で付いたか） */
+create or replace function app_private.gacha_gauge_json(p_user text)
+returns json language sql stable set search_path = '' as $$
+  select case when not app_private.gacha_gauge_open() then json_build_object('open', false) else
+    json_build_object(
+      'open', true,
+      'points', coalesce(g.points, 0),
+      'target', g.target,
+      'month', json_build_object('draw_pt', coalesce(m.draw_pt, 0), 'cap', 1.0,
+                                 'visited', app_private.gacha_gauge_visited(p_user, app_private.gacha_month_of(app_private.today_jst()))),
+      'goals', (select coalesce(json_agg(json_build_object('code', p.code, 'title', p.title, 'rank', p.rank, 'points', gg.points,
+                                                           'amount', p.amount, 'free_menu', p.free_menu, 'weekday_only', p.weekday_only)
+                                         order by gg.points, p.sort), '[]'::json)
+                from app_private.gacha_gauge_goals gg join app_private.gacha_prizes p on p.code = gg.prize_code where p.active))
+  end
+  from (select 1) one
+  left join app_private.gacha_gauge g on g.user_id = p_user
+  left join app_private.gacha_gauge_month m on m.user_id = p_user and m.month = app_private.gacha_month_of(app_private.today_jst())
+$$;
+revoke all on function app_private.gacha_month_of(date), app_private.gacha_gauge_visited(text, date), app_private.gacha_gauge_json(text)
+  from public, anon, authenticated;

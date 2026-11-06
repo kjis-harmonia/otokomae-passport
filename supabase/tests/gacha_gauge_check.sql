@@ -8,7 +8,7 @@ $$;
 create function pg_temp.give(p_user text, p_code text) returns void language plpgsql as $$
 declare v uuid; begin
   update app_private.gacha_draws set choice = 'old' where user_id = p_user and choice is null;
-  insert into app_private.gacha_draws (user_id, draw_date, prize_code, choice) values (p_user, app_private.today_jst() - 3, p_code, 'auto') returning id into v;
+  insert into app_private.gacha_draws (user_id, draw_date, prize_code, choice) values (p_user, app_private.today_jst() - 40, p_code, 'auto') returning id into v;
   perform app_private.gacha_hold(p_user, v);
 end $$;
 create function pg_temp.place(p_res uuid, p_at timestamptz, p_status text default 'confirmed') returns void language sql as $$
@@ -128,14 +128,53 @@ begin
   log := log || pg_temp.chk('抽選の券に入れ替えるとご本人だけの印は外れる', (public.customer_gacha_state(T)->'held'->>'self_only'), 'false');
   log := log || pg_temp.chk('受け取りの記録', (select count(*)::text from app_private.gacha_gauge_log where user_id = U and kind = 'claim'), '1');
 
+  log := log || E'── 毎日のガチャの分（1回 0.1pt・月 1pt まで・その月に来店があれば付く）\n';
+  update app_private.gacha_gauge set points = 0 where user_id = U;
+  delete from app_private.gacha_gauge_month where user_id = U; delete from app_private.gacha_gauge_log where user_id = U;
+  insert into app_private.gacha_draws (user_id, draw_date, prize_code, choice) select U, app_private.today_jst(), 'off100', 'old' from generate_series(1, 3);
+  log := log || pg_temp.chk('3回引く → 今月の分 0.3', (public.customer_gacha_state(T)->'gauge'->'month'->>'draw_pt'), '0.3');
+  log := log || pg_temp.chk('来店が無いうちは付かない', pg_temp.pt(T), '0.0');
+  insert into app_private.gacha_draws (user_id, draw_date, prize_code, choice) select U, app_private.today_jst(), 'off100', 'old' from generate_series(1, 12);
+  log := log || pg_temp.chk('15回引いても今月の分は 1pt まで', (public.customer_gacha_state(T)->'gauge'->'month'->>'draw_pt'), '1.0');
+  insert into app_private.gacha_draws (user_id, draw_date, prize_code, choice) values (U, app_private.today_jst() - 40, 'off100', 'old');
+  log := log || pg_temp.chk('先月の日付の当選は数えない', (public.customer_gacha_state(T)->'gauge'->'month'->>'draw_pt'), '1.0');
+  perform pg_temp.place(A, TUE); perform pg_temp.give(U, 'off300'); perform public.customer_gacha_attach(T, A);
+  s := pg_temp.sale(A, jsonb_build_array(pg_temp.item('cut-regular', '通常カット', 4000)), 3700, true, 'gk-m1');
+  v_sale := (s->>'id')::uuid;
+  log := log || pg_temp.chk('来店 0.5 ＋ 今月のガチャ 1.0 ＝ 1.5', coalesce(s->>'error', pg_temp.pt(T)), '1.5');
+  log := log || pg_temp.chk('来店したので今月は付いた扱い', (public.customer_gacha_state(T)->'gauge'->'month'->>'visited'), 'true');
+  insert into app_private.gacha_draws (user_id, draw_date, prize_code, choice) values (U, app_private.today_jst(), 'off100', 'old');
+  log := log || pg_temp.chk('上限のあとに引いても増えない', pg_temp.pt(T), '1.5');
+  log := log || pg_temp.chk('ガチャそのものは引ける（上限はポイントだけ）', (select count(*)::text from app_private.gacha_draws where user_id = U and draw_date = app_private.today_jst()), '16');
+  perform app_private.void_sale(v_sale, '点検', 'staff', '点検');
+  log := log || pg_temp.chk('来店の会計を取り消す → 今月のガチャの分も戻る', pg_temp.pt(T), '0.0');
+  log := log || pg_temp.chk('取り消すと今月は来店なしの扱い', (public.customer_gacha_state(T)->'gauge'->'month'->>'visited'), 'false');
+  delete from app_private.gacha_gauge_month where user_id = U;
+  perform pg_temp.place(A, TUE); perform pg_temp.give(U, 'off300'); perform public.customer_gacha_attach(T, A);
+  s := pg_temp.sale(A, jsonb_build_array(pg_temp.item('cut-regular', '通常カット', 4000)), 3700, true, 'gk-m2');
+  insert into app_private.gacha_draws (user_id, draw_date, prize_code, choice) values (U, app_private.today_jst(), 'off100', 'old');
+  log := log || pg_temp.chk('来店のあとに引いた分はすぐ付く（0.5 ＋ 0.1）', pg_temp.pt(T), '0.6');
+  perform app_private.void_sale((s->>'id')::uuid, '点検', 'staff', '点検');
+  log := log || pg_temp.chk('取り消すと両方戻る', pg_temp.pt(T), '0.0');
+  perform pg_temp.place(A, TUE); perform pg_temp.place(B, TUE + interval '1 hour');
+  update public.reservation_items set menu_code = 'cut-kids-skin-fade' where reservation_id = A;
+  update app_private.gacha_gauge_month set draw_pt = 1.0, credited = 0 where user_id = U;
+  perform pg_temp.give(U, 'off300'); perform public.customer_gacha_attach(T, A);
+  s := pg_temp.sale(A, jsonb_build_array(pg_temp.item('cut-kids-skin-fade', '子供スキンフェード', 3000)), 2700, true, 'gk-m3');
+  log := log || pg_temp.chk('子どものメニューの来店では今月の分も付かない', coalesce(s->>'error', pg_temp.pt(T)), '0.0');
+  perform app_private.void_sale((s->>'id')::uuid, '点検', 'staff', '点検');
+  update public.reservation_items set menu_code = 'cut-regular' where reservation_id = A;
+
   log := log || E'── 解禁前\n';
   update app_private.gacha_settings set gauge_opens_on = date '2026-12-01' where id = 1;
   log := log || pg_temp.chk('解禁前は閉じている', (public.customer_gacha_state(T)->'gauge'->>'open'), 'false');
   log := log || pg_temp.chk('解禁前に狙う', pg_temp.err(public.customer_gacha_gauge_target(T, 'free-punch')), 'not_open');
   perform pg_temp.place(A, TUE); perform public.customer_gacha_attach(T, A);
-  s := pg_temp.sale(A, jsonb_build_array(pg_temp.item('cut-regular', '通常カット', 4000)), 3900, true, 'gk-a5');
-  log := log || pg_temp.chk('会計そのものは通る', coalesce(s->>'error', s->>'total'), '3900');
-  log := log || pg_temp.chk('解禁前の会計は付かない（0.5 のまま）', (select points::text from app_private.gacha_gauge where user_id = U), '0.5');
+  s := pg_temp.sale(A, jsonb_build_array(pg_temp.item('cut-regular', '通常カット', 4000)), 3700, true, 'gk-a5');
+  log := log || pg_temp.chk('会計そのものは通る', coalesce(s->>'error', s->>'total'), '3700');
+  log := log || pg_temp.chk('解禁前の会計は付かない', (select points::text from app_private.gacha_gauge where user_id = U), '0.0');
+  insert into app_private.gacha_draws (user_id, draw_date, prize_code, choice) values (U, app_private.today_jst(), 'off100', 'old');
+  log := log || pg_temp.chk('解禁前のガチャも付かない', (select draw_pt::text from app_private.gacha_gauge_month where user_id = U), '1.0');
 
   raise exception 'RESULT%', E'\n' || log;
 end $t$;

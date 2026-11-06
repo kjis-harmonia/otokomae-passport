@@ -23,7 +23,9 @@ export type GachaHeld = GachaPrize & {
 }
 /** ゲージ（11/6）：ガチャ券を使ったご来店でポイントがたまり、狙う景品の分たまったら受け取れる */
 export type GachaGoal = GachaPrize & { points: number }
-export type GachaGauge = { open: false } | { open: true; points: number; target: string | null; goals: GachaGoal[] }
+/** 今月のガチャの分：引くたびに 0.1pt・月 cap まで。visited＝今月ポイントの付く来店があった（その月の分がゲージに入る） */
+export type GachaGaugeMonth = { draw_pt: number; cap: number; visited: boolean }
+export type GachaGauge = { open: false } | { open: true; points: number; target: string | null; goals: GachaGoal[]; month?: GachaGaugeMonth }
 export type GachaChoice ='auto' | 'new' | 'old'
 export type GachaState = {
   today: { id: string; prize: GachaPrize; choice: GachaChoice | null } | null
