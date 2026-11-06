@@ -3,7 +3,7 @@ export const GACHA_AUDIO_FILES = {
   intro: '/gacha/gacha-intro-audio.m4a?v=deep2',
   wait: '/gacha/gacha-wait-audio.wav?v=deep2',
   open: '/gacha/gacha-open-audio.m4a?v=deep2',
-  result: '/gacha/gacha-result-audio.m4a?v=deep2',
+  result: '/gacha/gacha-result-audio.m4a?v=deep3',
 } as const
 export type GachaAudioFiles = Record<'intro' | 'wait' | 'open', string> & { result?: string }
 export type GachaAudioBuffers = Record<'intro' | 'wait' | 'open', AudioBuffer> & { result?: AudioBuffer }
@@ -34,6 +34,7 @@ export async function loadGachaAudio(signal: AbortSignal, files: GachaAudioFiles
 
 export const INTRO_CROSSFADE = 1.2
 export const OPEN_CROSSFADE = 2
+export const RESULT_CUE_MAX = 0.2
 const RELEASE = 0.08
 
 interface Envelope { at: number; duration: number; values: Float32Array }
@@ -137,7 +138,11 @@ export class GachaSoundtrack {
     if (this.resultPlayed || !this.buffers.result) return
     this.resultPlayed = true
     this.stop(at)
-    this.voice(this.buffers.result, at)
+    const cue = this.voice(this.buffers.result, at)
+    const duration = Math.min(this.buffers.result.duration, RESULT_CUE_MAX)
+    const release = Math.min(.02, duration)
+    this.fade(cue, new Float32Array([1, 0]), at + duration - release, release)
+    cue.source.stop(at + duration)
   }
 
   stop(at = this.ctx.currentTime): void {

@@ -7,7 +7,7 @@ import vm from 'node:vm'
 const source = fs.readFileSync(new URL('../src/audio/gachaSoundtrack.ts', import.meta.url), 'utf8')
 const module = { exports: {} }
 vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: module.exports, setTimeout: fn => fn() })
-const { GachaSoundtrack, INTRO_CROSSFADE, OPEN_CROSSFADE } = module.exports
+const { GachaSoundtrack, INTRO_CROSSFADE, OPEN_CROSSFADE, RESULT_CUE_MAX } = module.exports
 function fixture() {
   const nodes = []
   const param = () => ({ value: 1, events: [], setValueAtTime(v, t) { this.events.push(['set', v, t]) }, cancelScheduledValues(t) { this.events.push(['cancel', t]) }, linearRampToValueAtTime(v, t) { this.events.push(['ramp', v, t]) } })
@@ -46,6 +46,8 @@ test('a successful result plays one non-looping cue even if the result renders r
   assert.equal(nodes.length, 4)
   assert.deepEqual(nodes[3].starts, [46, 0])
   assert.equal(nodes[3].loop, false)
+  assert.equal(nodes[3].stopped, 46 + RESULT_CUE_MAX)
+  assert.deepEqual(nodes[3].gain.gain.events.at(-1), ['ramp', 0, 46 + RESULT_CUE_MAX])
   assert(nodes.slice(0, 3).every(n => n.stopped > 46 && n.stopped < 46.1))
 })
 
@@ -65,6 +67,16 @@ test('themes without a result audio buffer keep their soundtrack unchanged', () 
   audio.startIntro(0); audio.open(30); audio.result(46)
   assert.equal(nodes.length, 3)
   assert.equal(nodes[2].stopped, undefined)
+})
+
+test('a short result sound ends at its own length without padding or a looping tail', () => {
+  const { ctx, nodes } = fixture()
+  const audio = new GachaSoundtrack(ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 16 }, result: { duration: .04 } })
+  audio.startIntro(0); audio.result(40); audio.result(40.02)
+  assert.equal(nodes.length, 3)
+  assert.equal(nodes[2].stopped, 40.04)
+  assert.equal(nodes[2].loop, false)
+  assert.deepEqual(nodes[2].gain.gain.events.at(-1), ['ramp', 0, 40.04])
 })
 test('all video tags stay muted and hidden/closed playback is cleaned up', () => {
   const s = fs.readFileSync(new URL('../src/v2/V2Gacha.tsx', import.meta.url), 'utf8')

@@ -15,7 +15,7 @@ FPS = 24
 FIRST = 9.5
 SECOND = 18.5
 FADE1 = 10 / FPS  # 0.4 seconds, rounded to complete video frames.
-FLASH = 7 / FPS  # 0.3 seconds, rounded to complete video frames.
+SECOND_FADE = 7 / FPS  # A natural dissolve; do not add a bright flash.
 BURST_END = 116 / FPS
 WHITE = 4 / FPS
 SWIM_START = 8.0
@@ -29,18 +29,14 @@ def crossfade(a, b, seconds):
 
 
 def result_cue():
-    """Original, quiet four-note confirmation; no reused movie/game soundtrack."""
-    output = np.zeros((round(.95 * SR), 2), dtype=np.float64)
-    for k, frequency in enumerate([523.251, 659.255, 783.991, 1046.502]):
-        t = np.arange(round(.5 * SR)) / SR
-        attack = np.minimum(t / .012, 1)
-        tail = np.minimum((.5 - t) / .08, 1)
-        wave = (np.sin(2*np.pi*frequency*t) + .18*np.sin(4*np.pi*frequency*t))
-        wave *= attack * np.exp(-7*t) * tail
-        start = round(k * .11 * SR)
-        output[start:start+len(t)] += wave[:, None]
-    output *= .32 / np.max(np.abs(output))
-    return output
+    """Keep one short strike, without the former arpeggio or lingering tail."""
+    t = np.arange(round(.10 * SR)) / SR
+    attack = np.minimum(t / .006, 1)
+    tail = np.clip((.10 - t) / .025, 0, 1) ** 2
+    wave = (np.sin(2*np.pi*523.251*t) + .18*np.sin(4*np.pi*523.251*t))
+    wave *= attack * np.exp(-7*t) * tail
+    wave *= .32 / np.max(np.abs(wave))
+    return np.repeat(wave[:, None], 2, axis=1)
 
 
 def render_video(ffmpeg, source, audio, output, name):
@@ -77,10 +73,9 @@ def render_video(ffmpeg, source, audio, output, name):
                     n = 10 if index < 238 else 7
                     j = index - (228 if n == 10 else 444)
                     t = j / (n - 1)
-                    mixed = buffer[j].astype(np.float32) * (1-t) + frame.astype(np.float32) * t
                     if n == 7:
-                        flash = np.sin(np.pi*t) ** 2
-                        mixed = mixed*(1-flash) + np.array([238, 249, 255], np.float32)*flash
+                        t = t*t*(3-2*t)
+                    mixed = buffer[j].astype(np.float32) * (1-t) + frame.astype(np.float32) * t
                     emit(mixed)
                     if j == n-1:
                         buffer.clear()
@@ -121,7 +116,7 @@ def main():
         p.error('Preserve the originals: source-dir and output-dir must differ.')
     out.mkdir(parents=True, exist_ok=True)
     report = {'source_sha256': {}, 'timing': {'first_join_source': FIRST, 'second_join_source': SECOND,
-              'first_crossfade': FADE1, 'blue_flash': FLASH, 'burst_source_end': BURST_END,
+              'first_crossfade': FADE1, 'second_dissolve': SECOND_FADE, 'added_flash': False, 'result_cue_seconds': .10, 'burst_source_end': BURST_END,
               'white_hold': WHITE, 'swimmer_source_start': SWIM_START, 'source_audio_silent_from': MUTE_FROM}}
 
     def run(*cmd, data=None, capture=False):
@@ -148,9 +143,9 @@ def main():
 
     intro = read_audio('intro')
     intro = crossfade(crossfade(intro[:round(FIRST*SR)], intro[round(FIRST*SR):round(SECOND*SR)], FADE1),
-                      intro[round(SECOND*SR):], FLASH)
+                      intro[round(SECOND*SR):], SECOND_FADE)
     # Match video duration exactly, excluding AAC encoder padding from the input.
-    intro = intro[:round((692 / FPS - FADE1 - FLASH) * SR)]
+    intro = intro[:round((692 / FPS - FADE1 - SECOND_FADE) * SR)]
     encode_audio(intro, 'gacha-intro-audio.m4a')
 
     opening = read_audio('open')
