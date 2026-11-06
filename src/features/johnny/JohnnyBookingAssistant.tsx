@@ -2618,10 +2618,11 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
   useEffect(() => {
     const t = phase === 'day' || phase === 'calendar' ? { title: `${size}名様が入れる日をお選びください`, sub: '入れない日は押せません' }
       : phase === 'times' ? { title: 'この時間ならご案内できます', sub: day ? `${dayWord(day)}・${size}名様` : undefined }
+      : phase === 'menus' && pendingMenu ? { title: `${label(idx)}のお名前は？`, sub: persons[idx] ? `${formatVisit(persons[idx].at).time}から・${pendingMenu.name}` : undefined }
       : phase === 'menus' ? { title: `${label(idx)}のメニューは？`, sub: persons[idx] ? `${formatVisit(persons[idx].at).time}から・この時間に入るメニューだけ出しています` : undefined }
       : { title: `${size}名様のご予約はこちらでよろしいですか？` }
     onTitle(t)
-  }, [phase, idx, day, size]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, idx, day, size, pendingMenu]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickDay = async (d: string) => {
     setBusy(true); setNote(null)
@@ -2729,10 +2730,10 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
           )}
           {pendingMenu ? (
             <form onSubmit={e => { e.preventDefault(); const n = nameDraft.trim(); if (n) { setPerson({ name: n }); nextPerson() } }} style={{ marginTop: 20 }}>
-              <p style={{ margin: '0 2px 8px', fontSize: 14 }}>{label(idx)}のお名前（お店でお呼びするお名前です）</p>
+              <p style={{ margin: '0 2px 8px', fontSize: 13, color: C.secondary }}>お店でお呼びするお名前です</p>
               <input value={nameDraft} onChange={e => setNameDraft(e.target.value)} placeholder="例：山田" aria-label="お連れ様のお名前" autoFocus
                 style={{ width: '100%', boxSizing: 'border-box', minHeight: 52, padding: '0 14px', borderRadius: 12, border: `1px solid ${C.separator}`, fontSize: 17, fontFamily: FONT, background: C.fill }} />
-              <div style={{ marginTop: 12 }}><PrimaryButton disabled={!nameDraft.trim()} onClick={() => { const n = nameDraft.trim(); if (n) { setPerson({ name: n }); nextPerson() } }}>次へ</PrimaryButton></div>
+              <div style={{ marginTop: 12, display: 'grid' }}><PrimaryButton disabled={!nameDraft.trim()} onClick={() => { const n = nameDraft.trim(); if (n) { setPerson({ name: n }); nextPerson() } }}>次へ</PrimaryButton></div>
             </form>
           ) : (
             <>
