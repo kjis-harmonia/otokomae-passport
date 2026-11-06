@@ -18,7 +18,7 @@ import { GachaGauge, GaugeMonth } from './GachaGauge'
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
 type Theme = { short: string; id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean }
 const THEMES: Theme[] = [
-  { id: 'deep', short: '深海編', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
+  { id: 'deep', short: '深海編', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4?v=deep2', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4?v=deep2', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
   // 銀河の音は1部の終わりがそのまま待ちの頭へ続く曲なので、重ねるのは短く。開放は 7.9 秒で真っ白になりきる。そこからチケットを飛ばす
   { id: 'galaxy', short: '銀河編', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
     audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg', hold: true }, // 保留中（11/1「宇宙編微妙やな」）。ランダムには出さない
@@ -138,6 +138,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const sound = useRef<GachaSoundtrack | null>(null)
   const introSoundStarted = useRef(false)
   const openSoundStarted = useRef(false)
+  const resultCuePending = useRef(false)
   const waitStop = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reveals = useRef(new Set<() => void>())
   const [top, setTop] = useState<'intro' | 'wait' | 'burst'>('intro') // いま前に出ている動画
@@ -150,6 +151,14 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const [drawn, setDrawn] = useState<GachaState | 'error' | null>(null) // 今回回した結果（演出のあいだに届く）
   const [keeping, setKeeping] = useState(false)
   const [lineup, setLineup] = useState(false) // 今月のラインナップ（3D ショーケース）
+
+  useEffect(() => {
+    // Do not celebrate loading, a failed draw, or merely reopening a saved result.
+    if (THEME.id === 'deep' && resultCuePending.current && phase === 'result' && drawn && drawn !== 'error' && drawn.today) {
+      resultCuePending.current = false
+      sound.current?.result()
+    }
+  }, [THEME.id, phase, drawn])
 
   useEffect(() => {
     if (!canUseGacha()) return
@@ -173,6 +182,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   }, [src, attempt, THEME])
 
   const close = useCallback(() => {
+    resultCuePending.current = false
     reveals.current.forEach(cancel => cancel())
     reveals.current.clear()
     if (waitStop.current) clearTimeout(waitStop.current)
@@ -249,7 +259,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
       })
     }
     const waitEnded = () => { if (phaseRef.current === 'open') void play(b).catch(close) } // 早送りで終わりまで来たら開放へ
-    const burstEnded = () => { if (phaseRef.current === 'open') move('result') }
+    const burstEnded = () => { if (phaseRef.current === 'open') { resultCuePending.current = true; move('result') } }
     const burstTime = () => { if (phaseRef.current !== 'idle' && THEME.ticketAt != null && b.currentTime >= THEME.ticketAt) setTicket(true) }
     const hide = () => { if (document.hidden) close() }
     i.addEventListener('playing', introPlaying)

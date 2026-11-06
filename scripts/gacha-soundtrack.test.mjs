@@ -12,7 +12,7 @@ function fixture() {
   const nodes = []
   const param = () => ({ value: 1, events: [], setValueAtTime(v, t) { this.events.push(['set', v, t]) }, cancelScheduledValues(t) { this.events.push(['cancel', t]) }, linearRampToValueAtTime(v, t) { this.events.push(['ramp', v, t]) } })
   const ctx = { currentTime: 0, destination: {}, createGain() { return { gain: param(), connect() {}, disconnect() {} } }, createBufferSource() { const n = { loop: false, connect(g) { this.gain = g }, disconnect() {}, start(...a) { this.starts = a }, stop(t) { this.stopped = t } }; nodes.push(n); return n }, resume: async () => {} }
-  return { ctx, nodes, audio: new GachaSoundtrack(ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 16 } }) }
+  return { ctx, nodes, audio: new GachaSoundtrack(ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 16 }, result: { duration: 0.9 } }) }
 }
 test('wait is scheduled before the intro finishes and loops on the audio clock', () => {
   const { audio, nodes } = fixture(); audio.startIntro(1)
@@ -37,6 +37,34 @@ test('restart releases previous voices and cannot leave two waiting loops playin
   const { audio, nodes } = fixture(); audio.startIntro(0); audio.startIntro(3)
   assert(nodes[0].stopped < 3.1); assert(nodes[1].stopped < 3.1)
   assert.equal(nodes.filter(n => n.loop && n.stopped === undefined).length, 1)
+})
+
+test('a successful result plays one non-looping cue even if the result renders repeatedly', () => {
+  const { audio, nodes } = fixture()
+  audio.startIntro(0); audio.open(30)
+  audio.result(46); audio.result(46.1); audio.result(47)
+  assert.equal(nodes.length, 4)
+  assert.deepEqual(nodes[3].starts, [46, 0])
+  assert.equal(nodes[3].loop, false)
+  assert(nodes.slice(0, 3).every(n => n.stopped > 46 && n.stopped < 46.1))
+})
+
+test('closing releases the result cue; only a new playback run resets its once guard', () => {
+  const { audio, nodes } = fixture()
+  audio.startIntro(0); audio.result(30); audio.stop(30.2); audio.result(31)
+  assert.equal(nodes.length, 3)
+  assert(nodes[2].stopped < 30.3)
+  audio.startIntro(32); audio.result(60)
+  assert.equal(nodes.length, 6)
+  assert.deepEqual(nodes[5].starts, [60, 0])
+})
+
+test('themes without a result audio buffer keep their soundtrack unchanged', () => {
+  const { ctx, nodes } = fixture()
+  const audio = new GachaSoundtrack(ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 16 } })
+  audio.startIntro(0); audio.open(30); audio.result(46)
+  assert.equal(nodes.length, 3)
+  assert.equal(nodes[2].stopped, undefined)
 })
 test('all video tags stay muted and hidden/closed playback is cleaned up', () => {
   const s = fs.readFileSync(new URL('../src/v2/V2Gacha.tsx', import.meta.url), 'utf8')

@@ -1,11 +1,12 @@
 // Video elements stay muted. One decoded audio clock owns the soundtrack, including the loop.
 export const GACHA_AUDIO_FILES = {
-  intro: '/gacha/gacha-intro-audio.m4a',
-  wait: '/gacha/gacha-wait-audio.wav',
-  open: '/gacha/gacha-open-audio.m4a',
+  intro: '/gacha/gacha-intro-audio.m4a?v=deep2',
+  wait: '/gacha/gacha-wait-audio.wav?v=deep2',
+  open: '/gacha/gacha-open-audio.m4a?v=deep2',
+  result: '/gacha/gacha-result-audio.m4a?v=deep2',
 } as const
-export type GachaAudioFiles = Record<keyof typeof GACHA_AUDIO_FILES, string>
-export type GachaAudioBuffers = Record<keyof typeof GACHA_AUDIO_FILES, AudioBuffer>
+export type GachaAudioFiles = Record<'intro' | 'wait' | 'open', string> & { result?: string }
+export type GachaAudioBuffers = Record<'intro' | 'wait' | 'open', AudioBuffer> & { result?: AudioBuffer }
 
 let context: AudioContext | null = null
 export function gachaAudioContext(): AudioContext {
@@ -16,13 +17,19 @@ export function gachaAudioContext(): AudioContext {
 export async function loadGachaAudio(signal: AbortSignal, files: GachaAudioFiles = GACHA_AUDIO_FILES): Promise<GachaAudioBuffers> {
   const ctx = gachaAudioContext()
   const entries = await Promise.all(Object.entries(files).map(async ([key, url]) => {
-    const res = await fetch(url, { signal })
-    if (!res.ok) throw new Error(`gacha audio: ${res.status}`)
-    const buffer = await ctx.decodeAudioData(await res.arrayBuffer())
-    if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-    return [key, buffer] as const
+    try {
+      const res = await fetch(url, { signal })
+      if (!res.ok) throw new Error(`gacha audio: ${res.status}`)
+      const buffer = await ctx.decodeAudioData(await res.arrayBuffer())
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+      return [key, buffer] as const
+    } catch (error) {
+      // 決定音（result）は無くても演出は続ける（読めないとガチャそのものが開けなくなるので・11/6 Claude レビュー）
+      if (key === 'result' && !signal.aborted) return null
+      throw error
+    }
   }))
-  return Object.fromEntries(entries) as GachaAudioBuffers
+  return Object.fromEntries(entries.filter((e): e is readonly [string, AudioBuffer] => e !== null)) as GachaAudioBuffers
 }
 
 export const INTRO_CROSSFADE = 1.2
@@ -43,6 +50,7 @@ export class GachaSoundtrack {
   private voices = new Set<Voice>()
   private waiting: Voice | null = null
   private readonly introFade: number
+  private resultPlayed = false
 
   // introFade: a theme whose intro already runs into the first bar of the wait loop needs only a short overlap.
   constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE) {
@@ -99,6 +107,7 @@ export class GachaSoundtrack {
 
   startIntro(at = this.ctx.currentTime, offset = 0): void {
     this.stop(at)
+    this.resultPlayed = false
     const remaining = Math.max(0.01, this.buffers.intro.duration - offset)
     const fade = Math.min(this.introFade, remaining)
     const join = at + remaining - fade
@@ -121,6 +130,14 @@ export class GachaSoundtrack {
     }
     const open = this.voice(this.buffers.open, at, offset, false, 0)
     this.fade(open, curve(true), at, fade)
+  }
+
+  // Only a rendered, successful result calls this. Re-renders cannot stack the cue.
+  result(at = this.ctx.currentTime): void {
+    if (this.resultPlayed || !this.buffers.result) return
+    this.resultPlayed = true
+    this.stop(at)
+    this.voice(this.buffers.result, at)
   }
 
   stop(at = this.ctx.currentTime): void {
