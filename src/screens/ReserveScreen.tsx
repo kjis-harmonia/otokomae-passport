@@ -36,7 +36,7 @@ export function ReserveScreen(props:{onShowQr?:()=>void;onClose?:()=>void}){
 }
 
 function StoreBookingGate({session,access,onShowQr,onClose}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void;onClose?:()=>void}){
-  return <section className="customer-access" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="AI予約の来店認証">
+  return <section className="customer-access" data-guide="jn-verify" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="AI予約の来店認証">
     {onClose&&<button type="button" className="v2-back" onClick={onClose}>‹ 戻る</button>}
     {/* 主な操作は1つ（QR を見せる）。Face ID は確認済みの人だけなので小さく下に */}
     <h1>はじめに、店頭で本人確認</h1>

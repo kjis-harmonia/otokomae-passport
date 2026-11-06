@@ -31,6 +31,7 @@ import { V2App } from './v2/V2App'
 import { needsInstallFirst } from './utils/installGuide'
 import { isStaging } from './utils/env'
 import { FirstGuide } from './v2/FirstGuide'
+import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 import { refreshPushIfGranted } from './utils/webPush'
 
@@ -480,6 +481,9 @@ function App() {
           <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
 
           {firstGuide && !welcomeCouponDialog && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
+
+          {/* 使い方ガイド：最初の案内・Welcome クーポン・Face ID の案内が出ている間は出さない */}
+          <CustomerGuide paused={!!firstGuide || !!welcomeCouponDialog || passkeyOffer || appLoading} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (

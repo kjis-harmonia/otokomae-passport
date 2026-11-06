@@ -40,6 +40,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
   return (
     <div className="v2-page">
       <h1 className="v2-title">次回予約</h1>
+      <div data-guide="next-panel">
       {next && visit ? (
         <section className="v2-panel v2-glass" aria-label="次のご予約">
           {status === 'failed' ? (
@@ -70,7 +71,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、お店からお電話します。</p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
             {status === 'failed' && <ReservationRetry onRetry={reload} />}
-            <button type="button" className="v2-btn v2-btn-quiet v2-glass" onClick={onJohnny}>変更・キャンセル（AI予約）</button>
+            <button type="button" className="v2-btn v2-btn-quiet v2-glass" data-guide="next-change" onClick={onJohnny}>変更・キャンセル（AI予約）</button>
             {status !== 'failed' && <a className="v2-btn v2-btn-quiet v2-glass" href={SHOP_PHONE_TEL}><Phone size={18} />お店に電話する</a>}
           </div>
         </section>
@@ -95,6 +96,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>電話で予約する（{SHOP_PHONE_DISPLAY}）</a>
         </section>
       )}
+      </div>
 
       <section className="v2-panel v2-glass" style={{ marginTop: 14 }} aria-label="メンテナンスの目安">
         <p className="v2-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Scissors size={14} />メンテナンスの目安</p>

@@ -303,7 +303,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
-          <button type="button" className="v2-gacha-start" onClick={pending ? resume : start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />{pending ? (gacha?.held?.reserved ? '当選した券を見る' : '当選した券を選ぶ') : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
+          <button type="button" className="v2-gacha-start" data-guide="gacha-start" onClick={pending ? resume : start} disabled={!src && !loadFailed}>{loadFailed ? '読み込み直す' : src ? <><Sparkles size={20} />{pending ? (gacha?.held?.reserved ? '当選した券を見る' : '当選した券を選ぶ') : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
           {pending && <p className="v2-gacha-again">{gacha?.held?.reserved ? '新しい券は、ご来店のあとに受け取れます' : '当選した券がまだ選ばれていません'}</p>}
           {gacha?.today?.choice && !gacha.repeat && <p className="v2-gacha-again">次のガチャは明日 0:00 から回せます</p>}
           {onChoose && (

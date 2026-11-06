@@ -17,9 +17,21 @@ export type GuideStep = {
   noJump?: boolean
   /** まわりを暗くしない（入力欄をいくつも埋める手順） */
   noDim?: boolean
+  /** 「次へ」で作業を終える（この先に進めないとき：本人確認がまだ など） */
+  stopHere?: boolean
+  /** 「次へ」の言葉を変える */
+  nextLabel?: string
 }
 
-export type GuideTask = { id: string; title: string; sub: string; steps: GuideStep[] }
+export type GuideTask = {
+  id: string; title: string; sub: string; steps: GuideStep[]
+  /** 選ぶ画面に出さない（自動で1回だけ出す案内） */
+  hidden?: boolean
+  /** 終わったら「これで終わりです」を出さずに閉じる */
+  quiet?: boolean
+  /** false のときは選ぶ画面に出さない（解禁前のガチャ など） */
+  available?: () => boolean
+}
 
 const g = (name: string) => `[data-guide="${name}"]`
 
@@ -29,6 +41,20 @@ const OPERATOR: GuideStep = {
   sub: '会計やチャージの記録に、押した人の名前が残ります。',
   skipIf: `${g('operator')} [aria-pressed="true"]`,
 }
+
+/** 会員QRを読むまで（お会計・チェックイン・初回の本人確認で同じ） */
+const SCAN: GuideStep[] = [
+  OPERATOR,
+  { target: g('menu-shop'), text: '「店舗端末」を押す' },
+  { target: g('pick-staff'), text: '担当者を選ぶ', skipIf: g('scanner') },
+  { target: g('staff-picker'), text: '自分の名前を押す', skipIf: g('scanner') },
+  {
+    target: g('scanner'), until: g('member-result'),
+    text: '「QRを読み取る」を押して、会員QRを映す',
+    sub: 'お客様にアプリの「会員QR」を出してもらいます。読めると来店も自動で記録されます。',
+  },
+]
+const CHECKED_IN: GuideStep = { target: g('checkin-done'), next: true, text: '「来店チェックイン完了」が出ていれば記録済みです', sub: 'QRを読んだ時点で、今日の来店が自動で記録されます。' }
 
 /** 会員QRのお会計。支払い方法の手順だけ「現金（PayPay など）」と「銀Pay」で変える */
 function memberCheckout(pay: 'cash' | 'ginpay'): GuideTask {
@@ -49,27 +75,49 @@ function memberCheckout(pay: 'cash' | 'ginpay'): GuideTask {
     title: pay === 'cash' ? 'お客様のお会計（現金・PayPay など）' : 'お客様のお会計（銀Pay）',
     sub: pay === 'cash' ? '会員QRを読んで、現金・PayPay・カードで会計' : '会員QRを読んで、銀Pay の残高で会計',
     steps: [
-      OPERATOR,
-      { target: g('menu-shop'), text: '「店舗端末」を押す' },
-      { target: g('pick-staff'), text: '担当者を選ぶ', skipIf: g('scanner') },
-      { target: g('staff-picker'), text: '自分の名前を押す', skipIf: g('scanner') },
-      {
-        target: g('scanner'), until: g('member-result'),
-        text: '「QRを読み取る」を押して、会員QRを映す',
-        sub: 'お客様にアプリの「会員QR」を出してもらいます。読めると来店も自動で記録されます。',
-      },
+      ...SCAN,
       { target: g('go-checkout'), text: '「お会計に進む」を押す', skipIf: g('checkout'), optional: true },
       { target: g('co-staff'), text: '施術した担当を押す', skipIf: `${g('co-staff')} [aria-pressed="true"]` },
-      { target: g('co-menu'), text: 'メニューを選ぶ', sub: '予約で選んだメニューが入っていれば、そのままで大丈夫です。', optional: true },
-      { target: g('co-tickets'), text: '使う券を押す', sub: '使わないときは「次へ」。', optional: true, next: true },
+      { target: g('co-menu'), text: 'メニューを選ぶ', sub: '予約から来たお会計は、最初から入っています。', optional: true },
+      { target: g('co-price'), text: '料金が担当で変わるときは、金額を入れる', sub: '右の金額を押して入れ直します。そのままなら「次へ」。', optional: true, next: true, noDim: true },
+      { target: g('co-plan'), text: 'お客様が AI予約で選んだ券です', sub: '下の券の枚数に、最初から入っています。', optional: true, next: true },
+      { target: g('co-tickets'), text: '使う券の枚数を「− ＋」で入れる', sub: '使わないときは「次へ」。', optional: true, next: true, noDim: true },
       ...payment,
-      { target: g('usual-menu'), text: 'いつものメニューを登録する', sub: 'お客様が次からアプリで同じメニューを予約できます。しないときは「次へ」。', optional: true, next: true },
+      {
+        target: g('usual-menu'), until: g('usual-saved'), optional: true, next: true,
+        text: 'お客様の「いつものメニュー」を登録する',
+        sub: '会計で選んだメニューが入っています。任意金額のときは一覧から選んで「登録する」。しないときは「次へ」。',
+      },
       { target: g('next-customer'), text: '終わったら「次のお客様」を押す', noJump: true },
     ],
   }
 }
 
 export const GUIDE_TASKS: GuideTask[] = [
+  {
+    id: 'checkin',
+    title: '来店チェックイン',
+    sub: '会員QRを読んで、今日の来店を記録',
+    steps: [...SCAN, CHECKED_IN, { target: g('next-customer'), text: '終わったら「次のお客様」を押す', noJump: true }],
+  },
+  {
+    id: 'first-visit',
+    title: '初めてアプリを登録したお客様の来店',
+    sub: '会員QRを読んで、AI予約の本人確認',
+    steps: [
+      ...SCAN,
+      {
+        target: g('store-approve'), until: g('store-approved'),
+        text: 'ご本人か確かめてから「本人を確認してAI予約を有効にする」',
+        sub: '「AI予約の初回本人確認」の欄です。出ないときは確認済みのお客様です。',
+        optional: true,
+      },
+      { target: g('store-approved'), next: true, optional: true, text: '確認できました', sub: 'お客様のアプリで AI予約が使えるようになります。' },
+      CHECKED_IN,
+      { target: `${g('go-checkout')}, ${g('checkout')}`, optional: true, next: true, noDim: true, text: 'お会計はこの下で続けます', sub: '手順は「お客様のお会計」のガイドで案内します。' },
+      { target: g('next-customer'), text: '終わったら「次のお客様」を押す', noJump: true },
+    ],
+  },
   memberCheckout('cash'),
   memberCheckout('ginpay'),
   {

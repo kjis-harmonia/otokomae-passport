@@ -1059,7 +1059,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 20, color: '#246b52',
                   }}>✓</div>
-                  <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#246b52', letterSpacing: '0.1em', marginBottom: 10 }}>
+                  <p data-guide="checkin-done" style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#246b52', letterSpacing: '0.1em', marginBottom: 10 }}>
                     来店チェックイン完了
                   </p>
                   <p style={{ fontFamily: SERIF, fontSize: 13, color: '#1c1f1d', lineHeight: 1.8, letterSpacing: '0.04em' }}>

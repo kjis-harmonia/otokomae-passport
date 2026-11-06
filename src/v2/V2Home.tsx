@@ -128,7 +128,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
       <div className="v2-pay-wrap"><V2GinpayBar onOpen={onGinpay} /></div>
       <div className="v2-cats" ref={catsRail} role="tablist" aria-label="スタイルのカテゴリ">
         {cats.map(id => (
-          <button key={id} type="button" role="tab" className="v2-cat v2-glass" aria-pressed={cat === id} aria-selected={cat === id} onClick={() => chooseCat(id)}>{id}</button>
+          <button key={id} type="button" role="tab" data-guide={id === USUAL ? 'home-usual-chip' : undefined} className="v2-cat v2-glass" aria-pressed={cat === id} aria-selected={cat === id} onClick={() => chooseCat(id)}>{id}</button>
         ))}
       </div>
 
@@ -136,11 +136,11 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
         <motion.div key={cat} className="v2-stage"
           initial={reduce ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? undefined : { opacity: 0, y: -8 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
-          <div className="v2-cards" ref={rail} onScroll={onScroll} aria-label={`${cat}のスタイル`}>
+          <div className="v2-cards" data-guide="home-cards" ref={rail} onScroll={onScroll} aria-label={`${cat}のスタイル`}>
             {list.map((item, i) => {
               const p = itemPrice(item)
               return (
-                <motion.article key={item.key} className="v2-card v2-glass" aria-current={i === index ? 'true' : undefined}
+                <motion.article key={item.key} data-guide={item.kind === 'group' ? 'home-group' : undefined} className="v2-card v2-glass" aria-current={i === index ? 'true' : undefined}
                   onClick={item.kind === 'group' ? () => requestJohnny({ menuCode: item.code, label: item.label, usual: true, group: true }) : undefined}
                   style={item.kind === 'group' ? { cursor: 'pointer' } : undefined}
                   initial={reduce ? false : { opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
@@ -164,7 +164,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
         </motion.div>
       </AnimatePresence>
 
-      <button type="button" className="v2-cta v2-glass" onClick={reserve}>
+      <button type="button" className="v2-cta v2-glass" data-guide="home-cta" onClick={reserve}>
         <span className="v2-cta-spark" aria-hidden="true"><Sparkle size={22} strokeWidth={1.6} /></span>
         <span className="v2-cta-text">
           <b>{!selected ? 'AI予約' : selected.kind === 'group' ? '2名以上でAI予約する' : selected.kind === 'usual' ? 'いつものでAI予約する' : 'この髪型でAI予約する'}</b>

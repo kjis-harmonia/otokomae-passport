@@ -139,7 +139,7 @@ function UsualMenuRow({ userId, staffName, picked, loadMenus }: { userId: string
       setState(r.ok ? 'saved' : 'error')
     } catch { setState('error') }
   }
-  if (state === 'saved') return <p style={{ marginTop: 12, fontSize: 13, color: '#246b52' }}>いつものメニューを「{name ?? code}」に登録しました。</p>
+  if (state === 'saved') return <p data-guide="usual-saved" style={{ marginTop: 12, fontSize: 13, color: '#246b52' }}>いつものメニューを「{name ?? code}」に登録しました。</p>
   return (
     <div data-guide="usual-menu" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(36,107,82,0.2)' }}>
       <p style={{ fontSize: 12, color: '#5b625e', marginBottom: 6 }}>お客様のいつものメニュー（次からアプリの「いつもの」で予約できます）</p>

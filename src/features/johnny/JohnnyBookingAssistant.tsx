@@ -1611,6 +1611,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
             style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+            data-guide={step.k === 'done' ? 'jn-done' : step.k === 'groupDone' ? 'jn-group-done' : undefined}
           >
             {prompt.title && (
               <h1 className="johnny-question-title" style={{ margin: '20px 0 0', fontSize: step.k === 'ai' && prompt.title.length > 24 ? 20 : 26, fontWeight: 600, lineHeight: 1.3, textAlign: 'center', letterSpacing: '-0.01em' }}>
@@ -1622,7 +1623,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
 
             {step.k === 'welcome' && (
-              <List>
+              <List guide="jn-welcome">
                 {/* 並び（10/29 慶一郎さん）：いつものメニュー → メンテナンスカット → いつもの担当 → いつものメニューを変える → ほか */}
                 {step.w.usual.filter(m => m.code !== 'maintenance').map(m => (
                   <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={yen(m)} note="いつもの" />
@@ -1645,26 +1646,28 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {/* メニューが決まったとき（「いつもの」など）：日にちを押して進める。前回のご来店から14日以内ならメンテナンスカットにも切り替えられる（過ぎていたら出さない） */}
             {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.calendar && (
-              <DayCalendar from={jstDate(3)} last={jstDate(options?.settings.booking_window_days ?? 60)} staff={options?.staff?.find(x => x.id === wantStaff) ?? null} onPick={d => void pickDay(step.menu!, d)}
+              <DayCalendar guide="jn-calendar" from={jstDate(3)} last={jstDate(options?.settings.booking_window_days ?? 60)} staff={options?.staff?.find(x => x.id === wantStaff) ?? null} onPick={d => void pickDay(step.menu!, d)}
                 onSoonest={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(3), `${m.name}の、明々後日からの空きです。`) }} />
             )}
             {step.k === 'askWhen' && step.again === 'menu' && step.menu && !step.calendar && step.menu.code !== 'maintenance' && (
               <List>
                 {/* いま選んでいるメニューと「変える」を一番上に（11/6 慶一郎さん「いつものでパンチパーマを適当に選んでる人は分かりづらい」） */}
-                <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true }, then: 'when' })}
+                <Row guide="jn-menu" onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true }, then: 'when' })}
                   title={step.menu.name} note={yen(step.menu)} detail="変える ›" />
                 {/* 担当（押すたびに テイテイ → 銀二郎 → どちらでも）。日にちはこの担当の出勤日から */}
                 {(options?.staff?.length ?? 0) > 1 && (
-                  <Row onClick={() => { const order = [...(options?.staff ?? []).map(st => st.id), 'any']; setWantStaff(order[(order.indexOf(wantStaff) + 1) % order.length]) }}
+                  <Row guide="jn-staff" onClick={() => { const order = [...(options?.staff ?? []).map(st => st.id), 'any']; setWantStaff(order[(order.indexOf(wantStaff) + 1) % order.length]) }}
                     title="担当" detail={`${options?.staff?.find(st => st.id === wantStaff)?.name ?? 'どちらでも'} ›`} />
                 )}
                 {/* 日にちを押すだけで進める（話さなくても予約できる・10/29 慶一郎さん）：今日・明日・明後日・もっと先 */}
+                <div data-guide="jn-days">
                 {[0, 1, 2].map(i => {
                   const d = jstDate(i)
                   return <Row key={d} onClick={() => void pickDay(step.menu!, d)} title={['今日', '明日', '明後日'][i]} detail={`${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}（${'日月火水木金土'[new Date(`${d}T12:00:00Z`).getUTCDay()]}）`} />
                 })}
                 {/* もっと先の日：カレンダーから日にちを選ぶ（11/6 慶一郎さん） */}
                 <Row onClick={() => setStep({ ...step, calendar: true })} title="もっと先の日" detail="カレンダーから" />
+                </div>
                 {maintLeft != null && maintenanceMenu && <Row onClick={startMaintenance} title="メンテナンスカット" detail={`${maintLeft === 0 ? '今日まで' : `あと${maintLeft}日`}・${yen(maintenanceMenu)}`} />}
               </List>
             )}
@@ -1687,13 +1690,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               </>
             )}
             {step.k === 'partySize' && (
-              <List>
+              <List guide="jn-party">
                 <Row onClick={() => choosePartySize(2, step.menu)} title="2名" detail="ご本人＋お連れ様1名" />
                 <Row onClick={() => choosePartySize(3, step.menu)} title="3名" detail="ご本人＋お連れ様2名" />
               </List>
             )}
             {step.k === 'askMenu' && (
-              <List>
+              <List guide="jn-askmenu">
                 {menus.map(m => (
                   <Row key={m.code} onClick={() => (step.then === 'when' ? setStep({ k: 'askWhen', again: 'menu', menu: m }) : handleText(m.name))}
                     title={m.name} detail={`${m.duration_min}分・${yen(m)}`} note={m.code === lastMenuCode ? '前回' : undefined} />
@@ -1713,7 +1716,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
 
             {step.k === 'pick' && (
-              <List>
+              <List guide="jn-times">
                 {step.offer.slots.map(x => (
                   <Row key={x.starts_at} onClick={() => setStep({ k: 'confirm', req: step.req, menu: step.menu, slot: x })}
                     title={formatVisit(x.starts_at).time} detail={formatVisit(x.starts_at).date} />
@@ -1851,7 +1854,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
 
             {step.k === 'confirm' && confirmPrice && (
-              <PriceBox menuName={step.menu.name} price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
+              <PriceBox guide="jn-price" menuName={step.menu.name} price={confirmPrice.price} usable={confirmPrice.usable} selected={confirmPrice.selected}
                 gacha={gachaHeld && confirmPrice.gachaNote === null ? gachaHeld.title : null} gachaOn={!skipGacha} onGacha={() => setSkipGacha(v => !v)} gachaNote={confirmPrice.gachaNote}
                 onToggle={id => toggleCoupon(confirmPrice.key, id)} ginpay={ginpayChoice} onGinpay={() => setPayGinpay(v => !v)} />
             )}
@@ -1959,7 +1962,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       </div>
 
       {/* 下：操作 */}
-      <div style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column', flexShrink: 0, maxHeight: '70%', overflowY: 'auto', overscrollBehavior: 'contain', gap: 10, alignItems: 'stretch', maxWidth: 460, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+      <div data-guide="jn-actions" data-step={step.k} style={{ padding: '12px 20px 20px', display: 'flex', flexDirection: 'column', flexShrink: 0, maxHeight: '70%', overflowY: 'auto', overscrollBehavior: 'contain', gap: 10, alignItems: 'stretch', maxWidth: 460, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
         {step.k === 'pickStaff' && (
           <>
             {(options?.staff ?? []).map(st => step.avail?.[st.id] === false
@@ -1979,7 +1982,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               <p style={{ margin: '0 0 2px', fontSize: 13, color: C.secondary, textAlign: 'center' }}>「はい」「いいえ」と話しても進めます</p>
             )}
             {/* 担当がまだ決まっていない間（いつもの担当の空きを確かめている間）は押せない */}
-            <PrimaryButton disabled={!step.staffChosen && !step.staffId && (options?.staff?.length ?? 0) > 1} onClick={() => book(step.menu, step.slot, step.req, step.staffId ?? null, replaceOf(step))}>はい</PrimaryButton>
+            <PrimaryButton guide="jn-yes" disabled={!step.staffChosen && !step.staffId && (options?.staff?.length ?? 0) > 1} onClick={() => book(step.menu, step.slot, step.req, step.staffId ?? null, replaceOf(step))}>はい</PrimaryButton>
             {/* 予約の一歩手前は「はい」「いいえ」だけ。時間・担当は上の「戻る」で選び直せる（10/30 慶一郎さん）。お連れ様は小さく下に */}
             <SecondaryButton onClick={() => declineConfirm(step.menu)}>いいえ</SecondaryButton>
             {!step.change && (
@@ -2204,8 +2207,8 @@ function WaitlistCard({ api, view }: { api: BookingAssistantApi; view: { menu: M
   )
 }
 
-function PrimaryButton({ onClick, children, disabled = false }: { onClick: () => void; children: ReactNode; disabled?: boolean }) {
-  return <button type="button" onClick={onClick} disabled={disabled} style={{ ...buttonBase, background: C.text, color: C.bg, opacity: disabled ? 0.45 : 1 }}>{children}</button>
+function PrimaryButton({ onClick, children, disabled = false, guide }: { onClick: () => void; children: ReactNode; disabled?: boolean; guide?: string }) {
+  return <button type="button" data-guide={guide} onClick={onClick} disabled={disabled} style={{ ...buttonBase, background: C.text, color: C.bg, opacity: disabled ? 0.45 : 1 }}>{children}</button>
 }
 
 function SecondaryButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
@@ -2213,7 +2216,7 @@ function SecondaryButton({ onClick, children }: { onClick: () => void; children:
 }
 
 /** もっと先の日のカレンダー（11/6 慶一郎さん）：1か月ずつ。選べるのは from〜last。押すとその日の空きを出す */
-function DayCalendar({ from, last, staff, onPick, onSoonest }: { from: string; last: string; staff: { id: string; name: string } | null; onPick: (d: string) => void; onSoonest: () => void }) {
+function DayCalendar({ from, last, staff, onPick, onSoonest, guide }: { from: string; last: string; staff: { id: string; name: string } | null; onPick: (d: string) => void; onSoonest: () => void; guide?: string }) {
   const [month, setMonth] = useState(from.slice(0, 7)) // 'YYYY-MM'
   // 担当の出勤（貼り紙の休み・店休日をそのまま反映）。誰も出勤しない日・選んだ担当の休みの日は押せない
   const [work, setWork] = useState<Record<string, string[]> | null>(null)
@@ -2228,7 +2231,7 @@ function DayCalendar({ from, last, staff, onPick, onSoonest }: { from: string; l
   const canNext = month < last.slice(0, 7)
   const nav: CSSProperties = { width: 44, height: 44, border: 'none', background: 'none', fontSize: 22, color: C.text, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }
   return (
-    <div style={{ width: '100%', marginTop: 20, borderRadius: 14, background: C.fill, padding: '8px 10px 12px', boxSizing: 'border-box' }}>
+    <div data-guide={guide} style={{ width: '100%', marginTop: 20, borderRadius: 14, background: C.fill, padding: '8px 10px 12px', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button type="button" aria-label="前の月" disabled={!canPrev} onClick={() => shift(-1)} style={{ ...nav, opacity: canPrev ? 1 : 0.25 }}>‹</button>
         <b style={{ fontSize: 17, fontWeight: 600 }}>{y}年{m}月</b>
@@ -2257,16 +2260,16 @@ function DayCalendar({ from, last, staff, onPick, onSoonest }: { from: string; l
   )
 }
 
-function List({ children }: { children: ReactNode }) {
+function List({ children, guide }: { children: ReactNode; guide?: string }) {
   return (
-    <div style={{ width: '100%', marginTop: 24, borderRadius: 14, overflow: 'hidden', background: C.fill }}>
+    <div data-guide={guide} style={{ width: '100%', marginTop: 24, borderRadius: 14, overflow: 'hidden', background: C.fill }}>
       {children}
     </div>
   )
 }
 
-function Row({ title, detail, note, onClick, href, muted }: {
-  title: string; detail?: string; note?: string; onClick?: () => void; href?: string; muted?: boolean
+function Row({ title, detail, note, onClick, href, muted, guide }: {
+  title: string; detail?: string; note?: string; onClick?: () => void; href?: string; muted?: boolean; guide?: string
 }) {
   const style: CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 56, padding: '0 16px', boxSizing: 'border-box',
@@ -2281,7 +2284,7 @@ function Row({ title, detail, note, onClick, href, muted }: {
       {detail && <span style={{ fontSize: 15, color: C.secondary }}>{detail}</span>}
     </>
   )
-  return href ? <a href={href} style={style}>{body}</a> : <button type="button" onClick={onClick} style={style}>{body}</button>
+  return href ? <a href={href} data-guide={guide} style={style}>{body}</a> : <button type="button" data-guide={guide} onClick={onClick} style={style}>{body}</button>
 }
 
 /** 連絡先の登録（本名・電話番号）。保存はサーバー（customer_set_contact） */
@@ -2396,8 +2399,8 @@ function couponSpeech(price: PriceBreakdown | null, usableCount: number): string
 }
 
 /** お会計（プレミアムクーポン・選んだ券）と、使える券のボタン */
-function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpay, gacha, gachaOn = true, onGacha, gachaNote }: {
-  menuName: string; price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void
+function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpay, gacha, gachaOn = true, onGacha, gachaNote, guide }: {
+  menuName: string; price: PriceBreakdown; usable: TicketRow[]; selected: TicketRow[]; onToggle: (id: string) => void; guide?: string
   /** 自動で付くガチャ券の名前（付かなければ null）と、付かない理由 */
   gacha?: string | null; gachaNote?: string | null
   /** ガチャ券を使うか（1枚まで）。onGacha で 0枚 ⇄ 1枚 */
@@ -2407,7 +2410,7 @@ function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpa
 }) {
   const p = price.premium
   return (
-    <div style={{ width: '100%', marginTop: 12 }}>
+    <div data-guide={guide} style={{ width: '100%', marginTop: 12 }}>
       {/* レシートのように：料金 → クーポンの割引 → 券の割引 → お会計 */}
       <div style={{ borderRadius: 14, overflow: 'hidden', background: C.fill }}>
         <SummaryRow label={`料金（${menuName}）`} value={yenOf(price.normal ?? price.base)} />
@@ -2750,7 +2753,7 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
     <div style={{ width: '100%' }}>
       {note && <p role="status" style={{ margin: '16px 2px 0', fontSize: 14, color: C.text, textAlign: 'center' }}>{note}</p>}
       {phase === 'day' && (
-        <List>
+        <List guide="gf-day">
           {[0, 1, 2].map(i => {
             const d = jstDate(i), p = dayPlans[d]
             const none = Array.isArray(p) && p.length === 0
@@ -2761,10 +2764,10 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
         </List>
       )}
       {phase === 'calendar' && (
-        <DayCalendar from={jstDate(3)} last={jstDate(windowDays)} staff={null} onPick={d => void pickDay(d)} onSoonest={() => void pickDay(jstDate(3))} />
+        <DayCalendar guide="gf-calendar" from={jstDate(3)} last={jstDate(windowDays)} staff={null} onPick={d => void pickDay(d)} onSoonest={() => void pickDay(jstDate(3))} />
       )}
       {phase === 'times' && day && Array.isArray(dayPlans[day]) && (
-        <List>
+        <List guide="gf-times">
           {(dayPlans[day] as GroupPlan[]).map((p, i) => {
             const hm = (t: number) => formatVisit(new Date(t).toISOString()).time
             const title = p.kind === 'together' ? `${hm(p.at[0])}　${size}名様 同時に`
@@ -2789,11 +2792,11 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
           {idx > 0 && !pendingMenu && !memberName && freeMembers.length > 0 && (
             <>
               <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>いつものメンバー</p>
-              <List>{freeMembers.map(u => { const m = menus.find(x => x.code === u.menuCode); return m ? <Row key={u.name} onClick={() => void chooseMember(u)} title={`${u.name}様`} detail={m.name} /> : null })}</List>
+              <List guide="gf-members">{freeMembers.map(u => { const m = menus.find(x => x.code === u.menuCode); return m ? <Row key={u.name} onClick={() => void chooseMember(u)} title={`${u.name}様`} detail={m.name} /> : null })}</List>
             </>
           )}
           {pendingMenu ? (
-            <form onSubmit={e => { e.preventDefault(); const n = nameDraft.trim(); if (n) { setPerson({ name: n }); nextPerson() } }} style={{ marginTop: 20 }}>
+            <form data-guide="gf-name" onSubmit={e => { e.preventDefault(); const n = nameDraft.trim(); if (n) { setPerson({ name: n }); nextPerson() } }} style={{ marginTop: 20 }}>
               <p style={{ margin: '0 2px 8px', fontSize: 13, color: C.secondary }}>お店でお呼びするお名前です</p>
               <input value={nameDraft} onChange={e => setNameDraft(e.target.value)} placeholder="例：山田" aria-label="お連れ様のお名前" autoFocus
                 style={{ width: '100%', boxSizing: 'border-box', minHeight: 52, padding: '0 14px', borderRadius: 12, border: `1px solid ${C.separator}`, fontSize: 17, fontFamily: FONT, background: C.fill }} />
@@ -2802,7 +2805,7 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
           ) : (
             <>
               {idx > 0 && !memberName && freeMembers.length > 0 && <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>ほかの方</p>}
-              <List>
+              <List guide="gf-menus">
                 {(idx === 0 ? [planMenu, ...menus.filter(m => m.code !== planMenu.code)] : memberMenu ? [memberMenu, ...menus.filter(m => m.code !== memberMenu.code)] : menus).map(m => {
                   const at = persons[idx].at
                   const ok = fits(m.code, at)
@@ -2824,7 +2827,7 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
           </div>
           <p style={{ margin: '10px 2px 0', fontSize: 12, lineHeight: 1.6, color: C.secondary }}>担当は空いている者でご案内します。銀Pay・ガチャ券はご本人の分だけです。</p>
           <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-            <PrimaryButton onClick={() => onBook(persons)}>はい</PrimaryButton>
+            <PrimaryButton guide="gf-yes" onClick={() => onBook(persons)}>はい</PrimaryButton>
           </div>
         </>
       )}

@@ -18,7 +18,7 @@ export function V2Menu({ open, onClose, onTickets, onAccount }: { open: boolean;
             initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}>
             <div className="v2-grab" />
             <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }}>
-              <button type="button" className="v2-row" onClick={() => { onClose(); onTickets() }}><Ticket size={20} /><span style={{ flex: 1 }}>すべてのチケット<small>割引券・特典・プレゼント・銀Pay</small></span><ChevronRight size={18} /></button>
+              <button type="button" className="v2-row" data-guide="menu-tickets" onClick={() => { onClose(); onTickets() }}><Ticket size={20} /><span style={{ flex: 1 }}>すべてのチケット<small>割引券・特典・プレゼント・銀Pay</small></span><ChevronRight size={18} /></button>
               <button type="button" className="v2-row" onClick={() => { onClose(); onAccount() }}><KeyRound size={20} /><span style={{ flex: 1 }}>ログインと引き継ぎ<small>Face ID・機種変更・以前のチケット</small></span><ChevronRight size={18} /></button>
               {canShowInstallGuide() && <button type="button" className="v2-row" onClick={() => { onClose(); window.dispatchEvent(new Event(SHOW_INSTALL_GUIDE_EVENT)) }}><Smartphone size={20} /><span style={{ flex: 1 }}>ホーム画面に追加</span><ChevronRight size={18} /></button>}
             </div>

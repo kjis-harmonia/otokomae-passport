@@ -346,7 +346,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                         {lines.filter(x => x.source !== 'manual').length === 1 && <button type="button" onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>変える</button>}
                       </span>
                     )}
-                    <input value={String(l.unit_price)} inputMode="numeric" aria-label={`${l.name}の金額`}
+                    <input data-guide={l.source === 'manual' ? undefined : 'co-price'} value={String(l.unit_price)} inputMode="numeric" aria-label={`${l.name}の金額`}
                       onChange={e => { const v = parseInt(e.target.value.replace(/\D/g, '') || '0', 10); update(l.key, { unit_price: v, discount: Math.min(l.discount, v * l.quantity) }) }}
                       style={{ ...inputStyle, fontSize: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
                   </div>
@@ -400,7 +400,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 if (!mine.length) return null
                 const groups = [...mine.reduce((m, t) => m.set(t.title, { n: (m.get(t.title)?.n ?? 0) + 1, amt: (m.get(t.title)?.amt ?? 0) + t.amount }), new Map<string, { n: number; amt: number }>())]
                 return (
-                  <div role="note" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(151,115,43,0.08)', border: '1px solid rgba(151,115,43,0.35)', fontSize: 14, lineHeight: 1.6 }}>
+                  <div role="note" data-guide="co-plan" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(151,115,43,0.08)', border: '1px solid rgba(151,115,43,0.35)', fontSize: 14, lineHeight: 1.6 }}>
                     <b>お客様がAI予約で選んだ券</b><br />
                     {groups.map(([title, g]) => <span key={title} style={{ display: 'block' }}>{title} × {g.n}枚（−{yen(g.amt)}）</span>)}
                     <span style={{ fontSize: 12, color: C.sub }}>下の券の枚数に入れています。お会計は下の合計のとおりです。</span>

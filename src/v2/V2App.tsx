@@ -2,7 +2,8 @@
 // チケット・ログインと引き継ぎは ☰ から開くページ、AI予約（Johnny）は全画面。どの機能も消さず、入口だけ整理する。
 // 画面の切り替えは App の activeTab（お知らせのリンク ?tab=reserve・?tab=tickets もそのまま効く）。
 import { useEffect, useRef, useState } from 'react'
-import { CalendarClock, ChevronLeft, Home, Menu, QrCode, Sparkles } from 'lucide-react'
+import { CalendarClock, ChevronLeft, CircleHelp, Home, Menu, QrCode, Sparkles } from 'lucide-react'
+import { openCustomerGuide } from '../components/guide/guideEvents'
 import type { NavTab } from '../data/brand'
 import { JOHNNY_INTENT_EVENT } from '../features/johnny/bookingIntent'
 import { ReserveScreen } from '../screens/ReserveScreen'
@@ -54,7 +55,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   if (activeTab === 'tickets') {
     // チケットも白の画面（ほかのページと同じ上のロゴ・戻る）。券の絵柄（黒いカード・クーポン画像）はそのまま
     return (
-      <div className="v2 v2-wallet">
+      <div className="v2 v2-wallet" data-guide="wallet">
         <header className="v2-head" style={{ gridTemplateColumns: '80px 1fr 80px' }}>
           <button type="button" className="v2-back" onClick={back}><ChevronLeft size={18} />戻る</button>
           <img className="v2-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" />
@@ -72,9 +73,10 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   return (
     <div className={isHome ? 'v2 v2-fixed v2-home' : fixed ? 'v2 v2-fixed' : 'v2'}>
       <header className="v2-head">
-        <span />
+        {/* 使い方ガイド（押す場所を順番に案内する） */}
+        <button type="button" className="v2-round v2-glass" aria-label="使い方" data-guide="guide-open" onClick={openCustomerGuide}><CircleHelp size={20} /></button>
         <img className="v2-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" />
-        <button type="button" className="v2-round v2-glass" aria-label="メニュー" onClick={() => setMenu(true)}><Menu size={20} /></button>
+        <button type="button" className="v2-round v2-glass" aria-label="メニュー" data-guide="menu-open" onClick={() => setMenu(true)}><Menu size={20} /></button>
       </header>
 
       <main className={`v2-main${activeTab === 'home' && !pay ? ' has-cta' : ''}`}>
@@ -91,7 +93,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
         {TABS.map(t => {
           const Icon = t.icon
           return (
-            <button key={t.id} type="button" aria-current={activeTab === t.id ? 'page' : undefined} onClick={() => go(t.id)}>
+            <button key={t.id} type="button" data-guide={`tab-${t.id}`} aria-current={activeTab === t.id ? 'page' : undefined} onClick={() => go(t.id)}>
               <Icon size={22} strokeWidth={1.8} />{t.label}
             </button>
           )
