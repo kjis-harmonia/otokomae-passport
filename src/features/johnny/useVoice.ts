@@ -70,6 +70,15 @@ export interface VoiceOptions {
   aiVoice?: boolean
 }
 
+// アプリ全体で、いま鳴っている AI の声（11/7 慶一郎さん「AIの声が被さってる？なんか怖い」）。
+//   新しく話す前・画面を離れたときに必ず止める（別の画面の Johnny が残っていても、声が2つ重ならない）
+let globalVoice: AbortController | null = null
+function stopAllVoices() { globalVoice?.abort(); globalVoice = null; try { window.speechSynthesis?.cancel() } catch { /* ignore */ } }
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopAllVoices() })
+  window.addEventListener('pagehide', stopAllVoices)
+}
+
 export function useVoice(onFinal: (text: string) => void, options: VoiceOptions = { server: false }) {
   const recordMode = options.server && canRecord()
   const [listen, setListen] = useState<ListenState>(() => (recordMode || recognitionCtor() ? 'idle' : 'unsupported'))
@@ -278,6 +287,7 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
     const synth = window.speechSynthesis
     speakAbortRef.current?.abort()
     speakAbortRef.current = null
+    stopAllVoices()
     if (muted) { then?.(); return }
     recStopRef.current?.(true)
     recRef.current?.abort()
@@ -303,6 +313,7 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
     if (ctx && ctx.state === 'running') {
       const ac = new AbortController()
       speakAbortRef.current = ac
+      globalVoice = ac
       setSpeaking(true)
       void playAiVoice(text, ctx, ac.signal).then(r => {
         if (r === 'aborted') { setSpeaking(false); return }
@@ -320,7 +331,7 @@ export function useVoice(onFinal: (text: string) => void, options: VoiceOptions 
     if (m) { speakAbortRef.current?.abort(); window.speechSynthesis?.cancel(); setSpeaking(false) }
   }, [])
 
-  useEffect(() => () => { recStopRef.current?.(true); speakAbortRef.current?.abort(); recRef.current?.abort(); window.speechSynthesis?.cancel() }, [])
+  useEffect(() => () => { recStopRef.current?.(true); if (globalVoice === speakAbortRef.current) globalVoice = null; speakAbortRef.current?.abort(); recRef.current?.abort(); window.speechSynthesis?.cancel() }, [])
 
   return { listen, interim, notice, speaking, muted, setMuted, startListening, stopListening, finishListening, speak, recordMode }
 }
