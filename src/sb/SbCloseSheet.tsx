@@ -56,7 +56,7 @@ export function SbCloseSheet({ options, preset, actor, onClose, onDone, onNewBoo
     const choices = [30, 60, 90, 120].map(d => start + d).filter(m => m <= limit)
     if (limit > start && !choices.includes(limit)) choices.push(limit)
     return <SbModal title="この時間をクローズ" busy={busy} onClose={onClose}
-      footer={<div className="sb-actions"><button className="sb-primary sb-grow" disabled={!ready || busy} onClick={() => void submit()}><Check size={18} />{busy ? '閉めています…' : end !== null ? `${hm(end)}までクローズする` : 'いつまでか選んでください'}</button></div>}>
+      footer={<div className="sb-actions"><button className="sb-primary sb-grow" data-guide="sb-close-submit" disabled={!ready || busy} onClick={() => void submit()}><Check size={18} />{busy ? '閉めています…' : end !== null ? `${hm(end)}までクローズする` : 'いつまでか選んでください'}</button></div>}>
       <fieldset disabled={busy} className="sb-fieldset">
         <div className="sb-qc-card">
           <div><small>担当</small><strong>{who}</strong></div>
@@ -64,7 +64,7 @@ export function SbCloseSheet({ options, preset, actor, onClose, onDone, onNewBoo
           <div className="sb-qc-range"><small>クローズ</small><strong>{hm(start)}<span aria-hidden="true">→</span><em className={end === null ? 'is-empty' : undefined}>{end !== null ? hm(end) : '--:--'}</em></strong></div>
         </div>
         <h3 className="sb-qc-title">いつまで？</h3>
-        <div className="sb-qc-choices" role="group" aria-label="いつまでクローズするか">
+        <div className="sb-qc-choices" data-guide="sb-close-choices" role="group" aria-label="いつまでクローズするか">
           {choices.map(m => {
             const mins = m - start
             const tag = m === limit && preset.shiftEnd ? '終わりまで' : mins % 60 === 0 ? `${mins / 60}時間` : mins > 60 ? `${Math.floor(mins / 60)}時間${mins % 60}分` : `${mins}分`
@@ -78,7 +78,7 @@ export function SbCloseSheet({ options, preset, actor, onClose, onDone, onNewBoo
   }
 
   return <SbModal title="時間をクローズ" busy={busy} onClose={onClose}
-    footer={<div className="sb-actions"><button className="sb-primary sb-grow" disabled={!ready || busy} onClick={() => void submit()}><Check size={18} />{busy ? '閉めています…' : !staffIds.length ? '担当を選んでください' : 'クローズする'}</button></div>}>
+    footer={<div className="sb-actions"><button className="sb-primary sb-grow" data-guide="sb-close-submit" disabled={!ready || busy} onClick={() => void submit()}><Check size={18} />{busy ? '閉めています…' : !staffIds.length ? '担当を選んでください' : 'クローズする'}</button></div>}>
     <fieldset disabled={busy} className="sb-fieldset">
       <p className="sb-understood">サロンボードに入れた時間を閉めて、AI 予約が入らないようにします。</p>
       <section className="sb-form-section"><h3>担当</h3>

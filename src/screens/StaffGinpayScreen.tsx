@@ -96,7 +96,7 @@ export function StaffGinpayScreen() {
           </div>
         </>
       ) : (
-        <>
+        <div data-guide="gp-find">
           {scanning ? (
             <>
               <div className="st-camera"><div id={CAMERA_ID} /></div>
@@ -121,7 +121,7 @@ export function StaffGinpayScreen() {
               ))}
             </div>
           ))}
-        </>
+        </div>
       )}
       {error && <p className="st-error">{error}</p>}
       {a.picking && <ActorSheet api={a.bookingApi} actor={a.actor} onPick={a.choose} onClose={() => a.setPicking(false)} />}

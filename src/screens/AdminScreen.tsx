@@ -833,6 +833,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                     先に担当者を選択してください
                   </p>
                   <button
+                    data-guide="pick-staff"
                     onClick={() => setShowStaffPicker(true)}
                     style={{ padding: '16px 32px', borderRadius: 14, background: 'linear-gradient(160deg, #3a3e3b 0%, #1c1f1d 100%)', border: '1px solid rgba(151,115,43,0.5)', boxShadow: '0 4px 20px rgba(28,31,29,0.12)', color: '#ffffff', fontFamily: SERIF, fontSize: 17, fontWeight: 700, letterSpacing: '0.14em', cursor: 'pointer' }}
                   >
@@ -841,7 +842,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                 </div>
               </>
             ) : (
-              <div style={{ marginBottom: 14 }}>
+              <div data-guide="scanner" style={{ marginBottom: 14 }}>
                 <QrCameraScanner
                   onScan={text => { void handleScanned(text) }}
                   onCameraError={msg => { setCameraError(msg); setShowManual(true) }}
@@ -912,7 +913,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
         {/* ===== RESULT ===== */}
         {mainTab === 'issue' && phase === 'result' && scannedData && (
-          <div>
+          <div data-guide="member-result">
             {/* ── Customer card ── */}
             <div style={{ position: 'relative', marginBottom: 16 }}>
               <div
@@ -1796,6 +1797,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           <div style={{ display: 'flex', gap: 10, maxWidth: 480, margin: '0 auto' }}>
             <button
               type="button"
+              data-guide="next-customer"
               onClick={handleReset}
               style={{
                 flex: '0 0 34%', height: 66, borderRadius: 18,
@@ -2023,7 +2025,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 6 }}>担当者を選ぶ</p>
               <h2 style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.08em' }}>担当者を選んでください</h2>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '18px 18px 14px' }}>
+            <div data-guide="staff-picker" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '18px 18px 14px' }}>
               {STAFF_NAMES.map(name => {
                 const selected = staffId === name
                 return (

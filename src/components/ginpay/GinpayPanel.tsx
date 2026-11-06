@@ -212,7 +212,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                   )}
                   <Field label="受け取る現金">
                     {!tiers ? <p style={msgStyle(C.sub)}>読み込み中…</p> : (
-                      <div style={{ display: 'grid', gap: 8 }}>
+                      <div data-guide="gp-tiers" style={{ display: 'grid', gap: 8 }}>
                         {tiers.map((t) => {
                           const on = cash === t.cash
                           return (
@@ -238,7 +238,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
                       {needsAccountChoice && chargeAccount && !chargeAccount.is_current_client ? `${chargeAccount.client_name ?? '統合元'} の口座` : ledger.client_name ?? 'この顧客'}から現金 {yen(tier?.cash)} を受け取り、{yen(tier ? tier.cash + tier.bonus : null)} をチャージします（特典 +{yen(tier?.bonus)}）。
                     </p>
                   )}
-                  <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                  <div data-guide="gp-submit" style={{ display: 'flex', gap: 10, marginTop: 12 }}>
                     {!unsure && <SecondaryButton onClick={() => { setChargeOpen(false); setConfirmingCharge(false); setMessage(null) }} disabled={loading}>やめる</SecondaryButton>}
                     <PrimaryButton onClick={() => void submitCharge()} disabled={loading || !tier || (needsAccountChoice && !chargeAccount)} style={{ flex: 2 }}>
                       {loading ? '処理中…' : unsure ? '結果を確かめる' : confirmingCharge ? 'チャージ確定' : '確認へ'}
@@ -258,7 +258,7 @@ export function GinpayPanel({ clientId, api, ensureActor, showAccountDetail = tr
         </>
       )}
 
-      {message && <p style={msgStyle(message.includes('失敗') || message.includes('不足') ? C.danger : C.sub)}>{message}</p>}
+      {message && <p data-guide={message.includes('チャージしました') ? 'gp-done' : undefined} style={msgStyle(message.includes('失敗') || message.includes('不足') ? C.danger : C.sub)}>{message}</p>}
 
       {reverse && (
         <div role="dialog" aria-modal="true" aria-label={reverse.kind === 'refund' ? '返金' : '取消'} style={modalBackdrop}>

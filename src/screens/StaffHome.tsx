@@ -9,6 +9,8 @@ import { StaffGinpayScreen } from './StaffGinpayScreen'
 import type { PendingChangeSummary, StaffInventoryHandle } from './StaffInventoryScreen'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { OPERATOR_KEY, TERMINAL_OPERATORS } from './staffOperators'
+import { StaffGuide } from '../components/guide/StaffGuide'
+import { openStaffGuide } from '../components/guide/guideEvents'
 import './staffTerminal.css'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -60,18 +62,23 @@ export function StaffHome() {
             <p className="st-latin"><i aria-hidden="true" />GINJIRO</p>
           </header>
 
+          <button type="button" className="st-guide-open" onClick={openStaffGuide}>
+            <span><strong>使い方ガイド</strong><small>これから行う作業を選ぶと、押す場所を案内します</small></span>
+            <ChevronRight size={22} />
+          </button>
+
           <h2 className="st-section"><span>この端末を使う人</span><small>OPERATOR</small></h2>
-          <div className="st-operators" role="group" aria-label="この端末を使う人">
+          <div className="st-operators" data-guide="operator" role="group" aria-label="この端末を使う人">
             {TERMINAL_OPERATORS.map(name => <button type="button" key={name} aria-pressed={operator === name} onClick={() => chooseOperator(name)}>{name}</button>)}
           </div>
 
           <h2 className="st-section"><span>毎日の業務</span><small>DAILY WORK</small></h2>
           <div className="st-tray">
-            <MenuRow icon={<ScanLine size={30} />} tone="gold" title="店舗端末" sub="会員QR・来店・割引券" onClick={() => setMode('shop')} />
-            <MenuRow icon={<Wallet size={30} />} tone="dark" title="銀Pay チャージ" sub="現金でチャージ・残高" onClick={() => setMode('ginpay')} />
-            <MenuRow icon={<ReceiptJapaneseYen size={30} />} title="店頭会計" sub="会員QRが無いお客様の会計" onClick={() => setMode('walkin')} />
+            <MenuRow icon={<ScanLine size={30} />} tone="gold" guide="menu-shop" title="店舗端末" sub="会員QR・来店・割引券" onClick={() => setMode('shop')} />
+            <MenuRow icon={<Wallet size={30} />} tone="dark" guide="menu-ginpay" title="銀Pay チャージ" sub="現金でチャージ・残高" onClick={() => setMode('ginpay')} />
+            <MenuRow icon={<ReceiptJapaneseYen size={30} />} guide="menu-walkin" title="店頭会計" sub="会員QRが無いお客様の会計" onClick={() => setMode('walkin')} />
             {/* 予約表は SB に一本化（予約台帳は使わない） */}
-            <MenuRow icon={<CalendarDays size={30} />} title="予約（SB）" sub="予約表・クローズ" onClick={() => { window.location.href = '/sb' }} />
+            <MenuRow icon={<CalendarDays size={30} />} guide="menu-sb" title="予約（SB）" sub="予約表・クローズ" onClick={() => { window.location.href = '/sb' }} />
             <MenuRow icon={<Users size={30} />} title="顧客" sub="顧客一覧・顧客台帳" onClick={() => setMode('clients')} />
           </div>
 
@@ -81,6 +88,7 @@ export function StaffHome() {
             <MenuRow icon={<Database size={30} />} title="会員復旧" sub="機種変更・データ移管" onClick={() => setMode('recovery')} />
           </div>
         </div>
+        <StaffGuide autoOpen />
       </div>
     )
   }
@@ -90,7 +98,7 @@ export function StaffHome() {
 
   return (
     <div className={white ? undefined : 'st-app'} style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: white ? '#FFFFFF' : '#f6f5f2' }}>
-      <div className="st-app st-bar"><button type="button" className="st-back" onClick={handleBackClick}><ChevronLeft size={24} />メニュー</button></div>
+      <div className="st-app st-bar"><button type="button" className="st-back" onClick={handleBackClick}><ChevronLeft size={24} />メニュー</button><button type="button" className="st-bar-guide" onClick={openStaffGuide}>使い方</button></div>
 
       <div style={{ flex: '1 1 auto' }}>
         {mode === 'shop'
@@ -107,6 +115,8 @@ export function StaffHome() {
               ? <AdminScreen key="staff-recovery" mode="recovery" />
               : <StaffInventoryScreen ref={inventoryRef} />}
       </div>
+
+      <StaffGuide />
 
       {pendingSummary && (
         <div style={{
@@ -151,9 +161,9 @@ export function StaffHome() {
   )
 }
 
-function MenuRow({ icon, title, sub, tone = 'light', onClick }: { icon: ReactNode; title: string; sub: string; tone?: 'gold' | 'dark' | 'light'; onClick: () => void }) {
+function MenuRow({ icon, title, sub, tone = 'light', guide, onClick }: { icon: ReactNode; title: string; sub: string; tone?: 'gold' | 'dark' | 'light'; guide?: string; onClick: () => void }) {
   return (
-    <button type="button" className="st-row" onClick={onClick}>
+    <button type="button" className="st-row" data-guide={guide} onClick={onClick}>
       <span className={`st-tile st-tile-${tone}`}>{icon}</span>
       <span className="st-row-main"><strong>{title}</strong><small>{sub}</small></span>
       <ChevronRight size={24} />

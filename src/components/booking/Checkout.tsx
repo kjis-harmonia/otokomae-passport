@@ -292,7 +292,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   }
 
   return (
-    <div {...(quick ? { 'aria-label': 'お会計' } : { role: 'dialog', 'aria-modal': true, 'aria-label': '会計' })}
+    <div data-guide="checkout" {...(quick ? { 'aria-label': 'お会計' } : { role: 'dialog', 'aria-modal': true, 'aria-label': '会計' })}
       style={quick ? { marginTop: 16, padding: 16, borderRadius: 14, background: C.bg, color: C.text, fontFamily: SANS, textAlign: 'left', border: `1px solid ${C.line}` }
         : { position: 'fixed', inset: 0, zIndex: 950, background: C.bg, color: C.text, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
       {!quick && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px', borderBottom: `1px solid ${C.line}` }}>
@@ -316,14 +316,14 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
             <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
               {/* お客様・担当 */}
               {ctx.reservation || clientInfo || anonymous ? (
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+                <div data-guide="co-client-picked" style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
                   <h1 style={{ fontSize: 22, fontWeight: 600 }}>{clientInfo?.name ?? ctx.reservation?.customer_name ?? '匿名'}</h1>
                   {!ctx.reservation && <button type="button" onClick={() => { setClient(undefined); setAnonymous(false); setTicketIds([]); setGinpayAccountId(null); setMethod(m => m === 'ginpay' ? null : m) }} style={{ ...linkStyle, minHeight: 32, marginLeft: 'auto' }}>変更</button>}
                 </div>
               ) : customers ? <ClientPicker customers={customers} onPick={c => void chooseClient(c)} /> : null}
               {paid && <p style={{ marginTop: 8, fontSize: 14, color: C.danger }}>この予約はすでに会計済みです。</p>}
 
-              <Row label="担当">
+              <Row label="担当" guide="co-staff">
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {ctx.staff.map(s => <Choice key={s.id} on={stylistId === s.id} onClick={() => setStylistId(s.id)}>{s.name}</Choice>)}
                 </span>
@@ -390,7 +390,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 )}
                 {!detail && !lines.some(l => l.source !== 'manual') ? <QuickMenuSelect api={api} startsAt={ctx.reservation?.starts_at ?? null} personal={personal} onPick={item => addItem('service_menu', item)} />
                   : adding ? <ItemPicker api={api} startsAt={ctx.reservation?.starts_at ?? null} onPick={addItem} onClose={() => setAdding(false)} />
-                  : detail ? <button type="button" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button> : null}
+                  : detail ? <button type="button" data-guide="co-add" onClick={() => setAdding(true)} style={{ ...linkStyle, color: C.text }}>＋ メニュー・商品を追加</button> : null}
               </div>
 
               {/* クーポン（App 会員）・値引き */}
@@ -408,7 +408,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 )
               })()}
               {listed.length > 0 && (
-                <div style={{ marginTop: 8 }}>
+                <div data-guide="co-tickets" style={{ marginTop: 8 }}>
                   {listed.map(t => {
                     const on = t.id === 'gacha' ? gachaOn : ticketIds.includes(t.id)
                     const permOnly = !hasPerm && welcomeIds.includes(t.id)
@@ -525,7 +525,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     : <><br />お会計 {yen(totals.total)}・<b>差額 {yen(totals.total - hold.amount)}</b>。差額も銀Payなら「GINPay」（全額を銀Payで）、ほかの方法なら支払方法を選んでください（仮支払いは確定と同時に戻ります）。</>}
                 </div>
               )}
-              <Row label="支払方法">
+              <Row label="支払方法" guide="co-method">
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {METHODS.filter(m => quick ? m.id === 'ginpay' || m.id === 'cash' : m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => pickMethod(m.id)}>{quick && m.id === 'ginpay' ? '銀Pay' : m.label}</Choice>)}
                 </span>
@@ -571,7 +571,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       </div>
       {(ctx || attempt) && !attemptError && (
         <div style={quick ? { marginTop: 16 } : { flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
-          <div style={quick ? undefined : { maxWidth: 640, margin: '0 auto' }}>
+          <div data-guide="co-confirm" style={quick ? undefined : { maxWidth: 640, margin: '0 auto' }}>
             <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : quick && method === 'cash' ? `現金 ${yen(Math.max(0, totals.total))} を受け取って会計を確定` : quick && method === 'ginpay' ? `銀Payで会計を確定 ${yen(Math.max(0, totals.total))}` : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
@@ -599,7 +599,7 @@ function ClientPicker({ customers, onPick }: { customers: CustomerApi; onPick: (
     return () => { alive = false; window.clearTimeout(t) }
   }, [customers, q])
   return (
-    <div>
+    <div data-guide="co-client">
       <p style={{ fontSize: 13, color: C.sub }}>お客様</p>
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="氏名・電話番号で探す" aria-label="顧客を探す" style={{ ...inputStyle, marginTop: 6 }} autoComplete="off" />
       {found.map(k => (
@@ -624,7 +624,7 @@ function QuickMenuSelect({ api, startsAt, personal, onPick }: { api: CheckoutApi
   }, [api, startsAt])
   const groups = items ? [...new Set(items.map(i => i.group ?? 'メニュー'))] : []
   return (
-    <label style={{ display: 'block', padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
+    <label data-guide="co-menu" style={{ display: 'block', padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
       <span style={smallLabel}>メニュー</span>
       {failed ? <span role="alert" style={{ fontSize: 14, color: C.danger }}>メニューを読み込めませんでした。「メニューの追加・値引き」から入れてください。</span> : (
         <select value="" disabled={!items} onChange={e => { const item = items?.find(i => i.id === e.target.value); if (item) onPick(item) }}
@@ -661,7 +661,7 @@ function ItemPicker({ api, startsAt, onPick, onClose }: { api: CheckoutApi; star
     ['店販', 'product', cat.products.filter(match)],
   ] : []
   return (
-    <div style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
+    <div data-guide="co-picker" style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}` }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="メニュー・商品を探す" aria-label="メニュー・商品を探す" style={inputStyle} autoComplete="off" />
         <button type="button" onClick={onClose} style={{ ...linkStyle, flexShrink: 0 }}>閉じる</button>
@@ -694,9 +694,9 @@ function ItemPicker({ api, startsAt, onPick, onClose }: { api: CheckoutApi; star
 
 // ── 部品 ──────────────────────────────────────────────────────────────────────
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+function Row({ label, guide, children }: { label: string; guide?: string; children: ReactNode }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', alignItems: 'center', gap: 12, marginTop: 14 }}>
+    <div data-guide={guide} style={{ display: 'grid', gridTemplateColumns: '72px 1fr', alignItems: 'center', gap: 12, marginTop: 14 }}>
       <span style={{ fontSize: 13, color: C.sub }}>{label}</span>{children}
     </div>
   )

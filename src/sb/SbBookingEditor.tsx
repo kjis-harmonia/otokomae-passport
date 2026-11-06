@@ -87,8 +87,8 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
   return <SbModal title={preview ? '予約内容の確認' : r ? '予約を編集' : '新規予約'} busy={busy} onClose={onClose}
     footer={<div className="sb-actions">{preview ? <>
       <button className="sb-secondary" disabled={busy} onClick={() => setPreview(null)}><ChevronLeft size={18} />戻る</button>
-      <button className="sb-primary" disabled={busy} onClick={submit}><Check size={18} />{sending ? '送信中…' : r ? '変更を保存' : '予約を登録'}</button>
-    </> : <button className="sb-primary sb-grow" disabled={busy || !options.menus.length} onClick={() => void review()}>{checking ? '内容を確認中…' : '内容を確認'}</button>}</div>}>
+      <button className="sb-primary" data-guide="sb-register" disabled={busy} onClick={submit}><Check size={18} />{sending ? '送信中…' : r ? '変更を保存' : '予約を登録'}</button>
+    </> : <button className="sb-primary sb-grow" data-guide="sb-review" disabled={busy || !options.menus.length} onClick={() => void review()}>{checking ? '内容を確認中…' : '内容を確認'}</button>}</div>}>
     {preview ? <dl className="sb-facts">
       <dt>お客様</dt><dd>{preview.input.customer_name}{preview.input.customer_phone && <small>{preview.input.customer_phone}</small>}</dd>
       <dt>日時</dt><dd>{jstDateLabel(date)} {jstTime(preview.input.starts_at)}〜</dd>

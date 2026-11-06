@@ -13,7 +13,7 @@ export function StaffWalkInScreen({ onBack }: { onBack: () => void }) {
   const [notice, setNotice] = useState<string | null>(null)
   return (
     <div style={{ background: C.bg, minHeight: '100%' }}>
-      {notice && <p role="status" style={{ margin: 0, padding: '12px 20px', fontSize: 14, color: C.text, background: '#F1F6EF', borderBottom: `1px solid ${C.line}` }}>{notice}</p>}
+      {notice && <p role="status" data-guide="walkin-done" style={{ margin: 0, padding: '12px 20px', fontSize: 14, color: C.text, background: '#F1F6EF', borderBottom: `1px solid ${C.line}` }}>{notice}</p>}
       <Checkout key={round} api={a.checkoutApi} customers={a.customerApi} reservationId={null} ensureActor={a.ensureActor}
         onClose={onBack}
         onDone={sale => { setNotice(`会計を確定しました ${sale.client?.name ?? sale.customer_name ?? ''} ${yen(sale.total)}`); setRound(r => r + 1) }} />
