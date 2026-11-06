@@ -11,7 +11,7 @@ import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
 import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { normalizePhone } from '../../utils/customerContact'
-import { bookingAssistantApi, linkCompanion, type AiBookingStatus, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
+import { bookingAssistantApi, linkCompanion, loadWorkDays, type AiBookingStatus, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
 import { answerMenuInfo, detectAsk } from './askIntent'
 import { planOffer, type Offer, type Slot, jstMinutes } from './slotPlanner'
@@ -28,6 +28,7 @@ import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { takeAiTurn } from './aiQuota'
 import { PushToggle } from '../../components/PushToggle'
 import { canBeUsual, getUsualMenu, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from './usualMenu'
+import { addUsualMember, getUsualMembers, isUsualMember } from './usualMembers'
 import { pushState } from '../../utils/webPush'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
@@ -62,8 +63,8 @@ type Step =
   | { k: 'contact'; name: string }
   /** 2回目以降：おかえりなさい（前回からの日数・メンテナンスカットの期限・いつものメニュー） */
   | { k: 'welcome'; w: Welcome }
-  | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption; label?: string }
-  | { k: 'askMenu'; req: VisitRequest }
+  | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption; label?: string; calendar?: boolean }
+  | { k: 'askMenu'; req: VisitRequest; then?: 'when' }
   /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
   | { k: 'overview'; req: VisitRequest; advice: DayAdvice; note?: string }
   | { k: 'searching'; label?: string }
@@ -73,7 +74,9 @@ type Step =
   /** 担当（指名）を選ぶ：確定の前に必ず聞く。avail はその時間にその担当が空いているか */
   | { k: 'pickStaff'; next: ConfirmStep; avail?: Record<string, boolean>; note?: string }
   | { k: 'booking'; menu: MenuOption; slot: Slot }
-  | { k: 'done'; reservation: CustomerReservation; changedFrom?: CustomerReservation; oldKept?: boolean; companion?: CustomerReservation; companionFailed?: boolean; ginpay?: number | 'failed'; gacha?: string; gachaFor?: string; gachaFailed?: boolean }
+  | { k: 'done'; reservation: CustomerReservation; changedFrom?: CustomerReservation; oldKept?: boolean; companion?: CustomerReservation; companionFailed?: boolean
+      /** お連れ様のお名前・メニュー（いつものメンバーに追加する用）。extra＝3人目を足した予約（もう足せない） */
+      companionName?: string; companionMenuCode?: string; extra?: boolean; ginpay?: number | 'failed'; gacha?: string; gachaFor?: string; gachaFailed?: boolean }
   /** お連れ様：メニューを聞く → 2人分の確認（お連れ様は予約者の時間から一番早く。togetherAt：お二人同時に入れる時刻） */
   | { k: 'companionMenu'; primary: PartyPrimary }
   /** お連れ様のお名前を聞く（お店の予約のメモに入れる・10/30 慶一郎さん「お連れ様の名前が不明のまま」） */
@@ -99,7 +102,9 @@ type Step =
   /** お知らせの枠が、もう押さえられていない（時間切れ・予約済み） */
   | { k: 'offerGone'; reason: 'expired' | 'booked' }
 
-interface PartyPrimary { menu: MenuOption; slot: Slot; staffId: string | null; req: VisitRequest; replace?: CustomerReservation }
+interface PartyPrimary { menu: MenuOption; slot: Slot; staffId: string | null; req: VisitRequest; replace?: CustomerReservation
+  /** 3人目（11/6）：ご本人はもう予約済み。お連れ様だけ足す */
+  booked?: CustomerReservation }
 
 /** お連れ様の話（確認画面で「息子の分も」「もう1人」など） */
 const COMPANION_WORDS = /もう1人|もう一人|もう1名|もう一名|お連れ|連れ|息子|娘|子供|こども|子ども|嫁|妻|旦那|主人|友達|友人|2人|二人|ふたり|2名|二名/
@@ -124,6 +129,8 @@ interface Props {
   initialLabel?: string | null
   /** ホームの「いつもの」から（メニューが分からなければ、いつものメニューを聞いて登録する） */
   initialUsual?: boolean
+  /** ホームの「2名以上で予約する」から：ご本人の日時と担当が決まったら、お連れ様のメニューを聞く */
+  initialGroup?: boolean
 }
 
 /** 「戻る」で戻れる画面（読み込み中・送信中・終わった画面は数えない） */
@@ -224,7 +231,7 @@ const pausedStep = (s?: AiBookingStatus | null): Step => ({ k: 'ai', say: paused
 
 const BUSINESS_ERRORS = new Set(['slot_taken', 'too_late', 'date_not_open', 'invalid_starts_at', 'menu_not_available', 'hold_expired', 'hold_not_found'])
 
-export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null, initialLabel = null, initialUsual = false }: Props) {
+export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null, initialLabel = null, initialUsual = false, initialGroup = false }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
     if (viewportRef.current) return observeVisibleViewport(viewportRef.current)
@@ -294,6 +301,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const shownRef = useRef<Step | null>(null)
   // お連れ様の担当（null＝おまかせ）。2人分の確認の画面で選ぶ
   // お二人の予約で、無料のガチャ券をどちらに使うか（null＝おまかせ：ご本人に使えればご本人、だめならお連れ様）
+  // 日にちを聞く前に選ぶ担当（11/6 慶一郎さん「メニュー、担当の後、施術日聞くか」）。'any'＝どちらでも（空いている担当に決める）。
+  // 最初はいつもの担当。選んだ担当の休みの日はカレンダーで押せず、空きもその担当の分だけ出す
+  const [wantStaff, setWantStaffState] = useState<string>(() => getUsualStaff() ?? 'any')
+  const wantStaffRef = useRef(wantStaff)
+  const setWantStaff = useCallback((v: string) => { wantStaffRef.current = v; setWantStaffState(v) }, [])
   const [partyGachaPick, setPartyGachaPick] = useState<'self' | 'companion' | null>(null)
   const partyGachaPickRef = useRef<'self' | 'companion' | null>(null)
   const pickPartyGacha = useCallback((v: 'self' | 'companion' | null) => { partyGachaPickRef.current = v; setPartyGachaPick(v) }, [])
@@ -313,7 +325,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       setBackList([]) // eslint-disable-line react-hooks/set-state-in-effect
       return
     }
-    if (!canReturnTo(step) || !prev || prev === step || prev.k === step.k) return
+    // カレンダーを開いたときは、同じ「日にち」の画面でも戻れるようにする（戻ると今日・明日・明後日の一覧）
+    const openedCalendar = step.k === 'askWhen' && !!step.calendar && prev?.k === 'askWhen' && !prev.calendar
+    if (!canReturnTo(step) || !prev || prev === step || (prev.k === step.k && !openedCalendar)) return
     historyRef.current = [...historyRef.current, prev].slice(-12)
     setBackList(historyRef.current)
   }, [step])
@@ -446,7 +460,16 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // メンテナンスカットのお知らせ（JOHNNY のお知らせ）をまだ受け取っていない端末だけ「登録しますか？」と聞く
   const [pushAsk, setPushAsk] = useState(false)
   useEffect(() => { pushState().then(st => setPushAsk(st === 'off' || st === 'needs-install'), () => {}) }, [])
+  // 「2名以上で予約する」から：ご本人の日時と担当が決まったら（確認の手前）、そのままお連れ様のメニューへ
+  const groupRef = useRef(initialGroup)
+  useEffect(() => {
+    if (!groupRef.current || step.k !== 'confirm' || step.change || !(step.staffChosen || step.staffId)) return
+    groupRef.current = false
+    setStep({ k: 'companionMenu', primary: { menu: step.menu, slot: step.slot, staffId: step.staffId ?? null, req: step.req, replace: ownActiveRef.current ?? undefined } }) // eslint-disable-line react-hooks/set-state-in-effect -- 段階の差し替え
+  }, [step])
   const [usualDone, setUsualDone] = useState<string | null>(null)
+  const [usualMembers, setUsualMembers] = useState(getUsualMembers)
+  const [memberSaved, setMemberSaved] = useState<string | null>(null)
   const initialMenuRef = useRef(initialMenuCode)
   const initialLabelRef = useRef(initialLabel)
   const initialUsualRef = useRef(initialUsual)
@@ -482,7 +505,18 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep({ k: 'searching' })
     stopListening()
     try {
-      const picks = spreadSlots(await api.nextSlots(menu.code, from, 10), 3)
+      // 担当を選んでいれば、その担当の空きだけを近い日から（3週間先まで）
+      const want = wantStaffRef.current !== 'any' ? wantStaffRef.current : null
+      let found: Slot[] = []
+      if (want) {
+        for (let k = 0; k < 21 && found.length < 10; k += 3) {
+          const days = [0, 1, 2].map(i => addDays(from, k + i))
+          const got = await Promise.all(days.map(d => api.staffSlots(d, menu.code, want)))
+          for (const list of got) found = [...found, ...[...list].sort((x, y) => x.starts_at.localeCompare(y.starts_at))]
+        }
+        found = found.slice(0, 10)
+      } else found = await api.nextSlots(menu.code, from, 10)
+      const picks = spreadSlots(found, 3)
       if (picks.length === 0) { setStep({ k: 'askWhen', again: 'none', menu }); return }
       const dates = [...new Set(picks.map(x => slotDate(x.starts_at)))]
       setStep({ k: 'pick', req: { ...req, dates, time: null }, menu, offer: { kind: 'choices', slots: picks }, note, waitDate })
@@ -497,7 +531,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     stopListening()
     const req: VisitRequest = { dates: [date], time: null, range: null, earliest: false }
     try {
-      const slots = [...await api.slots(date, menu.code)].sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+      const want = wantStaffRef.current !== 'any' ? wantStaffRef.current : null
+      const slots = [...await (want ? api.staffSlots(date, menu.code, want) : api.slots(date, menu.code))].sort((a, b) => a.starts_at.localeCompare(b.starts_at))
       if (slots.length === 0) { void soonest(menu, req, addDays(date, 1), `${menu.name}は${dayWord(date)}は空きがありません。`, date); return }
       const n = Math.min(6, slots.length)
       const picks = n === 1 ? slots : [...new Set(Array.from({ length: n }, (_, i) => Math.round(i * (slots.length - 1) / (n - 1))))].map(i => slots[i])
@@ -597,7 +632,21 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     if (staff.length === 0) return
     if (staff.length === 1) { setStep({ ...step, staffId: staff[0].id, staffChosen: true }); return } // eslint-disable-line react-hooks/set-state-in-effect -- 担当が1人ならその人。2人以上なら確定の前に担当の画面へ差し替える
     // いつもの担当を登録している人は、担当の確認を省く（その担当がその時間に空いていなければ、担当の画面で選んでもらう・10/27 慶一郎さん）
-    const usual = step.change ? null : getUsualStaff()
+    // 日にちの前に選んだ担当があればその担当（どちらでもなら、その時間に空いている担当に決める）
+    const want = wantStaffRef.current
+    if (!step.change && want === 'any' && staff.length > 1) {
+      let alive = true
+      const at = Date.parse(step.slot.starts_at)
+      void Promise.all(staff.map(st => api.staffSlots(slotDate(step.slot.starts_at), step.menu.code, st.id).then(list => list.some(x => Date.parse(x.starts_at) === at), () => false)))
+        .then(free => {
+          if (!alive) return
+          const i = free.findIndex(Boolean)
+          if (i >= 0) setStep({ ...step, staffId: staff[i].id, staffChosen: true })
+          else setStep({ k: 'pickStaff', next: step })
+        })
+      return () => { alive = false }
+    }
+    const usual = step.change ? null : (want !== 'any' ? want : getUsualStaff())
     const usualStaff = usual ? staff.find(st => st.id === usual) : undefined
     if (usualStaff) {
       let alive = true
@@ -607,7 +656,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         .then(free => {
           if (!alive) return
           if (free) setStep({ ...step, staffId: usualStaff.id, staffChosen: true, usualStaff: true })
-          else setStep({ k: 'pickStaff', next: step, note: `いつもの担当の${usualStaff.name}は、この時間は空いていません。ほかの担当をお選びください。` })
+          else setStep({ k: 'pickStaff', next: step, note: `${usualStaff.name}は、この時間は空いていません。ほかの担当をお選びください。` })
         })
       return () => { alive = false }
     }
@@ -719,6 +768,22 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     stopListening()
     const date = slotDate(primary.slot.starts_at)
     try {
+      // 3人目：ご本人とお連れ様1人目はもう予約済み。その日の、ご本人の時刻からいちばん早く入れる時間（今の空き＝予約済みの分は埋まっている）
+      if (primary.booked) {
+        const staffAll = options?.staff?.length ? options.staff : []
+        const lists = await Promise.all(staffAll.map(async st => ({ staffId: st.id, times: (await api.staffSlots(date, menu.code, st.id)).map(x => Date.parse(x.starts_at)) })))
+        const S = Date.parse(primary.slot.starts_at)
+        const C = [...new Set(lists.flatMap(l => l.times))].filter(t => t >= S).sort((x, y) => x - y)[0]
+        if (C == null) {
+          setStep({ k: 'ai', say: 'その日は、もう1名様の空きがありません。お手数ですが、お電話でご相談ください。', view: { kind: 'talk', handoff: true } })
+          return
+        }
+        const at = new Date(C).toISOString()
+        setStep({ k: 'confirmParty', primary, companion: { menu, slot: { starts_at: at }, name }, togetherAt: null, companionFree: lists.filter(l => l.times.includes(C)).map(l => l.staffId) })
+        pickCompanion(null)
+        pickPartyGacha(null)
+        return
+      }
       const staff = options?.staff?.length ? options.staff : null
       const primaryStaff = staff ? primary.staffId : null
       const listsOn = async (day: string) => staff
@@ -770,6 +835,25 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep({ k: 'booking', menu: s.primary.menu, slot: s.primary.slot })
     stopListening()
     let reservation: CustomerReservation
+    // 3人目：ご本人の予約はもう済んでいる。お連れ様だけ取る（券・銀Pay はご本人の予約で済んでいるので触らない）
+    if (s.primary.booked) {
+      const booked = s.primary.booked
+      let companion: CustomerReservation | undefined
+      const staff = optionsRef.current?.staff ?? []
+      const order = companionPickRef.current ? staff.filter(st => st.id === companionPickRef.current) : staff.filter(st => !s.companionFree || s.companionFree.includes(st.id))
+      for (const st of order) {
+        try {
+          const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id)
+          companion = await api.confirm(hold.hold_id, `お連れ様：${s.companion.name}様`)
+          rememberCompanion(companion.id, s.companion.name)
+          try { await linkCompanion(booked.id, companion.id) } catch { /* 端末の記録では見分けられる */ }
+          break
+        } catch { /* 次の担当で試す */ }
+      }
+      api.reservations().then(setMyReservations).catch(() => {})
+      setStep({ k: 'done', reservation: booked, companion, companionFailed: !companion, companionName: s.companion.name, companionMenuCode: s.companion.menu.code, extra: true })
+      return
+    }
     try {
       const hold = await api.hold(s.primary.slot.starts_at, s.primary.menu.code, s.primary.staffId)
       reservation = await api.confirm(hold.hold_id)
@@ -823,7 +907,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     if (companion && linked && gachaTo === 'companion') { gacha = await attachGachaTo(companion.id); if (gacha) gachaFor = s.companion.name }
     const gachaFailed = selfFailed || (gachaTo === 'companion' && !gacha)
     api.reservations().then(setMyReservations).catch(() => {})
-    setStep({ k: 'done', reservation, companion, companionFailed: !companion, ginpay: ginpayResult, gacha, gachaFor, gachaFailed })
+    setStep({ k: 'done', reservation, companion, companionFailed: !companion, ginpay: ginpayResult, gacha, gachaFor, gachaFailed, companionName: s.companion.name, companionMenuCode: s.companion.menu.code })
   }, [api, stopListening, attachGachaTo])
 
   const verifyUnknown = useCallback(async (menu: MenuOption, slot: Slot) => {
@@ -1100,7 +1184,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     }
     if (s.k === 'askMenu') {
       const menu = matchMenu(text, menus)
-      if (menu) void search(s.req, menu)
+      // 日にちの画面の「メニューを変える」から来たときは、日にちの画面へ戻る（11/6）
+      if (menu && s.then === 'when') setStep({ k: 'askWhen', again: 'menu', menu })
+      else if (menu) void search(s.req, menu)
       else setStep({ ...s })
       return
     }
@@ -1186,7 +1272,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [onConfirm])
   // お二人の確認画面：無料のガチャ券をどちらに使うか（お連れ様に使えるときだけ選ぶ欄を出す）
   const partyGacha = useMemo(() => {
-    if (step.k !== 'confirmParty' || !gachaHeld) return null
+    if (step.k !== 'confirmParty' || !gachaHeld || step.primary.booked) return null
     const fit = partyGachaFit(gachaHeld, step)
     if (!fit.companion) return null
     return { title: gachaHeld.title, to: partyGachaPick === 'companion' || !fit.self ? 'companion' as const : 'self' as const,
@@ -1238,6 +1324,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
           : step.again === 'menu' && step.menu ? `${step.menu.name}ですね。`
           : step.again === 'menu' && step.label ? `「${step.label}」ですね。`
           : 'いつのご来店をご希望ですか？'
+        if (step.calendar && step.menu) return { title: '日にちを選んでください', sub: `${step.menu.name}・空いている時間をお出しします`, speech: '日にちを選んでください。', listen: true }
         const follow = step.again === 'unclear' ? 'もう一度、ご希望の日時をお聞かせください。'
           : step.again === 'none' ? 'ほかのご希望の日時をお聞かせください。'
           : step.again === 'menu' ? 'いつのご来店をご希望ですか？' : undefined
@@ -1335,7 +1422,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       }
       case 'booking': return { title: 'ご予約を確定しています' }
       case 'done': return step.companion || step.companionFailed
-        ? step.companionFailed
+        ? step.extra
+          ? (step.companionFailed
+            ? { title: 'もう1名様の時間が埋まってしまいました', sub: 'お二人のご予約はそのままです。もう1名様の分は、お電話でご相談ください。', speech: 'もう1名様の時間は、ちょうど埋まってしまいました。お二人のご予約はそのままです。' }
+            : { title: '3名様のご予約が完了しました', sub: '当日は QR をご提示ください。', speech: '3名様のご予約が完了しました。当日はQRをご提示ください。' })
+          : step.companionFailed
           ? { title: 'ご本人のご予約をお取りしました', sub: 'お連れ様の時間はちょうど埋まってしまいました。お連れ様の分は、もう一度お伝えください。', speech: 'ご本人のご予約をお取りしました。お連れ様の時間はちょうど埋まってしまいました。' }
           : { title: 'お二人のご予約が完了しました', sub: '当日は QR をご提示ください。', speech: 'お二人のご予約が完了しました。当日はQRをご提示ください。' }
         : step.oldKept
@@ -1378,13 +1469,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     : voice.speaking ? 'speaking' : 'idle'
   // いつものメニュー：予約が済んだら、そのメニューを登録するか聞く（変更の予約・今のいつものと同じメニューは聞かない）
   const usualNow = getUsualMenu()
-  const doneCode = step.k === 'done' && !step.changedFrom ? step.reservation.items[0]?.menu_code : undefined
+  const doneCode = step.k === 'done' && !step.changedFrom && !step.extra ? step.reservation.items[0]?.menu_code : undefined
   const doneMenu = doneCode && canBeUsual(doneCode) ? menus.find(m => m.code === doneCode) : undefined
   const doneUsual = doneMenu && (usualDone === doneMenu.code || usualNow?.code !== doneMenu.code) ? doneMenu : undefined
   const canTalk = ['pickStaff', 'welcome', 'askWhen', 'askMenu', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'companionName', 'confirmParty', 'askUsual'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
   const compact = ['pickStaff', 'welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'companionName', 'confirmParty', 'askUsual', 'usualSaved'].includes(step.k)
-    || (step.k === 'ai' && step.view.kind !== 'talk')
+    || (step.k === 'ai' && step.view.kind !== 'talk') || (step.k === 'askWhen' && !!step.calendar)
   const voiceOff = voice.listen === 'unsupported' || voice.listen === 'denied'
 
   return (
@@ -1470,14 +1561,27 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
 
             {/* メニューが決まったとき（「いつもの」など）：日にちを押して進める。前回のご来店から14日以内ならメンテナンスカットにも切り替えられる（過ぎていたら出さない） */}
-            {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.menu.code !== 'maintenance' && (
+            {step.k === 'askWhen' && step.again === 'menu' && step.menu && step.calendar && (
+              <DayCalendar from={jstDate(3)} last={jstDate(options?.settings.booking_window_days ?? 60)} staff={options?.staff?.find(x => x.id === wantStaff) ?? null} onPick={d => void pickDay(step.menu!, d)}
+                onSoonest={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(3), `${m.name}の、明々後日からの空きです。`) }} />
+            )}
+            {step.k === 'askWhen' && step.again === 'menu' && step.menu && !step.calendar && step.menu.code !== 'maintenance' && (
               <List>
+                {/* いま選んでいるメニューと「変える」を一番上に（11/6 慶一郎さん「いつものでパンチパーマを適当に選んでる人は分かりづらい」） */}
+                <Row onClick={() => setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true }, then: 'when' })}
+                  title={step.menu.name} note={yen(step.menu)} detail="変える ›" />
+                {/* 担当（押すたびに テイテイ → 銀二郎 → どちらでも）。日にちはこの担当の出勤日から */}
+                {(options?.staff?.length ?? 0) > 1 && (
+                  <Row onClick={() => { const order = [...(options?.staff ?? []).map(st => st.id), 'any']; setWantStaff(order[(order.indexOf(wantStaff) + 1) % order.length]) }}
+                    title="担当" detail={`${options?.staff?.find(st => st.id === wantStaff)?.name ?? 'どちらでも'} ›`} />
+                )}
                 {/* 日にちを押すだけで進める（話さなくても予約できる・10/29 慶一郎さん）：今日・明日・明後日・もっと先 */}
                 {[0, 1, 2].map(i => {
                   const d = jstDate(i)
                   return <Row key={d} onClick={() => void pickDay(step.menu!, d)} title={['今日', '明日', '明後日'][i]} detail={`${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}（${'日月火水木金土'[new Date(`${d}T12:00:00Z`).getUTCDay()]}）`} />
                 })}
-                <Row onClick={() => { const m = step.menu!; void soonest(m, { dates: [], time: null, range: null, earliest: true }, jstDate(3), `${m.name}の、明々後日からの空きです。`) }} title="もっと先の日" detail="近い空きから" />
+                {/* もっと先の日：カレンダーから日にちを選ぶ（11/6 慶一郎さん） */}
+                <Row onClick={() => setStep({ ...step, calendar: true })} title="もっと先の日" detail="カレンダーから" />
                 {maintLeft != null && maintenanceMenu && <Row onClick={startMaintenance} title="メンテナンスカット" detail={`${maintLeft === 0 ? '今日まで' : `あと${maintLeft}日`}・${yen(maintenanceMenu)}`} />}
               </List>
             )}
@@ -1485,7 +1589,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {step.k === 'askMenu' && (
               <List>
                 {menus.map(m => (
-                  <Row key={m.code} onClick={() => handleText(m.name)}
+                  <Row key={m.code} onClick={() => (step.then === 'when' ? setStep({ k: 'askWhen', again: 'menu', menu: m }) : handleText(m.name))}
                     title={m.name} detail={`${m.duration_min}分・${yen(m)}`} note={m.code === lastMenuCode ? '前回' : undefined} />
                 ))}
               </List>
@@ -1580,6 +1684,17 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             )}
             {step.k === 'usualSaved' && !step.failed && <PushToggle tone="mono" />}
 
+            {step.k === 'companionMenu' && usualMembers.length > 0 && (
+              <>
+                <p style={{ margin: '20px 2px -14px', width: '100%', fontSize: 13, color: C.secondary }}>いつものメンバー</p>
+                <List>
+                  {usualMembers.map(u => { const m = menus.find(x => x.code === u.menuCode); return m ? (
+                    <Row key={u.name} onClick={() => void planParty(step.primary, m, u.name)} title={`${u.name}様`} detail={`${m.name}・${yen(m)}`} />
+                  ) : null })}
+                </List>
+                <p style={{ margin: '20px 2px -14px', width: '100%', fontSize: 13, color: C.secondary }}>ほかの方</p>
+              </>
+            )}
             {step.k === 'companionMenu' && (
               <List>
                 {menus.map(m => (
@@ -1680,6 +1795,21 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                 </div>)}
             {step.k === 'done' && <PushToggle tone="mono" />}
             {step.k === 'done' && step.companion && <ReservationSummary r={step.companion} companion />}
+            {/* いつものメンバーに追加（11/6）：次のお連れ様の予約で、押すだけで選べる */}
+            {step.k === 'done' && step.companion && step.companionName && step.companionMenuCode && (memberSaved === step.companionName
+              ? <p style={{ margin: '12px 0 0', fontSize: 13, color: C.secondary, textAlign: 'center' }}>{step.companionName}様を、いつものメンバーに追加しました。</p>
+              : !isUsualMember(step.companionName) && (
+                <button type="button" onClick={() => { const d = step as Extract<Step, { k: 'done' }>; if (addUsualMember({ name: d.companionName!, menuCode: d.companionMenuCode! })) { setMemberSaved(d.companionName!); setUsualMembers(getUsualMembers()) } }}
+                  style={{ marginTop: 12, minHeight: 44, padding: '0 18px', borderRadius: 12, border: `1px solid ${C.separator}`, background: C.fill, color: C.text, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+                  {step.companionName}様をいつものメンバーに追加
+                </button>
+              ))}
+            {/* 3名まで（11/6）：お連れ様1人目が取れたら、もう1名足せる */}
+            {step.k === 'done' && step.companion && !step.extra && !step.changedFrom && (
+              <button type="button" onClick={() => { const d = step as Extract<Step, { k: 'done' }>; const r = d.reservation; const menu = menus.find(m => m.code === r.items[0]?.menu_code); if (!menu || !r.starts_at) return
+                setStep({ k: 'companionMenu', primary: { menu, slot: { starts_at: r.starts_at }, staffId: options?.staff?.find(st => st.name === r.staff_name)?.id ?? null, req: reqFromSlot(r.starts_at), booked: r } }) }}
+                style={{ marginTop: 8, minHeight: 44, border: 'none', background: 'none', color: C.secondary, fontSize: 14, cursor: 'pointer' }}>＋ もう1名追加する（3名まで）</button>
+            )}
 
             {(step.k === 'confirmCancel' || step.k === 'cancelling' || step.k === 'cancelled') && <ReservationSummary r={step.reservation} />}
 
@@ -1847,6 +1977,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             <div style={{ width: 44 }} />
           </div>
         )}
+        {canTalk && step.k !== 'confirm' && step.k !== 'confirmCancel' && step.k !== 'confirmParty' && !voiceOff && !typing && (
+          <MicCaption listening={voice.listen === 'listening'} record={!!voice.recordMode} />
+        )}
         {canTalk && voice.listen === 'denied' && (
           <p style={{ margin: 0, fontSize: 13, color: C.secondary, textAlign: 'center' }}>マイクが使えないため、文字で入力してください。</p>
         )}
@@ -1871,21 +2004,39 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   )
 }
 
+// マイク（11/6 慶一郎さん「起動してるのかしてないのか分かりづらい」）：
+// 聞いている間は金に塗って、外側に広がる輪と、中に動く音の棒を出す。止まっている時は黒にマイクの絵。下の一言（MicCaption）でも今の状態を出す
+const MIC_ON = '#A8823F'
 function MicButton({ listening, onClick }: { listening: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-label={listening ? '聞き取りを止める' : '話す'} aria-pressed={listening} style={{
       position: 'relative', width: 72, height: 72, borderRadius: 36, border: 'none', cursor: 'pointer',
-      background: listening ? C.bg : C.text, color: listening ? C.text : C.bg,
-      boxShadow: listening ? `inset 0 0 0 2px ${C.text}` : 'none',
+      background: listening ? MIC_ON : C.text, color: '#FFFFFF',
       display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent',
-      transition: 'background 0.2s, color 0.2s, box-shadow 0.2s',
+      transition: 'background 0.2s',
     }}>
-      {listening && (
-        <motion.span aria-hidden="true" style={{ position: 'absolute', inset: -6, borderRadius: 42, border: `1px solid ${C.tertiary}` }}
-          animate={{ scale: [1, 1.12, 1], opacity: [0.8, 0, 0.8] }} transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }} />
-      )}
-      <Mic size={28} strokeWidth={2} />
+      {listening && [0, 0.8].map(d => (
+        <motion.span key={d} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 36, border: `2px solid ${MIC_ON}` }}
+          initial={{ scale: 1, opacity: 0.7 }} animate={{ scale: 1.5, opacity: 0 }} transition={{ duration: 1.6, delay: d, repeat: Infinity, ease: 'easeOut' }} />
+      ))}
+      {listening ? (
+        <span aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: 4, height: 28 }}>
+          {[0, 0.15, 0.3, 0.45].map(d => (
+            <motion.i key={d} style={{ display: 'block', width: 4, height: 24, borderRadius: 2, background: '#FFFFFF', transformOrigin: 'center' }}
+              animate={{ scaleY: [0.35, 1, 0.35] }} transition={{ duration: 0.9, delay: d, repeat: Infinity, ease: 'easeInOut' }} />
+          ))}
+        </span>
+      ) : <Mic size={28} strokeWidth={2} />}
     </button>
+  )
+}
+
+/** マイクの下の一言：いま聞いているか、どうすればいいか */
+function MicCaption({ listening, record }: { listening: boolean; record: boolean }) {
+  return (
+    <p role="status" aria-live="polite" style={{ margin: 0, fontSize: 14, fontWeight: listening ? 600 : 400, color: listening ? C.text : C.secondary, textAlign: 'center' }}>
+      {listening ? (record ? '聞いています。話し終えたらタップ' : '聞いています。どうぞお話しください') : 'マイクをタップして話す'}
+    </p>
   )
 }
 
@@ -1953,6 +2104,51 @@ function PrimaryButton({ onClick, children, disabled = false }: { onClick: () =>
 
 function SecondaryButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return <button type="button" onClick={onClick} style={{ ...buttonBase, background: C.fill, color: C.text, fontWeight: 500 }}>{children}</button>
+}
+
+/** もっと先の日のカレンダー（11/6 慶一郎さん）：1か月ずつ。選べるのは from〜last。押すとその日の空きを出す */
+function DayCalendar({ from, last, staff, onPick, onSoonest }: { from: string; last: string; staff: { id: string; name: string } | null; onPick: (d: string) => void; onSoonest: () => void }) {
+  const [month, setMonth] = useState(from.slice(0, 7)) // 'YYYY-MM'
+  // 担当の出勤（貼り紙の休み・店休日をそのまま反映）。誰も出勤しない日・選んだ担当の休みの日は押せない
+  const [work, setWork] = useState<Record<string, string[]> | null>(null)
+  useEffect(() => { let live = true; void loadWorkDays(from, last).then(w => { if (live) setWork(w) }); return () => { live = false } }, [from, last])
+  const [y, m] = month.split('-').map(Number)
+  const first = new Date(Date.UTC(y, m - 1, 1))
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const cells: (string | null)[] = [...Array(first.getUTCDay()).fill(null),
+    ...Array.from({ length: days }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`)]
+  const shift = (n: number) => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(d.toISOString().slice(0, 7)) }
+  const canPrev = month > from.slice(0, 7)
+  const canNext = month < last.slice(0, 7)
+  const nav: CSSProperties = { width: 44, height: 44, border: 'none', background: 'none', fontSize: 22, color: C.text, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }
+  return (
+    <div style={{ width: '100%', marginTop: 20, borderRadius: 14, background: C.fill, padding: '8px 10px 12px', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button type="button" aria-label="前の月" disabled={!canPrev} onClick={() => shift(-1)} style={{ ...nav, opacity: canPrev ? 1 : 0.25 }}>‹</button>
+        <b style={{ fontSize: 17, fontWeight: 600 }}>{y}年{m}月</b>
+        <button type="button" aria-label="次の月" disabled={!canNext} onClick={() => shift(1)} style={{ ...nav, opacity: canNext ? 1 : 0.25 }}>›</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', rowGap: 4, textAlign: 'center' }}>
+        {'日月火水木金土'.split('').map(w => <span key={w} style={{ fontSize: 12, color: C.secondary, padding: '4px 0' }}>{w}</span>)}
+        {cells.map((d, i) => {
+          if (!d) return <span key={`e${i}`} />
+          const ids = work?.[d]
+          const ok = d >= from && d <= last && (!work || (staff ? !!ids?.includes(staff.id) : (ids?.length ?? 0) > 0))
+          return (
+            <button key={d} type="button" disabled={!ok} onClick={() => onPick(d)} aria-label={`${Number(d.slice(5, 7))}月${Number(d.slice(8, 10))}日`}
+              style={{ height: 40, border: 'none', borderRadius: 20, background: 'transparent', fontSize: 16, fontFamily: FONT,
+                color: ok ? C.text : C.tertiary, textDecoration: !ok && d >= from && d <= last ? 'line-through' : 'none', cursor: ok ? 'pointer' : 'default', WebkitTapHighlightColor: 'transparent' }}>
+              {Number(d.slice(8, 10))}
+            </button>
+          )
+        })}
+      </div>
+      {staff && <p style={{ margin: '6px 0 0', fontSize: 13, color: C.secondary, textAlign: 'center' }}>線の日は{staff.name}のお休みです</p>}
+      <button type="button" onClick={onSoonest} style={{ display: 'block', margin: '8px auto 0', minHeight: 44, border: 'none', background: 'none', color: C.secondary, fontSize: 14, cursor: 'pointer' }}>
+        いちばん近い空きから探す
+      </button>
+    </div>
+  )
 }
 
 function List({ children }: { children: ReactNode }) {
