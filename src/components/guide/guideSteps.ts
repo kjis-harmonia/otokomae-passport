@@ -30,11 +30,24 @@ const OPERATOR: GuideStep = {
   skipIf: `${g('operator')} [aria-pressed="true"]`,
 }
 
-export const GUIDE_TASKS: GuideTask[] = [
-  {
-    id: 'member-checkout',
-    title: '会員のお客様のお会計',
-    sub: 'お客様のアプリの会員QRを読んで会計',
+/** 会員QRのお会計。支払い方法の手順だけ「現金（PayPay など）」と「銀Pay」で変える */
+function memberCheckout(pay: 'cash' | 'ginpay'): GuideTask {
+  const method = `${g('co-method')} [data-method="${pay}"]`
+  // 予約のときに銀Pay で先に払っていると、銀Pay が最初から選ばれている（そのときは現金を押さない）
+  const prepaid = `${g('co-method')} [data-method="ginpay"][aria-pressed="true"]`
+  const payment: GuideStep[] = pay === 'cash' ? [
+    { target: prepaid, text: 'このお客様は銀Pay で支払い済みです', sub: '「現金」は押さずに、そのまま確定します。', optional: true, next: true },
+    { target: method, text: '「現金」を押す', sub: 'PayPay・カードなどのときも「現金」を押します。', skipIf: `${method}[aria-pressed="true"], ${prepaid}` },
+    { target: g('co-confirm'), until: g('paid'), text: '金額を確かめて、ここを押す', sub: '現金のときは、お金を受け取ってから押します。この時点でお会計が確定します。' },
+  ] : [
+    { target: method, text: '「銀Pay」を押す', sub: 'アプリで先に支払い済みの予約は、もう選ばれています。', skipIf: `${method}[aria-pressed="true"]` },
+    { target: g('co-ginpay-account'), text: '支払う口座を押す', optional: true, skipIf: `${g('co-ginpay-account')} [aria-pressed="true"]` },
+    { target: g('co-confirm'), until: g('paid'), text: '金額を確かめて「銀Payで会計を確定」', sub: '残高が足りないと押せません。そのときは先に「銀Pay チャージ」で入れます。' },
+  ]
+  return {
+    id: `member-checkout-${pay}`,
+    title: pay === 'cash' ? 'お客様のお会計（現金・PayPay など）' : 'お客様のお会計（銀Pay）',
+    sub: pay === 'cash' ? '会員QRを読んで、現金・PayPay・カードで会計' : '会員QRを読んで、銀Pay の残高で会計',
     steps: [
       OPERATOR,
       { target: g('menu-shop'), text: '「店舗端末」を押す' },
@@ -49,12 +62,16 @@ export const GUIDE_TASKS: GuideTask[] = [
       { target: g('co-staff'), text: '施術した担当を押す', skipIf: `${g('co-staff')} [aria-pressed="true"]` },
       { target: g('co-menu'), text: 'メニューを選ぶ', sub: '予約で選んだメニューが入っていれば、そのままで大丈夫です。', optional: true },
       { target: g('co-tickets'), text: '使う券を押す', sub: '使わないときは「次へ」。', optional: true, next: true },
-      { target: g('co-method'), text: '支払い方法を押す', sub: 'PayPay・カードのときも「現金」を押します。' },
-      { target: g('co-confirm'), until: g('paid'), text: '金額を確かめて、ここを押す', sub: 'この時点でお会計が確定します。' },
+      ...payment,
       { target: g('usual-menu'), text: 'いつものメニューを登録する', sub: 'お客様が次からアプリで同じメニューを予約できます。しないときは「次へ」。', optional: true, next: true },
       { target: g('next-customer'), text: '終わったら「次のお客様」を押す', noJump: true },
     ],
-  },
+  }
+}
+
+export const GUIDE_TASKS: GuideTask[] = [
+  memberCheckout('cash'),
+  memberCheckout('ginpay'),
   {
     id: 'ginpay',
     title: '銀Pay のチャージ',

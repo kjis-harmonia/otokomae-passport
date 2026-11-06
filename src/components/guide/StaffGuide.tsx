@@ -169,6 +169,8 @@ export function StaffGuide({ autoOpen = false }: { autoOpen?: boolean }) {
     )
   }
   if (!step) return null
+  // 場所が出ない手順（予約で入っている・券が無い など）は、飛ばすまで何も出さない
+  if (step.optional && !rect) return null
 
   // ◯：小さい所は丸、横に長いボタンは角の丸い枠
   const pad = 8

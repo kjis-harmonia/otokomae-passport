@@ -527,7 +527,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               )}
               <Row label="支払方法" guide="co-method">
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {METHODS.filter(m => quick ? m.id === 'ginpay' || m.id === 'cash' : m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} on={method === m.id} onClick={() => pickMethod(m.id)}>{quick && m.id === 'ginpay' ? '銀Pay' : m.label}</Choice>)}
+                  {METHODS.filter(m => quick ? m.id === 'ginpay' || m.id === 'cash' : m.id !== 'ginpay' || !!clientInfo).map(m => <Choice key={m.id} method={m.id} on={method === m.id} onClick={() => pickMethod(m.id)}>{quick && m.id === 'ginpay' ? '銀Pay' : m.label}</Choice>)}
                 </span>
               </Row>
               {/* 店舗端末で QR を読んだあとの会計：PayPay などの支払いも「現金」で確定する（10/28 慶一郎さん） */}
@@ -541,7 +541,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   ) : (
                     <>
                       {ginpayAccounts.length > 1 && (
-                        <div style={{ marginBottom: 8 }}>
+                        <div data-guide="co-ginpay-account" style={{ marginBottom: 8 }}>
                           <p style={smallLabel}>支払う口座</p>
                           <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                             {ginpayAccounts.map(a => (
@@ -701,9 +701,9 @@ function Row({ label, guide, children }: { label: string; guide?: string; childr
     </div>
   )
 }
-function Choice({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+function Choice({ on, onClick, method, children }: { on: boolean; onClick: () => void; method?: string; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={on} style={{
+    <button type="button" data-method={method} onClick={onClick} aria-pressed={on} style={{
       minHeight: 40, padding: '0 14px', borderRadius: 8, fontSize: 14, fontFamily: SANS, cursor: 'pointer',
       background: on ? C.text : C.bg, color: on ? C.bg : C.text, border: `1px solid ${on ? C.text : C.lineStrong}`,
     }}>{children}</button>
