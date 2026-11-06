@@ -67,6 +67,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
       {
         target: [g('gf-members'), g('gf-name'), g('gf-menus')].join(', '), until: g('gf-yes'), noDim: true,
         text: 'お一人ずつメニューを押してください', sub: 'お連れ様はお名前も入れます。いつものメンバーは名前を押すだけです。',
+        alts: [{ when: g('gf-name'), text: 'お名前を入れて「次へ」を押してください', sub: 'お店でお呼びするお名前です。' }],
       },
       { target: g('gf-yes'), until: g('jn-group-done'), text: '内容をご確認のうえ「はい」を押してください' },
       { target: g('jn-group-done'), next: true, text: 'ご予約できました', sub: '下の「次回予約」でお連れ様の分もご確認いただけます。' },
