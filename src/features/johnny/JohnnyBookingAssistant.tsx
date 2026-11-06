@@ -481,6 +481,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     setStep({ k: 'group', size: n, menu: menu ?? null })
   }, [])
   const [groupTitle, setGroupTitle] = useState<{ title: string; sub?: string }>({ title: '' })
+  // グループ予約の途中：上の「戻る」は GroupFlow の中で1つ戻る。× は2回押しで閉じる（3人目で押して全部消えないように・11/6 慶一郎さん）
+  const groupBackRef = useRef<(() => void) | null>(null)
+  const [closeArmed, setCloseArmed] = useState(false)
+  useEffect(() => { if (!closeArmed) return; const t = setTimeout(() => setCloseArmed(false), 4000); return () => clearTimeout(t) }, [closeArmed])
   useEffect(() => {
     if (!groupRef.current || step.k !== 'confirm' || step.change || !(step.staffChosen || step.staffId)) return
     groupRef.current = false
@@ -1571,7 +1575,14 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       {/* 上：閉じる・読み上げ */}
       <div style={{ display: 'flex', flexShrink: 0, justifyContent: 'space-between', padding: '8px 8px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <IconButton label="閉じる" onClick={onClose}><X size={22} strokeWidth={2} /></IconButton>
+          <IconButton label="閉じる" onClick={() => { if (step.k === 'group' && !closeArmed) { setCloseArmed(true); return } onClose() }}><X size={22} strokeWidth={2} /></IconButton>
+          {step.k === 'group' && (
+            <button type="button" onClick={() => { setCloseArmed(false); groupBackRef.current?.() }} aria-label="ひとつ前に戻る" style={{
+              height: 40, padding: '0 14px 0 8px', borderRadius: 20, border: 'none', background: C.fill, color: C.text,
+              display: 'flex', alignItems: 'center', gap: 2, fontSize: 15, fontFamily: FONT, cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+            }}><ChevronLeft size={20} strokeWidth={2} />戻る</button>
+          )}
+          {closeArmed && step.k === 'group' && <span role="status" style={{ marginLeft: 8, fontSize: 12, color: C.secondary }}>もう一度 × で閉じます（入力は消えます）</span>}
           {/* 考えている・送っている間は出さない（あとから届いた答えで戻った画面が上書きされないように） */}
           {canBack && canReturnTo(step) && (
             <button type="button" onClick={() => goBack()} aria-label="ひとつ前の画面に戻る" style={{
@@ -1660,7 +1671,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
 
             {step.k === 'group' && options && (
               <GroupFlow key={`${step.size}|${step.menu?.code ?? ''}`} api={api} menus={menus} staff={options.staff ?? []} size={step.size} primaryMenu={step.menu}
-                members={usualMembers} windowDays={options.settings.booking_window_days ?? 60} onBook={p => void bookGroup(p)} onTitle={setGroupTitle} />
+                members={usualMembers} windowDays={options.settings.booking_window_days ?? 60} onBook={p => void bookGroup(p)} onTitle={setGroupTitle}
+                backRef={groupBackRef} onExit={() => setStep({ k: 'partySize', menu: step.menu ?? undefined })} />
             )}
             {step.k === 'groupDone' && step.primary && (
               <>
@@ -2576,9 +2588,11 @@ function planGroup(n: number, durP: number, durK: number, staffIds: string[], li
   return plans.sort((a, b) => rank[a.kind] - rank[b.kind] || a.at[0] - b.at[0]).slice(0, 3)
 }
 
-function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, onBook, onTitle }: {
+function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, onBook, onTitle, backRef, onExit }: {
   api: BookingAssistantApi; menus: MenuOption[]; staff: { id: string; name: string }[]; size: 2 | 3; primaryMenu: MenuOption | null
   members: UsualMember[]; windowDays: number; onBook: (persons: GroupPerson[]) => void; onTitle: (t: { title: string; sub?: string }) => void
+  /** 上の「戻る」から呼ぶ（いちばん最初なら onExit＝人数の画面へ） */
+  backRef: { current: (() => void) | null }; onExit: () => void
 }) {
   const cut = menus.find(m => m.code === 'cut-regular') ?? menus[0]
   const planMenu = primaryMenu ?? cut
@@ -2593,6 +2607,8 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
   const [overview, setOverview] = useState<DayOverview | null>(null)
   const [nameDraft, setNameDraft] = useState('')
   const [pendingMenu, setPendingMenu] = useState<MenuOption | null>(null)
+  // いつものメンバーを押した：お名前は決まり、メニューは一覧から（いつものが一番上・変えてもいい・11/6 慶一郎さん「お連れ様のメニュー変更はできんの？」）
+  const [memberName, setMemberName] = useState<string | null>(null)
   const label = (i: number) => (i === 0 ? 'ご本人' : `お連れ様${size === 3 ? (i === 1 ? '（1人目）' : '（2人目）') : ''}`)
 
   const plansFor = useCallback(async (d: string): Promise<GroupPlan[]> => {
@@ -2619,10 +2635,11 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
     const t = phase === 'day' || phase === 'calendar' ? { title: `${size}名様が入れる日をお選びください`, sub: '入れない日は押せません' }
       : phase === 'times' ? { title: 'この時間ならご案内できます', sub: day ? `${dayWord(day)}・${size}名様` : undefined }
       : phase === 'menus' && pendingMenu ? { title: `${label(idx)}のお名前は？`, sub: persons[idx] ? `${formatVisit(persons[idx].at).time}から・${pendingMenu.name}` : undefined }
+      : phase === 'menus' && memberName ? { title: `${memberName}様のメニューは？`, sub: persons[idx] ? `${formatVisit(persons[idx].at).time}から・いつものメニューが一番上です` : undefined }
       : phase === 'menus' ? { title: `${label(idx)}のメニューは？`, sub: persons[idx] ? `${formatVisit(persons[idx].at).time}から・この時間に入るメニューだけ出しています` : undefined }
       : { title: `${size}名様のご予約はこちらでよろしいですか？` }
     onTitle(t)
-  }, [phase, idx, day, size, pendingMenu]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, idx, day, size, pendingMenu, memberName]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickDay = async (d: string) => {
     setBusy(true); setNote(null)
@@ -2666,7 +2683,7 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
   }
 
   const setPerson = (patch: Partial<GroupPerson>) => setPersons(ps => ps.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
-  const nextPerson = () => { setPendingMenu(null); setNameDraft(''); if (idx + 1 < size) setIdx(idx + 1); else setPhase('confirm') }
+  const nextPerson = () => { setPendingMenu(null); setMemberName(null); setNameDraft(''); if (idx + 1 < size) setIdx(idx + 1); else setPhase('confirm') }
   // 担当ごと・メニューごとの空き（開始時刻）。選んだメニューで、全員の担当をその場で割り振り直す
   //   （11/6 慶一郎さん「3名入れたけど田中さんのみ反映」：同時の2人目がパンチを選び、空いていた担当がご本人の担当とかぶっていた）
   const slotCache = useRef<Record<string, Record<string, Set<number>>>>({})
@@ -2718,17 +2735,16 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
     finally { setBusy(false) }
   }
   const chooseMenu = async (m: MenuOption) => {
-    if (busy || !(await settle(m, null))) return
-    if (idx === 0) nextPerson(); else setPendingMenu(m)
+    if (busy || !(await settle(m, memberName))) return
+    if (idx === 0 || memberName) nextPerson(); else setPendingMenu(m)
   }
-  const chooseMember = async (u: UsualMember) => {
-    const m = menus.find(x => x.code === u.menuCode)
-    if (!m || busy) return
-    if (await settle(m, u.name)) nextPerson()
-  }
+  // まだこのグループに入っていない、いつものメンバー
+  const freeMembers = members.filter(u => menus.some(m => m.code === u.menuCode) && !persons.some((p, i) => i !== idx && p.name === u.name))
+  const chooseMember = (u: UsualMember) => { setNote(null); setMemberName(u.name) }
+  const memberMenu = memberName ? menus.find(m => m.code === members.find(u => u.name === memberName)?.menuCode) ?? null : null
 
-  const rowBtn: CSSProperties = { minHeight: 44, border: 'none', background: 'none', color: C.secondary, fontSize: 14, cursor: 'pointer' }
-  const back = () => { setNote(null); if (phase === 'confirm') { setIdx(size - 1); setPhase('menus') } else if (phase === 'menus' && idx > 0) { setIdx(idx - 1); setPendingMenu(null) } else if (phase === 'menus') setPhase('times'); else if (phase === 'times' || phase === 'calendar') setPhase('day') }
+  const back = () => { setNote(null); if (phase === 'confirm') { setIdx(size - 1); setPhase('menus') } else if (phase === 'menus' && (pendingMenu || memberName)) { setPendingMenu(null); setMemberName(null) } else if (phase === 'menus' && idx > 0) { setIdx(idx - 1) } else if (phase === 'menus') setPhase('times'); else if (phase === 'times' || phase === 'calendar') setPhase('day'); else onExit() }
+  backRef.current = back
 
   return (
     <div style={{ width: '100%' }}>
@@ -2754,7 +2770,8 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
             const title = p.kind === 'together' ? `${hm(p.at[0])}　${size}名様 同時に`
               : p.kind === 'mixed' ? `${hm(p.at[0])} 2名様・${hm(p.at[2])} 1名様`
               : p.at.map(hm).join(' → ')
-            const how = p.kind === 'together' ? 'ご一緒に始められます' : p.kind === 'mixed' ? '2名様は同時に' : `${Math.round((p.at[1] - p.at[0]) / MIN)}分ずつ順番に`
+            const gaps = p.at.slice(1).map((t, k) => Math.round((t - p.at[k]) / MIN))
+            const how = p.kind === 'together' ? 'ご一緒に始められます' : p.kind === 'mixed' ? '2名様は同時に' : gaps.every(g => g === gaps[0]) ? `${gaps[0]}分ずつ順番に` : '順番に'
             const cap = capacityNote(p)
             return (
               <button key={i} type="button" disabled={busy} onClick={() => void pickPlan(p)}
@@ -2769,10 +2786,10 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
       )}
       {phase === 'menus' && persons[idx] && (
         <>
-          {idx > 0 && !pendingMenu && members.length > 0 && (
+          {idx > 0 && !pendingMenu && !memberName && freeMembers.length > 0 && (
             <>
               <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>いつものメンバー</p>
-              <List>{members.filter(u => !persons.some((p, i) => i !== idx && p.name === u.name)).map(u => { const m = menus.find(x => x.code === u.menuCode); return m ? <Row key={u.name} onClick={() => void chooseMember(u)} title={`${u.name}様`} detail={m.name} /> : null })}</List>
+              <List>{freeMembers.map(u => { const m = menus.find(x => x.code === u.menuCode); return m ? <Row key={u.name} onClick={() => void chooseMember(u)} title={`${u.name}様`} detail={m.name} /> : null })}</List>
             </>
           )}
           {pendingMenu ? (
@@ -2784,14 +2801,14 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
             </form>
           ) : (
             <>
-              {idx > 0 && members.length > 0 && <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>ほかの方</p>}
+              {idx > 0 && !memberName && freeMembers.length > 0 && <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>ほかの方</p>}
               <List>
-                {(idx === 0 ? [planMenu, ...menus.filter(m => m.code !== planMenu.code)] : menus).map(m => {
+                {(idx === 0 ? [planMenu, ...menus.filter(m => m.code !== planMenu.code)] : memberMenu ? [memberMenu, ...menus.filter(m => m.code !== memberMenu.code)] : menus).map(m => {
                   const at = persons[idx].at
                   const ok = fits(m.code, at)
                   const later = ok ? null : nextFit(m.code, at)
                   return <Row key={m.code} muted={!ok && !later} onClick={ok || later ? () => void chooseMenu(m) : undefined}
-                    title={m.name} note={idx === 0 && m.code === planMenu.code && primaryMenu ? 'いつもの' : undefined}
+                    title={m.name} note={(idx === 0 && m.code === planMenu.code && primaryMenu) || (memberMenu && m.code === memberMenu.code) ? 'いつもの' : undefined}
                     detail={ok ? `${m.duration_min}分・${yen(m)}` : later ? `${formatVisit(new Date(later).toISOString()).time}から入れます` : 'この日は難しいです'} />
                 })}
               </List>
@@ -2811,7 +2828,6 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
           </div>
         </>
       )}
-      {phase !== 'day' && <button type="button" onClick={back} style={{ ...rowBtn, display: 'block', margin: '8px auto 0' }}>‹ ひとつ前に戻る</button>}
     </div>
   )
 }
