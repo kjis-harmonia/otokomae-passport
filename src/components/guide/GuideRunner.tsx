@@ -161,7 +161,13 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
       // 見えていなければ真ん中までスクロール（手順ごとに1回）
       if (scrolledFor.current !== key && (r.top < 64 || r.bottom > window.innerHeight - 150 || r.left < 0 || r.right > window.innerWidth)) {
         scrolledFor.current = key
-        el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' })
+        // 見える所（上 64px・下 150px を除く）より高い枠は、真ん中に合わせると一番上が隠れるので上に合わせる
+        const tall = r.height > window.innerHeight - 214
+        //   上に合わせるときは、枠の上の線と 👇 が見えるよう少し空ける
+        const margin = el.style.scrollMarginTop
+        if (tall) el.style.scrollMarginTop = '24px'
+        el.scrollIntoView({ block: tall ? 'start' : 'center', inline: 'center', behavior: 'smooth' })
+        if (tall) el.style.scrollMarginTop = margin
       }
       setRect(prev => prev && prev.top === r.top && prev.left === r.left && prev.width === r.width && prev.height === r.height
         ? prev : { top: r.top, left: r.left, width: r.width, height: r.height })
@@ -246,7 +252,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const fingerAbove = !ring || ring.top > 76
   // 縦に大きい枠（写真の並びなど）は、上の別のボタンを指して見えないよう 👇 を枠の中に出す
   const fingerInside = !!ring && ring.height > 220
-  const bubbleTop = !!ring && ring.top + ring.height / 2 > vh * 0.55
+  // 高い枠（一覧・予約できました など）は上を読むので、吹き出しは下に
+  const bubbleTop = !!ring && ring.height <= vh - 214 && ring.top + ring.height / 2 > vh * 0.55
 
   return createPortal(
     <>
@@ -254,10 +261,11 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
         <>
           <div className={`gd-ring${round ? ' is-round' : ''}${step.noDim ? ' is-clear' : ''}`} aria-hidden="true"
             style={{ top: ring.top, left: ring.left, width: ring.width, height: ring.height }} />
-          <div className={`gd-finger${fingerAbove || fingerInside ? '' : ' is-below'}`} aria-hidden="true"
+          {/* 読むだけの手順（予約できました など）は指を出さない。日時やタイトルにかぶるので */}
+          {!step.read && <div className={`gd-finger${fingerAbove || fingerInside ? '' : ' is-below'}`} aria-hidden="true"
             style={{ left: ring.left + ring.width / 2, top: fingerInside ? ring.top + Math.min(ring.height / 2, 160) : fingerAbove ? ring.top - 6 : ring.top + ring.height + 6 }}>
             {fingerAbove || fingerInside ? '👇' : '👆'}
-          </div>
+          </div>}
         </>
       )}
       <div className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite">

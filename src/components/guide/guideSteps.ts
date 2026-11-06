@@ -17,6 +17,8 @@ export type GuideStep = {
   noJump?: boolean
   /** まわりを暗くしない（入力欄をいくつも埋める手順） */
   noDim?: boolean
+  /** 読むだけの手順（押す所が無い）。👇 を出さない */
+  read?: boolean
   /** この場所が画面にあるときは、言葉をこちらに替える（同じ手順の中で画面が変わるとき：メニュー → お名前 など） */
   alts?: { when: string; text: string; sub?: string }[]
   /** 「次へ」で作業を終える（この先に進めないとき：本人確認がまだ など） */

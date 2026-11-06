@@ -42,7 +42,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
       { target: PICK_STAFF, optional: true, until: g('jn-yes'), text: '担当を押してください' },
       { target: g('jn-price'), optional: true, next: true, text: '金額と使う券をご確認ください', sub: '券は −・＋ で枚数を変えられます（ガチャ券は 0 か 1 枚）。' },
       { target: g('jn-yes'), until: g('jn-done'), text: 'よろしければ「はい」を押してください', sub: 'これで予約が確定します。' },
-      { target: g('jn-done'), next: true, text: 'ご予約できました', sub: '下の「次回予約」でいつでもご確認いただけます。' },
+      { target: g('jn-done'), next: true, read: true, text: 'ご予約できました', sub: '下の「次回予約」でいつでもご確認いただけます。' },
     ],
   },
   {
@@ -70,7 +70,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
         alts: [{ when: g('gf-name'), text: 'お名前を入れて「次へ」を押してください', sub: 'お店でお呼びするお名前です。' }],
       },
       { target: g('gf-yes'), until: g('jn-group-done'), text: '内容をご確認のうえ「はい」を押してください' },
-      { target: g('jn-group-done'), next: true, text: 'ご予約できました', sub: '下の「次回予約」でお連れ様の分もご確認いただけます。' },
+      { target: g('jn-group-done'), next: true, read: true, text: 'ご予約できました', sub: '下の「次回予約」でお連れ様の分もご確認いただけます。' },
     ],
   },
   {
@@ -79,7 +79,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     sub: 'ご来店のとき・お会計のときに',
     steps: [
       { target: g('tab-qr'), text: '下の「会員QR」を押してください', skipIf: g('qr-card') },
-      { target: g('qr-card'), next: true, text: 'この画面をスタッフにお見せください' },
+      { target: g('qr-card'), next: true, read: true, text: 'この画面をスタッフにお見せください' },
     ],
   },
   {
@@ -88,7 +88,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     sub: '日時の確認・変更・キャンセル',
     steps: [
       { target: g('tab-next'), text: '下の「次回予約」を押してください', skipIf: g('next-panel') },
-      { target: g('next-panel'), next: true, text: 'ご予約の日時・メニュー・担当が出ます' },
+      { target: g('next-panel'), next: true, read: true, text: 'ご予約の日時・メニュー・担当が出ます' },
       { target: g('next-change'), optional: true, next: true, text: '変更・キャンセルはここから', sub: 'お電話でも承ります。' },
     ],
   },
@@ -101,7 +101,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
       { target: g('menu-tickets'), text: '「すべてのチケット」を押してください', skipIf: g('wallet') },
       // お持ちの券は「割引チケット」タブに出る（最初はカットクーポンのタブ）
       { target: g('wallet-other'), text: '右の「割引チケット」を押してください', skipIf: `${g('wallet-other')}[aria-pressed="true"]` },
-      { target: g('wallet'), next: true, noDim: true, text: 'お持ちのチケットが並びます', sub: 'ご来店時は「会員QR」をお見せください。' },
+      { target: g('wallet'), next: true, read: true, noDim: true, text: 'お持ちのチケットが並びます', sub: 'ご来店時は「会員QR」をお見せください。' },
     ],
   },
   {
