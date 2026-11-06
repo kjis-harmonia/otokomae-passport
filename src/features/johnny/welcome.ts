@@ -55,7 +55,8 @@ export function buildWelcome(lastVisit: string | null, reservations: readonly Cu
     days,
     lastMenu: menuOf(byDay.get(last) ?? null),
     maintenanceLeft: qrSince != null && qrSince <= MAINTENANCE_DAYS ? MAINTENANCE_DAYS - qrSince : null,
-    usual: order.map(menuOf).filter((m): m is MenuOption => !!m && !(m.code === 'maintenance' && qrSince != null && qrSince <= MAINTENANCE_DAYS)).slice(0, 2),
+    // メンテナンスカットは「いつもの」に入れない（14日以内は別の行で出す・過ぎたら出さない・11/7 慶一郎さん）
+    usual: order.map(menuOf).filter((m): m is MenuOption => !!m && m.code !== 'maintenance').slice(0, 2),
   }
 }
 
