@@ -11,6 +11,7 @@ import { RpcError } from '../../utils/staffSession'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../../data/wallet'
 import { PreviousTicketsBindDialog } from '../../components/PreviousTicketsBind'
 import { normalizePhone } from '../../utils/customerContact'
+import { callCustomerRpc } from '../../utils/customerSession'
 import { bookingAssistantApi, linkCompanion, loadWorkDays, type AiBookingStatus, type AssistantOptions, type BookingAssistantApi, type CustomerReservation, type HoldOffer } from './bookingAssistantApi'
 import { matchMenu, type MenuOption } from './menuMatcher'
 import { answerMenuInfo, detectAsk } from './askIntent'
@@ -700,6 +701,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       const pickKey = `${menu.code}|${slot.starts_at}`
       const pickedIds = couponPickRef.current.key === pickKey ? couponPickRef.current.ids : []
       if (pickedIds.length) saveCouponPlan({ date: slotDate(reservation.starts_at), reservationId: reservation.id, ticketIds: pickedIds })
+      // 店舗端末にも届くよう、予約と一緒にサーバーへ（当日以外・別の端末の QR でも店の会計に出る・11/6）。届かなくても当日の QR には入る
+      if (pickedIds.length) void callCustomerRpc('customer_set_ticket_plan', { p_reservation_id: reservation.id, p_ticket_ids: pickedIds }).catch(() => {})
       // ガチャ券を先に付ける（付いたかどうかで、銀Pay で押さえる額が変わる・11/4 点検）。
       //   確認画面で付けていたら。変更で元の予約に付いていたら、新しい予約に付け直す（使えなければ外れる）
       const gachaPlan = gachaPlanRef.current
