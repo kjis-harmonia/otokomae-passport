@@ -22,14 +22,14 @@ import { clearCurrentReservation, loadCurrentReservation } from '../../utils/cur
 import { heldFor, holdGinpay, useGinpayHolds, type GinpayHoldSummary } from '../ginpay/holds'
 import type { AgentAnswer, AgentShown, AgentTurn } from './agentClient'
 import { useVoice } from './useVoice'
-import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice } from './dayAdvisor'
+import { adviseDay, adviceSpeech, spreadSlots, type DayAdvice, type DayOverview } from './dayAdvisor'
 import { JohnnyRider, type OrbState } from './JohnnyRider'
 import { planCompanion, planPartyDay } from './partyPlanner'
 import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { takeAiTurn } from './aiQuota'
 import { PushToggle } from '../../components/PushToggle'
 import { canBeUsual, getUsualMenu, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from './usualMenu'
-import { addUsualMember, getUsualMembers, isUsualMember } from './usualMembers'
+import { addUsualMember, getUsualMembers, isUsualMember, type UsualMember } from './usualMembers'
 import { pushState } from '../../utils/webPush'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
@@ -67,6 +67,10 @@ type Step =
   | { k: 'askWhen'; again?: 'unclear' | 'retry' | 'none' | 'menu'; menu?: MenuOption; label?: string; calendar?: boolean }
   /** 「2名以上で予約する」から：まず何名様か（ご本人を含めて 2〜3名・11/6 慶一郎さん「まず、何名か聞かんとね」） */
   | { k: 'partySize'; menu?: MenuOption }
+  /** グループ予約の本体（GroupFlow：日にち → AI の提案 → メニュー → 確認） */
+  | { k: 'group'; size: 2 | 3; menu: MenuOption | null }
+  /** グループ予約の結果（お連れ様ごとに取れたか） */
+  | { k: 'groupDone'; primary: CustomerReservation | null; companions: { name: string; menuCode: string; r: CustomerReservation | null }[] }
   | { k: 'askMenu'; req: VisitRequest; then?: 'when' }
   /** その日の空き状況を先に見て、入れられるメニューと時刻を案内（note：希望の日が埋まっていて別の日にしたときの一言） */
   | { k: 'overview'; req: VisitRequest; advice: DayAdvice; note?: string }
@@ -143,7 +147,7 @@ const BACKABLE = new Set<Step['k']>(['welcome', 'askWhen', 'askMenu', 'overview'
 //   進み直し、戻るを押しても抜けられなかった・10/29 慶一郎さん）
 const canReturnTo = (s: Step) => BACKABLE.has(s.k) && !(s.k === 'confirm' && !s.staffChosen && !s.staffId) && !(s.k === 'pickStaff' && !s.avail)
 /** ここまで来たら、戻る先を忘れる（予約・キャンセルが終わった） */
-const FORGET = new Set<Step['k']>(['done', 'cancelled', 'unavailable', 'offer', 'offerGone'])
+const FORGET = new Set<Step['k']>(['done', 'groupDone', 'cancelled', 'unavailable', 'offer', 'offerGone'])
 /** 時間を選んだ画面（「時間を選び直す」の戻り先） */
 const isTimeChoice = (s: Step) => s.k === 'pick' || s.k === 'overview' || (s.k === 'ai' && s.view.kind === 'slots')
 const BACK_WORDS = /戻|もど|前の画面|ひとつ前|一つ前/
@@ -470,10 +474,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   // 何名様か（ご本人を含めて）。3 なら、2人目の予約のあとそのまま3人目へ
   const partySizeRef = useRef<number | null>(null)
   const choosePartySize = useCallback((n: 2 | 3, menu?: MenuOption) => {
-    partySizeRef.current = n
-    if (menu) setStep({ k: 'askWhen', again: 'menu', menu })
-    else setStep({ k: 'askMenu', req: { dates: [], time: null, range: null, earliest: true }, then: 'when' })
+    // 11/6 慶一郎さん「聞く前に提案するのがAI」：人数が入れる日 → AI の時間の提案 → お一人ずつメニュー（GroupFlow）
+    groupRef.current = false
+    partySizeRef.current = null
+    setGroupTitle({ title: `${n}名様が入れる日をお選びください` })
+    setStep({ k: 'group', size: n, menu: menu ?? null })
   }, [])
+  const [groupTitle, setGroupTitle] = useState<{ title: string; sub?: string }>({ title: '' })
   useEffect(() => {
     if (!groupRef.current || step.k !== 'confirm' || step.change || !(step.staffChosen || step.staffId)) return
     groupRef.current = false
@@ -847,6 +854,37 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [api, options, pickCompanion, pickPartyGacha, stopListening])
 
   /** 2人分を予約（予約者 → お連れ様の順に押さえて確定。お連れ様だけ取れなかったら、そう伝える） */
+  /** グループ予約：ご本人 → お連れ様の順に、割り振った担当（だめならほかの担当）で押さえて確定。お連れ様はご本人の予約につなぐ */
+  const bookGroup = useCallback(async (persons: GroupPerson[]) => {
+    const [me, ...others] = persons
+    setStep({ k: 'booking', menu: me.menu, slot: { starts_at: me.at } })
+    stopListening()
+    const staff = optionsRef.current?.staff ?? []
+    const order = (want: string | null) => [...staff.filter(st => st.id === want), ...staff.filter(st => st.id !== want)]
+    const take = async (p: GroupPerson, note?: string): Promise<CustomerReservation | null> => {
+      for (const st of order(p.staffId)) {
+        try { const hold = await api.hold(p.at, p.menu.code, st.id); return await api.confirm(hold.hold_id, note) } catch { /* 次の担当で */ }
+      }
+      return null
+    }
+    const primary = await take(me)
+    if (!primary) { setStep({ k: 'groupDone', primary: null, companions: [] }); return }
+    const replace = ownActiveRef.current
+    if (replace) { try { await api.cancel(replace.id); forgetReservation(replace.id); clearCouponPlan(replace.id) } catch { /* 取り消せなければ一覧に両方出る */ } }
+    rememberReservation(primary)
+    clearCurrentReservation()
+    // ガチャ券はご本人の予約に（使えなければ付かない）
+    if (gachaHeldRef.current) void attachGachaTo(primary.id)
+    const companions: { name: string; menuCode: string; r: CustomerReservation | null }[] = []
+    for (const p of others) {
+      const r = await take(p, `お連れ様：${p.name}様`)
+      if (r) { rememberCompanion(r.id, p.name ?? ''); try { await linkCompanion(primary.id, r.id) } catch { /* 端末の記録では見分けられる */ } }
+      companions.push({ name: p.name ?? '', menuCode: p.menu.code, r })
+    }
+    api.reservations().then(setMyReservations).catch(() => {})
+    setStep({ k: 'groupDone', primary, companions })
+  }, [api, stopListening, attachGachaTo])
+
   const bookParty = useCallback(async (s: Extract<Step, { k: 'confirmParty' }>) => {
     setStep({ k: 'booking', menu: s.primary.menu, slot: s.primary.slot })
     stopListening()
@@ -1356,6 +1394,13 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       }
       case 'askMenu': return { title: groupRef.current && partySizeRef.current ? 'ご本人のメニューはどれにしますか？' : 'メニューはどれにしますか？', speech: 'メニューはどれにしますか？', listen: true }
       case 'partySize': return { title: '何名様でご予約ですか？', sub: 'ご本人を含めて3名様までお取りできます', speech: '何名様でご予約ですか？', listen: true }
+      case 'group': return { title: groupTitle.title, sub: groupTitle.sub }
+      case 'groupDone': {
+        const ok = step.companions.filter(c => c.r).length
+        if (!step.primary) return { title: 'ご予約をお取りできませんでした', sub: 'ちょうど埋まってしまいました。もう一度、日にちからお選びください。', speech: 'ちょうど埋まってしまいました。もう一度お選びください。' }
+        if (ok === step.companions.length) return { title: `${ok + 1}名様のご予約が完了しました`, sub: '当日は QR をご提示ください。', speech: `${ok + 1}名様のご予約が完了しました。` }
+        return { title: 'ご本人のご予約をお取りしました', sub: `${step.companions.filter(c => !c.r).map(c => `${c.name}様`).join('・')}の時間はちょうど埋まってしまいました。お電話でご相談ください。`, speech: 'ご本人のご予約をお取りしました。お連れ様の時間はちょうど埋まってしまいました。' }
+      }
       case 'overview': {
         const word = dayWord(step.advice.date)
         const a = adviceSpeech(step.advice, word, { isToday: step.advice.date === jstDate(0), time: step.req.time })
@@ -1481,7 +1526,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
           : { title: '通信できませんでした', sub: '電波の良い場所で、もう一度お試しください。' }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 券の読み込みで読み上げ直さない
-  }, [step])
+  }, [step, groupTitle])
 
   // 段階が変わったら読み上げ（同じ段階の聞き直しでも読み上げる）
   useEffect(() => {
@@ -1501,7 +1546,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const doneUsual = doneMenu && (usualDone === doneMenu.code || usualNow?.code !== doneMenu.code) ? doneMenu : undefined
   const canTalk = ['pickStaff', 'welcome', 'askWhen', 'askMenu', 'partySize', 'overview', 'pick', 'confirm', 'ai', 'confirmCancel', 'companionMenu', 'companionName', 'confirmParty', 'askUsual'].includes(step.k)
   // 一覧や確認を出す段階は球を小さくして、内容を1画面に収める
-  const compact = ['pickStaff', 'welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'companionName', 'confirmParty', 'askUsual', 'usualSaved'].includes(step.k)
+  const compact = ['group', 'groupDone', 'partySize', 'pickStaff', 'welcome', 'askMenu', 'overview', 'pick', 'confirm', 'booking', 'done', 'unknown', 'confirmCancel', 'cancelling', 'cancelled', 'companionMenu', 'companionName', 'confirmParty', 'askUsual', 'usualSaved'].includes(step.k)
     || (step.k === 'ai' && step.view.kind !== 'talk') || (step.k === 'askWhen' && !!step.calendar)
   const voiceOff = voice.listen === 'unsupported' || voice.listen === 'denied'
 
@@ -1613,6 +1658,22 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
               </List>
             )}
 
+            {step.k === 'group' && options && (
+              <GroupFlow key={`${step.size}|${step.menu?.code ?? ''}`} api={api} menus={menus} staff={options.staff ?? []} size={step.size} primaryMenu={step.menu}
+                members={usualMembers} windowDays={options.settings.booking_window_days ?? 60} onBook={p => void bookGroup(p)} onTitle={setGroupTitle} />
+            )}
+            {step.k === 'groupDone' && step.primary && (
+              <>
+                <ReservationSummary r={step.primary} />
+                {step.companions.map((c, i) => c.r ? <ReservationSummary key={i} r={c.r} companion /> : null)}
+                {step.companions.filter(c => c.r && !isUsualMember(c.name) && memberSaved !== c.name).map(c => (
+                  <button key={c.name} type="button" onClick={() => { if (addUsualMember({ name: c.name, menuCode: c.menuCode })) { setMemberSaved(c.name); setUsualMembers(getUsualMembers()) } }}
+                    style={{ marginTop: 10, minHeight: 44, padding: '0 18px', borderRadius: 12, border: `1px solid ${C.separator}`, background: C.fill, color: C.text, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+                    {c.name}様をいつものメンバーに追加
+                  </button>
+                ))}
+              </>
+            )}
             {step.k === 'partySize' && (
               <List>
                 <Row onClick={() => choosePartySize(2, step.menu)} title="2名" detail="ご本人＋お連れ様1名" />
@@ -1952,7 +2013,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             setStep({ k: 'askWhen', again: 'menu', menu: step.menu })
           }}>{step.menu.name}で日時を決める</PrimaryButton>
         )}
-        {step.k === 'done' && (
+        {(step.k === 'done' || step.k === 'groupDone') && (
           <>
             {onShowQr && <PrimaryButton onClick={() => { onClose(); onShowQr() }}>QR を表示</PrimaryButton>}
             <SecondaryButton onClick={onClose}>閉じる</SecondaryButton>
@@ -2455,3 +2516,254 @@ function ReservationSummary({ r, companion }: { r: CustomerReservation; companio
   )
 }
 
+
+// ── グループ予約（11/6 慶一郎さん「聞く前に提案するのがAIでしょ」「メニュー聞いた後に空いてなかったらガッカリ」） ──
+//   ① 何名様 → ② 日にち（その人数が入れる日だけ押せる）→ ③ AI の提案（同時／ずらし）→ ④ お一人ずつメニュー（その時間に入るものだけ）→ ⑤ まとめて確認
+//   空きの見方：メニューが決まる前は、ご本人＝いつものメニュー、お連れ様＝通常カットの長さで見る。担当は AI が割り振る（同じ担当の時間は重ねない）
+export interface GroupPerson { menu: MenuOption; name: string | null; at: string; staffId: string | null }
+type GroupPlan = { kind: 'together' | 'mixed' | 'stagger'; at: number[]; staff: string[] }
+const MIN = 60000
+
+/** その日の、n名様の案（同時・ずらし）。lists[staff] = { p: ご本人のメニューで空いている開始時刻, k: お連れ様（カット）で空いている開始時刻 } */
+function planGroup(n: number, durP: number, durK: number, staffIds: string[], lists: Record<string, { p: Set<number>; k: Set<number> }>): GroupPlan[] {
+  const fit = (starts: number[]): string[] | null => {
+    const busy: Record<string, [number, number][]> = {}
+    const out: string[] = []
+    for (let i = 0; i < starts.length; i++) {
+      const t = starts[i], dur = (i === 0 ? durP : durK) * MIN
+      const s = staffIds.find(id => (i === 0 ? lists[id].p : lists[id].k).has(t) && !(busy[id] ?? []).some(([a, b]) => t < b && a < t + dur))
+      if (!s) return null
+      ;(busy[s] ??= []).push([t, t + dur]); out.push(s)
+    }
+    return out
+  }
+  const firsts = [...new Set(staffIds.flatMap(id => [...lists[id].p]))].sort((a, b) => a - b)
+  const comps = [...new Set(staffIds.flatMap(id => [...lists[id].k]))].sort((a, b) => a - b)
+  const plans: GroupPlan[] = []
+  // 同時：全員が同じ時刻に始められる（担当がちがう）
+  for (const T of firsts) {
+    const s = fit(Array(n).fill(T))
+    if (s && !plans.some(p => p.kind === 'together' && Math.abs(p.at[0] - T) < 180 * MIN)) plans.push({ kind: 'together', at: Array(n).fill(T), staff: s })
+    if (plans.filter(p => p.kind === 'together').length >= 2) break
+  }
+  // 3名：2名様は同時、もう1名様は30〜90分あとから（担当が2人なので、3名同時より取りやすい）
+  if (n === 3) {
+    for (const T of firsts) {
+      if (!fit([T, T])) continue
+      const third = comps.find(t => t >= T + 30 * MIN && t <= T + 90 * MIN && fit([T, T, t]))
+      const s = third != null ? fit([T, T, third]) : null
+      if (s) { plans.push({ kind: 'mixed', at: [T, T, third!], staff: s }); break }
+    }
+  }
+  // ずらし：前の方から30分以上・90分以内に、次の方が始められる。朝と、3時間以上あとの2案まで
+  const stagger = (from: number): GroupPlan | null => {
+    for (const T of firsts.filter(t => t >= from)) {
+      const at = [T]
+      let ok = true
+      for (let i = 1; i < n && ok; i++) {
+        const next = comps.find(t => t >= at[i - 1] + 30 * MIN && t <= at[i - 1] + 90 * MIN && fit([...at, t]))
+        if (next == null) ok = false; else at.push(next)
+      }
+      const s = ok ? fit(at) : null
+      if (s) return { kind: 'stagger', at, staff: s }
+    }
+    return null
+  }
+  const s1 = stagger(0)
+  if (s1) { plans.push(s1); const s2 = stagger(s1.at[0] + 180 * MIN); if (s2) plans.push(s2) }
+  // 同時 → 2名同時 → ずらし の順に良い案。同じ順位なら早い時間
+  const rank = { together: 0, mixed: 1, stagger: 2 }
+  return plans.sort((a, b) => rank[a.kind] - rank[b.kind] || a.at[0] - b.at[0]).slice(0, 3)
+}
+
+function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, onBook, onTitle }: {
+  api: BookingAssistantApi; menus: MenuOption[]; staff: { id: string; name: string }[]; size: 2 | 3; primaryMenu: MenuOption | null
+  members: UsualMember[]; windowDays: number; onBook: (persons: GroupPerson[]) => void; onTitle: (t: { title: string; sub?: string }) => void
+}) {
+  const cut = menus.find(m => m.code === 'cut-regular') ?? menus[0]
+  const planMenu = primaryMenu ?? cut
+  const staffIds = staff.map(s => s.id)
+  const [phase, setPhase] = useState<'day' | 'calendar' | 'times' | 'menus' | 'confirm'>('day')
+  const [day, setDay] = useState<string | null>(null)
+  const [dayPlans, setDayPlans] = useState<Record<string, GroupPlan[] | 'loading'>>({})
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const [persons, setPersons] = useState<GroupPerson[]>([])
+  const [idx, setIdx] = useState(0)
+  const [overview, setOverview] = useState<DayOverview | null>(null)
+  const [nameDraft, setNameDraft] = useState('')
+  const [pendingMenu, setPendingMenu] = useState<MenuOption | null>(null)
+  const label = (i: number) => (i === 0 ? 'ご本人' : `お連れ様${size === 3 ? (i === 1 ? '（1人目）' : '（2人目）') : ''}`)
+
+  const plansFor = useCallback(async (d: string): Promise<GroupPlan[]> => {
+    const lists: Record<string, { p: Set<number>; k: Set<number> }> = {}
+    await Promise.all(staffIds.map(async id => {
+      const [p, k] = await Promise.all([api.staffSlots(d, planMenu.code, id), planMenu.code === cut.code ? null : api.staffSlots(d, cut.code, id)])
+      const pp = new Set(p.map(x => Date.parse(x.starts_at)))
+      lists[id] = { p: pp, k: k ? new Set(k.map(x => Date.parse(x.starts_at))) : pp }
+    }))
+    return planGroup(size, planMenu.duration_min, cut.duration_min, staffIds, lists)
+  }, [api, planMenu, cut, size, staffIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 今日・明日・明後日：その人数が入れるか先に見ておく
+  useEffect(() => {
+    let live = true
+    for (const d of [0, 1, 2].map(i => jstDate(i))) {
+      setDayPlans(m => ({ ...m, [d]: 'loading' }))
+      void plansFor(d).then(p => { if (live) setDayPlans(m => ({ ...m, [d]: p })) }, () => { if (live) setDayPlans(m => ({ ...m, [d]: [] })) })
+    }
+    return () => { live = false }
+  }, [plansFor])
+
+  useEffect(() => {
+    const t = phase === 'day' || phase === 'calendar' ? { title: `${size}名様が入れる日をお選びください`, sub: '入れない日は押せません' }
+      : phase === 'times' ? { title: 'この時間ならご案内できます', sub: day ? `${dayWord(day)}・${size}名様` : undefined }
+      : phase === 'menus' ? { title: `${label(idx)}のメニューは？`, sub: persons[idx] ? `${formatVisit(persons[idx].at).time}から・この時間に入るメニューだけ出しています` : undefined }
+      : { title: `${size}名様のご予約はこちらでよろしいですか？` }
+    onTitle(t)
+  }, [phase, idx, day, size]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickDay = async (d: string) => {
+    setBusy(true); setNote(null)
+    try {
+      const plans = dayPlans[d] && dayPlans[d] !== 'loading' ? dayPlans[d] as GroupPlan[] : await plansFor(d)
+      setDayPlans(m => ({ ...m, [d]: plans }))
+      if (plans.length) { setOverview(await api.dayOverview(d).catch(() => null)); setDay(d); setPhase('times'); return }
+      // その日は入れない：近い日を探して出す（2週間先まで）
+      for (let k = 1; k <= 14; k++) {
+        const next = addDays(d, k)
+        if (next > jstDate(windowDays)) break
+        const p = await plansFor(next)
+        if (p.length) { setDayPlans(m => ({ ...m, [next]: p })); setNote(`${dayWord(d)}は${size}名様の空きがありません。${dayWord(next)}ならご案内できます。`); setOverview(await api.dayOverview(next).catch(() => null)); setDay(next); setPhase('times'); return }
+      }
+      setNote(`${dayWord(d)}から2週間、${size}名様ご一緒の空きがありません。お電話でご相談ください。`)
+    } catch { setNote('空きを確かめられませんでした。電波の良いところで、もう一度お試しください。') }
+    finally { setBusy(false) }
+  }
+
+  const pickPlan = async (p: GroupPlan) => {
+    setBusy(true)
+    if (!overview) { try { setOverview(await api.dayOverview(day!)) } catch { setOverview(null) } }
+    setBusy(false)
+    setPersons(p.at.map((t, i) => ({ menu: i === 0 ? planMenu : cut, name: null, at: new Date(t).toISOString(), staffId: p.staff[i] ?? null })))
+    setIdx(0); setPendingMenu(null); setNameDraft(''); setPhase('menus')
+  }
+
+  // その時間にそのメニューが入るか（その日の空き一覧で見る。担当は確定のときに空いている人を選ぶ）
+  const slotsOf = (code: string) => overview?.groups.find(g => g.codes.includes(code))?.slots.map(s => Date.parse(s)) ?? null
+  const fits = (code: string, at: string) => { const s = slotsOf(code); return s ? s.includes(Date.parse(at)) : true }
+  const nextFit = (code: string, at: string) => { const s = slotsOf(code); const t = Date.parse(at); return s?.filter(x => x >= t).sort((a, b) => a - b)[0] ?? null }
+
+  // その案で、パーマ（長いメニュー）まで入る人数とカットまでの人数（11/6 慶一郎さん「パーマ（90分相当）の空きが2名、カット枠が1名とか教えてあげたら」）
+  const perm = menus.find(m => m.code === 'perm-punch') ?? menus.find(m => m.code.startsWith('perm-'))
+  const capacityNote = (p: GroupPlan): string | undefined => {
+    if (!perm || !overview) return undefined
+    const long = p.at.filter(t => fits(perm.code, new Date(t).toISOString())).length
+    // パーマ＝アイパー・パンチ・ニグロ・濡れパンなど（本番の所要時間 90分）。カット＝通常カット（30分）
+    return long === p.at.length ? `全員パーマ（${perm.duration_min}分）までOK` : long === 0 ? `カット（${cut.duration_min}分）まで` : `パーマ（${perm.duration_min}分）${long}名・カット ${p.at.length - long}名まで`
+  }
+
+  const setPerson = (patch: Partial<GroupPerson>) => setPersons(ps => ps.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
+  const nextPerson = () => { setPendingMenu(null); setNameDraft(''); if (idx + 1 < size) setIdx(idx + 1); else setPhase('confirm') }
+  const chooseMenu = (m: MenuOption, at?: string) => {
+    if (idx === 0) { setPerson({ menu: m, ...(at ? { at } : {}) }); nextPerson(); return }
+    setPerson({ menu: m, ...(at ? { at } : {}) }); setPendingMenu(m)
+  }
+  const chooseMember = (u: UsualMember) => {
+    const m = menus.find(x => x.code === u.menuCode)
+    if (!m) return
+    const at = persons[idx].at
+    const t = fits(m.code, at) ? at : (() => { const n = nextFit(m.code, at); return n ? new Date(n).toISOString() : null })()
+    if (!t) { setNote(`${u.name}様の${m.name}は、この日は入れる時間がありません。ほかのメニューをお選びください。`); return }
+    setNote(t !== at ? `${u.name}様の${m.name}は ${formatVisit(t).time} からご案内できます。` : null)
+    setPerson({ menu: m, name: u.name, at: t }); nextPerson()
+  }
+
+  const rowBtn: CSSProperties = { minHeight: 44, border: 'none', background: 'none', color: C.secondary, fontSize: 14, cursor: 'pointer' }
+  const back = () => { setNote(null); if (phase === 'confirm') { setIdx(size - 1); setPhase('menus') } else if (phase === 'menus' && idx > 0) { setIdx(idx - 1); setPendingMenu(null) } else if (phase === 'menus') setPhase('times'); else if (phase === 'times' || phase === 'calendar') setPhase('day') }
+
+  return (
+    <div style={{ width: '100%' }}>
+      {note && <p role="status" style={{ margin: '16px 2px 0', fontSize: 14, color: C.text, textAlign: 'center' }}>{note}</p>}
+      {phase === 'day' && (
+        <List>
+          {[0, 1, 2].map(i => {
+            const d = jstDate(i), p = dayPlans[d]
+            const none = Array.isArray(p) && p.length === 0
+            return <Row key={d} onClick={none || busy ? undefined : () => void pickDay(d)} muted={none} title={['今日', '明日', '明後日'][i]}
+              detail={p === 'loading' || !p ? '確かめています…' : none ? '空きなし' : `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}・${formatVisit(new Date(p[0].at[0]).toISOString()).time}〜`} />
+          })}
+          <Row onClick={() => setPhase('calendar')} title="もっと先の日" detail="カレンダーから" />
+        </List>
+      )}
+      {phase === 'calendar' && (
+        <DayCalendar from={jstDate(3)} last={jstDate(windowDays)} staff={null} onPick={d => void pickDay(d)} onSoonest={() => void pickDay(jstDate(3))} />
+      )}
+      {phase === 'times' && day && Array.isArray(dayPlans[day]) && (
+        <List>
+          {(dayPlans[day] as GroupPlan[]).map((p, i) => {
+            const hm = (t: number) => formatVisit(new Date(t).toISOString()).time
+            const title = p.kind === 'together' ? `${hm(p.at[0])}　${size}名様 同時に`
+              : p.kind === 'mixed' ? `${hm(p.at[0])} 2名様・${hm(p.at[2])} 1名様`
+              : p.at.map(hm).join(' → ')
+            const how = p.kind === 'together' ? 'ご一緒に始められます' : p.kind === 'mixed' ? '2名様は同時に' : `${Math.round((p.at[1] - p.at[0]) / MIN)}分ずつ順番に`
+            const cap = capacityNote(p)
+            return (
+              <button key={i} type="button" disabled={busy} onClick={() => void pickPlan(p)}
+                style={{ display: 'block', width: '100%', padding: '14px 16px', boxSizing: 'border-box', background: 'transparent', border: 'none', borderTop: `0.5px solid ${C.separator}`, marginTop: -0.5,
+                  textAlign: 'left', fontFamily: FONT, color: C.text, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+                <span style={{ display: 'block', fontSize: 18, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{title}</span>
+                <span style={{ display: 'block', marginTop: 3, fontSize: 13, color: C.secondary }}>{how}{cap ? `・${cap}` : ''}</span>
+              </button>
+            )
+          })}
+        </List>
+      )}
+      {phase === 'menus' && persons[idx] && (
+        <>
+          {idx > 0 && !pendingMenu && members.length > 0 && (
+            <>
+              <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>いつものメンバー</p>
+              <List>{members.filter(u => !persons.some((p, i) => i !== idx && p.name === u.name)).map(u => { const m = menus.find(x => x.code === u.menuCode); return m ? <Row key={u.name} onClick={() => chooseMember(u)} title={`${u.name}様`} detail={m.name} /> : null })}</List>
+            </>
+          )}
+          {pendingMenu ? (
+            <form onSubmit={e => { e.preventDefault(); const n = nameDraft.trim(); if (n) { setPerson({ name: n }); nextPerson() } }} style={{ marginTop: 20 }}>
+              <p style={{ margin: '0 2px 8px', fontSize: 14 }}>{label(idx)}のお名前（お店でお呼びするお名前です）</p>
+              <input value={nameDraft} onChange={e => setNameDraft(e.target.value)} placeholder="例：山田" aria-label="お連れ様のお名前" autoFocus
+                style={{ width: '100%', boxSizing: 'border-box', minHeight: 52, padding: '0 14px', borderRadius: 12, border: `1px solid ${C.separator}`, fontSize: 17, fontFamily: FONT, background: C.fill }} />
+              <div style={{ marginTop: 12 }}><PrimaryButton disabled={!nameDraft.trim()} onClick={() => { const n = nameDraft.trim(); if (n) { setPerson({ name: n }); nextPerson() } }}>次へ</PrimaryButton></div>
+            </form>
+          ) : (
+            <>
+              {idx > 0 && members.length > 0 && <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>ほかの方</p>}
+              <List>
+                {(idx === 0 ? [planMenu, ...menus.filter(m => m.code !== planMenu.code)] : menus).map(m => {
+                  const at = persons[idx].at
+                  const ok = fits(m.code, at)
+                  const later = ok ? null : nextFit(m.code, at)
+                  return <Row key={m.code} muted={!ok && !later} onClick={ok ? () => chooseMenu(m) : later ? () => chooseMenu(m, new Date(later).toISOString()) : undefined}
+                    title={m.name} note={idx === 0 && m.code === planMenu.code && primaryMenu ? 'いつもの' : undefined}
+                    detail={ok ? `${m.duration_min}分・${yen(m)}` : later ? `${formatVisit(new Date(later).toISOString()).time}から入れます` : 'この日は難しいです'} />
+                })}
+              </List>
+            </>
+          )}
+        </>
+      )}
+      {phase === 'confirm' && (
+        <>
+          <div style={{ width: '100%', marginTop: 24, borderRadius: 14, overflow: 'hidden', background: C.fill }}>
+            <SummaryRow label="日にち" value={day ? dayWord(day) : ''} />
+            {persons.map((p, i) => <SummaryRow key={i} label={i === 0 ? 'ご本人' : `${p.name}様`} value={`${formatVisit(p.at).time}・${p.menu.name}`} />)}
+          </div>
+          <p style={{ margin: '10px 2px 0', fontSize: 12, lineHeight: 1.6, color: C.secondary }}>担当は空いている者でご案内します。銀Pay・ガチャ券はご本人の分だけです。</p>
+          <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+            <PrimaryButton onClick={() => onBook(persons)}>はい</PrimaryButton>
+          </div>
+        </>
+      )}
+      {phase !== 'day' && <button type="button" onClick={back} style={{ ...rowBtn, display: 'block', margin: '8px auto 0' }}>‹ ひとつ前に戻る</button>}
+    </div>
+  )
+}
