@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { RpcError, rpcErrorMessage } from '../../utils/staffSession'
+import { RpcError, callStaffRpc, rpcErrorMessage } from '../../utils/staffSession'
 import { yen } from '../../utils/bookingApi'
 import { reservationSaleLines } from '../../utils/checkoutPricing'
 import { idempotencyKey } from '../../utils/ginpayApi'
@@ -126,6 +126,22 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
 
   // 開いたあとに選び直した券（読み込み前なら、読み込んだときに上で入れる）
   const ctxTickets = ctx?.tickets
+  // AI予約でお客様が選んだ券（予約と一緒にサーバーに残したもの・11/6）。会員QR に券が入っていなければ、これを最初から選ぶ
+  const [plan, setPlan] = useState<string[] | null>(null)
+  const planApplied = useRef(false)
+  useEffect(() => {
+    if (!reservationId) return
+    let alive = true
+    void callStaffRpc<{ ticket_ids?: string[] } | null>('staff_reservation_ticket_plan', { p_reservation_id: reservationId })
+      .then(r => { if (alive) setPlan(Array.isArray(r?.ticket_ids) ? r.ticket_ids : []) }, () => { if (alive) setPlan([]) })
+    return () => { alive = false }
+  }, [reservationId])
+  useEffect(() => {
+    if (!ctxTickets || !plan?.length || planApplied.current || (initialTicketIds?.length ?? 0) > 0) return
+    planApplied.current = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTicketIds(usableTicketIds(ctxTickets, plan))
+  }, [ctxTickets, plan, initialTicketIds])
   useEffect(() => {
     if (!ctxTickets || initialTicketIds === undefined) return
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -378,6 +394,19 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               </div>
 
               {/* クーポン（App 会員）・値引き */}
+              {/* 予約でお客様が選んだ券：何の券を何枚、いくら引くか（11/6 慶一郎さん「何枚使用していくら決済したら良いのかわからん」） */}
+              {plan && plan.length > 0 && (() => {
+                const mine = tickets.filter(t => plan.includes(t.id))
+                if (!mine.length) return null
+                const groups = [...mine.reduce((m, t) => m.set(t.title, { n: (m.get(t.title)?.n ?? 0) + 1, amt: (m.get(t.title)?.amt ?? 0) + t.amount }), new Map<string, { n: number; amt: number }>())]
+                return (
+                  <div role="note" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(151,115,43,0.08)', border: '1px solid rgba(151,115,43,0.35)', fontSize: 14, lineHeight: 1.6 }}>
+                    <b>お客様がAI予約で選んだ券</b><br />
+                    {groups.map(([title, g]) => <span key={title} style={{ display: 'block' }}>{title} × {g.n}枚（−{yen(g.amt)}）</span>)}
+                    <span style={{ fontSize: 12, color: C.sub }}>下の券に ✓ を付けています。お会計は下の合計のとおりです。</span>
+                  </div>
+                )
+              })()}
               {listed.length > 0 && (
                 <div style={{ marginTop: 8 }}>
                   {listed.map(t => {
