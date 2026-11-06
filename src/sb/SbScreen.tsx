@@ -15,6 +15,7 @@ import { SbToday } from './SbToday'
 import { SbMoveSheet } from './SbMove'
 import { useReservationDrag, type SbMoveTarget } from './sbDrag'
 import { SbHotpepper } from './SbHotpepper'
+import { SbTicketPlan } from './SbTicketPlan'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
 import { announceVoice, playChime, unlockChime } from './sbChime'
@@ -364,7 +365,7 @@ function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onE
     {r.source === 'app' && <AiPause reservationId={r.id} actor={actor} blocked={blocked} />}
     <dl className="sb-facts"><dt>日付</dt><dd>{jstDateLabel(getJapanDateString(new Date(r.starts_at)))}</dd><dt>担当</dt><dd>{r.staff_name}{r.nominated ? '（指名）' : '（指名なし）'}</dd>
       <dt>メニュー</dt><dd>{r.items.map(i => <span className="sb-line" key={i.menu_code}>{i.name}<small>{i.duration_min}分 / {yen(i.price)}</small></span>)}</dd>
-      <dt>予約時の金額</dt><dd>{yen(r.total_price)}</dd>{r.note && <><dt>メモ</dt><dd className="sb-prewrap">{r.note}</dd></>}{r.external_ref && <><dt>予約番号</dt><dd>{r.external_ref}</dd></>}
+      <dt>予約時の金額</dt><dd>{yen(r.total_price)}</dd><SbTicketPlan reservation={r} />{r.note && <><dt>メモ</dt><dd className="sb-prewrap">{r.note}</dd></>}{r.external_ref && <><dt>予約番号</dt><dd>{r.external_ref}</dd></>}
     </dl>
     {cancel ? <label className="sb-field">取消理由（任意）<input value={reason} maxLength={100} disabled={busy} onChange={e => setReason(e.target.value)} /></label> : <>
       <div className="sb-quick-actions">{r.status === 'confirmed' && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'checked_in' })}>来店済みにする</button>}
