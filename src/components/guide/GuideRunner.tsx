@@ -230,6 +230,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   }
   const vh = window.innerHeight
   const fingerAbove = !ring || ring.top > 76
+  // 縦に大きい枠（写真の並びなど）は、上の別のボタンを指して見えないよう 👇 を枠の中に出す
+  const fingerInside = !!ring && ring.height > 220
   const bubbleTop = !!ring && ring.top + ring.height / 2 > vh * 0.55
 
   return createPortal(
@@ -238,9 +240,9 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
         <>
           <div className={`gd-ring${round ? ' is-round' : ''}${step.noDim ? ' is-clear' : ''}`} aria-hidden="true"
             style={{ top: ring.top, left: ring.left, width: ring.width, height: ring.height }} />
-          <div className={`gd-finger${fingerAbove ? '' : ' is-below'}`} aria-hidden="true"
-            style={{ left: ring.left + ring.width / 2, top: fingerAbove ? ring.top - 6 : ring.top + ring.height + 6 }}>
-            {fingerAbove ? '👇' : '👆'}
+          <div className={`gd-finger${fingerAbove || fingerInside ? '' : ' is-below'}`} aria-hidden="true"
+            style={{ left: ring.left + ring.width / 2, top: fingerInside ? ring.top + Math.min(ring.height / 2, 160) : fingerAbove ? ring.top - 6 : ring.top + ring.height + 6 }}>
+            {fingerAbove || fingerInside ? '👇' : '👆'}
           </div>
         </>
       )}

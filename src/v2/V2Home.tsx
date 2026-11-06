@@ -126,7 +126,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   return (
     <>
       <div className="v2-pay-wrap"><V2GinpayBar onOpen={onGinpay} /></div>
-      <div className="v2-cats" ref={catsRail} role="tablist" aria-label="スタイルのカテゴリ">
+      <div className="v2-cats" data-guide="home-cats" ref={catsRail} role="tablist" aria-label="スタイルのカテゴリ">
         {cats.map(id => (
           <button key={id} type="button" role="tab" data-guide={id === USUAL ? 'home-usual-chip' : undefined} className="v2-cat v2-glass" aria-pressed={cat === id} aria-selected={cat === id} onClick={() => chooseCat(id)}>{id}</button>
         ))}

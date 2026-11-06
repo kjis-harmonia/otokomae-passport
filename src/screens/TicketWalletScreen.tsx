@@ -626,7 +626,7 @@ function MemberTicketWallet({
         <LayoutGroup id="wallet-chips">
           <div className="wallet-chips" role="toolbar" aria-label="カードの絞り込み" style={{ marginTop: 12 }}>
             {WALLET_FILTERS.map(f => (
-              <button key={f.id} type="button" className="wallet-chip" aria-label={f.label} aria-pressed={filter === f.id} onClick={() => selectFilter(f.id)}>
+              <button key={f.id} type="button" className="wallet-chip" data-guide={`wallet-${f.id}`} aria-label={f.label} aria-pressed={filter === f.id} onClick={() => selectFilter(f.id)}>
                 {filter === f.id && (
                   <motion.span
                     layoutId="wallet-chip-pill"
