@@ -6,9 +6,9 @@
 --   ・会計を取り消したら、その会計のポイントも戻す（受け取ったあとならマイナスになり、次のポイントで埋まる）
 --   ・会計の関数（finalize_sale・void_sale）には触らない。会計の状態が変わったときのトリガーで付ける／戻す。
 --     ポイントの計算で何か起きても会計そのものは止めない（警告だけ残す）
---   ・解禁日 gacha_settings.gauge_opens_on（本番 12/1）より前の会計にはポイントを付けない
+--   ・解禁日 gacha_settings.gauge_opens_on（本番 11/11・ガチャの解禁と同じ日。11/6 慶一郎さん「これも11/11にやりたい」）より前は付けない
 
-alter table app_private.gacha_settings add column if not exists gauge_opens_on date not null default date '2026-12-01';
+alter table app_private.gacha_settings add column if not exists gauge_opens_on date not null default date '2026-11-11';
 
 -- 景品ごとに必要なポイント（無い景品はゲージで狙えない）
 create table if not exists app_private.gacha_gauge_goals (

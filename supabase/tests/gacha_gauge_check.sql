@@ -166,7 +166,7 @@ begin
   update public.reservation_items set menu_code = 'cut-regular' where reservation_id = A;
 
   log := log || E'── 解禁前\n';
-  update app_private.gacha_settings set gauge_opens_on = date '2026-12-01' where id = 1;
+  update app_private.gacha_settings set gauge_opens_on = date '2026-12-31' where id = 1;
   log := log || pg_temp.chk('解禁前は閉じている', (public.customer_gacha_state(T)->'gauge'->>'open'), 'false');
   log := log || pg_temp.chk('解禁前に狙う', pg_temp.err(public.customer_gacha_gauge_target(T, 'free-punch')), 'not_open');
   perform pg_temp.place(A, TUE); perform public.customer_gacha_attach(T, A);
