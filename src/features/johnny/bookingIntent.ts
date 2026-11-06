@@ -1,7 +1,8 @@
 // スタイルの「予約する」→ Johnny：押したメニューを入れた状態で、予約タブの Johnny を開く（あとは日時と担当を聞く）。
 export const JOHNNY_INTENT_EVENT = 'ginjiro:johnny-intent'
 /** usual：ホームの「いつもの」から（メニューが分からなければ Johnny がいつものメニューを聞いて登録する） */
-export interface JohnnyIntent { menuCode: string | null; label: string; usual?: boolean }
+/** group：ホームの「2名以上で予約する」から（ご本人の予約のあと、お連れ様を聞く・11/6） */
+export interface JohnnyIntent { menuCode: string | null; label: string; usual?: boolean; group?: boolean }
 
 let pending: JohnnyIntent | null = null
 
