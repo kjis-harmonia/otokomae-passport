@@ -3,10 +3,13 @@
 import { callCustomerRpc, hasCustomerSession } from './customerSession'
 import { isMissingRpc, RpcError } from './staffSession'
 import { normalizePhone } from './phone'
+import { getUserId } from './userId'
 
 export interface CustomerContact { name: string; phone: string | null; registered: boolean }
 
 const PENDING_KEY = 'ginjiro_pending_contact'
+// 入力の誤りは送り直しても通らないので、端末に残さない
+const isInputError = (err: unknown) => err instanceof RpcError && (err.code === 'invalid_name' || err.code === 'invalid_phone')
 
 export { formatPhone, normalizePhone } from './phone'
 
@@ -30,7 +33,8 @@ export async function saveContact(name: string, phoneRaw: string): Promise<'save
   const trimmed = name.trim()
   if (!trimmed) throw new RpcError('invalid_name', 'お名前を入力してください。')
   const keep = () => {
-    try { localStorage.setItem(PENDING_KEY, JSON.stringify({ name: trimmed, phone })) } catch { /* ignore */ }
+    // どの会員の連絡先かも残し、次の起動で同じ会員のときだけ送る（別の会員に切り替わっていたら送らない）
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify({ name: trimmed, phone, user_id: getUserId() })) } catch { /* ignore */ }
     return 'pending' as const
   }
   // 顧客セッションの無い端末（移行期間の旧登録など）は送らずに端末へ（引き継ぎの案内を出さない）
@@ -40,8 +44,10 @@ export async function saveContact(name: string, phoneRaw: string): Promise<'save
     clearPending()
     return 'saved'
   } catch (err) {
-    if (!isMissingRpc(err)) throw err
-    return keep()
+    if (isMissingRpc(err)) return keep()
+    // 通信の失敗・ログインの切れなど：端末に残して次の起動で送り直す。呼んだ画面にはこれまでどおり失敗を伝える
+    if (!isInputError(err)) keep()
+    throw err
   }
 }
 
@@ -50,11 +56,12 @@ function clearPending(): void {
 }
 
 /** 端末に一時保存した連絡先 */
-export function pendingContact(): { name: string; phone: string } | null {
+export function pendingContact(): { name: string; phone: string; user_id?: string } | null {
   try {
     const v = localStorage.getItem(PENDING_KEY)
-    const p = v ? (JSON.parse(v) as { name?: unknown; phone?: unknown }) : null
-    return p && typeof p.name === 'string' && typeof p.phone === 'string' ? { name: p.name, phone: p.phone } : null
+    const p = v ? (JSON.parse(v) as { name?: unknown; phone?: unknown; user_id?: unknown }) : null
+    if (!p || typeof p.name !== 'string' || typeof p.phone !== 'string') return null
+    return typeof p.user_id === 'string' ? { name: p.name, phone: p.phone, user_id: p.user_id } : { name: p.name, phone: p.phone }
   } catch { return null }
 }
 
@@ -62,10 +69,13 @@ export function pendingContact(): { name: string; phone: string } | null {
 export async function flushPendingContact(): Promise<void> {
   const p = pendingContact()
   if (!p || !hasCustomerSession()) return
+  // 別の会員の連絡先は送らない（端末で会員が切り替わった時）。残しても使わないので消す
+  if (p.user_id && p.user_id !== getUserId()) { clearPending(); return }
   try {
     await callCustomerRpc('customer_set_contact', { p_name: p.name, p_phone: p.phone })
     clearPending()
-  } catch {
-    // 仕組みが無い・通信できない：次の起動でもう一度
+  } catch (err) {
+    // 入力の誤りは消す。仕組みが無い・通信できない：次の起動でもう一度
+    if (isInputError(err)) clearPending()
   }
 }

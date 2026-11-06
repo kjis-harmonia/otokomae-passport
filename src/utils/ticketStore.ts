@@ -81,6 +81,36 @@ interface CompleteOnboardingRpcResponse {
  * ステップA 適用前の環境に限り、旧 RPC（complete_customer_onboarding）で登録する。
  * 失敗時は例外（テーブル直接書き込みへの代替は行わない）。
  */
+// 登録の合言葉（Codex R3-D002）。届いたか分からない登録を送り直しても、会員・Welcomeクーポンが二重にならない。
+// 登録が通るまで端末に残し、同じ合言葉で送り直す（サーバーは24時間以内なら前回の会員を返す）
+const REGISTER_KEY = 'ginjiro_register_key'
+function registerKey(): string | null {
+  try {
+    const saved = localStorage.getItem(REGISTER_KEY)
+    if (saved && /^[A-Za-z0-9_-]{32,128}$/.test(saved)) return saved
+    const b = new Uint8Array(24); crypto.getRandomValues(b)
+    const key = Array.from(b, x => x.toString(16).padStart(2, '0')).join('')
+    localStorage.setItem(REGISTER_KEY, key)
+    return localStorage.getItem(REGISTER_KEY) === key ? key : null
+  } catch { return null }
+}
+function clearRegisterKey(): void { try { localStorage.removeItem(REGISTER_KEY) } catch { /* ignore */ } }
+
+async function register(name: string, hasVisitedBefore: boolean): Promise<RegisterRpcResponse> {
+  const key = registerKey()
+  if (key) {
+    try {
+      const r = await callRpc<RegisterRpcResponse>('customer_register_once', { p_name: name, p_has_visited_before: hasVisitedBefore, p_request_key: key })
+      clearRegisterKey()
+      return r
+    } catch (err) {
+      if (!isMissingRpc(err)) throw err
+    }
+  }
+  // 端末に合言葉を残せない時・サーバーが古い時は、今までの登録
+  return callRpc<RegisterRpcResponse>('customer_register', { p_name: name, p_has_visited_before: hasVisitedBefore })
+}
+
 export async function completeCustomerOnboarding(
   userId: string,
   name: string,
@@ -90,10 +120,7 @@ export async function completeCustomerOnboarding(
   if (!trimmedName) throw new Error('名前を入力してください。')
 
   try {
-    const r = await callRpc<RegisterRpcResponse>('customer_register', {
-      p_name: trimmedName,
-      p_has_visited_before: hasVisitedBefore,
-    })
+    const r = await register(trimmedName, hasVisitedBefore)
     saveCustomerSession(r.user_id, r.session)
     const ticket = r.ticket ?? null
     return {

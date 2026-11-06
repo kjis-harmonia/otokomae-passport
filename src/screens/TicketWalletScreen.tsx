@@ -9,6 +9,7 @@ import { fetchLastVisitDateStrict, fetchTodayUsedType } from '../utils/customerS
 import { RpcError } from '../utils/staffSession'
 import { callCustomerRpc } from '../utils/customerSession'
 import { PreviousTicketsPrompt } from '../components/PreviousTicketsBind'
+import { useCustomerAccessSession } from '../features/customerAccess/useCustomerAccessSession'
 import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/storage'
 import { getLastVisit } from '../utils/visitHistory'
 import { getMaintenanceVisit } from '../utils/maintenanceSchedule'
@@ -155,13 +156,22 @@ function WalletFilterText({ filter }: { filter: WalletFilter }) {
 
 // ── TicketWalletScreen ────────────────────────────────────────────────────────
 
-export function TicketWalletScreen({
-  onModalChange,
-  initialFilter = 'cut',
-}: {
+type TicketWalletProps = {
   onModalChange?: (open: boolean) => void
   initialFilter?: WalletFilter
-}) {
+}
+
+export function TicketWalletScreen(props: TicketWalletProps) {
+  // Re-evaluate the member on legitimate session changes. A same-member
+  // renewal keeps the wallet; another member gets a fresh display instance.
+  useCustomerAccessSession()
+  return <MemberTicketWallet key={getUserId()} {...props} />
+}
+
+function MemberTicketWallet({
+  onModalChange,
+  initialFilter = 'cut',
+}: TicketWalletProps) {
   const userId       = getUserId()
   const reduced      = useReducedMotion() ?? false
   const memberStatus = loadMemberStatus()
@@ -198,24 +208,31 @@ export function TicketWalletScreen({
   const [copied,            setCopied]            = useState(false)
   const [cancelFailed,      setCancelFailed]      = useState(false)
   const [shareFailed,       setShareFailed]       = useState(false)
+  const loadRevision = useRef({ tickets: 0, visit: 0, usage: 0 })
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
   const refreshTickets = useCallback(() => {
+    const revision = ++loadRevision.current.tickets
     getUserTickets(userId)
-      .then(list => { setTickets(list); setTicketsFailed(false) })
-      .catch(() => setTicketsFailed(true)) // 読めた券があればそのまま見せる
+      .then(list => { if (revision !== loadRevision.current.tickets) return; setTickets(list); setTicketsFailed(false) })
+      .catch(() => { if (revision === loadRevision.current.tickets) setTicketsFailed(true) }) // 読めた券があればそのまま見せる
   }, [userId])
 
   const refreshVisit = useCallback(() => {
-    fetchLastVisitDateForUser(userId).then(d => setLastVisitDate(d ?? null)).catch(() => setLastVisitDate(prev => prev === undefined ? null : prev))
+    const revision = ++loadRevision.current.visit
+    fetchLastVisitDateForUser(userId)
+      .then(d => { if (revision === loadRevision.current.visit) setLastVisitDate(d ?? null) })
+      .catch(() => { if (revision === loadRevision.current.visit) setLastVisitDate(prev => prev === undefined ? null : prev) })
   }, [userId])
 
   const refreshTodayUsed = useCallback(async () => {
+    const revision = ++loadRevision.current.usage
     try {
-      setTodayUsedType(await fetchTodayUsedType(userId))
+      const used = await fetchTodayUsedType(userId)
+      if (revision === loadRevision.current.usage) setTodayUsedType(used)
     } catch {
-      setTodayUsedType(null)
+      if (revision === loadRevision.current.usage) setTodayUsedType(null)
     }
   }, [userId])
 
