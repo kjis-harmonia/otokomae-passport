@@ -2,11 +2,15 @@
 //   金の日輪と紅葉の山水に「二代目 銀二郎」の動画（public/opening、音なし・くり返し）。
 //   動画を読み終える前は最初のコマの絵を出す（真っ黒にしない）。動きを減らす設定では絵だけ
 import { motion, useReducedMotion } from 'framer-motion'
+import { useThemeColor } from '../utils/themeColor'
 
 export const OPENING_POSTER = '/opening/opening.jpg'
+const TOP = '#fbf1df' // 動画のいちばん上の色
 
 export function GinjiroLoadingScreen() {
   const still = useReducedMotion()
+  // 上の帯（時計・電池）を動画のいちばん上の色に（11/6「上部、見切れてる」）
+  useThemeColor(TOP)
   return (
     <motion.div
       initial={{ opacity: 1 }}
@@ -18,7 +22,7 @@ export function GinjiroLoadingScreen() {
         position: 'fixed',
         inset: 0,
         zIndex: 9999,
-        background: `#efe8dc url(${OPENING_POSTER}) center / cover no-repeat`,
+        background: `${TOP} url(${OPENING_POSTER}) center / cover no-repeat`,
       }}
     >
       {!still && (
