@@ -71,9 +71,12 @@ export function SbScreen() {
   const loadHpb = useCallback(async () => {
     try { const value = await hpbApi.list(); if (Array.isArray(value?.mails)) setHpb(value) } catch { /* メールの取込一覧が読めなくても予約表は止めない */ }
   }, [])
+  // 予約表を読み直すたびに、黒い帯（新しい予約・取消）も読み直す（11/6 慶一郎さん「キャンセルしたら帯から名前が自動で消えるように」）
+  const loadUnackedRef = useRef<(() => Promise<void>) | null>(null)
   const refresh = useCallback(async (d: string) => {
     const gen = ++generation.current
     void loadHpb()
+    void loadUnackedRef.current?.()
     try {
       const value = await sbApi.ledger(d)
       if (gen !== generation.current || dateRef.current !== d) return
@@ -110,6 +113,7 @@ export function SbScreen() {
     } catch { /* 仕組みが無い・通信切れ：次の読み込みで */ }
   }
   useEffect(() => {
+    loadUnackedRef.current = loadUnacked
     void loadUnacked() // eslint-disable-line react-hooks/set-state-in-effect -- 通信の結果で入れる（同期的な setState ではない）
     const poll = window.setInterval(() => { if (document.visibilityState === 'visible') void loadUnacked() }, 30_000)
     // 画面に戻ったら（iPad のスリープ明け・別のアプリから戻ったとき）すぐ確かめる
