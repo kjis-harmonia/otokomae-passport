@@ -78,6 +78,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const [choosing, setChoosing] = useState(false)
   const [rect, setRect] = useState<Rect | null>(null)
   const [covered, setCovered] = useState(false)
+  // 文字を入れている間（キーボードが出ている間）は吹き出し・◯ を出さない。入力欄とキーボードに重ならないように
+  const [typing, setTyping] = useState(false)
   const stepStarted = useRef(0)
   const scrolledFor = useRef<string | null>(null)
   const hold = paused || covered
@@ -115,6 +117,17 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     if (autoTask) setShared(ns, { task: autoTask, step: 0 })
     else setChoosing(true) // eslint-disable-line react-hooks/set-state-in-effect
   }, [autoOpen, autoTask, paused, ns])
+
+  useEffect(() => {
+    const isText = (el: Element | null) => el instanceof HTMLTextAreaElement
+      || (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'].includes(el.type))
+    const check = () => setTyping(isText(document.activeElement))
+    const later = () => window.setTimeout(check, 0)
+    check()
+    document.addEventListener('focusin', check)
+    document.addEventListener('focusout', later)
+    return () => { document.removeEventListener('focusin', check); document.removeEventListener('focusout', later) }
+  }, [])
 
   // 上に重なるもの（お知らせ・演出）があるか。作業中だけ見る
   useEffect(() => {
@@ -211,7 +224,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
       topLayer(),
     )
   }
-  if (!step) return null
+  if (!step || typing) return null
   // 場所が出ない手順（予約で入っている・券が無い など）は、飛ばすまで何も出さない
   if (step.optional && !rect) return null
 
@@ -228,6 +241,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
       ring = { top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }
     }
   }
+  const alt = step.alts?.find(a => !!findVisible(a.when))
   const vh = window.innerHeight
   const fingerAbove = !ring || ring.top > 76
   // 縦に大きい枠（写真の並びなど）は、上の別のボタンを指して見えないよう 👇 を枠の中に出す
@@ -248,8 +262,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
       )}
       <div className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite">
         <p className="gd-count">{task.title}</p>
-        <p className="gd-text">{step.text}</p>
-        {step.sub && <p className="gd-sub">{step.sub}</p>}
+        <p className="gd-text">{alt ? alt.text : step.text}</p>
+        {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}
         <div className="gd-actions">
           <button type="button" className="gd-ghost" onClick={stop}>ガイドを終わる</button>
           {step.next && <button type="button" className="gd-main" onClick={pressNext}>{step.nextLabel ?? '次へ'}</button>}
