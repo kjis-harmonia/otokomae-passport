@@ -29,7 +29,8 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     sub: '髪型を選んで、日にちと時間を押すだけ',
     steps: [
       HOME,
-      { target: g('home-cards'), next: true, text: 'お好きな髪型を選んでください', sub: '上の言葉で種類が変わり、写真は左右にめくれます。' },
+      { target: g('home-cats'), next: true, text: '髪型の種類を選んでください', sub: '「いつもの」「昭和の漢」などを押すと、髪型の種類が変わります。' },
+      { target: g('home-cards'), next: true, text: 'お好きな髪型の写真を選んでください', sub: '写真は左右にめくれます。' },
       { target: g('home-cta'), noJump: true, text: '下の「AI予約する」を押してください' },
       VERIFY,
       { target: `${g('jn-welcome')}, ${g('jn-askmenu')}`, optional: true, until: g('jn-menu'), text: 'メニューを押してください' },
@@ -97,6 +98,8 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     steps: [
       { target: g('menu-open'), text: '右上の ☰ を押してください', skipIf: `${g('menu-tickets')}, ${g('wallet')}` },
       { target: g('menu-tickets'), text: '「すべてのチケット」を押してください', skipIf: g('wallet') },
+      // お持ちの券は「割引チケット」タブに出る（最初はカットクーポンのタブ）
+      { target: g('wallet-other'), text: '右の「割引チケット」を押してください', skipIf: `${g('wallet-other')}[aria-pressed="true"]` },
       { target: g('wallet'), next: true, noDim: true, text: 'お持ちのチケットが並びます', sub: 'ご来店時は「会員QR」をお見せください。' },
     ],
   },
