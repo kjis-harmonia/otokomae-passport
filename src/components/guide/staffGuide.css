@@ -21,6 +21,21 @@
 @keyframes gd-tap-up { 0%, 100% { margin-top: 6px; } 50% { margin-top: -2px; } }
 @media (prefers-reduced-motion: reduce) { .gd-finger { animation: none; } }
 
+/* ちび銀ちゃん（お客様アプリ）：指先（横42%・縦82%）を押す場所に合わせる。100コマ（横10×縦10）を1秒10コマでくり返す */
+.gd-chibi {
+  position: fixed; z-index: 2147483001; pointer-events: none;
+  width: 85.4px; height: 140px; /* 1コマ 183×300 */
+  transform: translate(-42%, -82%);
+  background: url('/guide/chibi-squat-sprite.webp') 0 0 / 1000% 1000% no-repeat;
+  filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.75)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
+  animation: gd-chibi-x 1s steps(10) infinite, gd-chibi-y 10s steps(10) infinite;
+}
+@keyframes gd-chibi-x { from { background-position-x: 0%; } to { background-position-x: 111.111%; } }
+@keyframes gd-chibi-y { from { background-position-y: 0%; } to { background-position-y: 111.111%; } }
+@media (prefers-reduced-motion: reduce) {
+  .gd-chibi { animation: none; background: url('/guide/chibi-squat.png') center / contain no-repeat; }
+}
+
 .gd-bubble {
   position: fixed; z-index: 2147483002; left: 12px; right: 12px;
   max-width: 520px; margin: 0 auto;

@@ -9,5 +9,5 @@ const WORDS: GuideWords = { kicker: '使い方ガイド', title: '何をしま�
 const COVERS = ['.v2-campaign', '.customer-install-sheet', '.v2-gacha-stage.is-on'].join(', ')
 
 export function CustomerGuide({ paused }: { paused: boolean }) {
-  return <GuideRunner ns="customer" tasks={CUSTOMER_GUIDE_TASKS} openEvent={CUSTOMER_GUIDE_OPEN_EVENT} autoTask="c-hint" paused={paused} pauseWhen={COVERS} words={WORDS} />
+  return <GuideRunner ns="customer" tasks={CUSTOMER_GUIDE_TASKS} openEvent={CUSTOMER_GUIDE_OPEN_EVENT} autoTask="c-hint" paused={paused} pauseWhen={COVERS} words={WORDS} chibi />
 }

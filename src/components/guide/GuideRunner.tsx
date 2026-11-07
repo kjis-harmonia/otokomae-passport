@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronRight } from 'lucide-react'
 import type { GuideStep, GuideTask } from './guideSteps'
@@ -57,9 +57,11 @@ function topLayer(): HTMLElement {
 const isField = (el: EventTarget | null) => el instanceof HTMLSelectElement || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
 
 export type GuideWords = { kicker: string; title: string; lead: string; others: string }
+// お客様アプリは 👇 の代わりに「ちび銀ちゃん」が指さす。絵の指先は 横42%・縦82%、高さ 140px
+const CHIBI = { h: 140, tipX: 0.42, tipY: 0.82, sprite: '/guide/chibi-squat-sprite.webp', still: '/guide/chibi-squat.png' }
 const STAFF_WORDS: GuideWords = { kicker: '使い方ガイド', title: 'これから何を行いますか？', lead: '選ぶと、押す場所を順番に案内します。', others: 'ほかの作業を見る' }
 
-export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, paused = false, pauseWhen, words = STAFF_WORDS }: {
+export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, paused = false, pauseWhen, words = STAFF_WORDS, chibi = false }: {
   ns: string
   tasks: GuideTask[]
   /** このイベントで「これから何を行いますか？」を開く */
@@ -73,6 +75,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   /** これが画面にある間も何も出さない（お知らせのポップアップ・ガチャの演出など） */
   pauseWhen?: string
   words?: GuideWords
+  /** 👇 の代わりにちび銀ちゃんを出す（お客様アプリ） */
+  chibi?: boolean
 }) {
   const [run, setRunState] = useState<Run | null>(() => getShared(ns))
   const [choosing, setChoosing] = useState(false)
@@ -148,6 +152,24 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     const id = window.setInterval(sync, 250)
     return () => window.clearInterval(id)
   })
+
+  // ちび銀ちゃんの絵は、ガイドを始めたときに読む（ホームを開くたびには読まない。「？」の場所の案内では読まない）
+  const quietRun = !!task?.quiet
+  // 吹き出しが上にあるとき、銀ちゃんが吹き出しに隠れないよう、吹き出しの下の端を測っておく
+  const bubbleRef = useRef<HTMLDivElement>(null)
+  const [bubbleBottom, setBubbleBottom] = useState(0)
+  // 毎回測る（同じ値なら set しないので繰り返さない）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const b = bubbleRef.current ? Math.round(bubbleRef.current.getBoundingClientRect().bottom) : 0
+    if (b !== bubbleBottom) setBubbleBottom(b)
+  })
+  useEffect(() => {
+    if (!chibi || !runTask || quietRun) return
+    const img = new Image()
+    // 動きを減らす設定の端末は、止まった1枚だけ
+    img.src = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? CHIBI.still : CHIBI.sprite
+  }, [chibi, runTask, quietRun])
 
   // 場所を探して ◯ を合わせる・済んだ手順は飛ばす
   useEffect(() => {
@@ -266,6 +288,11 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const fingerInside = !!ring && ring.height > 220
   // 高い枠（一覧・予約できました など）は上を読むので、吹き出しは下に
   const bubbleTop = !!ring && ring.height <= vh - 214 && ring.top + ring.height / 2 > vh * 0.55
+  // 指先の位置（👇 の先と同じ所）
+  const tipTop = ring ? (fingerInside ? ring.top + Math.min(ring.height / 2, 160) : ring.top - 6) : 0
+  // ちび銀ちゃん：体が画面の上に入らないとき（押す場所が上の方）は出さない
+  const chibiTop = tipTop - CHIBI.h * CHIBI.tipY
+  const chibiFits = !!ring && (fingerInside || fingerAbove) && chibiTop >= 8 && !(bubbleTop && chibiTop < bubbleBottom + 4)
 
   return createPortal(
     <>
@@ -274,13 +301,15 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
           <div className={`gd-ring${round ? ' is-round' : ''}${step.noDim ? ' is-clear' : ''}`} aria-hidden="true"
             style={{ top: ring.top, left: ring.left, width: ring.width, height: ring.height }} />
           {/* 読むだけの手順（予約できました など）は指を出さない。日時やタイトルにかぶるので */}
-          {!step.read && <div className={`gd-finger${fingerAbove || fingerInside ? '' : ' is-below'}`} aria-hidden="true"
+          {!step.read && chibi && chibiFits && <div className="gd-chibi" aria-hidden="true"
+            style={{ left: ring.left + ring.width / 2, top: tipTop }} />}
+          {!step.read && !chibi && <div className={`gd-finger${fingerAbove || fingerInside ? '' : ' is-below'}`} aria-hidden="true"
             style={{ left: ring.left + ring.width / 2, top: fingerInside ? ring.top + Math.min(ring.height / 2, 160) : fingerAbove ? ring.top - 6 : ring.top + ring.height + 6 }}>
             {fingerAbove || fingerInside ? '👇' : '👆'}
           </div>}
         </>
       )}
-      <div className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite">
+      <div ref={bubbleRef} className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite">
         <p className="gd-count">{task.title}</p>
         <p className="gd-text">{alt ? alt.text : step.text}</p>
         {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}
