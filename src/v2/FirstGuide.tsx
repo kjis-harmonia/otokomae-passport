@@ -9,6 +9,7 @@ import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { canBeUsual, setUsualMenu, usualMenuOrder } from '../features/johnny/usualMenu'
 import { requestJohnny } from '../features/johnny/bookingIntent'
 import { loadUsual } from './usualPicks'
+import { addUsualMember, getUsualMembers, type UsualMember } from '../features/johnny/usualMembers'
 import { SHOP_PHONE_TEL } from '../data/wallet'
 
 type Menu = { code: string; name: string; duration_min: number; price: number | null }
@@ -23,6 +24,12 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
   const [saved, setSaved] = useState<Menu | null>(null)
   // 並びすぎないように、決めた7つだけ。ほかは「ほかのメニューを見る」で（11/6 慶一郎さん「メニュー並び過ぎて、たいぎい」）
   const [showAll, setShowAll] = useState(false)
+  // いつものを決めたあと：ご一緒に来られる方（いつものメンバー）を登録して、終わったらホームへ（11/7 慶一郎さん：最初にメニューとお連れ様を決めてからホーム）
+  //   ask＝いますか？・name＝お名前・menu＝その方のメニュー・done＝準備ができました。2名まで（3名の予約に合わせる）
+  const [mates, setMates] = useState<UsualMember[]>([])
+  const [mateStep, setMateStep] = useState<'ask' | 'name' | 'menu' | 'done'>('ask')
+  const [mateName, setMateName] = useState('')
+  const [mateAll, setMateAll] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -31,7 +38,16 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
     return () => { live = false }
   }, [visited])
 
-  const save = (m: Menu) => { setUsualMenu({ code: m.code, name: m.name }); setSaved(m) }
+  const save = (m: Menu) => { setUsualMenu({ code: m.code, name: m.name }); setSaved(m); setMates(getUsualMembers().slice(0, 2)); setMateStep('ask') }
+  const addMate = (m: Menu) => {
+    const name = mateName.trim()
+    if (!name) return
+    addUsualMember({ name, menuCode: m.code })
+    setMates(prev => [...prev.filter(x => x.name !== name), { name, menuCode: m.code }])
+    setMateName(''); setMateAll(false); setMateStep('done')
+  }
+  const menuName = (code: string) => menus?.find(m => m.code === code)?.name ?? ''
+  const input: React.CSSProperties = { width: '100%', minHeight: 52, marginTop: 16, padding: '0 16px', boxSizing: 'border-box', borderRadius: 14, border: '1px solid var(--v2-line, rgba(70,55,34,.1))', background: '#fff', color: 'inherit', fontSize: 17 }
   const featuredCount = menus ? menus.filter(m => FEATURED.includes(m.code)).length : 0
   const lastMenu = last ? menus?.find(m => m.code === last.code) ?? null : null
 
@@ -46,12 +62,52 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
   return (
     <div role="dialog" aria-modal="true" aria-label="はじめに" className="v2" style={sheet}>
       <div style={{ maxWidth: 440, margin: '0 auto' }}>
-        {saved ? (
+        {saved && mateStep === 'ask' ? (
           <>
-            <h2 style={{ margin: 0, font: '700 22px/1.5 var(--v2-serif)' }}>いつものを「{saved.name}」にしました</h2>
-            <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: 1.7, color: 'var(--v2-sub)' }}>次からはホームの「いつもの」を押すだけで予約できます。</p>
+            <h2 style={{ margin: 0, font: '700 22px/1.5 var(--v2-serif)' }}>ご一緒に来られる方はいますか？</h2>
+            <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: 1.7, color: 'var(--v2-sub)' }}>ご家族やお友だちのお名前とメニューを登録しておくと、2名以上の予約もお名前を押すだけでできます。</p>
             <div style={{ marginTop: 24, display: 'grid', gap: 10 }}>
-              <button type="button" style={primary} onClick={() => { onClose(); requestJohnny({ menuCode: saved.code, label: saved.name, usual: true }) }}>このメニューでAI予約する</button>
+              <button type="button" style={primary} onClick={() => setMateStep('name')}>登録する</button>
+              <button type="button" style={quiet} onClick={() => setMateStep('done')}>いない</button>
+            </div>
+          </>
+        ) : saved && mateStep === 'name' ? (
+          <>
+            <h2 style={{ margin: 0, font: '700 22px/1.5 var(--v2-serif)' }}>ご一緒の方のお名前</h2>
+            <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: 1.7, color: 'var(--v2-sub)' }}>お店でお呼びするお名前です。下のお名前だけでも大丈夫です。</p>
+            <input style={input} value={mateName} onChange={e => setMateName(e.target.value)} maxLength={20} autoComplete="off" enterKeyHint="next" aria-label="ご一緒の方のお名前"
+              onKeyDown={e => { if (e.key === 'Enter' && mateName.trim()) setMateStep('menu') }} />
+            <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+              <button type="button" style={primary} disabled={!mateName.trim()} onClick={() => setMateStep('menu')}>次へ</button>
+              <button type="button" style={quiet} onClick={() => { setMateName(''); setMateStep(mates.length ? 'done' : 'ask') }}>戻る</button>
+            </div>
+          </>
+        ) : saved && mateStep === 'menu' ? (
+          <>
+            <h2 style={{ margin: 0, font: '700 22px/1.5 var(--v2-serif)' }}>{mateName.trim()}さんのいつものメニュー</h2>
+            <div style={card}>
+              {(mateAll ? menus : menus?.slice(0, featuredCount))?.map(m => (
+                <button key={m.code} type="button" style={row} onClick={() => addMate(m)}>
+                  <span>{m.name}</span><span style={{ fontSize: 14, color: 'var(--v2-sub)' }}>{yen(m.price)}</span>
+                </button>
+              ))}
+              {!mateAll && (menus?.length ?? 0) > featuredCount && (
+                <button type="button" style={{ ...row, justifyContent: 'center', color: 'var(--v2-sub)', fontSize: 15 }} onClick={() => setMateAll(true)}>ほかのメニューを見る（{(menus?.length ?? 0) - featuredCount}）</button>
+              )}
+            </div>
+            <button type="button" style={quiet} onClick={() => setMateStep('name')}>戻る</button>
+          </>
+        ) : saved ? (
+          <>
+            <h2 style={{ margin: 0, font: '700 22px/1.5 var(--v2-serif)' }}>準備ができました</h2>
+            <div style={card}>
+              <div style={{ ...row, cursor: 'default' }}><span>いつもの</span><span style={{ fontSize: 15 }}>{saved.name}</span></div>
+              {mates.map(m => <div key={m.name} style={{ ...row, cursor: 'default' }}><span>{m.name}さん</span><span style={{ fontSize: 15 }}>{menuName(m.menuCode)}</span></div>)}
+            </div>
+            <p style={{ margin: '12px 2px 0', fontSize: 14, lineHeight: 1.7, color: 'var(--v2-sub)' }}>次からはホームの「いつもの」を押すだけで予約できます。{mates.length ? 'ご一緒の予約は「2名以上で予約する」からどうぞ。' : ''}あとから変えられます。</p>
+            {mates.length < 2 && <button type="button" style={{ ...quiet, marginTop: 4 }} onClick={() => setMateStep('name')}>{mates.length ? 'もう1人登録する' : 'ご一緒の方を登録する'}</button>}
+            <div style={{ marginTop: 20, display: 'grid', gap: 10 }}>
+              <button type="button" style={primary} onClick={() => { onClose(); requestJohnny({ menuCode: saved.code, label: saved.name, usual: true }) }}>いつものでAI予約する</button>
               <button type="button" style={quiet} onClick={onClose}>ホームへ</button>
             </div>
           </>
@@ -66,8 +122,8 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
           </>
         ) : (
           <>
-            <h2 style={{ margin: 0, font: '700 22px/1.5 var(--v2-serif)' }}>{visited ? 'いつものメニューは？' : 'メニューを選んでください'}</h2>
-            <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: 1.7, color: 'var(--v2-sub)' }}>選んだメニューが「いつもの」になります。あとから変えられます。</p>
+            <h2 style={{ margin: 0, font: '700 22px/1.5 var(--v2-serif)' }}>いつものメニューを決めましょう</h2>
+            <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: 1.7, color: 'var(--v2-sub)' }}>決めておくと、次からホームの「いつもの」を押すだけで予約できます。あとから変えられます。</p>
             <a href={SHOP_PHONE_TEL} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, minHeight: 48, borderRadius: 14, border: '1px solid var(--v2-line, rgba(70,55,34,.1))', background: '#fff', color: 'inherit', fontSize: 15, textDecoration: 'none' }}>
               <Phone size={18} aria-hidden="true" />髪型に迷ったらお電話ください
             </a>
