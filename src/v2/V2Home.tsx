@@ -13,6 +13,7 @@ import type { StyleCard } from '../data/styleCard'
 import { V2GinpayBar } from './V2GinpayBar'
 import { loadUsual, type Usual } from './usualPicks'
 import { getCustomerSession } from '../utils/customerSession'
+import { V2PeopleSheet } from './V2PeopleSheet'
 
 const yen = (n: number) => `¥${n.toLocaleString()}`
 
@@ -45,6 +46,8 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const styles = useMemo(() => loadStyles().filter(s => s.isPublished), [])
   const [cat, setCat] = useState<string>(UI_CATEGORIES[0].id)
   const [usual, setUsual] = useState<Usual>(null)
+  // 「いつものでAI予約する」：まずどなたのご予約か（ご本人・お連れ様）を選ぶ（11/8）
+  const [peopleOpen, setPeopleOpen] = useState(false)
   const touched = useRef(false)
   const catsRail = useRef<HTMLDivElement>(null)
   const [index, setIndex] = useState(0)
@@ -117,6 +120,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const reserve = () => {
     // いつものでメニューが分からないときは、メニューを決めずに Johnny（おかえりなさい から聞く）
     if (!selected) { requestJohnny({ menuCode: null, label: '' }); return }
+    if (selected.kind === 'usual') { setPeopleOpen(true); return }
     requestJohnny({ menuCode: selected.code, label: selected.label, usual: selected.kind !== 'style', group: selected.kind === 'group' })
   }
   const price = selected ? itemPrice(selected) : null
@@ -175,6 +179,9 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
         </span>
         <span className="v2-cta-go" aria-hidden="true"><ArrowRight size={20} /></span>
       </button>
+      <V2PeopleSheet open={peopleOpen} onClose={() => setPeopleOpen(false)}
+        ownerMenu={usual?.menu ? { code: usual.menu.code, name: usual.menu.name } : null}
+        onBook={(person, menuCode, label) => { setPeopleOpen(false); requestJohnny({ menuCode, label, usual: true, person }) }} />
     </>
   )
 }

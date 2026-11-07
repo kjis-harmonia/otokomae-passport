@@ -29,7 +29,8 @@ import { buildWelcome, welcomeText, type Welcome } from './welcome'
 import { takeAiTurn } from './aiQuota'
 import { PushToggle } from '../../components/PushToggle'
 import { canBeUsual, getUsualMenu, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from './usualMenu'
-import { addUsualMember, getUsualMembers, isUsualMember, type UsualMember } from './usualMembers'
+import { addUsualMember, companionIdFor, fetchPeople, getUsualMembers, isUsualMember, type UsualMember } from './usualMembers'
+import { isPermOnlyCoupon } from '../../utils/welcomeCoupon'
 import { pushState } from '../../utils/webPush'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
@@ -142,6 +143,8 @@ interface Props {
   initialManage?: boolean
   /** ホームの「2名以上で予約する」から：ご本人の日時と担当が決まったら、お連れ様のメニューを聞く */
   initialGroup?: boolean
+  /** いつものの「どなたのご予約ですか？」でお連れ様を選んだ（11/8）。その方の予約として取る（メンテナンスはその方の14日・Welcome 券は使わない） */
+  initialPerson?: { id: string; name: string } | null
 }
 
 /** 「戻る」で戻れる画面（読み込み中・送信中・終わった画面は数えない） */
@@ -242,7 +245,9 @@ const pausedStep = (s?: AiBookingStatus | null): Step => ({ k: 'ai', say: paused
 
 const BUSINESS_ERRORS = new Set(['slot_taken', 'too_late', 'date_not_open', 'invalid_starts_at', 'menu_not_available', 'hold_expired', 'hold_not_found'])
 
-export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null, initialLabel = null, initialUsual = false, initialGroup = false, initialManage = false }: Props) {
+export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = null, initialLabel = null, initialUsual = false, initialGroup = false, initialManage = false, initialPerson = null }: Props) {
+  // 施術を受けるお連れ様（開いたときに決まる。途中では変えない）
+  const [person] = useState(initialPerson)
   const viewportRef = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
     if (viewportRef.current) return observeVisibleViewport(viewportRef.current)
@@ -277,9 +282,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   const [myReservations, setMyReservations] = useState<CustomerReservation[]>([])
   // ご本人の予約は1つまで（お連れ様の予約は数えない）。新しく予約するときに本人の予約があれば「キャンセルしてこちらにしますか？」＝変更として確定する
   // ご本人の予約（お連れ様の予約は入れ替えの対象にしない。別の端末でも DB のつながりで見分ける）
-  const ownActive = useMemo(() => pickNext(myReservations.filter(r => !isCompanion(r))), [myReservations])
+  // お連れ様の予約のときは、その方の予約だけ（会員本人の予約を入れ替えない・11/8）
+  const ownActive = useMemo(() => pickNext(myReservations.filter(r => person ? r.companion_id === person.id : !isCompanion(r))), [myReservations, person])
   // お電話のクーポン予約（端末に覚えた予約日つきのメモ）。AI 予約を取ったら、これと入れ替える（ご予約は1つ）
-  const [phoneReservation] = useState(loadCurrentReservation)
+  const [phoneReservation] = useState(() => (person ? null : loadCurrentReservation()))
   const ownActiveRef = useRef(ownActive)
   useEffect(() => { ownActiveRef.current = ownActive }, [ownActive])
   /** 確定のときに入れ替える予約（変更ならその予約、新規でも本人の予約があればそれ） */
@@ -397,7 +403,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         if (!alive) return
         setOptions(opts)
         setMyReservations(list)
-        api.tickets().then(setMyTickets).catch(() => {})
+        // Welcome クーポンは会員本人の施術だけ（お連れ様の予約では出さない・11/8）
+        api.tickets().then(list => setMyTickets(person ? list.filter(t => !isPermOnlyCoupon(t)) : list)).catch(() => {})
         // 当日キャンセル・無断キャンセルのあと：新しい予約は電話へ。今の予約の確認・キャンセルはできる
         if (aiStatus?.paused) { setStep(pausedStep(aiStatus)); return }
         // 前回のメニュー（キャンセル以外で一番新しい予約）を選択肢の先頭に出す
@@ -418,7 +425,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
         // 登録したいつものメニューがあれば、それを「いつもの」の先頭に
         const reg = getUsualMenu()
         const regMenu = reg && canBeUsual(reg.code) ? opts.menus.find(m => m.code === reg.code) : undefined
-        setMaintLeft(w0?.maintenanceLeft ?? null)
+        // メンテナンスカット：受ける人の14日（その方が対象メニューの施術を終えてから）。サーバーの記録で決める（11/8）
+        setMaintLeft(person ? null : w0?.maintenanceLeft ?? null)
+        if (person) void fetchPeople().then(p => { if (alive) setMaintLeft(p.companions.find(c => c.id === person.id)?.days_left ?? null) }, () => {})
         // いつものは1つだけ（パンチパーマの人に通常カットは出さない・10/29 慶一郎さん）：登録したもの、なければ来店でいちばん多いもの
         const w = w0 ? { ...w0, usual: (regMenu ? [regMenu] : w0.usual).slice(0, 1) } : w0
         if (w) {
@@ -504,6 +513,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
   }, [step])
   const [usualDone, setUsualDone] = useState<string | null>(null)
   const [usualMembers, setUsualMembers] = useState(getUsualMembers)
+  // お連れ様の一覧は会員の記録から読み直す（ほかの端末で登録した方も出る・11/8）
+  useEffect(() => { let live = true; void fetchPeople().then(() => { if (live) setUsualMembers(getUsualMembers()) }, () => {}); return () => { live = false } }, [])
   const [memberSaved, setMemberSaved] = useState<string | null>(null)
   const initialMenuRef = useRef(initialMenuCode)
   const initialLabelRef = useRef(initialLabel)
@@ -721,9 +732,9 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     stopListening()
     let holdId: string | null = null
     try {
-      const hold = await api.hold(slot.starts_at, menu.code, staffId)
+      const hold = await api.hold(slot.starts_at, menu.code, staffId, person?.id ?? null)
       holdId = hold.hold_id
-      const reservation = await api.confirm(hold.hold_id)
+      const reservation = await api.confirm(hold.hold_id, null, person?.id ?? null)
       const oldHeld = change ? heldFor(ginpayRef.current, change.id) : null
       // 変更：新しい予約が取れてから、元の予約をキャンセルする（取り消せなければ両方残っていることを伝える）
       let oldKept = false
@@ -878,8 +889,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
     const staff = optionsRef.current?.staff ?? []
     const order = (want: string | null) => [...staff.filter(st => st.id === want), ...staff.filter(st => st.id !== want)]
     const take = async (p: GroupPerson, note?: string): Promise<CustomerReservation | null> => {
+      // お連れ様は会員の記録に登録して番号で予約（受ける人ごとの記録・メンテナンスの14日のため・11/8）。登録できなければ今までどおりメモだけ
+      const pid = note ? await companionIdFor(p.name ?? '', p.menu.code) : null
+      if (note && !pid && p.menu.code === 'maintenance') return null
       for (const st of order(p.staffId)) {
-        try { const hold = await api.hold(p.at, p.menu.code, st.id); return await api.confirm(hold.hold_id, note) } catch { /* 次の担当で */ }
+        try { const hold = await api.hold(p.at, p.menu.code, st.id, pid); return await api.confirm(hold.hold_id, note, pid) } catch { /* 次の担当で */ }
       }
       return null
     }
@@ -911,10 +925,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       let companion: CustomerReservation | undefined
       const staff = optionsRef.current?.staff ?? []
       const order = companionPickRef.current ? staff.filter(st => st.id === companionPickRef.current) : staff.filter(st => !s.companionFree || s.companionFree.includes(st.id))
-      for (const st of order) {
+      const pid = await companionIdFor(s.companion.name, s.companion.menu.code)
+      for (const st of (!pid && s.companion.menu.code === 'maintenance' ? [] : order)) {
         try {
-          const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id)
-          companion = await api.confirm(hold.hold_id, `お連れ様：${s.companion.name}様`)
+          const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id, pid)
+          companion = await api.confirm(hold.hold_id, `お連れ様：${s.companion.name}様`, pid)
           rememberCompanion(companion.id, s.companion.name)
           try { await linkCompanion(booked.id, companion.id) } catch { /* 端末の記録では見分けられる */ }
           break
@@ -963,10 +978,11 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
       const staff = optionsRef.current?.staff ?? []
       // お連れ様が担当を選んでいたら、その人だけ
       const order = companionPickRef.current ? staff.filter(st => st.id === companionPickRef.current) : [...staff.filter(st => st.id !== s.primary.staffId), ...staff.filter(st => st.id === s.primary.staffId)]
-      for (const st of order) {
+      const pid = await companionIdFor(s.companion.name, s.companion.menu.code)
+      for (const st of (!pid && s.companion.menu.code === 'maintenance' ? [] : order)) {
         try {
-          const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id)
-          companion = await api.confirm(hold.hold_id, `お連れ様：${s.companion.name}様`)
+          const hold = await api.hold(s.companion.slot.starts_at, s.companion.menu.code, st.id, pid)
+          companion = await api.confirm(hold.hold_id, `お連れ様：${s.companion.name}様`, pid)
           rememberCompanion(companion.id, s.companion.name)
           try { await linkCompanion(reservation.id, companion.id); linked = true } catch { /* 端末の記録では見分けられる。無料券はお連れ様に使えない */ }
           break
@@ -1626,6 +1642,10 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
             data-guide={step.k === 'done' ? 'jn-done' : step.k === 'groupDone' ? 'jn-group-done' : undefined}
           >
+            {/* お連れ様の予約：どなたの予約かをずっと見えるところに（11/8） */}
+            {person && step.k !== 'done' && step.k !== 'contact' && (
+              <p style={{ margin: '12px 0 0', padding: '4px 12px', borderRadius: 999, background: C.fill, color: C.secondary, fontSize: 13, fontWeight: 600 }}>{person.name}様のご予約</p>
+            )}
             {prompt.title && (
               <h1 className="johnny-question-title" style={{ margin: '20px 0 0', fontSize: step.k === 'ai' && prompt.title.length > 24 ? 20 : 26, fontWeight: 600, lineHeight: 1.3, textAlign: 'center', letterSpacing: '-0.01em' }}>
                 {prompt.title}
@@ -1703,7 +1723,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                 <ReservationSummary r={step.primary} />
                 {step.companions.map((c, i) => c.r ? <ReservationSummary key={i} r={c.r} companion /> : null)}
                 {step.companions.filter(c => c.r && !isUsualMember(c.name) && memberSaved !== c.name).map(c => (
-                  <button key={c.name} type="button" onClick={() => { if (addUsualMember({ name: c.name, menuCode: c.menuCode })) { setMemberSaved(c.name); setUsualMembers(getUsualMembers()) } }}
+                  <button key={c.name} type="button" onClick={() => { void addUsualMember({ name: c.name, menuCode: c.menuCode }).then(ok => { if (ok) { setMemberSaved(c.name); setUsualMembers(getUsualMembers()) } }) }}
                     style={{ marginTop: 10, minHeight: 44, padding: '0 18px', borderRadius: 12, border: `1px solid ${C.separator}`, background: C.fill, color: C.text, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
                     {c.name}様をいつものメンバーに追加
                   </button>
@@ -1929,7 +1949,7 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
             {step.k === 'done' && step.companion && step.companionName && step.companionMenuCode && (memberSaved === step.companionName
               ? <p style={{ margin: '12px 0 0', fontSize: 13, color: C.secondary, textAlign: 'center' }}>{step.companionName}様を、いつものメンバーに追加しました。</p>
               : !isUsualMember(step.companionName) && (
-                <button type="button" onClick={() => { const d = step as Extract<Step, { k: 'done' }>; if (addUsualMember({ name: d.companionName!, menuCode: d.companionMenuCode! })) { setMemberSaved(d.companionName!); setUsualMembers(getUsualMembers()) } }}
+                <button type="button" onClick={() => { const d = step as Extract<Step, { k: 'done' }>; void addUsualMember({ name: d.companionName!, menuCode: d.companionMenuCode! }).then(ok => { if (ok) { setMemberSaved(d.companionName!); setUsualMembers(getUsualMembers()) } }) }}
                   style={{ marginTop: 12, minHeight: 44, padding: '0 18px', borderRadius: 12, border: `1px solid ${C.separator}`, background: C.fill, color: C.text, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
                   {step.companionName}様をいつものメンバーに追加
                 </button>

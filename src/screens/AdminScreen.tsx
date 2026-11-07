@@ -20,6 +20,8 @@ import { StgBadge } from '../components/StgBadge'
 import { isReservationForDate } from '../utils/currentReservation'
 import type { VisitInfo } from '../components/VisitMenuPicker'
 import { MemberCheckout } from '../components/MemberCheckout'
+import { PartyCheckIn } from '../components/PartyCheckIn'
+import { fetchTodayParty, partyNeedsAsk, type PartyEntry } from '../utils/partyCheckIn'
 import { resolveMemberQr } from '../utils/memberQrIdentity'
 import {
   canUseDiscountType, playSuccessSound, playWarningSound, checkInVisit,
@@ -279,6 +281,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   // Checkin
   const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+  // 今日のご予約が2名以上・お連れ様のご予約があるとき：来た方だけ受付（11/8）
+  const [partyAsk, setPartyAsk] = useState<{ userId: string; party: PartyEntry[] } | null>(null)
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
   const [, setVisitInfo]         = useState<VisitInfo | null>(null)
 
@@ -394,6 +398,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           // チケットの QR でも会員QR と同じく来店チェックインまで済ませ、お会計を出す（10/28：チェックインを押さないとお会計が出なかった）
           setCheckInStatus('loading')
           setCheckInDate(null)
+          void fetchTodayParty(tuData.userId).then(p => { if (partyNeedsAsk(p)) setPartyAsk({ userId: tuData.userId, party: p }) })
           try {
             const visit = await checkInVisit(tuData.userId)
             setCheckInDate(visit.date)
@@ -481,7 +486,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       setSelectedTicketIds(ctx.tickets.filter(t => passportData.ticketIds!.includes(t.id) && !t.used && !t.pending_transfer
         && (!t.expires_at || new Date(t.expires_at) > now) && canUseDiscountType(ctx.today_used_type, t.type) && !isWelcomeCouponBlockedToday(t)).map(t => t.id))
     }
-    // 会員QRの読み取り＝来店登録（14日サイクルを本日からリセット）
+    // 会員QRの読み取り＝来店の記録（14日は対象メニューの会計の完了から・11/8）。今日のご予約が2名以上・お連れ様なら、来た方を聞いて受付
+    void fetchTodayParty(passportData.userId).then(p => { if (partyNeedsAsk(p)) setPartyAsk({ userId: passportData.userId, party: p }) })
     setCheckInStatus('loading')
     try {
       const visit = await checkInVisit(passportData.userId)
@@ -1928,6 +1934,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       )}
 
       {/* ── Confirmation modal ── */}
+      {partyAsk && (
+        <PartyCheckIn userId={partyAsk.userId} party={partyAsk.party} staffName={staffId} onDone={() => setPartyAsk(null)} />
+      )}
+
       {showConfirm && scannedData && (
         <div
           onClick={() => setShowConfirm(false)}

@@ -43,8 +43,8 @@ export function buildWelcome(lastVisit: string | null, reservations: readonly Cu
   const last = dates[dates.length - 1]
   if (!last) return null
   const days = dayDiff(last, today)
-  // メンテナンスは QR の来店チェックインの日だけで数える（予約の日は使わない）
-  const qrDays = [lastVisit?.slice(0, 10), ...visits.map(v => v.visit_date.slice(0, 10))].filter((d): d is string => !!d && d <= today).sort()
+  // メンテナンスは、対象メニューの施術を終えた（会計の完了）日だけで数える（customer_get_last_visit。受付だけの日・予約の日は使わない・11/8）
+  const qrDays = [lastVisit?.slice(0, 10)].filter((d): d is string => !!d && d <= today).sort()
   const qrLast = qrDays[qrDays.length - 1]
   const qrSince = qrLast ? dayDiff(qrLast, today) : null
   const menuOf = (code: string | null) => (code === 'maintenance' ? MAINTENANCE_MENU : code ? menus.find(m => m.code === code) ?? null : null)

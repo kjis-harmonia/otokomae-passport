@@ -30,6 +30,8 @@ export interface CustomerReservation {
   companion_of?: string | null
   /** お連れ様のお名前（予約メモ「お連れ様：〇〇様」から） */
   companion_name?: string | null
+  /** 施術を受けるお連れ様（サーバーに登録したお連れ様の番号・11/8）。null＝会員本人 */
+  companion_id?: string | null
 }
 
 /** お連れ様の予約をご本人の予約につなぐ（つながらなくても予約はそのまま。別の端末でも見分けられるように） */
@@ -67,9 +69,10 @@ export interface BookingAssistantApi {
   /** 近い日から空きを探す（早い順） */
   nextSlots(menuCode: string, from: string, limit?: number): Promise<Slot[]>
   /** staffId があればその担当で押さえる（指名） */
-  hold(startsAt: string, menuCode: string, staffId?: string | null): Promise<Hold>
+  /** personId：施術を受けるお連れ様（登録した番号）。渡さなければ会員本人（11/8） */
+  hold(startsAt: string, menuCode: string, staffId?: string | null, personId?: string | null): Promise<Hold>
   /** note はお店に見えるメモ（お連れ様など） */
-  confirm(holdId: string, note?: string | null): Promise<CustomerReservation>
+  confirm(holdId: string, note?: string | null, personId?: string | null): Promise<CustomerReservation>
   release(holdId: string): Promise<void>
   reservations(): Promise<CustomerReservation[]>
   /** AI 予約が止まっているか。仕組みが無い環境では無い */
@@ -110,8 +113,13 @@ export const customerBookingApi: BookingAssistantApi = {
   staffSlots: (date, menuCode, staffId) => callCustomerRpc<Slot[]>('customer_available_slots', { p_date: date, p_menu_codes: [menuCode], p_staff_id: staffId }),
   dayOverview: date => callCustomerRpc<DayOverview>('customer_day_overview', { p_date: date }),
   nextSlots: (menuCode, from, limit = 10) => callCustomerRpc<Slot[]>('customer_next_slots', { p_menu_codes: [menuCode], p_from: from, p_limit: limit }),
-  hold: (startsAt, menuCode, staffId = null) => callCustomerRpc<Hold>('customer_create_hold', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: staffId }),
-  confirm: (holdId, note = null) => callCustomerRpc<CustomerReservation>('customer_confirm_reservation', { p_hold_id: holdId, p_note: note }),
+  // お連れ様（登録した番号あり）は、受ける人を付けて押さえ・確定する（メンテナンスカットはその方の14日で判定・お店の表示は「お連れ様：〇〇様」）
+  hold: (startsAt, menuCode, staffId = null, personId = null) => personId
+    ? callCustomerRpc<Hold>('customer_create_hold_for', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: staffId, p_companion: personId })
+    : callCustomerRpc<Hold>('customer_create_hold', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: staffId }),
+  confirm: (holdId, note = null, personId = null) => personId
+    ? callCustomerRpc<CustomerReservation>('customer_confirm_for', { p_hold_id: holdId, p_companion: personId })
+    : callCustomerRpc<CustomerReservation>('customer_confirm_reservation', { p_hold_id: holdId, p_note: note }),
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),

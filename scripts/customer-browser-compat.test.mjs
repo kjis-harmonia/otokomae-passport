@@ -34,6 +34,7 @@ function homeFixture(empty = false) {
     './V2GinpayBar': { V2GinpayBar: 'ginpay' },
     './usualPicks': { loadUsual: async () => null },
     '../utils/customerSession': { getCustomerSession: () => null },
+    './V2PeopleSheet': { V2PeopleSheet: () => null },
   }
   context.require = name => { assert.ok(modules[name], name); return modules[name] }
   vm.runInContext(compile(homeSource), context)
