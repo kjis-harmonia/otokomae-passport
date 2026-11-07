@@ -1,6 +1,8 @@
 // 登録直後の「いつものメニュー」決め：銀ちゃんと話して決める（11/8 慶一郎さん「話すことを画面の主役に」「極限まで削ぎ落とし、極限まで美しく」）
 //   ・最初は銀ちゃんとひとこと、ガラスの入力欄「銀ちゃんとAIで話して決める」だけ。一覧と HOT PEPPER は下に控えめに
-//   ・話した言葉から、AI予約と同じメニューの読み取り（matchMenu）で探す。あいまいなら候補を出して聞き返す。勝手に決めない
+//   ・銀ちゃん（johnny-agent の mode: usual）が相談に乗る。質問には答え、「ちがう」は何が違うか聞き、同じメニューを押しつけない
+//   ・登録の確認へ進むのは、お客様が「それで」と決めたとき・メニューの名前だけを言ったとき・紹介のボタンを押したときだけ
+//   ・AI が使えんときだけ、AI予約と同じメニューの読み取り（matchMenu）の決まった規則で続ける
 //   ・決める前に、正式なメニュー名と料金で必ず確かめる
 //   ・対象メニューならメンテナンスカットのご希望、つぎにお連れ様（3名まで。お連れ様も対象ならメンテナンスを聞く）
 //   ・終わったらホームへ。店頭で本人確認が済んだ方だけ「お店で決めてもらう」で飛ばせる
@@ -72,6 +74,8 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
   const nextId = useRef(1)
   // 銀ちゃん（AI）に送る、これまでの会話
   const turnsRef = useRef<AgentTurn[]>([])
+  // 「ちがう」と言われたメニュー（もう一度すすめない）
+  const rejectedRef = useRef<Set<string>>(new Set())
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const matesRef = useRef(mates)
@@ -123,33 +127,42 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
       { label: 'まだ迷うとる', act: () => hear(who, '迷う') },
     ], { k: 'menu', who })
   }
-  /** お客様の言葉 → メニュー */
-  /** お客様の言葉 → メニュー。名前がそのまま分かればすぐ確かめる。それ以外は銀ちゃん（AI）と話す。AI が使えんときは決まった規則で */
-  const hear = (who: Who, said: string) => {
-    you(said)
+  /** お客様の言葉 → 銀ちゃん（AI）と相談する。
+   *  すぐ登録の確認へ進むのは「アイパー」「アイパーで」のように、メニューの名前だけを言われたときだけ。
+   *  質問・相談・「おすすめは？」は AI が答える。AI の紹介（suggestions）はボタンにするだけで、決定（ready）はお客様が「それで」と言ったときだけ */
+  const hear = (who: Who, said: string, echo = true) => {
+    if (echo) you(said)
     const all = menus ?? []
-    const hit = matchMenu(said, all)
-    if (hit) { turnsRef.current.push({ role: 'user', text: said }); check(who, hit); return }
-    setChips([]); setAsk({ k: 'none' }); setTyping(true)
-    const history = turnsRef.current.slice()
+    const plain = said.normalize('NFKC').replace(/[\s。、！!]/g, '').replace(/(でお願い(します)?|でおねがい|にする|でええ|で)$/, '')
+    const exact = all.find(m => m.name.normalize('NFKC').replace(/\s/g, '') === plain && !rejectedRef.current.has(m.code))
     turnsRef.current.push({ role: 'user', text: said })
-    void askUsualAi(said, history, { visited, who: who.kind === 'mate' ? who.name : null }).then(r => {
+    if (exact) { check(who, exact); return }
+    talk(who, said)
+  }
+  /** 銀ちゃん（AI）に聞く。これまでの会話・「ちがう」と言われたメニューも一緒に送る */
+  const talk = (who: Who, said: string) => {
+    const all = menus ?? []
+    setChips([]); setAsk({ k: 'none' }); setTyping(true)
+    const history = turnsRef.current.slice(0, -1)
+    void askUsualAi(said, history, { visited, who: who.kind === 'mate' ? who.name : null, rejected: [...rejectedRef.current] }).then(r => {
       setTyping(false)
       if (!r) { hearByRules(who, said); return }
       turnsRef.current.push({ role: 'assistant', text: r.say })
-      const one = r.menu_code ? all.find(m => m.code === r.menu_code) : undefined
-      if (one) { check(who, one, r.say); return }
-      const opts = r.options.map(c => all.find(m => m.code === c)).filter((m): m is Menu => !!m)
-      const chips: Chip[] = opts.map(m => ({ label: m.name, sub: yen(m.price), act: () => { you(m.name); turnsRef.current.push({ role: 'user', text: m.name }); check(who, m) } }))
+      const ready = r.ready ? all.find(m => m.code === r.ready) : undefined
+      if (ready) { check(who, ready, r.say); return }
+      const opts = r.suggestions.map(c => all.find(m => m.code === c)).filter((m): m is Menu => !!m)
+      const chips: Chip[] = opts.map(m => ({ label: m.name, sub: yen(m.price), act: () => { you(`${m.name}にする`); turnsRef.current.push({ role: 'user', text: `${m.name}にする` }); check(who, m) } }))
       if (r.action === 'hotpepper') chips.push({ label: 'HOT PEPPER で見る', strong: !opts.length, act: () => window.open(HOTPEPPER_MENU_URL, '_blank', 'noopener') })
       if (r.action === 'phone') chips.push({ label: 'お店に電話する', strong: !opts.length, act: () => { window.location.href = SHOP_PHONE_TEL } })
-      chips.push({ label: opts.length ? 'ほかを見る' : '一覧から選ぶ', act: () => setList({ who }) })
+      chips.push({ label: '一覧から選ぶ', act: () => setList({ who }) })
       gin(r.say, chips, { k: 'menu', who }, true)
     })
   }
   /** AI が使えんとき：決まった規則で */
   const hearByRules = (who: Who, said: string) => {
     const all = menus ?? []
+    const hit = matchMenu(said, all)
+    if (hit && !rejectedRef.current.has(hit.code) && !/[?？]/.test(said)) { check(who, hit); return }
     if (/迷|まよ|わから|分から|おまかせ|相談/.test(said)) {
       gin('ほいじゃ、写真見て決めてもええし、電話で相談してもええよ。', [
         { label: 'HOT PEPPER で見る', act: () => window.open(HOTPEPPER_MENU_URL, '_blank', 'noopener') },
@@ -168,9 +181,15 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
   /** 正式な名前と料金で確かめる */
   const check = (who: Who, menu: Menu, lead?: string) => {
     const whose = who.kind === 'mate' ? `${honor(who.name)}のいつもは` : 'いつものは'
+    turnsRef.current.push({ role: 'assistant', text: `いつものは「${menu.name}」${menu.price != null ? ` ${yen(menu.price)}` : ''}で登録してええ？` })
     gin(`${lead && !lead.includes(menu.name) ? lead + '\n' : ''}${whose}「${menu.name}」${menu.price != null ? ` ${yen(menu.price)}` : ''}じゃね。\nこれで登録してええ？`, [
       { label: '登録する', strong: true, act: () => { you('登録する'); if (menu.maintenance) askMaint(who, menu); else void commit(who, menu, false) } },
-      { label: 'ちがう', act: () => { you('ちがう'); gin('ほいじゃ、何にする？', [{ label: '一覧から選ぶ', act: () => setList({ who }) }], { k: 'menu', who }) } },
+      { label: 'ちがう', act: () => {
+        // 何が違うのかは銀ちゃん（AI）が聞く。このメニューはもうすすめない
+        you('ちがう'); rejectedRef.current.add(menu.code)
+        const said = `「${menu.name}」はちがう`
+        turnsRef.current.push({ role: 'user', text: said })
+        talk(who, said) } },
     ])
   }
   const askMaint = (who: Who, menu: Menu) => gin('14日以内のメンテナンスカットも使えるよ。\n希望する？', [

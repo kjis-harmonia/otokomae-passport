@@ -19,7 +19,8 @@ const USUAL_FIRST = ['cut-regular', 'cut-skin-fade', 'perm-iper', 'perm-punch', 
 
 /** いつものメニューにならないもの：メンテナンス・顔そり・オプション（眉・シャンプーなど）・前髪だけ */
 export function canBeUsual(code: string): boolean {
-  return !/^(maintenance|shave-|opt-)/.test(code) && code !== 'cut-bangs'
+  // オプション（ライン・前髪など）とメンテナンスカットはいつものにしない。シェービングはいつものにできる（11/8 お母さん＝レディースシェービング）
+  return !/^(maintenance|opt-)/.test(code) && code !== 'cut-bangs'
 }
 
 /** いつものメニューを選ぶ一覧：なれないものを除いて、選ばれやすい順 */
