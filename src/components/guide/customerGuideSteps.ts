@@ -29,8 +29,8 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     sub: '髪型を選んで、日にちと時間を押すだけ',
     steps: [
       HOME,
-      { target: g('home-cats'), next: true, text: '髪型の種類を選んでください', sub: '「いつもの」「昭和の漢」などを押すと、髪型の種類が変わります。' },
-      { target: g('home-cards'), next: true, text: 'お好きな髪型の写真を選んでください', sub: '写真は左右にめくれます。' },
+      { target: g('home-cats'), next: true, text: '髪型の種類を選んでください', sub: '押すと髪型の写真が変わります。横にスワイプすると、ほかの種類も出てきます。' },
+      { target: g('home-cards'), next: true, text: 'お好きな髪型の写真を選んでください', sub: '写真は横にスワイプしてめくれます。' },
       { target: g('home-cta'), noJump: true, text: '下の「AI予約する」を押してください' },
       VERIFY,
       { target: `${g('jn-welcome')}, ${g('jn-askmenu')}`, optional: true, until: g('jn-menu'), text: 'メニューを押してください' },
