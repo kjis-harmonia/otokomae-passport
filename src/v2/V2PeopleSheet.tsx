@@ -10,7 +10,7 @@ import { canBeUsual, usualMenuOrder } from '../features/johnny/usualMenu'
 import { fetchPeople, MAX_COMPANIONS, removeCompanion, saveCompanion, type People, type Person } from '../features/johnny/usualMembers'
 import { RpcError } from '../utils/staffSession'
 
-type Menu = { code: string; name: string; price: number | null }
+type Menu = { code: string; name: string; duration_min: number; price: number | null }
 // 最初に出すメニュー（最初の案内と同じ順）。ほかは「ほかのメニューを見る」で
 const FEATURED = ['cut-regular', 'cut-skin-fade', 'perm-nurepan', 'perm-iper', 'perm-punch', 'perm-negro', 'store-teitei-gari']
 
