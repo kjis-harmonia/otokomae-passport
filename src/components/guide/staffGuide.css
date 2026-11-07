@@ -8,6 +8,8 @@
   transition: top .18s ease, left .18s ease, width .18s ease, height .18s ease;
 }
 .gd-ring.is-round { border-radius: 50%; }
+/* お客様アプリ：まわりの画面も見えるよう、幕は薄め */
+.gd-ring.is-light { box-shadow: 0 0 0 3px #1c1f1d, 0 0 0 100vmax rgba(20, 22, 21, 0.26); }
 .gd-ring.is-clear { box-shadow: 0 0 0 3px #1c1f1d; }
 
 .gd-finger {

@@ -25,6 +25,10 @@ export type GuideStep = {
   stopHere?: boolean
   /** 「次へ」の言葉を変える */
   nextLabel?: string
+  /** next と一緒に：囲んだ所を押しても次へ進む（髪型の種類など） */
+  tap?: boolean
+  /** 囲んだ所の中のこの要素の文字を、text の {label} に入れる（ボタンの文字が変わるとき） */
+  label?: string
 }
 
 export type GuideTask = {

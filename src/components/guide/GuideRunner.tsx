@@ -54,6 +54,28 @@ function topLayer(): HTMLElement {
   return open.length ? open[open.length - 1] : document.body
 }
 
+// ちび銀ちゃんが重なってはいけない物：文字（見出し・料金も）と入力欄。ガイド自身は除く
+const GUIDE_PARTS = '.gd-bubble, .gd-ring, .gd-chibi, .gd-finger, .gd-sheet-back'
+function hitsReadable(root: HTMLElement, box: Rect): boolean {
+  const hit = (r: DOMRect) => r.width > 2 && r.height > 2
+    && r.left < box.left + box.width && r.right > box.left && r.top < box.top + box.height && r.bottom > box.top
+  for (const el of root.querySelectorAll<HTMLElement>('input, select, textarea')) {
+    if (!el.closest(GUIDE_PARTS) && hit(el.getBoundingClientRect())) return true
+  }
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const range = document.createRange()
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!n.nodeValue?.trim()) continue
+    const p = n.parentElement
+    if (!p || !hit(p.getBoundingClientRect()) || p.closest(GUIDE_PARTS)) continue
+    const cs = getComputedStyle(p)
+    if (cs.visibility === 'hidden' || cs.opacity === '0') continue
+    range.selectNodeContents(n)
+    for (const r of range.getClientRects()) if (hit(r)) return true
+  }
+  return false
+}
+
 const isField = (el: EventTarget | null) => el instanceof HTMLSelectElement || el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
 
 export type GuideWords = { kicker: string; title: string; lead: string; others: string }
@@ -84,6 +106,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const [covered, setCovered] = useState(false)
   // 文字を入れている間（キーボードが出ている間）は吹き出し・◯ を出さない。入力欄とキーボードに重ならないように
   const [typing, setTyping] = useState(false)
+  // 囲んだボタンの今の文字（「この髪型でAI予約する」など）
+  const [label, setLabel] = useState('')
   const stepStarted = useRef(0)
   const scrolledFor = useRef<string | null>(null)
   // 吹き出しを置く場所：開いている dialog の中（上に重なるため）か body。
@@ -157,12 +181,13 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const quietRun = !!task?.quiet
   // 吹き出しが上にあるとき、銀ちゃんが吹き出しに隠れないよう、吹き出しの下の端を測っておく
   const bubbleRef = useRef<HTMLDivElement>(null)
-  const [bubbleBottom, setBubbleBottom] = useState(0)
+  const [bubbleBox, setBubbleBox] = useState({ top: 0, bottom: 0 })
   // 毎回測る（同じ値なら set しないので繰り返さない）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
-    const b = bubbleRef.current ? Math.round(bubbleRef.current.getBoundingClientRect().bottom) : 0
-    if (b !== bubbleBottom) setBubbleBottom(b)
+    const r = bubbleRef.current?.getBoundingClientRect()
+    const top = r ? Math.round(r.top) : 0, bottom = r ? Math.round(r.bottom) : 0
+    if (top !== bubbleBox.top || bottom !== bubbleBox.bottom) setBubbleBox({ top, bottom })
   })
   useEffect(() => {
     if (!chibi || !runTask || quietRun) return
@@ -189,6 +214,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
         else setRect(null)
         return
       }
+      if (step.label) { const t = (el.querySelector(step.label) ?? el).textContent?.trim() ?? ''; setLabel(t) }
       const r = el.getBoundingClientRect()
       const key = `${runTask}:${at}`
       // 見えていなければ真ん中までスクロール（手順ごとに1回）
@@ -213,7 +239,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
 
   // 囲んだ場所を押したら次へ（入力欄は選び終わったら）
   useEffect(() => {
-    if (!step || !run || step.until || step.next) return
+    if (!step || !run || step.until || (step.next && !step.tap)) return
     const at = run.step
     const inside = (t: EventTarget | null) => {
       if (holdRef.current) return false
@@ -289,25 +315,36 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const fingerInside = !!ring && ring.height > 220
   // 高い枠（一覧・予約できました など）は上を読むので、吹き出しは下に
   const bubbleTop = !!ring && ring.height <= vh - 214 && ring.top + ring.height / 2 > vh * 0.55
-  // 指先の位置（👇 の先と同じ所）
-  const tipTop = ring ? (fingerInside ? ring.top + Math.min(ring.height / 2, 160) : ring.top - 6) : 0
-  // ちび銀ちゃん：ふつうは指先を押す場所に合わせる。縦に大きい枠（写真の並び・一覧など）は、中身に重ならないよう枠の右上の角に座る
-  //   体が画面の上に入らないとき（押す場所が上の方）は出さない
-  const chibiLeft = !ring ? 0 : fingerInside
-    ? Math.min(ring.left + ring.width, window.innerWidth) - 6 - CHIBI.w
-    : ring.left + ring.width / 2 - CHIBI.w * CHIBI.tipX
-  const chibiTop = !ring ? 0 : fingerInside ? ring.top + 4 - CHIBI.h : tipTop - CHIBI.h * CHIBI.tipY
-  const chibiFits = !!ring && (fingerInside || fingerAbove) && chibiTop >= 8 && !(bubbleTop && chibiTop < bubbleBottom + 4)
+  // ちび銀ちゃん：読めることが先。文字・料金・見出し・入力欄・吹き出しに重なる所には置かない
+  //   置く場所の順：指先を押す場所の真上 → 枠の右上の角 → 枠の左上の角。どこにも入らなければ出さない（吹き出しだけ）
+  //   縦に大きい枠（写真の並び・一覧など）は、真上に置くと中身にかかるので角だけ
+  let chibiAt: { left: number; top: number } | null = null
+  if (chibi && ring && !step.read) {
+    const vw = window.innerWidth
+    const right = Math.min(ring.left + ring.width, vw)
+    const left = Math.max(ring.left, 0)
+    const spots = [
+      ...(fingerInside ? [] : [{ left: ring.left + ring.width / 2 - CHIBI.w * CHIBI.tipX, top: ring.top - 6 - CHIBI.h * CHIBI.tipY }]),
+      { left: right - 6 - CHIBI.w, top: ring.top + 4 - CHIBI.h },
+      { left: left + 6, top: ring.top + 4 - CHIBI.h },
+    ]
+    const root = layer && layer.isConnected ? layer : document.body
+    chibiAt = spots.find(p => {
+      const box = { left: p.left, top: p.top, width: CHIBI.w, height: CHIBI.h }
+      if (p.top < 8 || p.left < 4 || p.left + CHIBI.w > vw - 4 || p.top + CHIBI.h > vh - 4) return false
+      if (bubbleBox.bottom > bubbleBox.top && p.top < bubbleBox.bottom + 4 && p.top + CHIBI.h > bubbleBox.top - 4) return false
+      return !hitsReadable(root, box)
+    }) ?? null
+  }
 
   return createPortal(
     <>
       {ring && (
         <>
-          <div className={`gd-ring${round ? ' is-round' : ''}${step.noDim ? ' is-clear' : ''}`} aria-hidden="true"
+          <div className={`gd-ring${round ? ' is-round' : ''}${step.noDim ? ' is-clear' : chibi ? ' is-light' : ''}`} aria-hidden="true"
             style={{ top: ring.top, left: ring.left, width: ring.width, height: ring.height }} />
           {/* 読むだけの手順（予約できました など）は指を出さない。日時やタイトルにかぶるので */}
-          {!step.read && chibi && chibiFits && <div className="gd-chibi" aria-hidden="true"
-            style={{ left: chibiLeft, top: chibiTop }} />}
+          {chibiAt && <div className="gd-chibi" aria-hidden="true" style={{ left: chibiAt.left, top: chibiAt.top }} />}
           {!step.read && !chibi && <div className={`gd-finger${fingerAbove || fingerInside ? '' : ' is-below'}`} aria-hidden="true"
             style={{ left: ring.left + ring.width / 2, top: fingerInside ? ring.top + Math.min(ring.height / 2, 160) : fingerAbove ? ring.top - 6 : ring.top + ring.height + 6 }}>
             {fingerAbove || fingerInside ? '👇' : '👆'}
@@ -316,7 +353,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
       )}
       <div ref={bubbleRef} className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite">
         <p className="gd-count">{task.title}</p>
-        <p className="gd-text">{alt ? alt.text : step.text}</p>
+        <p className="gd-text">{alt ? alt.text : step.label ? step.text.replace('{label}', label) : step.text}</p>
         {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}
         <div className="gd-actions">
           <button type="button" className="gd-ghost" onClick={stop}>ガイドを終わる</button>
