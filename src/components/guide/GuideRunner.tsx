@@ -82,6 +82,9 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const [typing, setTyping] = useState(false)
   const stepStarted = useRef(0)
   const scrolledFor = useRef<string | null>(null)
+  // 吹き出しを置く場所：開いている dialog の中（上に重なるため）か body。
+  //   描いた先の dialog が閉じる・消えると吹き出しも一緒に消えるので、描いたあとに確かめて置き直す
+  const [layer, setLayer] = useState<HTMLElement | null>(null)
   const hold = paused || covered
   const holdRef = useRef(hold)
   useEffect(() => { holdRef.current = hold }, [hold])
@@ -129,14 +132,22 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     return () => { document.removeEventListener('focusin', check); document.removeEventListener('focusout', later) }
   }, [])
 
-  // 上に重なるもの（お知らせ・演出）があるか。作業中だけ見る
+  // 上に重なるもの（お知らせ・演出）があるか。作業中と一覧を出している間だけ見る
   useEffect(() => {
-    if (!pauseWhen || !runTask) { setCovered(false); return } // eslint-disable-line react-hooks/set-state-in-effect
+    if (!pauseWhen || (!runTask && !choosing)) { setCovered(false); return } // eslint-disable-line react-hooks/set-state-in-effect
     const check = () => setCovered(!!findVisible(pauseWhen))
     check()
     const id = window.setInterval(check, 200)
     return () => window.clearInterval(id)
-  }, [pauseWhen, runTask])
+  }, [pauseWhen, runTask, choosing])
+
+  useEffect(() => {
+    const sync = () => { const l = topLayer(); setLayer(prev => prev === l ? prev : l) }
+    sync()
+    if (!runTask) return
+    const id = window.setInterval(sync, 250)
+    return () => window.clearInterval(id)
+  })
 
   // 場所を探して ◯ を合わせる・済んだ手順は飛ばす
   useEffect(() => {
@@ -212,7 +223,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     else advance(run.step)
   }
 
-  if (choosing) return createPortal(<Chooser tasks={tasks.filter(t => !t.hidden && (!t.available || t.available()))} words={words} onPick={start} onClose={() => setChoosing(false)} />, document.body)
+  // 一覧も、ほかの案内（最初の案内・お知らせなど）が出ている間は休ませる。消えたらまた出す
+  if (choosing) return hold ? null : createPortal(<Chooser tasks={tasks.filter(t => !t.hidden && (!t.available || t.available()))} words={words} onPick={start} onClose={() => setChoosing(false)} />, document.body)
   if (!task || !run || hold) return null
 
   if (finished) {
@@ -227,12 +239,12 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
           <button type="button" className="gd-main" onClick={stop}>閉じる</button>
         </div>
       </div>,
-      topLayer(),
+      layer && layer.isConnected ? layer : document.body,
     )
   }
   if (!step || typing) return null
-  // 場所が出ない手順（予約で入っている・券が無い など）は、飛ばすまで何も出さない
-  if (step.optional && !rect) return null
+  // 指す場所が今の画面に無い間（別の画面へ移った・予約で入っている・券が無い など）は、吹き出しも出さない
+  if (!rect) return null
 
   // ◯：小さい所は丸、横に長いボタンは角の丸い枠
   const pad = 8
@@ -278,7 +290,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
         </div>
       </div>
     </>,
-    topLayer(),
+    layer && layer.isConnected ? layer : document.body,
   )
 }
 
