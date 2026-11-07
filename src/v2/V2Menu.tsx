@@ -4,6 +4,9 @@ import { ChevronRight, ExternalLink, KeyRound, Phone, Smartphone, Ticket } from 
 import { PushToggle } from '../components/PushToggle'
 import { canShowInstallGuide, SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../data/wallet'
+import { useState } from 'react'
+import { isStaging } from '../utils/env'
+import { resetStagingTester } from './stagingReset'
 
 /** HOT PEPPER Beauty のお店のページ */
 const HOTPEPPER_SHOP_URL = 'https://beauty.hotpepper.jp/slnH000583749/'
@@ -27,10 +30,25 @@ export function V2Menu({ open, onClose, onTickets, onAccount }: { open: boolean;
               <a className="v2-row" href={SHOP_PHONE_TEL}><Phone size={20} /><span style={{ flex: 1 }}>電話で予約<small>{SHOP_PHONE_DISPLAY}</small></span></a>
               <a className="v2-row" href={HOTPEPPER_SHOP_URL} target="_blank" rel="noopener noreferrer"><ExternalLink size={20} /><span style={{ flex: 1 }}>HOT PEPPER Beauty で予約</span></a>
             </div>
+            {isStaging() && <StagingReset />}
             <button type="button" className="v2-btn v2-btn-quiet" style={{ marginTop: 8, background: 'none' }} onClick={onClose}>閉じる</button>
           </motion.div>
         </>
       )}
     </AnimatePresence>
   )
+}
+
+/** Staging だけ：テスト会員を登録した直後に戻す。2回押しで実行（間違えて押しても消えないように） */
+function StagingReset() {
+  const [step, setStep] = useState<'idle' | 'confirm' | 'busy' | 'error'>('idle')
+  const press = () => {
+    if (step === 'idle' || step === 'error') { setStep('confirm'); return }
+    if (step !== 'confirm') return
+    setStep('busy')
+    resetStagingTester().catch(() => setStep('error'))
+  }
+  const label = step === 'confirm' ? 'もう一度押すと戻します（予約・いつもの・ガチャが消えます）'
+    : step === 'busy' ? '戻しています…' : step === 'error' ? '戻せませんでした。もう一度押してください' : 'テスト用：登録した直後に戻す'
+  return <button type="button" className="v2-btn v2-btn-quiet" style={{ marginTop: 12, background: 'none', fontSize: 13, color: step === 'confirm' || step === 'error' ? '#a33' : 'var(--v2-faint)' }} disabled={step === 'busy'} onClick={press}>{label}</button>
 }
