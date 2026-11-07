@@ -199,7 +199,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
         //   上に合わせるときは、枠の上の線と 👇 が見えるよう少し空ける（ちび銀ちゃんは枠の右上の角に座るので、その分も空ける）
         const margin = el.style.scrollMarginTop
         if (tall) el.style.scrollMarginTop = `${chibi ? 24 + CHIBI.h : 24}px`
-        el.scrollIntoView({ block: tall ? 'start' : 'center', inline: 'center', behavior: 'smooth' })
+        // 画面より横に長い枠（髪型の種類のボタンの列など）は、真ん中に合わせると先頭のボタン（昭和の漢）が左に隠れるので左に合わせる（11/7）
+        el.scrollIntoView({ block: tall ? 'start' : 'center', inline: r.width >= window.innerWidth - 1 ? 'start' : 'center', behavior: 'smooth' })
         if (tall) el.style.scrollMarginTop = margin
       }
       setRect(prev => prev && prev.top === r.top && prev.left === r.left && prev.width === r.width && prev.height === r.height
