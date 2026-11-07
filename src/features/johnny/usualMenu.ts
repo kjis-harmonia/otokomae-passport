@@ -38,12 +38,18 @@ export function setUsualMenu(menu: UsualMenu): boolean {
 
 /** 会員の記録のいつものメニュー（お店で登録したもの・ほかの端末で登録したもの）。読めなければ null */
 export async function fetchServerUsualMenu(): Promise<UsualMenu | null> {
+  const v = await fetchServerUsualMenuState()
+  return v === 'none' || v === 'unknown' ? null : v
+}
+
+/** 'none'＝会員の記録に無いと分かった・'unknown'＝読めなかった（ログイン前・通信など） */
+export async function fetchServerUsualMenuState(): Promise<UsualMenu | 'none' | 'unknown'> {
   try {
     const { callCustomerRpc, hasCustomerSession } = await import('../../utils/customerSession')
-    if (!hasCustomerSession()) return null
+    if (!hasCustomerSession()) return 'unknown'
     const v = await callCustomerRpc<{ code?: string; name?: string } | null>('customer_usual_menu')
-    return v && typeof v.code === 'string' && typeof v.name === 'string' ? { code: v.code, name: v.name } : null
-  } catch { return null }
+    return v && typeof v.code === 'string' && typeof v.name === 'string' ? { code: v.code, name: v.name } : 'none'
+  } catch { return 'unknown' }
 }
 
 /** いつもの担当の id（登録していなければ null＝どちらでもいい・毎回聞く） */
