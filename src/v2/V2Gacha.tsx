@@ -6,9 +6,10 @@
 // iPhone は preload を守らず流しながら読むので、電波しだいでカクカクする（10/30「球体もカクカク」）。タブを開いたら3本とも先に全部読み、読み終わってからボタンを押せる。
 // 音は独立したWeb Audioのクロックでつなぐ。videoは常にミュートし、待機のループでAACの再始動やended待ちの無音を挟まない。
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronRight, Pointer, Sparkles, X } from 'lucide-react'
+import { ChevronRight, Pointer, Sparkles, Volume2, X } from 'lucide-react'
 import { canUseGacha, drawGacha, gachaDays, gachaReservedLabel, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
+import { GachaAudioPlayback } from '../audio/gachaAudioPlayback'
 import { isStaging } from '../utils/env'
 import { afterPresentedFrame } from '../features/gacha/presentedFrame'
 import { GachaShowcase } from './GachaShowcase'
@@ -135,9 +136,11 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const [phase, setPhase] = useState<Phase>('idle')
   const [ticket, setTicket] = useState(false) // 銀河：黄金チケットが飛んできた
   const phaseRef = useRef<Phase>('idle')
-  const sound = useRef<GachaSoundtrack | null>(null)
-  const introSoundStarted = useRef(false)
-  const openSoundStarted = useRef(false)
+  const sound = useRef<GachaAudioPlayback | null>(null)
+  const introPresented = useRef(false)
+  const openPresented = useRef(false)
+  const [audioBlocked, setAudioBlocked] = useState(false)
+  const [audioChecking, setAudioChecking] = useState(false)
   const resultCuePending = useRef(false)
   const waitStop = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reveals = useRef(new Set<() => void>())
@@ -155,10 +158,9 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   useEffect(() => {
     // Do not celebrate loading, a failed draw, or merely reopening a saved result.
     if (THEME.id === 'deep' && resultCuePending.current && phase === 'result' && drawn && drawn !== 'error' && drawn.today) {
-      resultCuePending.current = false
-      sound.current?.result()
+      if (sound.current?.result()) resultCuePending.current = false
     }
-  }, [THEME.id, phase, drawn])
+  }, [THEME.id, phase, drawn, audioBlocked])
 
   useEffect(() => {
     if (!canUseGacha()) return
@@ -189,7 +191,10 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     waitStop.current = null
     setTicket(false)
     for (const v of [intro.current, wait.current, burst.current]) v?.pause()
-    sound.current?.stop()
+    sound.current?.dispose()
+    sound.current = null
+    setAudioBlocked(false)
+    setAudioChecking(false)
     move('idle')
   }, [move])
 
@@ -213,10 +218,23 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     const w = wait.current
     const b = burst.current
     if (!i || !w || !b) return
-    sound.current ??= new GachaSoundtrack(gachaAudioContext(), cache.audio, THEME.introFade)
-    sound.current.unlock() // Keep the iPhone audio unlock inside the user's gesture.
-    introSoundStarted.current = false
-    openSoundStarted.current = false
+    sound.current?.dispose()
+    sound.current = new GachaAudioPlayback(
+      () => new GachaSoundtrack(gachaAudioContext(), cache.audio, THEME.introFade),
+      () => {
+        const current = phaseRef.current
+        const video = current === 'intro' ? intro.current : current === 'tap' ? wait.current : burst.current
+        return { phase: current, offset: video?.currentTime ?? 0,
+          presented: current === 'intro' ? introPresented.current : current === 'open' ? openPresented.current : true }
+      },
+      status => {
+        setAudioChecking(status === 'checking')
+        if (status !== 'checking') setAudioBlocked(status === 'blocked')
+      },
+    )
+    introPresented.current = false
+    openPresented.current = false
+    setAudioBlocked(false)
     rewind(b)
     rewind(i)
     rewind(w)
@@ -227,6 +245,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     drawGacha().then(s => { setDrawn(s); setGacha(s) }).catch(() => setDrawn('error'))
     setTop('intro')
     move('intro')
+    void sound.current.unlock() // Resume is invoked synchronously in the user's gesture.
     void play(i).catch(close)
   }
 
@@ -242,18 +261,19 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     }
     // 1部・2部の最後のコマを出したまま待ちを流し、動き出したら入れ替える
     const introPlaying = () => {
-      if (phaseRef.current !== 'intro' || introSoundStarted.current) return
-      introSoundStarted.current = true
-      presented(i, () => { if (phaseRef.current === 'intro') sound.current?.startIntro(undefined, i.currentTime) })
+      if (phaseRef.current !== 'intro' || introPresented.current) return
+      presented(i, () => { if (phaseRef.current === 'intro') { introPresented.current = true; sound.current?.sync() } })
     }
     const introEnded = () => { if (phaseRef.current === 'intro') { move('tap'); void play(w).catch(close) } }
-    const waitPlaying = () => { if (phaseRef.current === 'tap') presented(w, () => { if (phaseRef.current === 'tap') setTop('wait') }) }
+    const waitPlaying = () => { if (phaseRef.current === 'tap') presented(w, () => {
+      if (phaseRef.current === 'tap') { setTop('wait'); sound.current?.sync() }
+    }) }
     const burstPlaying = () => {
-      if (phaseRef.current !== 'open' || openSoundStarted.current) return
-      openSoundStarted.current = true
+      if (phaseRef.current !== 'open' || openPresented.current) return
       presented(b, () => {
         if (phaseRef.current !== 'open') return
-        sound.current?.open(undefined, b.currentTime)
+        openPresented.current = true
+        sound.current?.sync()
         setTop('burst')
         waitStop.current = setTimeout(() => w.pause(), 600) // Only the visual fade; audio has its own scheduled crossfade.
       })
@@ -297,7 +317,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     const b = burst.current
     if (phaseRef.current !== 'tap' || !w || !b) return
     move('open')
-    sound.current?.unlock()
+    void sound.current?.unlock()
     // This edit opens from the same stone, with a short lit transition. Keep
     // the live loop at normal speed underneath the reveal, even on an early tap.
     if (THEME.id === 'dino') { void play(b).catch(close); return }
@@ -363,6 +383,12 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
           </div>
         )}
         {phase === 'tap' && <p className="v2-gacha-tap"><Pointer size={30} strokeWidth={1.6} aria-hidden />{THEME.tap ?? '光る球をタップ'}</p>}
+        {showing && audioBlocked && (
+          <button type="button" className="v2-gacha-audio" disabled={audioChecking}
+            onClick={e => { e.stopPropagation(); void sound.current?.unlock() }}>
+            <Volume2 size={20} aria-hidden />{audioChecking ? '音を確認中…' : '音を出す'}
+          </button>
+        )}
         {phase === 'result' && (
           // 結果のポップ（11/3 慶一郎さんの見本：黒×金のパネル）。上の銀ちゃんと金のチケットは動画のまま
           <div className={`v2-gacha-result${ticket ? ' is-ticket' : ''}`} onClick={e => e.stopPropagation()}>

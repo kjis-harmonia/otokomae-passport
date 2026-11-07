@@ -35,7 +35,21 @@ export async function loadGachaAudio(signal: AbortSignal, files: GachaAudioFiles
 export const INTRO_CROSSFADE = 1.2
 export const OPEN_CROSSFADE = 2
 export const RESULT_CUE_MAX = 0.2
+export const AUDIO_UNLOCK_TIMEOUT_MS = 2000
 const RELEASE = 0.08
+
+/** Use the supported iPhone media channel only while the gacha owns playback. */
+export function requestGachaPlaybackSession(host: unknown = globalThis.navigator): () => void {
+  try {
+    const session = (host as { audioSession?: { type: string } } | undefined)?.audioSession
+    if (!session) return () => {}
+    const previous = session.type
+    session.type = 'playback'
+    return () => {
+      try { if (session.type === 'playback') session.type = previous } catch { /* Optional platform API. */ }
+    }
+  } catch { return () => {} } // Unsupported/read-only AudioSession must not disable Web Audio.
+}
 
 interface Envelope { at: number; duration: number; values: Float32Array }
 interface Voice { source: AudioBufferSourceNode; gain: GainNode; initial: number; envelope: Envelope | null }
@@ -52,6 +66,7 @@ export class GachaSoundtrack {
   private waiting: Voice | null = null
   private readonly introFade: number
   private resultPlayed = false
+  private restoreSession: (() => void) | null = null
 
   // introFade: a theme whose intro already runs into the first bar of the wait loop needs only a short overlap.
   constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE) {
@@ -64,8 +79,25 @@ export class GachaSoundtrack {
   }
 
   // Invoke synchronously in the user's tap, before awaiting video.play().
-  unlock(): void {
-    if ('resume' in this.ctx) void (this.ctx as AudioContext).resume().catch(() => {})
+  async unlock(): Promise<void> {
+    this.restoreSession ??= requestGachaPlaybackSession()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        (this.ctx as AudioContext).resume(),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('audio_resume_timeout')), AUDIO_UNLOCK_TIMEOUT_MS) }),
+      ])
+      if (this.ctx.state !== 'running') throw new Error('audio_not_running')
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }
+
+  get state(): AudioContextState { return this.ctx.state }
+
+  observeState(listener: () => void): () => void {
+    this.ctx.addEventListener('statechange', listener)
+    return () => this.ctx.removeEventListener('statechange', listener)
   }
 
   private voice(buffer: AudioBuffer, at: number, offset = 0, loop = false, initial = 1): Voice {
@@ -119,6 +151,13 @@ export class GachaSoundtrack {
     this.waiting = wait
   }
 
+  startWait(at = this.ctx.currentTime, offset = 0): void {
+    this.stop(at)
+    const wait = this.voice(this.buffers.wait, at, offset % this.buffers.wait.duration, true, 0)
+    this.fade(wait, curve(true), at, RELEASE)
+    this.waiting = wait
+  }
+
   open(at = this.ctx.currentTime, offset = 0): void {
     const fade = Math.min(OPEN_CROSSFADE, Math.max(0.01, this.buffers.open.duration - offset))
     const wait = this.waiting
@@ -134,8 +173,9 @@ export class GachaSoundtrack {
   }
 
   // Only a rendered, successful result calls this. Re-renders cannot stack the cue.
-  result(at = this.ctx.currentTime): void {
-    if (this.resultPlayed || !this.buffers.result) return
+  result(at = this.ctx.currentTime): boolean {
+    if (this.resultPlayed || !this.buffers.result) return true
+    if (this.ctx.state !== 'running') return false
     this.resultPlayed = true
     this.stop(at)
     const cue = this.voice(this.buffers.result, at)
@@ -143,10 +183,23 @@ export class GachaSoundtrack {
     const release = Math.min(.02, duration)
     this.fade(cue, new Float32Array([1, 0]), at + duration - release, release)
     cue.source.stop(at + duration)
+    return true
   }
 
   stop(at = this.ctx.currentTime): void {
     for (const voice of this.voices) {
+      // A suspended clock cannot finish a release. Cancel it now, so recovery
+      // cannot briefly replay the old scene underneath the newly aligned sound.
+      if (this.ctx.state !== 'running') {
+        voice.gain.gain.cancelScheduledValues(at)
+        voice.gain.gain.setValueAtTime(0, at)
+        voice.source.stop(at)
+        voice.source.onended = null
+        voice.source.disconnect()
+        voice.gain.disconnect()
+        this.voices.delete(voice)
+        continue
+      }
       const held = this.hold(voice, at)
       this.fade(voice, new Float32Array([held, 0]), at, RELEASE)
       voice.source.stop(at + RELEASE)
@@ -156,6 +209,8 @@ export class GachaSoundtrack {
 
   dispose(): void {
     this.stop()
+    this.restoreSession?.()
+    this.restoreSession = null
     // Preserve the short release rather than disconnecting at a non-zero sample.
     setTimeout(() => this.master.disconnect(), (RELEASE + 0.02) * 1000)
   }

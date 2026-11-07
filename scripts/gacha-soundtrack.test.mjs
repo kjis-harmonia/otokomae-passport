@@ -6,12 +6,12 @@ import vm from 'node:vm'
 
 const source = fs.readFileSync(new URL('../src/audio/gachaSoundtrack.ts', import.meta.url), 'utf8')
 const module = { exports: {} }
-vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: module.exports, setTimeout: fn => fn() })
+vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: module.exports, setTimeout, clearTimeout })
 const { GachaSoundtrack, INTRO_CROSSFADE, OPEN_CROSSFADE, RESULT_CUE_MAX } = module.exports
 function fixture() {
   const nodes = []
   const param = () => ({ value: 1, events: [], setValueAtTime(v, t) { this.events.push(['set', v, t]) }, cancelScheduledValues(t) { this.events.push(['cancel', t]) }, linearRampToValueAtTime(v, t) { this.events.push(['ramp', v, t]) } })
-  const ctx = { currentTime: 0, destination: {}, createGain() { return { gain: param(), connect() {}, disconnect() {} } }, createBufferSource() { const n = { loop: false, connect(g) { this.gain = g }, disconnect() {}, start(...a) { this.starts = a }, stop(t) { this.stopped = t } }; nodes.push(n); return n }, resume: async () => {} }
+  const ctx = { state: 'running', currentTime: 0, destination: {}, addEventListener() {}, removeEventListener() {}, createGain() { return { gain: param(), connect() {}, disconnect() {} } }, createBufferSource() { const n = { loop: false, connect(g) { this.gain = g }, disconnect() {}, start(...a) { this.starts = a }, stop(t) { this.stopped = t } }; nodes.push(n); return n }, resume: async () => {} }
   return { ctx, nodes, audio: new GachaSoundtrack(ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 16 }, result: { duration: 0.9 } }) }
 }
 test('wait is scheduled before the intro finishes and loops on the audio clock', () => {
@@ -171,4 +171,173 @@ test('a cancelled previous run cannot reveal over the next run', () => {
   assert.deepEqual(shown, [])
   ;[...frames.values()][0]()
   assert.deepEqual(shown, ['new'])
+})
+
+
+// Permission recovery uses the production coordinator, not a duplicate implementation.
+const playbackModule = { exports: {} }
+vm.runInNewContext(ts.transpileModule(fs.readFileSync(new URL('../src/audio/gachaAudioPlayback.ts', import.meta.url), 'utf8'),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: playbackModule.exports })
+const { GachaAudioPlayback } = playbackModule.exports
+const { requestGachaPlaybackSession } = module.exports
+function playbackFixture() {
+  const f = fixture(), statuses = []
+  let position = { phase: 'intro', offset: 3, presented: true }
+  const listeners = new Set()
+  f.ctx.addEventListener = (_, fn) => listeners.add(fn)
+  f.ctx.removeEventListener = (_, fn) => listeners.delete(fn)
+  const playback = new GachaAudioPlayback(() => f.audio, () => position, status => statuses.push(status))
+  return { ...f, playback, statuses, setPosition: p => { position = p },
+    interrupt: () => { f.ctx.state = 'suspended'; listeners.forEach(fn => fn()) }, listeners }
+}
+test('resume rejection is exposed by the soundtrack and produces a blocked status with no voice', async () => {
+  const f = playbackFixture()
+  f.ctx.resume = async () => { throw new Error('NotAllowedError') }
+  await assert.rejects(f.audio.unlock(), /NotAllowedError/)
+  await f.playback.unlock(); f.playback.sync()
+  assert.equal(f.statuses.at(-1), 'blocked')
+  assert.equal(f.nodes.length, 0)
+  f.playback.dispose()
+})
+test('resolved resume with a still-suspended context is not reported as audible', async () => {
+  const f = playbackFixture(); f.ctx.state = 'suspended'
+  await f.playback.unlock()
+  assert.equal(f.statuses.at(-1), 'blocked')
+  assert.equal(f.nodes.length, 0)
+  f.playback.dispose()
+})
+test('a never-settling resume reaches the recovery state rather than waiting forever', async () => {
+  const tasks = new Map(); let id = 0
+  const mod = { exports: {} }
+  vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText,
+    { exports: mod.exports, setTimeout: (fn, ms) => { tasks.set(++id, { fn, ms }); return id }, clearTimeout: key => tasks.delete(key) })
+  const f = fixture(); f.ctx.resume = () => new Promise(() => {})
+  const sound = new mod.exports.GachaSoundtrack(f.ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 16 } })
+  const attempt = sound.unlock()
+  const timeout = [...tasks.values()][0]
+  assert.equal(timeout.ms, mod.exports.AUDIO_UNLOCK_TIMEOUT_MS)
+  timeout.fn()
+  await assert.rejects(attempt, /audio_resume_timeout/)
+  assert.equal(tasks.size, 0)
+})
+test('retry uses the latest presented intro position, once, without restarting the movie', async () => {
+  const f = playbackFixture(); f.ctx.resume = async () => { throw new Error('blocked') }
+  await f.playback.unlock()
+  f.ctx.resume = async () => { f.ctx.state = 'running' }
+  f.setPosition({ phase: 'intro', offset: 12, presented: true })
+  await f.playback.unlock(); f.playback.sync(); f.playback.sync()
+  assert.equal(f.statuses.at(-1), 'ready')
+  assert.equal(f.nodes.length, 2)
+  assert.equal(f.nodes[0].starts[1], 12)
+  f.playback.dispose()
+})
+test('permission success waits for a presented frame before scheduling audio', async () => {
+  const f = playbackFixture(); f.setPosition({ phase: 'intro', offset: 0, presented: false })
+  await f.playback.unlock()
+  assert.equal(f.nodes.length, 0)
+  f.setPosition({ phase: 'intro', offset: .4, presented: true }); f.playback.sync()
+  assert.equal(f.nodes[0].starts[1], .4)
+  f.playback.dispose()
+})
+test('permission resolved after intro ends starts the waiting loop, not stale intro audio', async () => {
+  const f = playbackFixture(); let resolve
+  f.ctx.resume = () => new Promise(r => { resolve = r })
+  const attempt = f.playback.unlock()
+  f.setPosition({ phase: 'tap', offset: 2, presented: true }); resolve()
+  await attempt
+  assert.equal(f.nodes.length, 1)
+  assert.equal(f.nodes[0].loop, true)
+  assert.equal(f.nodes[0].starts[1], 2)
+  f.playback.dispose()
+})
+test('normal intro to waiting does not create another waiting loop', async () => {
+  const f = playbackFixture(); await f.playback.unlock()
+  f.setPosition({ phase: 'tap', offset: 2, presented: true }); f.playback.sync(); f.playback.sync()
+  assert.equal(f.nodes.length, 2)
+  f.playback.dispose()
+})
+test('retry in opening uses current opening position and cannot create duplicate opening voices', async () => {
+  const f = playbackFixture(); await f.playback.unlock(); f.interrupt()
+  f.ctx.resume = async () => { f.ctx.state = 'running' }
+  f.setPosition({ phase: 'open', offset: 7.2, presented: true })
+  await f.playback.unlock(); f.playback.sync(); f.playback.sync()
+  assert.equal(f.nodes.length, 3)
+  assert.equal(f.nodes[2].starts[1], 7.2)
+  assert(f.nodes.slice(0, 2).every(n => n.stopped !== undefined))
+  f.playback.dispose()
+})
+test('double tapping audio recovery performs only one resume', async () => {
+  const f = playbackFixture(); let resolve; let resumes = 0
+  f.ctx.resume = () => { resumes++; return new Promise(r => { resolve = r }) }
+  const first = f.playback.unlock(), second = f.playback.unlock()
+  assert.equal(resumes, 1); resolve(); await Promise.all([first, second])
+  assert.equal(f.nodes.length, 2)
+  f.playback.dispose()
+})
+test('late permission response after close/unmount cannot report ready or start sound', async () => {
+  const f = playbackFixture(); let resolve
+  f.ctx.resume = () => new Promise(r => { resolve = r })
+  const attempt = f.playback.unlock(); f.playback.dispose(); resolve(); await attempt
+  assert.equal(f.statuses.includes('ready'), false)
+  assert.equal(f.nodes.length, 0)
+  assert.equal(f.listeners.size, 0)
+})
+test('blocked result does not consume its once cue and recovery does not restart intro/open', async () => {
+  const f = playbackFixture(); await f.playback.unlock(); f.interrupt()
+  f.setPosition({ phase: 'result', offset: 16, presented: true })
+  assert.equal(f.playback.result(), false)
+  f.ctx.resume = async () => { f.ctx.state = 'running' }; await f.playback.unlock()
+  assert.equal(f.nodes.length, 2)
+  assert.equal(f.playback.result(), true); assert.equal(f.playback.result(), true)
+  assert.equal(f.nodes.length, 3)
+  f.playback.dispose()
+})
+test('closed contexts are replaced on recovery and the old observer is removed', async () => {
+  const old = fixture(), fresh = fixture(), observers = new Set(), statuses = []
+  old.ctx.addEventListener = (_, fn) => observers.add(fn); old.ctx.removeEventListener = (_, fn) => observers.delete(fn)
+  let creates = 0
+  const p = new GachaAudioPlayback(() => ++creates === 1 ? old.audio : fresh.audio,
+    () => ({ phase: 'open', offset: 5, presented: true }), s => statuses.push(s))
+  old.ctx.state = 'closed'; observers.forEach(fn => fn())
+  await p.unlock()
+  assert.equal(creates, 2); assert.equal(observers.size, 0)
+  assert.equal(fresh.nodes.length, 1); assert.equal(fresh.nodes[0].starts[1], 5)
+  assert.equal(statuses.at(-1), 'ready'); p.dispose()
+})
+test('supported AudioSession requests playback and restores the previous mode on release', () => {
+  const session = { type: 'auto' }
+  const restore = requestGachaPlaybackSession({ audioSession: session })
+  assert.equal(session.type, 'playback'); restore(); assert.equal(session.type, 'auto')
+})
+test('AudioSession cleanup respects another screen changing the session mode', () => {
+  const session = { type: 'auto' }, restore = requestGachaPlaybackSession({ audioSession: session })
+  session.type = 'play-and-record'; restore(); assert.equal(session.type, 'play-and-record')
+})
+test('missing or read-only AudioSession remains compatible with ordinary Web Audio', () => {
+  assert.doesNotThrow(() => requestGachaPlaybackSession({})())
+  const session = { get type() { return 'auto' }, set type(_) { throw new Error('unsupported') } }
+  assert.doesNotThrow(() => requestGachaPlaybackSession({ audioSession: session })())
+})
+
+test('context recreation failure remains recoverable instead of escaping the button handler', async () => {
+  const f = fixture(), statuses = []; let creates = 0
+  const p = new GachaAudioPlayback(() => { if (++creates === 2) throw new Error('no audio device'); return f.audio },
+    () => ({ phase: 'intro', offset: 5, presented: true }), s => statuses.push(s))
+  f.ctx.state = 'closed'
+  await p.unlock()
+  assert.equal(statuses.at(-1), 'blocked'); assert.equal(f.nodes.length, 0)
+  f.ctx.state = 'running'; await p.unlock()
+  assert.equal(statuses.at(-1), 'ready'); p.dispose()
+})
+
+test('interruption discards frozen old voices immediately instead of replaying an 80ms old-scene tail', async () => {
+  const f = playbackFixture(); await f.playback.unlock(); f.ctx.currentTime = 5; f.interrupt()
+  for (const n of f.nodes) {
+    assert.equal(n.stopped, 5)
+    assert.deepEqual(n.gain.gain.events.at(-1), ['set', 0, 5])
+  }
+  f.ctx.state = 'running'; f.setPosition({ phase: 'intro', offset: 8, presented: true }); await f.playback.unlock()
+  assert.equal(f.nodes[0].stopped, 5); assert.equal(f.nodes[1].stopped, 5)
+  assert.equal(f.nodes[2].starts[1], 8)
+  f.playback.dispose()
 })
