@@ -7,6 +7,8 @@ export interface MenuOption {
   duration_min: number
   price: number | null
   price_from?: boolean | null
+  /** メンテナンスカットの対象（大人のカット・パーマが入っている・11/7） */
+  maintenance?: boolean
 }
 
 /** 呼び方の揺れ（話し言葉 → メニュー名に含まれる語） */
