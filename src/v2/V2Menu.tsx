@@ -1,6 +1,6 @@
 // V2.0 の ☰：ホームに出さない機能の入口。機能は消さず、ここから開く。
 import { AnimatePresence, motion } from 'framer-motion'
-import { Bell, ChevronRight, ExternalLink, KeyRound, Phone, Smartphone, Ticket } from 'lucide-react'
+import { ChevronRight, ExternalLink, KeyRound, Phone, Smartphone, Ticket } from 'lucide-react'
 import { PushToggle } from '../components/PushToggle'
 import { canShowInstallGuide, SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../data/wallet'
@@ -22,10 +22,7 @@ export function V2Menu({ open, onClose, onTickets, onAccount }: { open: boolean;
               <button type="button" className="v2-row" onClick={() => { onClose(); onAccount() }}><KeyRound size={20} /><span style={{ flex: 1 }}>ログインと引き継ぎ<small>Face ID・機種変更・以前のチケット</small></span><ChevronRight size={18} /></button>
               {canShowInstallGuide() && <button type="button" className="v2-row" onClick={() => { onClose(); window.dispatchEvent(new Event(SHOW_INSTALL_GUIDE_EVENT)) }}><Smartphone size={20} /><span style={{ flex: 1 }}>ホーム画面に追加</span><ChevronRight size={18} /></button>}
             </div>
-            <div className="v2-panel v2-glass" style={{ marginTop: 12 }}>
-              <p className="v2-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Bell size={14} />銀二郎のお知らせ</p>
-              <PushToggle tone="mono" />
-            </div>
+            <PushToggle tone="mono" menu />
             <div className="v2-panel v2-glass" style={{ marginTop: 12, padding: '4px 14px' }}>
               <a className="v2-row" href={SHOP_PHONE_TEL}><Phone size={20} /><span style={{ flex: 1 }}>電話で予約<small>{SHOP_PHONE_DISPLAY}</small></span></a>
               <a className="v2-row" href={HOTPEPPER_SHOP_URL} target="_blank" rel="noopener noreferrer"><ExternalLink size={20} /><span style={{ flex: 1 }}>HOT PEPPER Beauty で予約</span></a>

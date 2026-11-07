@@ -95,6 +95,7 @@ function consumeDevOnboardingReset(): void {
 
 consumeDevOnboardingReset()
 
+// はじめての登録のあとに1回だけ出す。今のアプリ（クリーム色）と同じ見た目で、クーポン1枚と2つのボタンだけ（11/7 慶一郎さん：始まりの画面がダサい）
 function WelcomeCouponDialog({
   name,
   onTickets,
@@ -109,147 +110,33 @@ function WelcomeCouponDialog({
   return createPortal(
     <motion.div
       key="welcome-coupon-dialog"
+      className="v2 v2-welcome"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.22 }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 99990,
-        display: 'grid',
-        placeItems: 'center',
-        padding: 'max(24px, env(safe-area-inset-top, 0px)) 24px max(24px, env(safe-area-inset-bottom, 0px))',
-        background:
-          'radial-gradient(circle at 50% 24%, rgba(78,12,18,0.34), transparent 44%), linear-gradient(180deg, rgba(5,3,3,0.94), rgba(9,4,5,0.98))',
-        backdropFilter: 'blur(14px)',
-        WebkitBackdropFilter: 'blur(14px)',
-      }}
     >
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
+        className="v2-welcome-body"
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 10 }}
+        exit={{ opacity: 0, y: 8 }}
         transition={{ duration: 0.36, ease: [0.22, 0.68, 0.34, 1] }}
         role="dialog"
         aria-modal="true"
         aria-label={`${name}さんのWelcomeクーポン`}
-        style={{
-          width: '100%',
-          maxWidth: 390,
-          padding: '0 4px',
-          textAlign: 'center',
-        }}
       >
-        <div
-          aria-hidden
-          style={{
-            width: 42,
-            height: 1,
-            margin: '0 auto 34px',
-            background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.82), transparent)',
-          }}
-        />
-        <p
-          style={{
-            margin: '0 0 18px',
-            color: 'rgba(201,162,74,0.68)',
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: '0.28em',
-            textTransform: 'uppercase',
-          }}
-        >
-          ウェルカムクーポン
-        </p>
-        <h2
-          style={{
-            margin: '0 0 18px',
-            color: '#F2E6C8',
-            fontFamily: SERIF,
-            fontSize: 'clamp(25px, 7vw, 31px)',
-            lineHeight: 1.55,
-            letterSpacing: '0.08em',
-            fontWeight: 700,
-          }}
-        >
-          ようこそ、<br />
-          二代目銀二郎へ
-        </h2>
-        <p
-          style={{
-            margin: '0 auto 24px',
-            color: 'rgba(242,230,200,0.62)',
-            fontFamily: SERIF,
-            fontSize: 14,
-            lineHeight: 1.9,
-            letterSpacing: '0.08em',
-          }}
-        >
-          Welcomeクーポンをお届けしました
-        </p>
-        <div
-          style={{
-            width: '100%',
-            padding: '18px 0',
-            margin: '0 auto 28px',
-            borderTop: '1px solid rgba(201,162,74,0.22)',
-            borderBottom: '1px solid rgba(201,162,74,0.22)',
-          }}
-        >
-          <p
-            style={{
-              margin: 0,
-              color: '#F2E6C8',
-              fontFamily: SERIF,
-              fontSize: 'clamp(19px, 5.4vw, 23px)',
-              lineHeight: 1.45,
-              letterSpacing: '0.08em',
-              fontWeight: 700,
-            }}
-          >
-            パーマ<br />
-            <span style={{ color: '#D9B763', letterSpacing: '0.04em' }}>¥2,000 OFF</span>
-          </p>
+        <p className="v2-welcome-hello">{name ? `${name}さん、ようこそ` : 'ようこそ'}</p>
+        <h2 className="v2-welcome-title">二代目銀二郎へ</h2>
+        <div className="v2-panel v2-glass v2-welcome-coupon">
+          <p className="v2-label">Welcomeクーポン</p>
+          <p className="v2-welcome-menu">パーマ</p>
+          <p className="v2-welcome-price">¥2,000 OFF</p>
         </div>
-        <div style={{ display: 'grid', gap: 16 }}>
-          <button
-            type="button"
-            onClick={onTickets}
-            style={{
-              minHeight: 52,
-              borderRadius: 14,
-              border: '1px solid rgba(201,162,74,0.58)',
-              background:
-                'linear-gradient(160deg, rgba(76,14,18,0.96) 0%, rgba(111,18,28,0.96) 56%, rgba(55,8,12,0.98) 100%)',
-              boxShadow: '0 12px 34px rgba(54,8,12,0.48), inset 0 1px 0 rgba(242,230,200,0.08)',
-              color: '#F2E6C8',
-              fontFamily: SERIF,
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: '0.18em',
-              cursor: 'pointer',
-            }}
-          >
-            クーポンを見る
-          </button>
-          <button
-            type="button"
-            onClick={onHome}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: 'rgba(242,230,200,0.46)',
-              fontFamily: SERIF,
-              fontSize: 12,
-              lineHeight: 1.7,
-              letterSpacing: '0.14em',
-              cursor: 'pointer',
-              padding: '2px 0',
-            }}
-          >
-            ホームへ
-          </button>
+        <p className="v2-welcome-note">チケットの画面に入っています。</p>
+        <div className="v2-welcome-actions">
+          <button type="button" className="v2-btn v2-btn-gold" onClick={onTickets}>クーポンを見る</button>
+          <button type="button" className="v2-btn v2-btn-quiet" onClick={onHome}>ホームへ</button>
         </div>
       </motion.div>
     </motion.div>,

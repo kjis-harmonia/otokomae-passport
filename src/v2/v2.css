@@ -666,3 +666,15 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-showcase-dots i.on { width: 18px; background: #1d1d1f; }
 .v2-showcase-fine { margin: 0; padding: 0 24px; font-size: 12px; color: #86868b; text-align: center; }
 @media (prefers-reduced-motion: reduce) { .v2-showcase { animation: none; } .v2-showcase-ticket { transition: none; } }
+
+/* はじめての Welcome クーポン（App.tsx WelcomeCouponDialog）。今のアプリと同じクリーム色で、クーポン1枚とボタンだけ */
+.v2-welcome { position: fixed; inset: 0; z-index: 99990; min-height: 0; display: grid; place-items: center; overflow-y: auto;
+  padding: max(24px, env(safe-area-inset-top, 0px)) var(--v2-gutter-right) max(24px, env(safe-area-inset-bottom, 0px)) var(--v2-gutter-left); }
+.v2-welcome-body { width: 100%; max-width: 400px; text-align: center; }
+.v2-welcome-hello { margin: 0; font-size: 14px; color: var(--v2-sub); letter-spacing: .04em; }
+.v2-welcome-title { margin: 6px 0 28px; font: 700 26px/1.4 var(--v2-serif); letter-spacing: .06em; color: var(--v2-ink); }
+.v2-welcome-coupon { padding: 22px 20px 24px; }
+.v2-welcome-menu { margin: 4px 0 0; font: 700 18px/1.4 var(--v2-serif); letter-spacing: .08em; color: var(--v2-ink); }
+.v2-welcome-price { margin: 2px 0 0; font: 700 34px/1.25 var(--v2-serif); letter-spacing: .02em; color: var(--v2-gold-deep); }
+.v2-welcome-note { margin: 14px 0 28px; font-size: 13px; line-height: 1.7; color: var(--v2-faint); }
+.v2-welcome-actions { display: grid; gap: 4px; }
