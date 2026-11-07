@@ -511,7 +511,12 @@ function MemberTicketWallet({
           </p>
         )
       }
-      return <SecondaryLink href={MAINTENANCE_CUT_URL} external>メンテナンスカットを予約する</SecondaryLink>
+      // 14日を過ぎたら予約の入口は出さない（11/7 慶一郎さん）
+      return (
+        <p style={{ fontSize: 12, lineHeight: 1.7, color: 'rgba(31,28,24,0.84)', textAlign: 'center' }}>
+          ご利用の期限が過ぎました。次のご来店で会員QRを読むと、また14日間ご利用いただけます。
+        </p>
+      )
     }
 
     if (isPremiumCard(card)) {

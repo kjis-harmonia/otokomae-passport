@@ -5,7 +5,8 @@ import {useCustomerAccessSession} from '../features/customerAccess/useCustomerAc
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence } from 'framer-motion'
-import { MAINTENANCE_CUT_URL, getReserveUrl } from '../data/reserveLinks'
+// メンテナンスカットのホットペッパーの入口は出さない（14日以内のお客様だけ AI予約に出る・11/7 慶一郎さん）
+import { getReserveUrl } from '../data/reserveLinks'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../data/wallet'
 import { JohnnyBookingAssistant } from '../features/johnny/JohnnyBookingAssistant'
 import { takeJohnnyIntent } from '../features/johnny/bookingIntent'
@@ -19,7 +20,6 @@ const SANS = '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP"
 
 /** 既存のクーポン予約リンクがあるメニューだけ（reserveLinks のURLをそのまま使う） */
 const HOTPEPPER_MENUS: { label: string; url: string }[] = [
-  { label: 'メンテナンスカット（前回来店から14日以内）', url: MAINTENANCE_CUT_URL },
   ...['濡れパン', 'パンチパーマ', 'カールアイパー', 'ニグロパーマ', '銀パラ', 'テイテイ刈り']
     .map(label => ({ label, url: getReserveUrl(label) }))
     .filter(m => m.url),

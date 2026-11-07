@@ -1641,10 +1641,8 @@ export function JohnnyBookingAssistant({ onClose, onShowQr, initialMenuCode = nu
                 {step.w.usual.filter(m => m.code !== 'maintenance').map(m => (
                   <Row key={m.code} onClick={() => handleText(m.name)} title={`${m.name}で予約`} detail={yen(m)} note="いつもの" />
                 ))}
-                {step.w.maintenanceLeft != null ? (
+                {step.w.maintenanceLeft != null && (
                   <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={step.w.maintenanceLeft === 0 ? '今日まで' : `あと${step.w.maintenanceLeft}日`} />
-                ) : step.w.usual.some(m => m.code === 'maintenance') && (
-                  <Row onClick={startMaintenance} title="メンテナンスカットで予約" detail={maintenanceMenu ? `${maintenanceMenu.duration_min}分・${yen(maintenanceMenu)}` : 'ホットペッパー'} note="いつもの" />
                 )}
                 {/* いつもの担当：押すたびに 担当1 → 担当2 → 毎回選ぶ と切り替わる */}
                 {(options?.staff?.length ?? 0) > 1 && (
@@ -2829,7 +2827,8 @@ function GroupFlow({ api, menus, staff, size, primaryMenu, members, windowDays, 
             <>
               {idx > 0 && !memberName && freeMembers.length > 0 && <p style={{ margin: '20px 2px -14px', fontSize: 13, color: C.secondary }}>ほかの方</p>}
               <List guide="gf-menus">
-                {(idx === 0 ? [planMenu, ...menus.filter(m => m.code !== planMenu.code)] : memberMenu ? [memberMenu, ...menus.filter(m => m.code !== memberMenu.code)] : menus).map(m => {
+                {/* お連れ様にメンテナンスカットは出さない（QR の来店記録はご本人の分だけ・11/7） */}
+                {(idx === 0 ? [planMenu, ...menus.filter(m => m.code !== planMenu.code)] : (memberMenu ? [memberMenu, ...menus.filter(m => m.code !== memberMenu.code)] : menus).filter(m => m.code !== 'maintenance')).map(m => {
                   const at = persons[idx].at
                   const ok = fits(m.code, at)
                   const later = ok ? null : nextFit(m.code, at)
