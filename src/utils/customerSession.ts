@@ -37,8 +37,22 @@ export function hasCustomerSession(): boolean {
   return getCustomerSession() !== null
 }
 
+/** 会員ごとに端末に残すもの。端末の会員が別の人に変わったら消す（前の人の「いつもの」・お連れ様の名前・最初の案内を持ち越さない・11/7）
+ *  同じ会員のログインし直しでは消さない（案内をくり返さない） */
+export const MEMBER_LOCAL_KEYS = [
+  'otokomae_coupons', 'otokomae_gacha_date', 'otokomae_gacha_result', 'ginjiro_active_ticket', 'ginjiro_pending_contact', 'ginjiro_current_reservation',
+  'ginjiro_companion_reservations', 'ginjiro_member_issued_at', 'ginjiro_next_reservation', 'ginjiro_companion_names',
+  'ginjiro_usual_menu', 'ginjiro_usual_staff', 'ginjiro_usual_members', 'ginjiro_guide_seen_customer', 'ginjiro_first_guide', 'ginjiro_johnny_ai_count',
+]
+export function clearMemberLocal(): void {
+  for (const key of MEMBER_LOCAL_KEYS) { try { localStorage.removeItem(key) } catch { /* 保存できない端末 */ } }
+}
+
 /** サーバーが返した user_id とセッションを端末に保存する */
 export function saveCustomerSession(userId: string, session: string): void {
+  const previous = getStoredValue<string | null>(USER_ID_KEY, null)
+  // 前の会員がログインしていたときだけ（登録の途中の仮の番号から本番の番号に変わるときは消さない）
+  if (previous && previous !== userId && getCustomerSession()) clearMemberLocal()
   setStoredValue(USER_ID_KEY, userId)
   try { localStorage.setItem(CUSTOMER_SESSION_KEY, session) } catch { /* ignore */ }
   window.dispatchEvent(new Event('ginjiro:customer-session-changed'))
@@ -121,7 +135,9 @@ export async function repairUserIdFromSession(): Promise<boolean> {
   try {
     const r = await callCustomerRpc<{ user_id?: string } | null>('customer_get_profile')
     const owner = r?.user_id
-    if (!owner || getStoredValue<string | null>(USER_ID_KEY, null) === owner) return false
+    const previous = getStoredValue<string | null>(USER_ID_KEY, null)
+    if (!owner || previous === owner) return false
+    if (previous) clearMemberLocal()
     setStoredValue(USER_ID_KEY, owner)
     window.dispatchEvent(new Event('ginjiro:customer-session-changed'))
     return true

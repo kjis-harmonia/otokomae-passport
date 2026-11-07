@@ -99,7 +99,7 @@ for(const environment of [stage,prod])test(environment.name+': real signed enrol
 test('the actual client flag and endpoint follow the configured project, not a production label',async()=>{
  let source=await readFile(new URL('../src/features/customerAccess/passkeys.ts',import.meta.url),'utf8')
  source=source
-  .replace(/import \{clearCustomerSession,getCustomerSession,saveCustomerSession\}[^\n]+/,"const clearCustomerSession=()=>{},getCustomerSession=()=>globalThis.__accessFixture.session,saveCustomerSession=()=>{}")
+  .replace(/import \{clearCustomerSession,clearMemberLocal,getCustomerSession,saveCustomerSession\}[^\n]+/,"const clearCustomerSession=()=>{},clearMemberLocal=()=>{},getCustomerSession=()=>globalThis.__accessFixture.session,saveCustomerSession=()=>{}")
   .replace(/import \{getStoredValue,loadMemberStatus,saveMemberStatus,setStoredValue,ONBOARDING_DONE_KEY,ONBOARDING_NAME_KEY\}[^\n]+/,"const getStoredValue=()=>null,loadMemberStatus=()=>({}),saveMemberStatus=()=>{},setStoredValue=()=>{},ONBOARDING_DONE_KEY='done',ONBOARDING_NAME_KEY='name'")
   .replace(/import \{USER_ID_KEY\}[^\n]+/,"const USER_ID_KEY='user'")
   .replace("'../../../supabase/functions/_shared/customer-environment.ts'",JSON.stringify(new URL('../supabase/functions/_shared/customer-environment.ts',import.meta.url).href))
