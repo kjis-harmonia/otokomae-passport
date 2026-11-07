@@ -9,6 +9,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowUp, ChevronRight, X } from 'lucide-react'
 import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { matchMenu } from '../features/johnny/menuMatcher'
+import { askUsualAi } from '../features/johnny/usualAi'
+import type { AgentTurn } from '../features/johnny/agentClient'
 import { canBeUsual, setUsualMenu, usualMenuOrder } from '../features/johnny/usualMenu'
 import { loadUsual } from './usualPicks'
 import { MAX_COMPANIONS, saveCompanion, setOwnerMaintenance } from '../features/johnny/usualMembers'
@@ -68,6 +70,8 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
   const [mates, setMates] = useState<{ name: string; menu: Menu; maint: boolean }[]>([])
   const [done, setDone] = useState(false)
   const nextId = useRef(1)
+  // 銀ちゃん（AI）に送る、これまでの会話
+  const turnsRef = useRef<AgentTurn[]>([])
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const matesRef = useRef(mates)
@@ -88,14 +92,14 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
   useLayoutEffect(() => { const el = logRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? 'auto' : 'smooth' }) }, [msgs, chips, typing, reduce])
 
   /** 銀ちゃんが話す（少し間をおいて。ボタンはそのあと） */
-  const gin = (line: string, next: Chip[] = [], nextAsk: Ask = { k: 'none' }) => {
+  const gin = (line: string, next: Chip[] = [], nextAsk: Ask = { k: 'none' }, now = false) => {
     setChips([]); setAsk({ k: 'none' }); setTyping(true)
     window.setTimeout(() => {
       setTyping(false)
       setMsgs(m => [...m, { id: nextId.current++, from: 'gin', text: line }])
       setChips(next); setAsk(nextAsk)
       if (nextAsk.k !== 'none') window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50)
-    }, reduce ? 0 : 520)
+    }, reduce || now ? 0 : 520)
   }
   const you = (line: string) => setMsgs(m => [...m, { id: nextId.current++, from: 'you', text: line }])
 
@@ -111,7 +115,8 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
       return
     }
     if (name) { gin(`${name}は、いつも何にしよるん？`, pickChips, { k: 'menu', who }); return }
-    gin(visited ? 'いつもは何にしよるん？' : 'どんな髪型にしたいん？', visited ? pickChips : [
+    gin(visited ? 'いつもは何にしよるん？' : 'どのメニューにする？\nホットペッパーのメニューも見れるよ。', visited ? pickChips : [
+      { label: 'HOT PEPPER で見る', act: () => window.open(HOTPEPPER_MENU_URL, '_blank', 'noopener') },
       { label: 'カット', act: () => hear(who, 'カット') },
       { label: 'パーマ', act: () => hear(who, 'パーマ') },
       { label: 'パンチ・アイパー', act: () => hear(who, 'パンチ') },
@@ -119,8 +124,31 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
     ], { k: 'menu', who })
   }
   /** お客様の言葉 → メニュー */
+  /** お客様の言葉 → メニュー。名前がそのまま分かればすぐ確かめる。それ以外は銀ちゃん（AI）と話す。AI が使えんときは決まった規則で */
   const hear = (who: Who, said: string) => {
     you(said)
+    const all = menus ?? []
+    const hit = matchMenu(said, all)
+    if (hit) { turnsRef.current.push({ role: 'user', text: said }); check(who, hit); return }
+    setChips([]); setAsk({ k: 'none' }); setTyping(true)
+    const history = turnsRef.current.slice()
+    turnsRef.current.push({ role: 'user', text: said })
+    void askUsualAi(said, history, { visited, who: who.kind === 'mate' ? who.name : null }).then(r => {
+      setTyping(false)
+      if (!r) { hearByRules(who, said); return }
+      turnsRef.current.push({ role: 'assistant', text: r.say })
+      const one = r.menu_code ? all.find(m => m.code === r.menu_code) : undefined
+      if (one) { check(who, one, r.say); return }
+      const opts = r.options.map(c => all.find(m => m.code === c)).filter((m): m is Menu => !!m)
+      const chips: Chip[] = opts.map(m => ({ label: m.name, sub: yen(m.price), act: () => { you(m.name); turnsRef.current.push({ role: 'user', text: m.name }); check(who, m) } }))
+      if (r.action === 'hotpepper') chips.push({ label: 'HOT PEPPER で見る', strong: !opts.length, act: () => window.open(HOTPEPPER_MENU_URL, '_blank', 'noopener') })
+      if (r.action === 'phone') chips.push({ label: 'お店に電話する', strong: !opts.length, act: () => { window.location.href = SHOP_PHONE_TEL } })
+      chips.push({ label: opts.length ? 'ほかを見る' : '一覧から選ぶ', act: () => setList({ who }) })
+      gin(r.say, chips, { k: 'menu', who }, true)
+    })
+  }
+  /** AI が使えんとき：決まった規則で */
+  const hearByRules = (who: Who, said: string) => {
     const all = menus ?? []
     if (/迷|まよ|わから|分から|おまかせ|相談/.test(said)) {
       gin('ほいじゃ、写真見て決めてもええし、電話で相談してもええよ。', [
@@ -130,8 +158,6 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
       ], { k: 'menu', who })
       return
     }
-    const hit = matchMenu(said, all)
-    if (hit) { check(who, hit); return }
     const cand = candidates(said, all)
     if (cand.length) {
       gin('この中なら、どれが近い？', [...cand.map(m => ({ label: m.name, sub: yen(m.price), act: () => { you(m.name); check(who, m) } })), { label: 'ほかを見る', act: () => setList({ who }) }], { k: 'menu', who })
@@ -140,9 +166,9 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
     gin('ごめん、ようわからんかった。\n「パンチ」とか「短く」みたいに言うてみて。', [{ label: '一覧から選ぶ', act: () => setList({ who }) }], { k: 'menu', who })
   }
   /** 正式な名前と料金で確かめる */
-  const check = (who: Who, menu: Menu) => {
+  const check = (who: Who, menu: Menu, lead?: string) => {
     const whose = who.kind === 'mate' ? `${honor(who.name)}のいつもは` : 'いつものは'
-    gin(`${whose}「${menu.name}」${menu.price != null ? ` ${yen(menu.price)}` : ''}じゃね。\nこれで登録してええ？`, [
+    gin(`${lead && !lead.includes(menu.name) ? lead + '\n' : ''}${whose}「${menu.name}」${menu.price != null ? ` ${yen(menu.price)}` : ''}じゃね。\nこれで登録してええ？`, [
       { label: '登録する', strong: true, act: () => { you('登録する'); if (menu.maintenance) askMaint(who, menu); else void commit(who, menu, false) } },
       { label: 'ちがう', act: () => { you('ちがう'); gin('ほいじゃ、何にする？', [{ label: '一覧から選ぶ', act: () => setList({ who }) }], { k: 'menu', who }) } },
     ])
