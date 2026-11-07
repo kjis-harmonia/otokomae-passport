@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { getCustomerSession, clearCustomerSession } from './utils/customerSession'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { ChevronRight, Ticket } from 'lucide-react'
 import { OnboardingScreen, type OnboardingDonePayload } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import { flushPendingContact } from './utils/customerContact'
@@ -126,17 +127,18 @@ function WelcomeCouponDialog({
         aria-modal="true"
         aria-label={`${name}さんのWelcomeクーポン`}
       >
-        <p className="v2-welcome-hello">{name ? `${name}さん、ようこそ` : 'ようこそ'}</p>
-        <h2 className="v2-welcome-title">二代目銀二郎へ</h2>
-        <div className="v2-panel v2-glass v2-welcome-coupon">
-          <p className="v2-label">Welcomeクーポン</p>
+        <img className="v2-welcome-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" />
+        <p className="v2-welcome-eyebrow">WELCOME COUPON</p>
+        <h2 className="v2-welcome-title">ようこそ、<br />二代目銀二郎へ</h2>
+        <p className="v2-welcome-lead">初回限定のクーポンをお届けしました</p>
+        <div className="v2-welcome-coupon">
           <p className="v2-welcome-menu">パーマ</p>
-          <p className="v2-welcome-price">¥2,000 OFF</p>
+          <p className="v2-welcome-price">2,000<small>円</small> OFF</p>
+          <p className="v2-welcome-note">平日のご来店でお使いいただけます</p>
         </div>
-        <p className="v2-welcome-note">チケットの画面に入っています。</p>
         <div className="v2-welcome-actions">
-          <button type="button" className="v2-btn v2-btn-gold" onClick={onTickets}>クーポンを見る</button>
-          <button type="button" className="v2-btn v2-btn-quiet" onClick={onHome}>ホームへ</button>
+          <button type="button" className="v2-btn v2-btn-gold" onClick={onTickets}><Ticket size={20} />クーポンを見る</button>
+          <button type="button" className="v2-btn v2-btn-quiet v2-welcome-home" onClick={onHome}>ホームへ<ChevronRight size={16} /></button>
         </div>
       </motion.div>
     </motion.div>,

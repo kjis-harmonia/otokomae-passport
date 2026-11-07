@@ -667,14 +667,27 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-showcase-fine { margin: 0; padding: 0 24px; font-size: 12px; color: #86868b; text-align: center; }
 @media (prefers-reduced-motion: reduce) { .v2-showcase { animation: none; } .v2-showcase-ticket { transition: none; } }
 
-/* はじめての Welcome クーポン（App.tsx WelcomeCouponDialog）。今のアプリと同じクリーム色で、クーポン1枚とボタンだけ */
+/* はじめての Welcome クーポン（App.tsx WelcomeCouponDialog）。今のアプリと同じクリーム色。11/7 慶一郎さんの見本どおり：ロゴ・見出し・チケットの形の券・ボタン */
 .v2-welcome { position: fixed; inset: 0; z-index: 99990; min-height: 0; display: grid; place-items: center; overflow-y: auto;
   padding: max(24px, env(safe-area-inset-top, 0px)) var(--v2-gutter-right) max(24px, env(safe-area-inset-bottom, 0px)) var(--v2-gutter-left); }
 .v2-welcome-body { width: 100%; max-width: 400px; text-align: center; }
-.v2-welcome-hello { margin: 0; font-size: 14px; color: var(--v2-sub); letter-spacing: .04em; }
-.v2-welcome-title { margin: 6px 0 28px; font: 700 26px/1.4 var(--v2-serif); letter-spacing: .06em; color: var(--v2-ink); }
-.v2-welcome-coupon { padding: 22px 20px 24px; }
-.v2-welcome-menu { margin: 4px 0 0; font: 700 18px/1.4 var(--v2-serif); letter-spacing: .08em; color: var(--v2-ink); }
-.v2-welcome-price { margin: 2px 0 0; font: 700 34px/1.25 var(--v2-serif); letter-spacing: .02em; color: var(--v2-gold-deep); }
-.v2-welcome-note { margin: 14px 0 28px; font-size: 13px; line-height: 1.7; color: var(--v2-faint); }
-.v2-welcome-actions { display: grid; gap: 4px; }
+.v2-welcome-logo { display: block; height: 64px; width: auto; margin: 0 auto 26px; }
+.v2-welcome-eyebrow { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 0 0 14px; font: 600 12px/1 var(--v2-serif); letter-spacing: .24em; margin-right: -.24em; color: var(--v2-gold-deep); }
+.v2-welcome-eyebrow::before, .v2-welcome-eyebrow::after { content: ""; width: 40px; height: 1px; background: rgba(120,86,39,.45); }
+.v2-welcome-title { margin: 0; font: 700 clamp(26px, 8vw, 32px)/1.45 var(--v2-serif); letter-spacing: .06em; color: var(--v2-ink); }
+.v2-welcome-lead { margin: 12px 0 26px; font: 500 14px/1.7 var(--v2-serif); letter-spacing: .06em; color: var(--v2-sub); }
+.v2-welcome-coupon { position: relative; overflow: hidden; margin: 0 6px; padding: 20px 28px 16px; border-radius: 22px; border: 1px solid rgba(174,137,80,.55);
+  background: linear-gradient(175deg, rgba(255,255,255,.82), rgba(250,245,235,.6)); box-shadow: 0 14px 30px -18px rgba(120,83,31,.45), inset 0 1px 0 #fff; }
+/* 左右の切り欠き（チケットの形）：ページと同じ色の丸を、券のふちに半分だけ重ねる */
+.v2-welcome-coupon::before, .v2-welcome-coupon::after { content: ""; position: absolute; top: 50%; width: 26px; height: 26px; margin-top: -13px; border-radius: 50%;
+  background: #f3efe7; border: 1px solid rgba(174,137,80,.55); }
+.v2-welcome-coupon::before { left: -14px; }
+.v2-welcome-coupon::after { right: -14px; }
+.v2-welcome-menu { margin: 0; font: 700 22px/1.4 var(--v2-serif); letter-spacing: .1em; color: var(--v2-ink); }
+.v2-welcome-price { margin: 2px 0 12px; padding-bottom: 12px; border-bottom: 1px solid rgba(174,137,80,.35); font: 700 46px/1.15 var(--v2-serif); letter-spacing: .01em; color: var(--v2-gold-deep);
+  background: linear-gradient(180deg, #b48a4c, #7a5424); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.v2-welcome-price small { font-size: .6em; margin-right: .15em; }
+.v2-welcome-note { margin: 0; font-size: 13px; line-height: 1.6; letter-spacing: .06em; color: var(--v2-sub); }
+.v2-welcome-actions { display: grid; gap: 6px; margin-top: 30px; }
+.v2-welcome-actions .v2-btn-gold { font-family: var(--v2-serif); font-size: 17px; letter-spacing: .12em; }
+.v2-welcome-home { background: none; color: var(--v2-sub); font-weight: 500; gap: 4px; }
