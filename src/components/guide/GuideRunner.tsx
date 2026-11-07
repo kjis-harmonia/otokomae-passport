@@ -58,7 +58,7 @@ const isField = (el: EventTarget | null) => el instanceof HTMLSelectElement || e
 
 export type GuideWords = { kicker: string; title: string; lead: string; others: string }
 // お客様アプリは 👇 の代わりに「ちび銀ちゃん」が指さす。絵の指先は 横42%・縦82%、高さ 140px
-const CHIBI = { h: 140, tipX: 0.42, tipY: 0.82, sprite: '/guide/chibi-squat-sprite.webp', still: '/guide/chibi-squat.png' }
+const CHIBI = { h: 140, w: 140 * 183 / 300, tipX: 0.42, tipY: 0.82, sprite: '/guide/chibi-squat-sprite.webp', still: '/guide/chibi-squat.png' }
 const STAFF_WORDS: GuideWords = { kicker: '使い方ガイド', title: 'これから何を行いますか？', lead: '選ぶと、押す場所を順番に案内します。', others: 'ほかの作業を見る' }
 
 export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, paused = false, pauseWhen, words = STAFF_WORDS, chibi = false }: {
@@ -196,9 +196,9 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
         scrolledFor.current = key
         // 見える所（上 64px・下 150px を除く）より高い枠は、真ん中に合わせると一番上が隠れるので上に合わせる
         const tall = r.height > window.innerHeight - 214
-        //   上に合わせるときは、枠の上の線と 👇 が見えるよう少し空ける
+        //   上に合わせるときは、枠の上の線と 👇 が見えるよう少し空ける（ちび銀ちゃんは枠の右上の角に座るので、その分も空ける）
         const margin = el.style.scrollMarginTop
-        if (tall) el.style.scrollMarginTop = '24px'
+        if (tall) el.style.scrollMarginTop = `${chibi ? 24 + CHIBI.h : 24}px`
         el.scrollIntoView({ block: tall ? 'start' : 'center', inline: 'center', behavior: 'smooth' })
         if (tall) el.style.scrollMarginTop = margin
       }
@@ -208,7 +208,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     tick()
     const id = window.setInterval(tick, 120)
     return () => window.clearInterval(id)
-  }, [step, steps, runTask, runStep, advance, hold, ns])
+  }, [step, steps, runTask, runStep, advance, hold, ns, chibi])
 
   // 囲んだ場所を押したら次へ（入力欄は選び終わったら）
   useEffect(() => {
@@ -290,8 +290,12 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const bubbleTop = !!ring && ring.height <= vh - 214 && ring.top + ring.height / 2 > vh * 0.55
   // 指先の位置（👇 の先と同じ所）
   const tipTop = ring ? (fingerInside ? ring.top + Math.min(ring.height / 2, 160) : ring.top - 6) : 0
-  // ちび銀ちゃん：体が画面の上に入らないとき（押す場所が上の方）は出さない
-  const chibiTop = tipTop - CHIBI.h * CHIBI.tipY
+  // ちび銀ちゃん：ふつうは指先を押す場所に合わせる。縦に大きい枠（写真の並び・一覧など）は、中身に重ならないよう枠の右上の角に座る
+  //   体が画面の上に入らないとき（押す場所が上の方）は出さない
+  const chibiLeft = !ring ? 0 : fingerInside
+    ? Math.min(ring.left + ring.width, window.innerWidth) - 6 - CHIBI.w
+    : ring.left + ring.width / 2 - CHIBI.w * CHIBI.tipX
+  const chibiTop = !ring ? 0 : fingerInside ? ring.top + 4 - CHIBI.h : tipTop - CHIBI.h * CHIBI.tipY
   const chibiFits = !!ring && (fingerInside || fingerAbove) && chibiTop >= 8 && !(bubbleTop && chibiTop < bubbleBottom + 4)
 
   return createPortal(
@@ -302,7 +306,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
             style={{ top: ring.top, left: ring.left, width: ring.width, height: ring.height }} />
           {/* 読むだけの手順（予約できました など）は指を出さない。日時やタイトルにかぶるので */}
           {!step.read && chibi && chibiFits && <div className="gd-chibi" aria-hidden="true"
-            style={{ left: ring.left + ring.width / 2, top: tipTop }} />}
+            style={{ left: chibiLeft, top: chibiTop }} />}
           {!step.read && !chibi && <div className={`gd-finger${fingerAbove || fingerInside ? '' : ' is-below'}`} aria-hidden="true"
             style={{ left: ring.left + ring.width / 2, top: fingerInside ? ring.top + Math.min(ring.height / 2, 160) : fingerAbove ? ring.top - 6 : ring.top + ring.height + 6 }}>
             {fingerAbove || fingerInside ? '👇' : '👆'}
