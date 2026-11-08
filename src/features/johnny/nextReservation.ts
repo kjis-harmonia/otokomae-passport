@@ -10,7 +10,7 @@ const KEY = 'ginjiro_next_reservation'
 const EVENT = 'ginjiro:reservation-changed'
 const ACTIVE: CustomerReservation['status'][] = ['confirmed', 'checked_in', 'in_service', 'awaiting_payment']
 
-function isUpcoming(r: CustomerReservation, now = Date.now()): boolean {
+export function isUpcoming(r: CustomerReservation, now = Date.now()): boolean {
   return ACTIVE.includes(r.status) && new Date(r.ends_at).getTime() > now
 }
 

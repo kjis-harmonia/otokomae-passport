@@ -32,6 +32,8 @@ import { V2App } from './v2/V2App'
 import { needsInstallFirst } from './utils/installGuide'
 import { isStaging } from './utils/env'
 import { FirstGuide } from './v2/FirstGuide'
+import { GinChat, type GinMode } from './v2/GinChat'
+import { fetchVisitsToConfirm } from './v2/visitConfirm'
 import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 import { refreshPushIfGranted } from './utils/webPush'
@@ -349,6 +351,25 @@ function App() {
 
   // JOHNNY のお知らせ：許可済みなら受け取り先をサーバーに入れ直す（変わることがある）
   useEffect(() => { if (phase === 'app') void refreshPushIfGranted() }, [phase])
+  // 店頭で QR を読んだあと、次にアプリを開いたら銀ちゃんが接客する（11/8。Staging から・本番は承認のあと）
+  //   「あとで」で閉じたら、このアプリを開いている間はもう出さない（次に開いたときにまた聞く）
+  const [ginChat, setGinChat] = useState<GinMode | null>(null)
+  useEffect(() => {
+    if (phase !== 'app' || !customerAccessSession || !isStaging()) return
+    let alive = true
+    const check = () => {
+      try { if (sessionStorage.getItem('ginjiro_ginchat_later')) return } catch { /* 読めない端末は毎回確かめる */ }
+      void fetchVisitsToConfirm().then(p => { if (alive && p) setGinChat(c => c ?? { kind: 'welcome', pending: p }) })
+    }
+    check()
+    // ホームの「いつものでAI予約する」：銀ちゃんの会話で予約（Staging）
+    const onBook = () => setGinChat({ kind: 'book' })
+    window.addEventListener('ginjiro:gin-book', onBook)
+    const onVisible = () => { if (document.visibilityState === 'visible') check() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { alive = false; window.removeEventListener('ginjiro:gin-book', onBook); document.removeEventListener('visibilitychange', onVisible) }
+  }, [phase, customerAccessSession])
+  const closeGinChat = () => { try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
 
   return (
     <>
@@ -373,9 +394,10 @@ function App() {
           <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
 
           {firstGuide && !welcomeCouponDialog && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
+          {ginChat && !firstGuide && !welcomeCouponDialog && <GinChat key={ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
 
           {/* 使い方ガイド：最初の案内・Welcome クーポン・Face ID の案内が出ている間は出さない */}
-          <CustomerGuide paused={!!firstGuide || !!welcomeCouponDialog || passkeyOffer || appLoading} />
+          <CustomerGuide paused={!!firstGuide || !!ginChat || !!welcomeCouponDialog || passkeyOffer || appLoading} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (

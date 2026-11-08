@@ -30,12 +30,14 @@ const SCHEMA = {
   },
 } as const
 
-function system(menus: readonly MenuInfo[], visited: boolean, who: string | null, rejected: readonly MenuInfo[]): string {
+function system(menus: readonly MenuInfo[], visited: boolean, who: string | null, rejected: readonly MenuInfo[], visitDate: string | null = null): string {
   const list = menus.map(m => `${m.code} | ${m.name} | ${m.price == null ? '料金は店で' : `¥${m.price.toLocaleString('ja-JP')}${m.price_from ? '〜' : ''}`} | ${m.duration_min}分${m.category ? ` | ${m.category}` : ''}`).join('\n')
   const person = who ? `お連れ様の「${who}」` : 'お客様ご本人'
   return [
     'あなたは広島の理容室「二代目銀二郎」の看板キャラ「銀ちゃん」。バイクに乗ったリーゼントの男の子で、気さくな接客担当。',
-    `今の仕事：${person}の「いつものメニュー」（次から押すだけで予約できる、いつも頼むメニュー）を、相談に乗りながら一緒に決めること。`,
+    visitDate
+      ? `今の仕事：${person}が ${visitDate} に来店したときに受けたメニューを聞いて、一緒に確かめること（それがその日の記録と「いつものメニュー」になる）。思い出せんときは、長さ・パーマの有無などを1つずつ聞いて手伝う。`
+      : `今の仕事：${person}の「いつものメニュー」（次から押すだけで予約できる、いつも頼むメニュー）を、相談に乗りながら一緒に決めること。`,
     '',
     '■ 接客のしかた',
     visited
@@ -68,14 +70,14 @@ function system(menus: readonly MenuInfo[], visited: boolean, who: string | null
   ].join('\n')
 }
 
-export async function runUsual(menus: readonly MenuInfo[], history: Turn[], message: string, opts: { visited: boolean; who: string | null; rejected?: string[] },
+export async function runUsual(menus: readonly MenuInfo[], history: Turn[], message: string, opts: { visited: boolean; who: string | null; rejected?: string[]; visitDate?: string | null },
   llm: { apiKey: string; model: string }, fetchImpl: typeof fetch = fetch): Promise<UsualReply> {
   const rejectedCodes = new Set((opts.rejected ?? []).filter(c => typeof c === 'string').slice(0, 20))
   // いつものにできるメニューだけ（アプリの canBeUsual と同じ：オプション・前髪・メンテナンスカットは除く）
   const usable = menus.filter(m => !/^(maintenance|opt-)/.test(m.code) && m.code !== 'cut-bangs')
   const codes = new Set(usable.map(m => m.code))
   const messages = [
-    { role: 'system', content: system(usable, opts.visited, opts.who, usable.filter(m => rejectedCodes.has(m.code))) },
+    { role: 'system', content: system(usable, opts.visited, opts.who, usable.filter(m => rejectedCodes.has(m.code)), opts.visitDate ?? null) },
     ...history.slice(-16).map(t => ({ role: t.role, content: t.text })),
     { role: 'user', content: message },
   ]

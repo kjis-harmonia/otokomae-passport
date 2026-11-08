@@ -15,12 +15,12 @@ export interface UsualAiReply {
 
 const TIMEOUT_MS = 15000
 
-export async function askUsualAi(message: string, history: readonly AgentTurn[], opts: { visited: boolean; who: string | null; rejected?: string[] }): Promise<UsualAiReply | null> {
+export async function askUsualAi(message: string, history: readonly AgentTurn[], opts: { visited: boolean; who: string | null; rejected?: string[]; visitDate?: string | null }): Promise<UsualAiReply | null> {
   const session = getCustomerSession()
   if (!session) return null
   try {
     const call = supabase.functions.invoke<Partial<UsualAiReply>>('johnny-agent', {
-      body: { mode: 'usual', session, message: message.slice(0, 200), history: history.slice(-12), visited: opts.visited, who: opts.who, rejected: (opts.rejected ?? []).slice(0, 20) },
+      body: { mode: 'usual', session, message: message.slice(0, 200), history: history.slice(-12), visited: opts.visited, who: opts.who, rejected: (opts.rejected ?? []).slice(0, 20), visit_date: opts.visitDate ?? null },
     })
     const res = await Promise.race([call, new Promise<null>(r => setTimeout(() => r(null), TIMEOUT_MS))])
     const d = res && !res.error ? res.data : null

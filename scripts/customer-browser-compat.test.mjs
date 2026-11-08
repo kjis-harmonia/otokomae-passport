@@ -35,6 +35,7 @@ function homeFixture(empty = false) {
     './usualPicks': { loadUsual: async () => null },
     '../utils/customerSession': { getCustomerSession: () => null },
     './V2PeopleSheet': { V2PeopleSheet: () => null },
+    '../utils/env': { isStaging: () => false },
   }
   context.require = name => { assert.ok(modules[name], name); return modules[name] }
   vm.runInContext(compile(homeSource), context)

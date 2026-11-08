@@ -14,6 +14,7 @@ import { V2GinpayBar } from './V2GinpayBar'
 import { loadUsual, type Usual } from './usualPicks'
 import { getCustomerSession } from '../utils/customerSession'
 import { V2PeopleSheet } from './V2PeopleSheet'
+import { isStaging } from '../utils/env'
 
 const yen = (n: number) => `¥${n.toLocaleString()}`
 
@@ -120,6 +121,8 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const reserve = () => {
     // いつものでメニューが分からないときは、メニューを決めずに Johnny（おかえりなさい から聞く）
     if (!selected) { requestJohnny({ menuCode: null, label: '' }); return }
+    // Staging：銀ちゃんの会話で予約（どなたの予約か・メニュー・いつ を銀ちゃんが聞く）。本番は承認のあと
+    if (selected.kind === 'usual' && isStaging()) { window.dispatchEvent(new Event('ginjiro:gin-book')); return }
     if (selected.kind === 'usual') { setPeopleOpen(true); return }
     requestJohnny({ menuCode: selected.code, label: selected.label, usual: selected.kind !== 'style', group: selected.kind === 'group' })
   }

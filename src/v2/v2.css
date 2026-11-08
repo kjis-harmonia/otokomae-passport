@@ -809,3 +809,58 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .gc-gin[data-name] { position: relative; margin-top: 22px; }
 .gc-gin[data-name]::before { content: attr(data-name); position: absolute; left: 6px; top: -20px; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--v2-faint); }
 .gc-log > .gc-gin[data-name]:first-child { margin-top: 26px; }
+
+/* ── 銀ちゃんの接客（LINE のように：左が銀ちゃん・右がお客様・下にボタンと入力欄・11/8） ── */
+.lc-head { position: relative; display: flex; flex-direction: column; align-items: center; padding: 4px 56px 6px; border-bottom: 1px solid rgba(70,55,34,.06);
+  background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0)); }
+.lc-head-rider { height: 74px; display: flex; align-items: flex-end; overflow: hidden; }
+.lc-head-name { margin: 2px 0 0; font: 600 13px/1 var(--v2-sans); letter-spacing: .08em; color: var(--v2-sub); }
+.lc-close { position: absolute; right: 8px; top: 8px; }
+.lc-log { padding-top: 14px; }
+.lc-dock { padding: 8px 0 calc(env(safe-area-inset-bottom, 0px) + 4px); background: linear-gradient(180deg, rgba(243,238,229,0), rgba(243,238,229,.9) 30%); }
+.lc-chips { padding: 0 14px 10px; justify-content: flex-start; }
+.lc-link { text-decoration: none; color: var(--v2-sub); font-weight: 500; display: inline-flex; align-items: center; }
+.lc-mic { flex: none; width: 40px; height: 40px; margin-left: -12px; border: 0; border-radius: 50%; display: grid; place-items: center; background: none; color: var(--v2-sub); cursor: pointer; }
+.lc-mic:disabled { opacity: .4; }
+.lc-mic-on { color: #fff; background: radial-gradient(120% 90% at 50% 0%, #b8894a 0%, #8a6330 70%); box-shadow: 0 0 0 4px rgba(174,137,80,.18); animation: lc-pulse 1.4s ease-in-out infinite; }
+@keyframes lc-pulse { 50% { box-shadow: 0 0 0 8px rgba(174,137,80,.08); } }
+@media (prefers-reduced-motion: reduce) { .lc-mic-on { animation: none; } }
+.lc .gc-composer { margin-bottom: 8px; }
+
+/* ── 銀ちゃんの接客の背景：高級ホテルのラウンジのように。アイボリーに、左上から柔らかい斜めの光。会話中は動かさない（11/8） ── */
+.lc.v2::before { display: none; }
+.lc { background:
+    linear-gradient(116deg, rgba(255,255,255,0) 8%, rgba(255,254,250,.62) 26%, rgba(255,255,255,0) 44%),
+    linear-gradient(116deg, rgba(255,255,255,0) 52%, rgba(255,253,246,.34) 60%, rgba(255,255,255,0) 70%),
+    radial-gradient(120% 70% at 0% 0%, #fffdf8 0%, rgba(255,253,248,0) 62%),
+    radial-gradient(100% 60% at 100% 100%, rgba(207,182,134,.16) 0%, rgba(207,182,134,0) 70%),
+    #f3eee4;
+  background-attachment: fixed; }
+.lc-head { flex-direction: row; justify-content: center; min-height: 48px; padding: 0 56px; border-bottom: 1px solid rgba(120,95,55,.08);
+  background: rgba(250,247,241,.72); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
+.lc-head-name { margin: 0; font: 600 15px/1 var(--v2-sans); letter-spacing: .06em; color: var(--v2-ink); }
+.lc-close { top: 2px; }
+.lc-hero { display: flex; justify-content: center; margin: 4px 0 2px; }
+.lc-row { display: flex; align-items: flex-start; gap: 8px; max-width: 88%; }
+.lc-row-head { margin-top: 6px; }
+.lc-col { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+/* 銀ちゃんのアイコン（金の縁は絵に入っているので、こちらでは縁を足さない・11/8 慶一郎さんの絵） */
+.lc-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; box-shadow: 0 3px 8px -3px rgba(60,45,25,.45); }
+.lc-avatar-gap { flex: none; width: 40px; }
+.lc-name { margin: 0 0 4px 4px; font-size: 11px; font-weight: 600; color: var(--v2-faint); letter-spacing: .04em; }
+.lc .gc-gin { max-width: none; border-radius: 4px 20px 20px 20px; }
+.lc .lc-row + .lc-row .gc-gin, .lc .lc-row:not(.lc-row-head) .gc-gin { border-radius: 20px; }
+.lc .gc-you { max-width: 78%; border-radius: 20px 4px 20px 20px; }
+.lc .gc-gin[data-name]::before { display: none; }
+
+.lc-cal { align-self: stretch; margin: 4px 0 2px 48px; padding: 10px 12px 12px; border-radius: 24px; }
+.lc-cal-head { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; }
+.lc-cal-head b { font: 600 16px/1 var(--v2-sans); }
+.lc-cal-head button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--v2-ink); cursor: pointer; }
+.lc-cal-head button:disabled { opacity: .22; }
+.lc-cal-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; text-align: center; }
+.lc-cal-grid > span { font-size: 12px; color: var(--v2-faint); padding: 4px 0 6px; }
+.lc-cal-grid .lc-sun { color: #b0574a; } .lc-cal-grid .lc-sat { color: #4f6c99; }
+.lc-cal-grid button { height: 42px; border: 0; border-radius: 21px; background: none; color: var(--v2-ink); font: 600 16px/1 var(--v2-sans); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .14s ease, transform .14s ease; }
+.lc-cal-grid button:not(:disabled):active { background: #2a241d; color: #fff; transform: scale(.94); }
+.lc-cal-grid button:disabled { color: rgba(40,35,30,.22); font-weight: 400; cursor: default; }
