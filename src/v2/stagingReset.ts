@@ -16,6 +16,5 @@ export async function resetStagingTester(): Promise<void> {
   if (r && r.error) throw new Error(r.error)
   LOCAL_KEYS.forEach(k => { try { localStorage.removeItem(k) } catch { /* 保存できない端末 */ } })
   // 登録した直後と同じく「いつものメニューを決めましょう」から（そのあと「？」の案内）
-  try { localStorage.setItem('ginjiro_first_guide', JSON.stringify({ visited: false })) } catch { /* 保存できない端末 */ }
   window.location.replace(window.location.pathname)
 }

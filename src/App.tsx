@@ -335,9 +335,12 @@ function App() {
     saveMemberStatus(nextStatus)
     setMemberStatus(nextStatus)
     setPhase('app')
-    const guide = { visited: !!payload?.hasVisitedBefore }
-    setStoredValue(FIRST_GUIDE_KEY, guide)
-    setFirstGuide(guide)
+    // 登録のあとはそのままホームへ（11/8 慶一郎さん：いつものは店頭の QR のあと、銀ちゃんが聞く）。Staging から。本番は承認のあと
+    if (!isStaging()) {
+      const guide = { visited: !!payload?.hasVisitedBefore }
+      setStoredValue(FIRST_GUIDE_KEY, guide)
+      setFirstGuide(guide)
+    }
     // Face ID の案内はクーポンのあと、ホームで1回だけ出る（上の useEffect）。店頭確認のあとにも、未設定ならもう一度出る
     if (payload?.welcomeCouponIssued && payload.ticket) {
       setWelcomeCouponDialog({ name: nextStatus.memberName, ticket: payload.ticket })
