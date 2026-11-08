@@ -52,7 +52,7 @@ const intent = (t: string): 'yes' | 'no' | 'ambiguous' | null => {
   const s = t.normalize('NFKC').replace(/\s/g, '').replace(/[。、,!！~〜]+$/g, '').replace(/ー+$/g, '').toLowerCase()
   if (t === 'はい') return 'yes'
   if (/^((いや|いいや|やっぱ(り)?|もう|ほんなら|そんなら)[、,]?)+(ええ|えー|えぇ|いい)(わ|よ|です|や)?$/.test(s) || /やめ(とく|とこ|る|ます|て)|いらん|いらない|結構|けっこう|キャンセル|せん(わ|よ)?$|しない$|^いいえ|^いえ$|^ううん/.test(s)) return 'no'
-  if (/^(はい|うん|ほうよ|ほうじゃ|せや|そう(です)?|了解|りょうかい|ok|okです|オッケー|おけ|お願い(します)?|おねがい(します)?|それで(ええ|えー|いい)?(わ|よ|で|です)?|それでお願い(します)?|それにする|予約(して|する|します|お願い(します)?))$/.test(s)) return 'yes'
+  if (/^(はい|うん|ほうよ|ほうじゃ|せや|そう(です)?|了解|りょうかい|ok|okです|オッケー|おけ|お願い(します)?|おねがい(します)?|それで(ええ|えー|いい)?(わ|よ|で|です)?|それでお願い(します)?|それにする|そのまま(で)?(ええ|いい|お願い(します)?)?(です|よ|わ)?|予約(して|する|します|お願い(します)?))$/.test(s)) return 'yes'
   if (/^(ええ|えー|えぇ|いい)(わ|よ|で|ね|じゃ)?$/.test(s)) return 'ambiguous'
   return null
 }
@@ -68,6 +68,8 @@ type Draft = {
   at: string | null
   /** 2人以上：それぞれの担当（同じ時間に別々の担当） */
   plan: Record<string, string | null> | null
+  /** 人・メニューを変えたとき：前に選んだ時間。空きを確かめ直して、空いとれば「このままでよろしいですか？」だけ聞く（11/8 慶一郎さん） */
+  recheck: { at: string; note: string; why: string } | null
 }
 const sameWho = (a: BookPerson[], b: BookPerson[]) => a.length === b.length && a.every(x => b.some(y => y.key === x.key))
 /** n 人に、別々の担当（m 人の中から）を割り当てる。できなければ null（人数は3人までなので総当たりで足りる） */
@@ -311,7 +313,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const opts = await api.options().catch(() => null)
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const staffList = opts?.staff ?? []
-    const d: Draft = { who: mates.length ? null : [owner], menus: {}, when: null, at: null, plan: null }
+    const d: Draft = { who: mates.length ? null : [owner], menus: {}, when: null, at: null, plan: null, recheck: null }
 
     /** 言葉の中の人（「朔耶だけ」「本人と朔耶」「2人とも」） */
     const whoIn = (t: string): BookPerson[] | null => {
@@ -356,9 +358,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const s = t.normalize('NFKC')
       const changing = /やっぱ|変え|変更|じゃなく|ではなく|だけ|にする|がええ|がいい|にして/.test(s)
       const w = whoIn(s)
-      if (w && (changing || d.who !== null) && !(d.who && sameWho(d.who, w))) {
+      // 「朔耶はアイパーにする」はメニューの変更。人の変更は「だけ」「2人とも」「全員」などのときだけ
+      const aboutWho = /だけ|のみ|全員|みんな|皆|とも|一緒|人で|も一緒|も予約|も追加|抜き|なし|やめ/.test(s) || !menuIn(s)
+      if (w && aboutWho && (changing || d.who !== null) && !(d.who && sameWho(d.who, w))) {
+        const note = `${w.map(p => p.label).join('と')}のご予約に変更しました。`
+        if (d.at) d.recheck = { at: d.at, note, why: '人数が変わって' }
+        else await say(`かしこまりました！${note}`)
         d.who = w; d.at = null; d.plan = null
-        await say(`かしこまりました！${w.map(p => p.label).join('と')}のご予約にしますね。`)
         return true
       }
       const m = menuIn(s)
@@ -369,8 +375,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           target = d.who.find(p => p.label === a || a.includes(p.name)) ?? d.who[0]
         }
         if (m.code === 'maintenance' && !target.person?.maintenance_ok) { await say(`${target.label}は、今はメンテナンスカットの期限が過ぎとるんです。`); return true }
+        const note = `${d.who.length > 1 ? target.label + 'は' : ''}「${m.name}」に変更しました。`
+        if (d.at) d.recheck = { at: d.at, note, why: 'メニューが変わって施術の時間も変わるので' }
+        else await say(`かしこまりました！${note}`)
         d.menus[target.key] = m; d.at = null; d.plan = null
-        await say(`かしこまりました！${target.label}は「${m.name}」にしますね。`)
         return true
       }
       const wh = whenIn(s)
@@ -441,6 +449,18 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       return out.slice(0, want)
     }
 
+    const planAt = async (at: string): Promise<Record<string, string | null> | null> => {
+      const who = d.who!, menus = who.map(p => d.menus[p.key]), day = dayOf(at), t = Date.parse(at)
+      if (who.length === 1) {
+        const l = await api.slots(day, menus[0].code)
+        return l.some(x => Date.parse(x.starts_at) === t) ? { [who[0].key]: null } : null
+      }
+      const free = await Promise.all(who.map((_, i) => Promise.all(staffList.map(st => api.staffSlots(day, menus[i].code, st.id)
+        .then(l => l.some(x => Date.parse(x.starts_at) === t)).catch(() => false)))))
+      const pick = assign(who.length, staffList.length, (pi, si) => free[pi][si])
+      return pick ? Object.fromEntries(who.map((p, i) => [p.key, staffList[pick[i]].id])) : null
+    }
+
     const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}`).join('\n')
 
     for (let guard = 0; guard < 40; guard++) {
@@ -460,6 +480,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (m === 'changed') continue
         if (!m) { await say('また決まりましたら、いつでも声をかけてくださいね。'); break }
         d.menus[need.key] = m
+        if (d.recheck && !d.recheck.note) d.recheck.note = `${d.who.length > 1 ? need.label + 'は' : ''}「${m.name}」に変更しました。`
         continue
       }
       // いつ？
@@ -480,6 +501,25 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         await say(d.who.length > 1 ? '全員そろって入れる日だけ、押せるようにしとりますけぇね。' : '空いとる日だけ、押せるようにしとりますけぇね。')
         const day = await pickDate(open)
         d.when = day ? { kind: 'day', day } : null
+        continue
+      }
+      // 人・メニューを変えた：前の時間で入れるか確かめ直す。入れたら「このままでよろしいですか？」だけ。入れんかったら理由を伝えて同じ日のほかの時間
+      //   【そのまま】は時間の了承だけ（予約の確定は最後の【この内容で予約する】）
+      if (d.recheck && !d.at) {
+        const { at, note, why } = d.recheck
+        d.recheck = null
+        setTyping(true)
+        const plan = await planAt(at).catch(() => null)
+        setTyping(false)
+        if (plan) {
+          const r = await askYN(`${note}${note ? '\n' : ''}${slotLabel(at)}のままでよろしいですか？`, 'そのまま', '時間を変更')
+          if (r === 'yes') { d.at = at; d.plan = plan; continue }
+          if (r !== 'no' && await change(r)) continue
+          d.when = { kind: 'day', day: dayOf(at) }
+          continue
+        }
+        await say(`${note}${note ? '\n' : ''}ただ、${why}、${slotLabel(at)}は${d.who.length > 1 ? '全員そろって' : ''}入れんようになってしまいました。同じ日のほかの時間をご提案しますね。`)
+        d.when = { kind: 'day', day: dayOf(at) }
         continue
       }
       // 時間（人・メニュー・日が変わるたびに探し直す）
@@ -511,6 +551,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (tapped && a === 'メニューを変える') {
         const pickWho = d.who.length === 1 ? '' : await ask('どなたのメニューを変えますか？', d.who.map(x => ({ label: x.label })))
         const target = d.who.length === 1 ? d.who[0] : d.who.find(p => p.label === pickWho || pickWho.includes(p.name)) ?? d.who[0]
+        if (d.at) d.recheck = { at: d.at, note: '', why: 'メニューが変わって施術の時間も変わるので' }
         delete d.menus[target.key]; d.at = null; d.plan = null; continue
       }
       if (tapped && a === '日にちを変える') { d.when = null; d.at = null; d.plan = null; continue }
