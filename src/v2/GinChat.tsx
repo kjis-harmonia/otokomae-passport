@@ -1,18 +1,19 @@
 // 銀ちゃんの接客（11/8 慶一郎さん「LINE をする感覚で、話すかボタンを押すだけで全部済む」）
 //   左に銀ちゃん（丸い顔のアイコン・白い吹き出し）、右にお客様（黒い吹き出し）。下に銀ちゃんが先回りして出すボタンと、入力欄（マイク・文字）
 //   ボタン・声・文字は、ぜんぶ同じ会話につながる（「はい/いいえ」は「うん」「ちがう」でも進む）
-//   welcome：店頭で QR を読んだあと。「〇月〇日は〇〇じゃったね！いつものに登録してええ？」→ メンテナンス → お連れ様 → お得な案内
-//   book：「いつものでAI予約する」。どなたの予約か → メニュー → 「いつ来るん？」【最短で】【土日希望】【日付を選ぶ】→ 時間 → 確認 → 予約
+//   welcome：店頭で QR を読んだあと。「〇月〇日は〇〇でしたね！いつものに登録してもよろしいですか？」→ メンテナンス → お連れ様 → お得な案内
+//   book：「いつものでAI予約する」。どなたの予約か → メニュー → 「ご来店は、いつ頃がええですか？」【最短で】【土日希望】【日付を選ぶ】→ 時間 → 確認 → 予約
+//   話し方：丁寧で親しみやすい広島弁（です・ます＋〜けぇ・〜とります。タメ口・命令口調は使わない・11/8 慶一郎さん）
 //   メニュー・料金・空きは、店の一覧と今の予約エンジンだけ。登録・予約は、お客様が確かめてから
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowUp, ChevronLeft, ChevronRight, Mic, X } from 'lucide-react'
-import { bookingAssistantApi, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
+import { bookingAssistantApi, linkCompanion, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
+import { matchMenu } from '../features/johnny/menuMatcher'
 import { canBeUsual, setUsualMenu, usualMenuOrder } from '../features/johnny/usualMenu'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
 import { askUsualAi } from '../features/johnny/usualAi'
 import { askAgentVoice, type AgentTurn } from '../features/johnny/agentClient'
-import { parseYesNo } from '../features/johnny/visitParser'
 import { useVoice } from '../features/johnny/useVoice'
 import { JohnnyRider } from '../features/johnny/JohnnyRider'
 import { spreadSlots } from '../features/johnny/dayAdvisor'
@@ -42,9 +43,48 @@ const slotLabel = (iso: string) => `${mdw(dayOf(iso))} ${hm(iso)}`
 const todayJst = () => jst(new Date().toISOString()).slice(0, 10)
 const addDays = (d: string, n: number) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10) + n)).toISOString().slice(0, 10)
 const honor = (name: string) => (/(さん|様|ちゃん|くん|君)$/.test(name) ? name : `${name}さん`)
-const isYes = (t: string) => t === 'はい' || parseYesNo(t) === true
-const isNo = (t: string) => t === 'いいえ' || t === 'ちがう' || parseYesNo(t) === false
-const yes = (t: string) => isYes(t) && !isNo(t)
+/** はい／いいえ の読み取り（11/8 慶一郎さん「『ええわ』＝はい と決めるのは危ない」）
+ *   yes：はっきりした賛成（はい・うん・お願いします・それでええわ）
+ *   no：はっきりした断り（もうええわ・いや、ええわ・やっぱりええわ・やめとく・いらん）
+ *   ambiguous：「ええわ」「いいわ」だけ。賛成にも断りにも取れるので、銀ちゃんが聞き直す
+ *   null：それ以外（「土曜日がええわ」のような希望・質問。呼んだ側が変更として読む） */
+const intent = (t: string): 'yes' | 'no' | 'ambiguous' | null => {
+  const s = t.normalize('NFKC').replace(/\s/g, '').replace(/[。、,!！~〜]+$/g, '').replace(/ー+$/g, '').toLowerCase()
+  if (t === 'はい') return 'yes'
+  if (/^((いや|いいや|やっぱ(り)?|もう|ほんなら|そんなら)[、,]?)+(ええ|えー|えぇ|いい)(わ|よ|です|や)?$/.test(s) || /やめ(とく|とこ|る|ます|て)|いらん|いらない|結構|けっこう|キャンセル|せん(わ|よ)?$|しない$|^いいえ|^いえ$|^ううん/.test(s)) return 'no'
+  if (/^(はい|うん|ほうよ|ほうじゃ|せや|そう(です)?|了解|りょうかい|ok|okです|オッケー|おけ|お願い(します)?|おねがい(します)?|それで(ええ|えー|いい)?(わ|よ|で|です)?|それでお願い(します)?|それにする|予約(して|する|します|お願い(します)?))$/.test(s)) return 'yes'
+  if (/^(ええ|えー|えぇ|いい)(わ|よ|で|ね|じゃ)?$/.test(s)) return 'ambiguous'
+  return null
+}
+
+/** 予約する人（ご本人は id が null） */
+type BookPerson = { key: string; id: string | null; name: string; label: string; person: Person | null }
+/** 予約メモ：決まったところは残して、変わったところだけ直す。when.kind = pick はカレンダーで選ぶ */
+type Draft = {
+  who: BookPerson[] | null
+  menus: Record<string, Menu>
+  /** weekend.dow：土曜だけ（6）・日曜だけ（0）。無ければ土日どちらも */
+  when: { kind: 'soonest' } | { kind: 'weekend'; dow?: 0 | 6 } | { kind: 'pick' } | { kind: 'day'; day: string } | null
+  at: string | null
+  /** 2人以上：それぞれの担当（同じ時間に別々の担当） */
+  plan: Record<string, string | null> | null
+}
+const sameWho = (a: BookPerson[], b: BookPerson[]) => a.length === b.length && a.every(x => b.some(y => y.key === x.key))
+/** n 人に、別々の担当（m 人の中から）を割り当てる。できなければ null（人数は3人までなので総当たりで足りる） */
+function assign(n: number, m: number, ok: (person: number, staff: number) => boolean): number[] | null {
+  const used = new Set<number>(), pick: number[] = []
+  const go = (i: number): boolean => {
+    if (i === n) return true
+    for (let s = 0; s < m; s++) {
+      if (used.has(s) || !ok(i, s)) continue
+      used.add(s); pick.push(s)
+      if (go(i + 1)) return true
+      used.delete(s); pick.pop()
+    }
+    return false
+  }
+  return go(0) ? pick : null
+}
 
 /** 空きのある日（今の予約エンジンで判定）。1週間ずつ並べて調べる（1回で長く調べると時間切れになる） */
 async function openDays(menuCode: string, from: string, days: number, weekend: boolean): Promise<string[]> {
@@ -87,6 +127,23 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     setChips(options); setWaiting(true)
     return new Promise(res => { waitRef.current = res })
   }
+  /** はい／いいえ を聞く。「ええわ」だけ のような どっちとも取れる答えは「『ええわ』って、〇〇って意味？それとも〇〇？」と聞き直す。
+   *  関係ない言葉はそのまま返す（呼んだ側が変更として読む） */
+  const askYN = async (t: string, yesLabel: string, noLabel: string, strongYes = true): Promise<'yes' | 'no' | string> => {
+    let line = t, ys = yesLabel, ns = noLabel
+    for (let i = 0; i < 3; i++) {
+      const a = await ask(line, [{ label: ys, strong: strongYes }, { label: ns }])
+      if (a === ys) return 'yes'
+      if (a === ns) return 'no'
+      const k = intent(a)
+      if (k === 'yes' || k === 'no') return k
+      if (k === null) return a
+      ys = yesLabel === '予約する' ? 'これでOK！' : yesLabel
+      ns = noLabel === 'やめとく' ? '今回はやめとく' : noLabel
+      line = `「${a}」は、${yesLabel === '予約する' ? 'これでOK' : `「${yesLabel}」`}ということですか？それとも${noLabel === 'やめとく' ? '今回はやめておきますか' : `「${noLabel}」ですか`}？`
+    }
+    return 'no'
+  }
   const answer = useCallback((t: string) => {
     const w = waitRef.current
     if (!w || !t.trim()) return
@@ -124,7 +181,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     for (let turn = 0; turn < 14; turn++) {
       const t = await ask(line, [...sugg.map(m => ({ label: m.name, sub: yen(m.price) })), { label: '一覧から選ぶ' }])
       let menu: Menu | null = sugg.find(m => m.name === t) ?? null
-      if (!menu && t === '一覧から選ぶ') { menu = await pickFromList(); if (menu) push('you', menu.name); else { line = 'ほいじゃ、話して決めようか。何でもええよ。'; sugg = []; continue } }
+      if (!menu && t === '一覧から選ぶ') { menu = await pickFromList(); if (menu) push('you', menu.name); else { line = 'では、お話しして決めましょうか。どんなことでも、ええですよ。'; sugg = []; continue } }
       if (!menu) {
         const plain = t.normalize('NFKC').replace(/[\s。、！!]/g, '').replace(/(でお願い(します)?|にする|でええ|で)$/, '')
         menu = all.find(m => m.name.normalize('NFKC').replace(/\s/g, '') === plain && !rejected.has(m.code)) ?? null
@@ -133,19 +190,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         setTyping(true)
         const r = await askUsualAi(t, turns.current.slice(0, -1), { visited: true, who: who.kind === 'mate' ? who.name : null, rejected: [...rejected], visitDate })
         setTyping(false)
-        if (!r) { line = 'ごめん、今うまく聞き取れんかった。一覧から選んでもええよ。'; sugg = []; continue }
+        if (!r) { line = 'すみません、うまく聞き取れませんでした。一覧から選んでいただいても大丈夫ですよ。'; sugg = []; continue }
         const ready = r.ready ? all.find(m => m.code === r.ready) : undefined
         if (!ready) { line = r.say; sugg = r.suggestions.map(c => all.find(m => m.code === c)).filter((m): m is Menu => !!m); continue }
         menu = ready
         await say(r.say)
       }
-      const c = await ask(`「${menu.name}」${menu.price != null ? ` ${yen(menu.price)}` : ''}でええ？`, [{ label: 'はい', strong: true }, { label: 'ちがう' }])
-      if (yes(c)) return menu
+      const c = await askYN(`「${menu.name}」${menu.price != null ? ` ${yen(menu.price)}` : ''}でよろしいですか？`, 'はい', 'ちがう')
+      if (c === 'yes') return menu
       rejected.add(menu.code)
       setTyping(true)
-      const r = await askUsualAi(`「${menu.name}」はちがう`, turns.current, { visited: true, who: who.kind === 'mate' ? who.name : null, rejected: [...rejected], visitDate })
+      const r = await askUsualAi(c === 'no' ? `「${menu.name}」はちがう` : `「${menu.name}」はちがう。${c}`, turns.current, { visited: true, who: who.kind === 'mate' ? who.name : null, rejected: [...rejected], visitDate })
       setTyping(false)
-      line = r?.say ?? 'そうか、ちがったか。どんな感じじゃった？'
+      line = r?.say ?? '失礼しました。どんな感じでしたか？'
       sugg = (r?.suggestions ?? []).map(code => all.find(m => m.code === code)).filter((m): m is Menu => !!m)
     }
     return null
@@ -158,12 +215,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const name = who.kind === 'mate' ? `${honor(who.name)}は` : ''
     let menu: Menu | null
     if (known) {
-      const a = await ask(`${greet}${md(v.date)}は${name}${known.name}じゃったね！\nこれをいつものメニューに登録してええ？`, [{ label: 'はい', strong: true }, { label: 'いいえ' }])
-      menu = yes(a) ? known : await hearMenu(who, `ほいじゃ、${md(v.date)}は何のメニューじゃった？`, v.date)
+      const a = await askYN(`${greet}${md(v.date)}は${name}${known.name}でしたね！\nこちらを、いつものメニューに登録してもよろしいですか？`, 'はい', 'いいえ')
+      menu = a === 'yes' ? known : await hearMenu(who, `失礼しました。${md(v.date)}は、何のメニューでしたか？`, v.date)
     } else if (v.menu_code === 'maintenance') {
-      menu = await hearMenu(who, `${greet}${md(v.date)}はメンテナンスカットじゃったね！\n${name}いつものメニューは何にしよるん？`, null)
+      menu = await hearMenu(who, `${greet}${md(v.date)}はメンテナンスカットでしたね！\n${name}いつもは、何のメニューにされとりますか？`, null)
     } else {
-      menu = await hearMenu(who, `${greet}${md(v.date)}は${who.kind === 'mate' ? honor(who.name) + 'も' : ''}よう来てくれんさったのぉ！\nまだいつものが決まっとらんけん、前回何のメニューしたか教えてくれん？`, v.date)
+      menu = await hearMenu(who, `${greet}${md(v.date)}は${who.kind === 'mate' ? honor(who.name) + 'も' : ''}ご来店ありがとうございました！\nいつものメニューを決めたいので、前回のメニューを教えてもらえますか？`, v.date)
     }
     try {
       await callCustomerRpc('customer_confirm_visit', { p_date: v.date, p_companion: who.kind === 'mate' ? who.id : null, p_menu_code: v.menu_code === 'maintenance' ? null : menu?.code ?? null })
@@ -173,8 +230,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
   const askMaintenance = async (who: Who, menu: Menu) => {
     if (!menu.maintenance) return false
-    const a = await ask(`「${menu.name}」なら、14日以内のメンテナンスカットも使えるで。\n${who.kind === 'mate' ? honor(who.name) + 'も' : ''}希望する？`, [{ label: 'はい', strong: true }, { label: 'いいえ' }])
-    return yes(a)
+    const a = await askYN(`「${menu.name}」なら、14日以内のメンテナンスカットもご利用いただけます。\n${who.kind === 'mate' ? honor(who.name) + 'も' : ''}ご希望されますか？`, 'はい', 'いいえ')
+    return a === 'yes'
   }
 
   /** お得な案内：使える割引券（期限内・条件に合うもの）と、メンテナンスの期限 */
@@ -184,10 +241,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const usable = usableTickets(tickets ?? [], new Date().toISOString()).filter(t => t.type === 'discount' && (t.amount ?? 0) > 0)
       if (usable.length) {
         const best = Math.max(...usable.map(t => t.amount ?? 0))
-        await say(usable.length === 1 ? `今${best.toLocaleString('ja-JP')}円の割引券持っとるで！次の予約で使えるけんね！` : `割引券を${usable.length}枚持っとるで（いちばん大きいのは${best.toLocaleString('ja-JP')}円）！次の予約で使えるけんね！`)
+        await say(usable.length === 1 ? `今、${best.toLocaleString('ja-JP')}円の割引券をお持ちですよ。次のご予約で使えますけぇね。` : `割引券を${usable.length}枚お持ちですよ（いちばん大きいのは${best.toLocaleString('ja-JP')}円）。次のご予約で使えますけぇね。`)
       }
     } catch { /* 券が読めんときは案内しない */ }
-    if (owner?.maintenance_ok && owner.days_left != null) await say(owner.days_left === 0 ? 'メンテナンスカットは今日までじゃけぇね！' : `メンテナンスカットは、あと${owner.days_left}日使えるけぇね！`)
+    if (owner?.maintenance_ok && owner.days_left != null) await say(owner.days_left === 0 ? 'メンテナンスカットは今日までですけぇ、よかったらどうぞ。' : `メンテナンスカットは、あと${owner.days_left}日ご利用いただけますよ。`)
   }
 
   // ── welcome：店頭の QR のあと ──
@@ -201,10 +258,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const before = people?.owner?.menu_code
         setUsualMenu({ code: menu.code, name: menu.name })
         await callCustomerRpc('customer_set_usual_menu', { p_code: menu.code }).catch(() => {})
-        await say(before && before !== menu.code ? `いつものを「${menu.name}」にしといたで！` : `ええね！いつものは「${menu.name}」で登録したで！`)
+        await say(before && before !== menu.code ? `いつものを「${menu.name}」に変えておきました。` : `ありがとうございます！いつものは「${menu.name}」で登録しました。`)
         const m = await askMaintenance({ kind: 'me' }, menu)
         people = await setOwnerMaintenance(m).catch(() => people)
-        if (m) await say('了解！メンテナンスカットも出すようにしとくけぇね。')
+        if (m) await say('かしこまりました！メンテナンスカットもご案内しますね。')
       }
     }
     for (const c of pending.companions) {
@@ -214,110 +271,284 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (menu) {
         const m = await askMaintenance(who, menu)
         people = await saveCompanion(c.id, c.name, menu.code, m).catch(() => people)
-        await say(`${honor(c.name)}のいつものは「${menu.name}」にしといたで！`)
+        await say(`${honor(c.name)}のいつものは「${menu.name}」にしておきました。`)
       }
     }
     let count = people?.companions.length ?? 0
     if (count === 0) {
-      let a = await ask('お連れ様も登録できるで！どうする？', [{ label: '登録する', strong: true }, { label: '今はしない' }])
-      while ((a === '登録する' || yes(a)) && count < MAX_COMPANIONS) {
-        const n = await ask('お名前は？お店で呼ぶ名前でええよ。', [])
+      let a = await askYN('お連れ様も登録できますよ。どうされますか？', '登録する', '今はしない')
+      while (a === 'yes' && count < MAX_COMPANIONS) {
+        const n = await ask('お名前を教えてください。お店でお呼びするお名前で大丈夫ですよ。', [])
         const name = n.slice(0, 20)
-        const menu = await hearMenu({ kind: 'mate', id: null, name }, `${honor(name)}は、いつも何にしよるん？`, null)
+        const menu = await hearMenu({ kind: 'mate', id: null, name }, `${honor(name)}は、いつも何のメニューにされとりますか？`, null)
         if (menu) {
           const m = await askMaintenance({ kind: 'mate', id: null, name }, menu)
-          try { people = await saveCompanion(null, name, menu.code, m); count++; await say(`${honor(name)}も登録したで！`) }
-          catch { await say('ごめん、うまく登録できんかった。あとで ☰ からでも登録できるけぇね。'); break }
+          try { people = await saveCompanion(null, name, menu.code, m); count++; await say(`${honor(name)}も登録しました！`) }
+          catch { await say('すみません、うまく登録できませんでした。あとで ☰ からも登録できますけぇね。'); break }
         }
         if (count >= MAX_COMPANIONS) break
-        a = await ask('ほかにも一緒に来る人はおる？', [{ label: '登録する', strong: true }, { label: 'もうおらん' }])
+        a = await askYN('ほかにも、ご一緒に来られる方はいらっしゃいますか？', '登録する', 'もうおらん')
       }
     }
     await tips(people?.owner)
-    const next = await ask('準備できたけぇ！このまま次の予約もできるで。', [{ label: '予約する', strong: true }, { label: 'ホームへ' }])
-    if (next === '予約する' || /予約/.test(next) || yes(next)) await runBook(people)
+    const next = await askYN('準備ができました！このまま次のご予約もできますよ。', '予約する', 'ホームへ')
+    if (next === 'yes' || (next !== 'no' && /予約/.test(next))) await runBook(people)
     else onClose()
   }
 
-  // ── book：予約（どなたの → メニュー → いつ → 時間 → 確認） ──
+  // ── book：予約。「誰が・何を・いつ」を1枚の予約メモにして、足りんところだけ聞く（11/8 慶一郎さん「変えたところだけ直す」）
+  //   どの質問の途中でも「やっぱり朔耶だけ」「土曜がええ」「アイパーにする」で、そこだけ直す（ボタン・声・文字どれでも）
+  //   人・メニューが変わったら施術時間も変わるので、時間は必ず選び直し（前の時間で取れると決めつけない）
   const runBook = async (known?: People | null) => {
     const people = known ?? await fetchPeople().catch(() => null)
-    const owner = people?.owner ?? null
+    const owner: BookPerson = { key: 'me', id: null, name: people?.owner?.name ?? 'ご本人', label: 'ご本人', person: people?.owner ?? null }
+    const mates: BookPerson[] = (people?.companions ?? []).filter(c => c.id).map(c => ({ key: c.id!, id: c.id!, name: c.name, label: honor(c.name), person: c }))
+    const everyone = [owner, ...mates]
     const all = menusRef.current
-    // どなたのご予約？（お連れ様がおるときだけ聞く）
-    let person: Person | null = owner
-    const mates = people?.companions ?? []
-    if (mates.length) {
-      const a = await ask('どなたのご予約にする？', [{ label: 'ご本人', strong: true }, ...mates.map(c => ({ label: honor(c.name) }))])
-      person = mates.find(c => honor(c.name) === a || c.name === a || a.includes(c.name)) ?? owner
+    const opts = await api.options().catch(() => null)
+    const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
+    const staffList = opts?.staff ?? []
+    const d: Draft = { who: mates.length ? null : [owner], menus: {}, when: null, at: null, plan: null }
+
+    /** 言葉の中の人（「朔耶だけ」「本人と朔耶」「2人とも」） */
+    const whoIn = (t: string): BookPerson[] | null => {
+      const s = t.normalize('NFKC')
+      if (/全員|みんな|皆|[2２二]人とも|[3３三]人とも|一緒/.test(s)) return everyone.slice(0, 3)
+      const hit = mates.filter(p => s.includes(p.name.replace(/(さん|様|ちゃん|くん|君)$/, '')))
+      const me = /本人|わし|自分|私|僕|俺|お母さん本人/.test(s)
+      const list = [...(me ? [owner] : []), ...hit]
+      return list.length ? list.slice(0, 3) : null
     }
-    const mate = person && !person.is_owner && person.id ? { id: person.id, name: person.name } : null
-    const whoText = mate ? `${honor(mate.name)}の` : ''
-    // メニュー：いつもの。メンテナンスの期限内なら選べる
-    let menu: Menu | null = person?.menu_code ? all.find(m => m.code === person!.menu_code) ?? null : null
-    const maint = person?.maintenance_ok ? (await api.options()).menus.find(m => m.code === 'maintenance') as Menu | undefined : undefined
-    if (menu) {
-      const a = await ask(maint ? `${whoText}いつもの「${menu.name}」？それともメンテナンスカット？` : `${whoText}いつもの「${menu.name}」${menu.price != null ? ` ${yen(menu.price)}` : ''}でええ？`,
-        maint ? [{ label: menu.name, sub: yen(menu.price), strong: true }, { label: 'メンテナンスカット', sub: person?.days_left != null ? `あと${person.days_left}日` : undefined }, { label: 'ほかのメニュー' }]
-          : [{ label: 'はい', strong: true }, { label: 'ほかのメニュー' }])
-      if (maint && /メンテ/.test(a)) menu = maint
-      else if (a === 'ほかのメニュー' || isNo(a)) menu = await hearMenu(mate ? { kind: 'mate', id: mate.id, name: mate.name } : { kind: 'me' }, '何にする？', null)
-    } else {
-      menu = await hearMenu(mate ? { kind: 'mate', id: mate.id, name: mate.name } : { kind: 'me' }, `${whoText}メニューは何にする？`, null)
+    const whenIn = (t: string): Draft['when'] | undefined => {
+      const s = t.normalize('NFKC')
+      const md2 = s.match(/(\d{1,2})月(\d{1,2})日/), dOnly = s.match(/(?:^|[^\d月])(\d{1,2})日/)
+      if (md2 || dOnly) {
+        const today = todayJst()
+        let y = +today.slice(0, 4), mo = md2 ? +md2[1] : +today.slice(5, 7)
+        const da = md2 ? +md2[2] : +dOnly![1]
+        const ymd = () => `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`
+        // 過ぎた日なら：月まで言われたら来年、日だけなら来月
+        if (ymd() < today) { if (md2) y++; else { mo++; if (mo > 12) { mo = 1; y++ } } }
+        const day = ymd()
+        // 暦に無い日（11月31日など）は日付として受け取らない
+        const real = new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10))).toISOString().slice(0, 10) === day
+        if (real && day >= today) return { kind: 'day', day }
+      }
+      if (/土|日曜|週末/.test(s) && !/日付|日にち/.test(s)) {
+        const sat = /土曜/.test(s), sun = /日曜/.test(s)
+        return sat && !sun ? { kind: 'weekend', dow: 6 } : sun && !sat ? { kind: 'weekend', dow: 0 } : { kind: 'weekend' }
+      }
+      if (/最短|早|はよ|いちばん近/.test(s)) return { kind: 'soonest' }
+      if (/日付|日にち|カレンダー|別の日|ほかの日|他の日/.test(s)) return { kind: 'pick' }
+      return undefined
     }
-    if (!menu) { await say('また決まったら呼んでね！'); setFinished(true); return }
-    // 今の予約（その方の）：おひとり1つまで。あれば入れ替えるか聞く
-    const mine = await api.reservations().catch(() => [] as CustomerReservation[])
-    const active = mine.filter(r => isUpcoming(r) && (mate ? r.companion_id === mate.id : !r.companion_id && !r.companion_of && !r.companion_name)).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0] ?? null
-    if (active) {
-      const a = await ask(`${whoText}予約が ${slotLabel(active.starts_at)} に入っとるで。\n日にちを変える？`, [{ label: '変える', strong: true }, { label: 'そのまま' }])
-      if (!(a === '変える' || yes(a))) { await say('了解！そのままにしとくね。'); setFinished(true); return }
+    const menuIn = (t: string): Menu | null => {
+      // 「パンチじゃなくてアイパー」は後ろのほう（言い直したメニュー）
+      const s = t.normalize('NFKC').split(/じゃなく(?:て)?|ではなく(?:て)?|やなくて|より/).pop() ?? ''
+      if (/メンテ/.test(s) && maintMenu) return maintMenu
+      return all.find(m => s.includes(m.name.normalize('NFKC'))) ?? matchMenu(t, all)
     }
-    // いつ来るん？ → 時間 → 確認（取れんかったら、もう一回いつにするか聞く）
-    for (let round = 0; round < 6; round++) {
-      const when = await ask('いつ来るん？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
-      let times: string[] = []
-      setTyping(true)
-      try {
-        if (/土|日曜|週末/.test(when) && !/日付/.test(when)) {
-          const days = await openDays(menu.code, todayJst(), 42, true)
-          for (const d of (days ?? []).slice(0, 2)) times = [...times, ...spreadSlots(await api.slots(d, menu.code), 2).map(s => s.starts_at)]
-        } else if (/日付|カレンダー|選ぶ/.test(when)) {
-          const days = await openDays(menu.code, todayJst(), 63, false)
-          setTyping(false)
-          if (!days?.length) { await say('ごめん、しばらく空きが無いんよ。お店に電話してみてくれる？'); continue }
-          await say('空いとる日だけ押せるけぇね。')
-          const d = await pickDate(days)
-          if (!d) continue
-          setTyping(true)
-          times = spreadSlots(await api.slots(d, menu.code), 6).map(s => s.starts_at)
-        } else {
-          times = spreadSlots(await api.nextSlots(menu.code, todayJst(), 10), 3).map(s => s.starts_at)
+    /** 途中の変更を読み取って、予約メモのそこだけ直す。直したら true */
+    const change = async (t: string): Promise<boolean> => {
+      const s = t.normalize('NFKC')
+      const changing = /やっぱ|変え|変更|じゃなく|ではなく|だけ|にする|がええ|がいい|にして/.test(s)
+      const w = whoIn(s)
+      if (w && (changing || d.who !== null) && !(d.who && sameWho(d.who, w))) {
+        d.who = w; d.at = null; d.plan = null
+        await say(`かしこまりました！${w.map(p => p.label).join('と')}のご予約にしますね。`)
+        return true
+      }
+      const m = menuIn(s)
+      if (m && changing && d.who) {
+        let target = d.who.length === 1 ? d.who[0] : (whoIn(s)?.[0] ?? null)
+        if (!target) {
+          const a = await ask(`「${m.name}」は、どなたのメニューですか？`, d.who.map(p => ({ label: p.label })))
+          target = d.who.find(p => p.label === a || a.includes(p.name)) ?? d.who[0]
         }
-      } catch { times = [] }
-      setTyping(false)
-      if (!times.length) { await say('ごめん、その日は空きが無かったんよ。ほかの日にしてみよう。'); continue }
-      const oneDay = times.every(s => dayOf(s) === dayOf(times[0]))
-      const t = await ask(oneDay ? `${mdw(dayOf(times[0]))}は、この時間が空いとるで！` : 'この時間が空いとるで！', [...times.map(s => ({ label: oneDay ? hm(s) : slotLabel(s) })), { label: 'ほかの日' }])
-      const at = times.find(s => slotLabel(s) === t || hm(s) === t)
-      if (!at) continue
-      // 枠を押さえて、確認（担当も分かる）
-      let hold
-      try { hold = await api.hold(at, menu.code, null, mate?.id ?? null) }
-      catch { await say('ごめん、その時間はちょうど埋まってしもうた。ほかの時間にしよう。'); continue }
-      const ok = await ask(`${whoText}予約はこれでええ？\n${slotLabel(at)}\n${menu.name}${hold.total_price != null ? ` ${yen(hold.total_price)}` : ''}\n担当 ${hold.staff_name}`, [{ label: '予約する', strong: true }, { label: '変える' }])
-      if (!(ok === '予約する' || yes(ok))) { void api.release(hold.hold_id).catch(() => {}); continue }
-      try {
-        const r = await api.confirm(hold.hold_id, null, mate?.id ?? null)
-        rememberReservation(r)
-        if (active) { try { await api.cancel(active.id); forgetReservation(active.id) } catch { await say(`前の予約（${slotLabel(active.starts_at)}）は取り消せんかった。お店に電話してくれる？`) } }
-        await say(`予約したで！\n${slotLabel(r.starts_at)}、待っとるけぇね！`)
-        await tips(null)
-      } catch {
-        void api.release(hold.hold_id).catch(() => {})
-        await say('ごめん、うまく予約できんかった。もう一回やってみよう。')
+        if (m.code === 'maintenance' && !target.person?.maintenance_ok) { await say(`${target.label}は、今はメンテナンスカットの期限が過ぎとるんです。`); return true }
+        d.menus[target.key] = m; d.at = null; d.plan = null
+        await say(`かしこまりました！${target.label}は「${m.name}」にしますね。`)
+        return true
+      }
+      const wh = whenIn(s)
+      if (wh && (changing || d.when !== null)) {
+        d.when = wh; d.at = null; d.plan = null
+        await say(wh.kind === 'weekend' ? `かしこまりました！${wh.dow === 6 ? '土曜' : wh.dow === 0 ? '日曜' : '土日'}で探しますね。` : wh.kind === 'day' ? `かしこまりました！${mdw(wh.day)}で探しますね。` : wh.kind === 'soonest' ? 'かしこまりました！いちばん早いところで探しますね。' : 'かしこまりました。日にちを選び直しましょう。')
+        return true
+      }
+      return false
+    }
+
+    /** その人のメニュー（いつもの・メンテナンス・ほか） */
+    const askMenuFor = async (p: BookPerson): Promise<Menu | null | 'changed'> => {
+      const usual = p.person?.menu_code ? all.find(m => m.code === p.person!.menu_code) ?? null : null
+      const maint = p.person?.maintenance_ok ? maintMenu : undefined
+      const whoText = d.who && d.who.length > 1 ? `${p.label}は` : ''
+      if (!usual) {
+        const m = await hearMenu(p.id ? { kind: 'mate', id: p.id, name: p.name } : { kind: 'me' }, `${whoText}メニューは、何にされますか？`, null)
+        return m
+      }
+      const a = await ask(maint ? `${whoText}いつもの「${usual.name}」にされますか？それとも、メンテナンスカットにされますか？` : `${whoText}いつもの「${usual.name}」${usual.price != null ? ` ${yen(usual.price)}` : ''}でよろしいですか？`,
+        maint ? [{ label: usual.name, sub: yen(usual.price), strong: true }, { label: 'メンテナンスカット', sub: p.person?.days_left != null ? `あと${p.person.days_left}日` : undefined }, { label: 'ほかのメニュー' }]
+          : [{ label: 'はい', strong: true }, { label: 'ほかのメニュー' }])
+      if (maint && /メンテ/.test(a)) return maint
+      if (a === usual.name) return usual
+      if (a !== 'ほかのメニュー' && await change(a)) return 'changed'
+      const k = intent(a)
+      if (k === 'yes') return usual
+      if (k === 'ambiguous') { await say(`「${a}」は、いつもの「${usual.name}」でよろしいということですか？ボタンで教えてくださいね。`); return await askMenuFor(p) }
+      const direct = menuIn(a)
+      if (direct && a !== 'ほかのメニュー') return direct
+      return await hearMenu(p.id ? { kind: 'mate', id: p.id, name: p.name } : { kind: 'me' }, '何のメニューにされますか？', null)
+    }
+
+    /** 予約メモの人・メニュー・いつ から、空いている時間を探す（人数・施術時間ごとに今の予約エンジンで確かめる）。
+     *  2人以上は、同じ時間に全員が別々の担当で入れる時間だけ */
+    const findTimes = async (): Promise<{ at: string; staff: Record<string, string | null> }[]> => {
+      const who = d.who!, menus = who.map(p => d.menus[p.key])
+      const codes = [...new Set(menus.map(m => m.code))]
+      let days: string[]
+      if (d.when?.kind === 'day') days = [d.when.day]
+      else {
+        const lists = await Promise.all(codes.map(c => openDays(c, todayJst(), d.when?.kind === 'weekend' ? 42 : 21, d.when?.kind === 'weekend')))
+        days = lists.reduce((a, b) => a.filter(x => b.includes(x)))
+        const w = d.when
+        if (w?.kind === 'weekend' && w.dow != null) days = days.filter(x => new Date(Date.UTC(+x.slice(0, 4), +x.slice(5, 7) - 1, +x.slice(8, 10))).getUTCDay() === w.dow)
+      }
+      const out: { at: string; staff: Record<string, string | null> }[] = []
+      const want = d.when?.kind === 'day' ? 6 : 3
+      for (const day of days.slice(0, 8)) {
+        if (who.length === 1) {
+          const slots = spreadSlots(await api.slots(day, menus[0].code), d.when?.kind === 'day' ? 6 : d.when?.kind === 'weekend' ? 2 : 3)
+          out.push(...slots.map(s => ({ at: s.starts_at, staff: { [who[0].key]: null } })))
+        } else {
+          // 担当ごと・メニューごとの空き → 同じ時間に、全員へ別々の担当を割り当てられる時間
+          const free = await Promise.all(who.map((_, i) => Promise.all(staffList.map(st => api.staffSlots(day, menus[i].code, st.id).then(l => new Set(l.map(x => Date.parse(x.starts_at)))).catch(() => new Set<number>())))))
+          const times = [...new Set(free.flatMap(per => per.flatMap(set => [...set])))].sort((a, b) => a - b)
+          const ok: { at: string; staff: Record<string, string | null> }[] = []
+          for (const t of times) {
+            const pick = assign(who.length, staffList.length, (pi, si) => free[pi][si].has(t))
+            if (pick) ok.push({ at: new Date(t).toISOString(), staff: Object.fromEntries(who.map((p, i) => [p.key, staffList[pick[i]].id])) })
+          }
+          const spread = spreadSlots(ok.map(o => ({ starts_at: o.at })), d.when?.kind === 'day' ? 6 : 2).map(s => ok.find(o => o.at === s.starts_at)!)
+          out.push(...spread)
+        }
+        if (out.length >= want) break
+      }
+      return out.slice(0, want)
+    }
+
+    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}`).join('\n')
+
+    for (let guard = 0; guard < 40; guard++) {
+      // 誰の予約？
+      if (!d.who) {
+        const chips: Chip[] = [{ label: 'ご本人', strong: true }, ...mates.map(p => ({ label: p.label })), ...(everyone.length > 1 && everyone.length <= 3 ? [{ label: everyone.length === 2 ? '2人とも' : '全員' }] : [])]
+        const a = await ask('どなたのご予約にしますか？', chips)
+        const w = a === 'ご本人' ? [owner] : whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
+        if (w) { d.who = w; continue }
+        if (await change(a)) continue
+        d.who = [owner]; continue
+      }
+      // メニュー（決まっとらん人だけ）
+      const need = d.who.find(p => !d.menus[p.key])
+      if (need) {
+        const m = await askMenuFor(need)
+        if (m === 'changed') continue
+        if (!m) { await say('また決まりましたら、いつでも声をかけてくださいね。'); break }
+        d.menus[need.key] = m
         continue
       }
+      // いつ？
+      if (!d.when) {
+        const a = await ask('ご来店は、いつ頃がええですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
+        const wh = whenIn(a)
+        if (wh) { d.when = wh; continue }
+        if (await change(a)) continue
+        d.when = { kind: 'soonest' }; continue
+      }
+      if (d.when.kind === 'pick') {
+        setTyping(true)
+        const codes = [...new Set(d.who.map(p => d.menus[p.key].code))]
+        const lists = await Promise.all(codes.map(c => openDays(c, todayJst(), 63, false)))
+        const open = lists.reduce((a, b) => a.filter(x => b.includes(x)))
+        setTyping(false)
+        if (!open.length) { await say('すみません、しばらく全員そろって入れる日が無いんです。お店にお電話いただけますか？'); d.when = null; continue }
+        await say(d.who.length > 1 ? '全員そろって入れる日だけ、押せるようにしとりますけぇね。' : '空いとる日だけ、押せるようにしとりますけぇね。')
+        const day = await pickDate(open)
+        d.when = day ? { kind: 'day', day } : null
+        continue
+      }
+      // 時間（人・メニュー・日が変わるたびに探し直す）
+      if (!d.at) {
+        setTyping(true)
+        const found = await findTimes().catch(() => [])
+        setTyping(false)
+        if (!found.length) {
+          await say(d.when.kind === 'day' ? `すみません、${mdw(d.when.day)}は${d.who.length > 1 ? '全員そろって' : ''}入れる時間が無かったんです。` : 'すみません、近いところに空きが無かったんです。')
+          d.when = null; continue
+        }
+        const oneDay = found.every(f => dayOf(f.at) === dayOf(found[0].at))
+        const a = await ask(oneDay ? `${mdw(dayOf(found[0].at))}は、この時間が空いとりますよ。` : 'この時間が空いとりますよ。', [...found.map(f => ({ label: oneDay ? hm(f.at) : slotLabel(f.at) })), { label: 'ほかの日' }])
+        const hit = found.find(f => slotLabel(f.at) === a || hm(f.at) === a)
+        if (hit) { d.at = hit.at; d.plan = hit.staff; continue }
+        if (a === 'ほかの日') { d.when = null; continue }
+        if (await change(a)) continue
+        continue
+      }
+      // まとめて確認：誰が・何を・いつ（今の予約があれば入れ替える）
+      const mine = await api.reservations().catch(() => [] as CustomerReservation[])
+      const actives = d.who.map(p => mine.filter(r => isUpcoming(r) && (p.id ? r.companion_id === p.id : !r.companion_id && !r.companion_of && !r.companion_name)).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0] ?? null)
+      const swaps = d.who.map((p, i) => actives[i] ? `※${d.who!.length > 1 ? p.label + 'の' : ''}${slotLabel(actives[i]!.starts_at)}のご予約は、こちらに入れ替えますね` : '').filter(Boolean)
+      const a = await ask(`この内容でご予約してもよろしいですか？\n${slotLabel(d.at)}\n${summary()}${swaps.length ? '\n' + swaps.join('\n') : ''}`,
+        [{ label: '予約する', strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, { label: '日にちを変える' }])
+      if (a === '人を変える') { d.who = null; d.at = null; d.plan = null; continue }
+      if (a === 'メニューを変える') {
+        const pickWho = d.who.length === 1 ? '' : await ask('どなたのメニューを変えますか？', d.who.map(x => ({ label: x.label })))
+        const target = d.who.length === 1 ? d.who[0] : d.who.find(p => p.label === pickWho || pickWho.includes(p.name)) ?? d.who[0]
+        delete d.menus[target.key]; d.at = null; d.plan = null; continue
+      }
+      if (a === '日にちを変える') { d.when = null; d.at = null; d.plan = null; continue }
+      // 変更を先に読む。予約するのは【予約する】か、はっきりした「はい」のときだけ
+      if (a !== '予約する') {
+        if (await change(a)) continue
+        const k = intent(a)
+        if (k === 'ambiguous') {
+          // 「ええわ」だけ：賛成にも断りにも取れるので、その言葉のまま聞き直す
+          const b = await askYN(`「${a}」は、これでOKということですか？それとも、今回はやめておきますか？`, 'これでOK！', '今回はやめとく')
+          if (b === 'yes') { /* 予約へ */ }
+          else if (b !== 'no' && await change(b)) continue
+          else { const again = await askYN('かしこまりました。今回はやめておきますね。', 'やっぱり予約する', 'ホームへ', false); if (again === 'yes') continue; break }
+        } else if (k === 'no') {
+          const again = await askYN('かしこまりました。今回はやめておきますね。', 'やっぱり予約する', 'ホームへ', false)
+          if (again === 'yes') continue
+          break
+        } else if (k !== 'yes') continue
+      }
+      // 予約：1人ずつ押さえて確定（ご本人が先。お連れ様はご本人の予約につなぐ）
+      setTyping(true)
+      const order = [...d.who].sort((x, y) => (x.key === 'me' ? -1 : y.key === 'me' ? 1 : 0))
+      const done: { p: BookPerson; r: CustomerReservation | null }[] = []
+      let primary: CustomerReservation | null = null
+      for (const p of order) {
+        const menu = d.menus[p.key]
+        let r: CustomerReservation | null
+        try {
+          const hold = await api.hold(d.at, menu.code, d.plan?.[p.key] ?? null, p.id)
+          r = await api.confirm(hold.hold_id, p.id ? `お連れ様：${p.name}様` : null, p.id)
+          rememberReservation(r)
+          if (!p.id) primary = r
+          else if (primary) { try { await linkCompanion(primary.id, r.id) } catch { /* つながらなくても予約はそのまま */ } }
+          const old = actives[d.who.indexOf(p)]
+          if (old) { try { await api.cancel(old.id); forgetReservation(old.id) } catch { /* 下で伝える */ } }
+        } catch { r = null }
+        done.push({ p, r })
+      }
+      setTyping(false)
+      const okAll = done.every(x => x.r)
+      if (!done.some(x => x.r)) { await say('すみません、その時間はちょうど埋まってしまいました。時間を選び直しましょう。'); d.at = null; d.plan = null; continue }
+      await say(okAll ? `ご予約を承りました！\n${slotLabel(d.at)}、お待ちしとりますけぇね。` : `${done.filter(x => x.r).map(x => x.p.label).join('と')}のご予約は取れました（${slotLabel(d.at)}）。\n${done.filter(x => !x.r).map(x => x.p.label).join('と')}はちょうど埋まってしまいました。お店にお電話いただけますか？`)
+      await tips(null)
       break
     }
     setFinished(true)
@@ -333,7 +564,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const opts = await api.options().catch(() => null)
       menusRef.current = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : []
       if (mode.kind === 'welcome') await runWelcome(mode.pending)
-      else { await say('よう来んさったのぉ！予約じゃね。'); await runBook() }
+      else { await say('よう来んさったのぉ！ご予約ですね。'); await runBook() }
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- 開いたときに1回だけ
 
@@ -379,8 +610,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             <button type="button" className={listening ? 'lc-mic lc-mic-on' : 'lc-mic'} disabled={!waiting} aria-label={listening ? '話し終わった' : '声で話す'}
               onClick={() => (listening ? voice.finishListening() : voice.startListening())}><Mic size={19} /></button>
           )}
-          <input value={listening ? voice.interim || '聞いとるよ…' : text} onChange={e => setText(e.target.value)} readOnly={listening}
-            placeholder={waiting ? 'メッセージを入力' : '銀ちゃんが話しよるよ…'} disabled={!waiting} maxLength={60} enterKeyHint="send" autoComplete="off" aria-label="銀ちゃんへの返事" />
+          <input value={listening ? voice.interim || '聞いとります…' : text} onChange={e => setText(e.target.value)} readOnly={listening}
+            placeholder={waiting ? 'メッセージを入力' : '銀ちゃんが話しとります…'} disabled={!waiting} maxLength={60} enterKeyHint="send" autoComplete="off" aria-label="銀ちゃんへの返事" />
           <button type="submit" className="gc-send" disabled={!text.trim() || !waiting || listening} aria-label="送る"><ArrowUp size={18} strokeWidth={2.4} /></button>
         </form>
       </div>
