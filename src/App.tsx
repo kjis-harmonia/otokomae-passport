@@ -397,7 +397,7 @@ function App() {
           {ginChat && !firstGuide && !welcomeCouponDialog && <GinChat key={ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
 
           {/* 使い方ガイド：最初の案内・Welcome クーポン・Face ID の案内が出ている間は出さない */}
-          <CustomerGuide paused={!!firstGuide || !!ginChat || !!welcomeCouponDialog || passkeyOffer || appLoading} />
+          <CustomerGuide paused={!!firstGuide || ginChat?.kind === 'welcome' || !!welcomeCouponDialog || passkeyOffer || appLoading} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (

@@ -161,13 +161,18 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   }, [])
 
   // 上に重なるもの（お知らせ・演出）があるか。作業中と一覧を出している間だけ見る
+  //   作業が中を案内するもの（inside：銀ちゃんの会話 など）は、重なっていても休まない
+  const inside = task?.inside
   useEffect(() => {
     if (!pauseWhen || (!runTask && !choosing)) { setCovered(false); return } // eslint-disable-line react-hooks/set-state-in-effect
-    const check = () => setCovered(!!findVisible(pauseWhen))
+    const check = () => {
+      const el = findVisible(inside ? `:is(${pauseWhen}):not(${inside})` : pauseWhen)
+      setCovered(!!el)
+    }
     check()
     const id = window.setInterval(check, 200)
     return () => window.clearInterval(id)
-  }, [pauseWhen, runTask, choosing])
+  }, [pauseWhen, runTask, choosing, inside])
 
   useEffect(() => {
     const sync = () => { const l = topLayer(); setLayer(prev => prev === l ? prev : l) }
@@ -202,6 +207,9 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     stepStarted.current = Date.now()
     const at = runStep
     const tick = () => {
+      // 待つ間（銀ちゃんが話している途中など）は、待ち時間を数え直す（出るかどうか分からない手順を飛ばさない）。
+      //   画面に出た先の手順（話の途中に出るカレンダーなど）へ追いつくのはそのまま
+      if (step.waitWhile && findVisible(step.waitWhile)) stepStarted.current = Date.now()
       if ((step.skipIf && findVisible(step.skipIf)) || (step.until && findVisible(step.until))) { advance(at); return }
       const el = findVisible(step.target)
       if (!el) {

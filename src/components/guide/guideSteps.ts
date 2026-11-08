@@ -29,6 +29,8 @@ export type GuideStep = {
   tap?: boolean
   /** 囲んだ所の中のこの要素の文字を、text の {label} に入れる（ボタンの文字が変わるとき） */
   label?: string
+  /** これが画面にある間（銀ちゃんが話している途中など）は、飛ばさず・先へ進まずに待つ */
+  waitWhile?: string
 }
 
 export type GuideTask = {
@@ -39,6 +41,8 @@ export type GuideTask = {
   quiet?: boolean
   /** false のときは選ぶ画面に出さない（解禁前のガチャ など） */
   available?: () => boolean
+  /** この上に重なっていても休まない（pauseWhen のうち、この作業が中を案内するもの：銀ちゃんの会話 など） */
+  inside?: string
 }
 
 const g = (name: string) => `[data-guide="${name}"]`

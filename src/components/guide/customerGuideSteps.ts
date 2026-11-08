@@ -1,5 +1,5 @@
 // お客様アプリ（銀二郎app）の使い方ガイド：作業ごとの手順。書き方は guideSteps.ts（店舗端末）と同じ。
-// 押す場所は各画面の data-guide。画面の中身（AI予約・グループ予約・最初の案内・会計）は変えず、目印だけ付けている。
+// 押す場所は各画面の data-guide。画面の中身（銀ちゃんの会話・いつもの/お連れ様・最初の案内・会計）は変えず、目印だけ付けている。
 import { isStaging } from '../../utils/env'
 import type { GuideStep, GuideTask } from './guideSteps'
 
@@ -9,82 +9,93 @@ const g = (name: string) => `[data-guide="${name}"]`
 const GACHA_OPENS = '2026-11-11'
 const gachaOpen = () => isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS
 
-const HOME: GuideStep = { target: g('tab-home'), text: '下の「ホーム」を押してください', skipIf: g('home-cta') }
+// 銀ちゃんの会話（GinChat）：いま聞いていることが data-ask に入る
+//   verify・who・menu・when・time・yesno・confirm・done、話している途中は wait
+const CHIPS = (...asks: string[]) => asks.map(a => `${g('lc-chips')}[data-ask="${a}"]`).join(', ')
+const ASK = (...asks: string[]) => asks.map(a => `${g('lc')}[data-ask="${a}"]`).join(', ')
+/** その段階が終わった（ほかの段階に進んだ）。話している途中（wait）は、まだ終わっていない */
+const PAST = (...asks: string[]) => `${g('lc')}${[...asks, 'wait'].map(a => `:not([data-ask="${a}"])`).join('')}`
+const TALKING = ASK('wait')
 
-// 本人確認がまだの方は、AI予約の前に「はじめに、店頭で本人確認」が出る。そこで案内を終える
-const VERIFY: GuideStep = {
-  target: g('jn-verify'), optional: true, next: true, skipIf: g('jn-actions'), stopHere: true, nextLabel: 'わかりました',
-  text: 'はじめに、お店で本人確認をします',
-  sub: '次のご来店時に「会員QR」をスタッフにお見せください。確認が済むと AI予約が使えます。',
-}
-
-// 1人の予約：日にちのあと（カレンダー・時間・担当・確認）のどれかが出たら
-const PICK_STAFF = `[data-guide="jn-actions"][data-step="pickStaff"]`
-const AFTER_DAY = [g('jn-calendar'), g('jn-times'), PICK_STAFF, g('jn-yes')].join(', ')
+const HOME: GuideStep = { target: g('tab-home'), text: '下の「ホーム」を押してください', skipIf: `${g('home-cta')}, ${g('lc')}` }
+const MENU_OPEN = (done: string): GuideStep => ({ target: g('menu-open'), text: '右上の ☰ を押してください', skipIf: `${g('menu-people')}, ${done}` })
+const MENU_PEOPLE = (done: string): GuideStep => ({ target: g('menu-people'), text: '「いつもの・お連れ様」を押してください', skipIf: done })
 
 export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
   {
-    id: 'c-reserve',
-    title: 'AI予約をする',
-    sub: '髪型を選んで、日にちと時間を押すだけ',
-    steps: [
-      HOME,
-      { target: g('home-cats'), next: true, tap: true, text: '髪型の種類を選んでください', sub: '押すと髪型の写真が変わります。横にスワイプすると、ほかの種類も出てきます。' },
-      { target: g('home-cards'), next: true, text: 'お好きな髪型の写真を選んでください', sub: '写真は横にスワイプしてめくれます。' },
-      { target: g('home-cta'), noJump: true, label: '.v2-cta-text b', text: '下の「{label}」を押してください' },
-      VERIFY,
-      { target: `${g('jn-welcome')}, ${g('jn-askmenu')}`, optional: true, until: g('jn-menu'), text: 'メニューを押してください' },
-      { target: g('jn-menu'), next: true, text: 'メニューをご確認ください', sub: '違うときは「変える ›」で選び直せます。' },
-      { target: g('jn-staff'), optional: true, next: true, text: '担当を選べます。お任せなら「どちらでも」のままで大丈夫です。', sub: '押すたびに テイテイ → 銀二郎 → どちらでも と変わります。' },
-      { target: g('jn-days'), until: AFTER_DAY, text: 'ご希望の日を押してください', sub: '先の日は「もっと先の日」からカレンダーで選べます。' },
-      { target: g('jn-calendar'), optional: true, until: [g('jn-times'), PICK_STAFF, g('jn-yes')].join(', '), text: 'カレンダーで日にちを押してください', sub: '線で消えている日は、お店か担当がお休みの日です。' },
-      { target: g('jn-times'), until: `${PICK_STAFF}, ${g('jn-yes')}`, text: 'ご希望の時間を押してください' },
-      { target: PICK_STAFF, optional: true, until: g('jn-yes'), text: '担当を押してください' },
-      { target: g('jn-price'), optional: true, next: true, text: 'お会計の金額をご確認ください', sub: '割引券を使うと、ここの金額から引かれます。枚数は −・＋ で変えられます。' },
-      { target: g('jn-yes'), until: g('jn-done'), text: 'よろしければ「はい」を押してください', sub: 'これで予約が確定します。' },
-      { target: g('jn-done'), next: true, read: true, text: 'ご予約できました', sub: '下の「次回予約」でいつでもご確認いただけます。' },
-    ],
-  },
-  {
-    id: 'c-group',
-    title: '2名以上で予約する',
-    sub: 'ご家族・お友だちとご一緒に（3名まで）',
-    steps: [
-      HOME,
-      { target: g('home-usual-chip'), optional: true, skipIf: g('home-group'), text: '上の「いつもの」を押してください' },
-      // 「いつもの」がまだ無い方：ここから先に進めない
-      {
-        target: g('home-cta'), skipIf: g('home-group'), noJump: true, next: true, stopHere: true, nextLabel: 'わかりました',
-        text: 'まずは AI予約でご本人の予約をしてください',
-        sub: 'いつものメニューが決まると、ここに「2名以上で予約する」が出ます。',
-      },
-      { target: g('home-group'), until: [g('jn-party'), g('jn-verify'), g('gf-day')].join(', '), text: '「2名以上で予約する」を押してください', sub: '写真を左にめくると出てきます。' },
-      VERIFY,
-      { target: g('jn-party'), until: `${g('gf-day')}, ${g('gf-calendar')}`, text: '人数を押してください', sub: '途中で戻るときは左上の「戻る」。× は2回押すと閉じます。' },
-      { target: g('gf-day'), until: `${g('gf-calendar')}, ${g('gf-times')}`, text: 'ご希望の日を押してください', sub: '皆さまが入れる日だけ押せます。' },
-      { target: g('gf-calendar'), optional: true, until: g('gf-times'), text: 'カレンダーで日にちを押してください', sub: '線で消えている日は押せません。' },
-      { target: g('gf-times'), until: [g('gf-members'), g('gf-menus'), g('gf-name')].join(', '), text: 'ご案内できる時間を押してください' },
-      {
-        target: [g('gf-members'), g('gf-name'), g('gf-menus')].join(', '), until: g('gf-yes'), noDim: true,
-        text: 'お一人ずつメニューを押してください', sub: 'お連れ様はお名前も入れます。いつものメンバーは名前を押すだけです。',
-        alts: [{ when: g('gf-name'), text: 'お名前を入れて「次へ」を押してください', sub: 'お店でお呼びするお名前です。' }],
-      },
-      { target: g('gf-yes'), until: g('jn-group-done'), text: '内容をご確認のうえ「はい」を押してください' },
-      { target: g('jn-group-done'), next: true, read: true, text: 'ご予約できました', sub: '下の「次回予約」でお連れ様の分もご確認いただけます。' },
-    ],
-  },
-  {
-    id: 'c-qr',
-    title: 'お店で会員QRを見せる',
-    sub: 'ご来店のとき・お会計のときに',
+    id: 'c-first',
+    title: 'はじめての方へ',
+    sub: '次のご来店で、会員QRをスタッフに',
     steps: [
       { target: g('tab-qr'), text: '下の「会員QR」を押してください', skipIf: g('qr-card') },
-      { target: g('qr-card'), next: true, read: true, text: 'この画面をスタッフにお見せください' },
+      { target: g('qr-card'), next: true, read: true, text: '次のご来店で、この画面をスタッフにお見せください', sub: '確認が済むと、銀ちゃんのAI予約が使えます。' },
+    ],
+  },
+  {
+    id: 'c-book',
+    title: '銀ちゃんとAI予約する',
+    sub: '話しかけるか、ボタンを押すだけ',
+    // 銀ちゃんの会話の中を案内する（ほかの作業は、会話が出ている間は休む）
+    inside: g('lc'),
+    steps: [
+      HOME,
+      { target: g('home-cta'), noJump: true, skipIf: g('lc'), label: '.v2-cta-text b', text: '下の「{label}」を押してください', sub: '銀ちゃんがご予約をお聞きします。' },
+      // 本人確認がまだの方は、銀ちゃんが会員QRを案内する。そこで案内を終える
+      {
+        target: CHIPS('verify'), optional: true, waitWhile: TALKING, next: true, stopHere: true, nextLabel: 'わかりました',
+        text: 'はじめに、お店で本人確認をします', sub: '次のご来店で「会員QR」をスタッフにお見せください。確認が済むと、銀ちゃんのAI予約が使えます。',
+      },
+      { target: g('lc-input'), next: true, waitWhile: TALKING, text: '話しかけても、文字で書いても答えられます', sub: '左のマイクを押すと声で、ここに書いて送ると文字で。下のボタンを押しても進めます。' },
+      // お連れ様がいない方は出ない
+      { target: CHIPS('who'), optional: true, waitWhile: TALKING, until: PAST('who'), text: 'どなたのご予約か押してください', sub: 'ご一緒なら「2人とも」「全員」も選べます。' },
+      // いつものがある方・髪型の写真から来た方は「はい／ほかのメニュー」、メンテナンスの期限内の方は3つから
+      {
+        target: CHIPS('menu', 'yesno'), optional: true, waitWhile: TALKING, until: PAST('menu', 'yesno'), text: 'メニューを押してください', sub: 'ほかのメニューは「一覧から選ぶ」から選べます。',
+        alts: [{ when: CHIPS('yesno'), text: 'このメニューでよろしければ「はい」を押してください', sub: '違うときは「ほかのメニュー」を押してください。' }],
+      },
+      { target: CHIPS('when'), waitWhile: TALKING, until: PAST('when'), text: 'ご来店はいつ頃か押してください', sub: '「最短で」はいちばん早い空き、「土日希望」は土日、「日付を選ぶ」はカレンダーから選べます。' },
+      // 「日付を選ぶ」のときだけ
+      { target: g('lc-cal'), optional: true, waitWhile: TALKING, until: ASK('time', 'confirm', 'done'), text: 'ご希望の日を押してください', sub: '空きのある日だけ押せます。' },
+      { target: CHIPS('time'), waitWhile: TALKING, until: ASK('confirm', 'done'), text: 'ご希望の時間を押してください', sub: '合わないときは「ほかの日」を押してください。' },
+      {
+        target: g('lc-book'), waitWhile: TALKING, until: ASK('done'), text: '内容を確かめて【この内容で予約する】を押してください',
+        sub: '予約はこのボタンを押したときに入ります。途中で「やっぱり土曜」「アイパーにする」と言えば、そこだけ直せます。',
+      },
+      { target: CHIPS('done'), next: true, read: true, text: 'ご予約できました', sub: '下の「次回予約」でいつでもご確認いただけます。' },
+    ],
+  },
+  {
+    id: 'c-usual',
+    title: 'いつものを登録・変更する',
+    sub: 'ご本人のいつものメニュー',
+    steps: [
+      MENU_OPEN(g('people-owner-edit')),
+      MENU_PEOPLE(g('people-owner-edit')),
+      {
+        target: g('people-owner-edit'), skipIf: g('people-menus'), text: 'ご本人の「変更」を押してください',
+        sub: 'ご来店のあとは、次にアプリを開いたとき銀ちゃんが「〇月〇日は〇〇でしたね」とお聞きして、いつものに登録することもできます。',
+      },
+      { target: g('people-menus'), text: 'いつものにするメニューを押してください', sub: '押すと保存されます。' },
+    ],
+  },
+  {
+    id: 'c-people',
+    title: 'お連れ様を登録・管理する',
+    sub: 'ご家族・ご友人と一緒に予約',
+    steps: [
+      MENU_OPEN(`${g('people-add')}, ${g('people-name')}`),
+      MENU_PEOPLE(`${g('people-add')}, ${g('people-name')}`),
+      { target: g('people-add'), skipIf: g('people-name'), text: '「お連れ様を追加」を押してください' },
+      // 入れている間は吹き出しを休ませる。入れ終わって欄から離れると次へ
+      { target: g('people-name'), text: 'お名前を入れてください', sub: 'お店でお呼びするお名前です（例：父、たろう）。' },
+      { target: g('people-menus'), text: 'お連れ様のいつものメニューを押してください', sub: '押すと保存されます。' },
+      { target: g('people-list'), next: true, read: true, text: 'お連れ様が登録されました', sub: '次から銀ちゃんの予約で、お名前を押すだけで予約できます。' },
+      { target: g('people-remove'), optional: true, next: true, text: '削除するときは「削除」を2回押します', sub: '削除しても、予約と来店の記録は残ります。' },
     ],
   },
   {
     id: 'c-next',
-    title: '次回予約を見る・変える',
+    title: '予約を確認・変更する',
     sub: '日時の確認・変更・キャンセル',
     steps: [
       { target: g('tab-next'), text: '下の「次回予約」を押してください', skipIf: g('next-panel') },
@@ -94,7 +105,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
   },
   {
     id: 'c-tickets',
-    title: 'チケットを見る',
+    title: 'チケットを見る・使う',
     sub: '割引券・特典・プレゼント',
     steps: [
       { target: g('menu-open'), text: '右上の ☰ を押してください', skipIf: `${g('menu-tickets')}, ${g('wallet')}` },
