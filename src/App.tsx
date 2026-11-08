@@ -365,9 +365,12 @@ function App() {
     // ホームの「いつものでAI予約する」：銀ちゃんの会話で予約（Staging）
     const onBook = (e: Event) => { const d = (e as CustomEvent<{ menuCode?: string | null; label?: string } | null>).detail; setGinChat({ kind: 'book', menuCode: d?.menuCode ?? null, label: d?.label ?? '' }) }
     window.addEventListener('ginjiro:gin-book', onBook)
+    // 次回予約の「変更・キャンセル」：銀ちゃんの会話で（Staging）
+    const onChange = () => setGinChat({ kind: 'change' })
+    window.addEventListener('ginjiro:gin-change', onChange)
     const onVisible = () => { if (document.visibilityState === 'visible') check() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => { alive = false; window.removeEventListener('ginjiro:gin-book', onBook); document.removeEventListener('visibilitychange', onVisible) }
+    return () => { alive = false; window.removeEventListener('ginjiro:gin-book', onBook); window.removeEventListener('ginjiro:gin-change', onChange); document.removeEventListener('visibilitychange', onVisible) }
   }, [phase, customerAccessSession])
   const closeGinChat = () => { try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
 

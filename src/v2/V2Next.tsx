@@ -6,6 +6,7 @@ import { CalendarClock, Phone, Scissors } from 'lucide-react'
 import { companionName, formatVisit, useNextVisit } from '../features/johnny/nextReservation'
 import { heldFor, useGinpayHolds } from '../features/ginpay/holds'
 import { requestJohnny } from '../features/johnny/bookingIntent'
+import { isStaging } from '../utils/env'
 import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { hasCustomerSession } from '../utils/customerSession'
 import { getMaintenanceVisit, getDaysUntilRecommended, getNextRecommendedDate, fmtDate, MAINTENANCE_CYCLE_DAYS } from '../utils/maintenanceSchedule'
@@ -72,7 +73,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、お店からお電話します。</p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
             {status === 'failed' && <ReservationRetry onRetry={reload} />}
-            <button type="button" className="v2-btn v2-btn-quiet v2-glass" data-guide="next-change" onClick={() => { requestJohnny({ menuCode: null, label: '', manage: true }); onJohnny() }}>変更・キャンセル（AI予約）</button>
+            <button type="button" className="v2-btn v2-btn-quiet v2-glass" data-guide="next-change" onClick={() => { if (isStaging()) { window.dispatchEvent(new Event('ginjiro:gin-change')); return } requestJohnny({ menuCode: null, label: '', manage: true }); onJohnny() }}>{isStaging() ? '変更・キャンセル' : '変更・キャンセル（AI予約）'}</button>
             {status !== 'failed' && <a className="v2-btn v2-btn-quiet v2-glass" href={SHOP_PHONE_TEL}><Phone size={18} />お店に電話する</a>}
           </div>
         </section>
