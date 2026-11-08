@@ -30,7 +30,7 @@ const SCHEMA = {
   },
 } as const
 
-function system(menus: readonly MenuInfo[], visited: boolean, who: string | null, rejected: readonly MenuInfo[], visitDate: string | null = null): string {
+function system(menus: readonly MenuInfo[], visited: boolean, who: string | null, rejected: readonly MenuInfo[], visitDate: string | null = null, knowledge = ''): string {
   const list = menus.map(m => `${m.code} | ${m.name} | ${m.price == null ? '料金は店で' : `¥${m.price.toLocaleString('ja-JP')}${m.price_from ? '〜' : ''}`} | ${m.duration_min}分${m.category ? ` | ${m.category}` : ''}`).join('\n')
   const person = who ? `お連れ様の「${who}」` : 'お客様ご本人'
   return [
@@ -47,7 +47,7 @@ function system(menus: readonly MenuInfo[], visited: boolean, who: string | null
     '・質問ばかり続けない。希望が2つ分かったら（例：短め＋カットだけ）、合うメニューを2〜3個、名前と料金を添えて具体的にすすめ、suggestions に入れる。',
     '・「それで」「じゃあそれで」と言われても、直前に具体的なメニューを1つだけすすめていなければ決定ではない。そのときは合うメニューを2〜3個 suggestions で出して「どれにする？」と聞く。',
     '・お客様の言葉にまず反応してから（「ええですね」「なるほど」「かしこまりました」など）、次の一言を話す。',
-    '・質問（「〇〇できる？」「〇〇ってどんなの？」「いくら？」）には、まず答える。答えたあと「それにする？」と聞いてよいが、決定ではない。',
+    '・質問（「〇〇できる？」「〇〇ってどんなの？」「いくら？」）には、まず答える（料金・時間は一覧、仕上がりは「確認済みの理容知識」だけ）。答えたあと「それにする？」と聞いてよいが、決定ではない。',
     '・「ちがう」「それじゃない」と言われたら、何が違うのか（長さ？雰囲気？値段？）をやさしく聞く。同じメニューをもう一度すすめない。',
     '・「おすすめは？」には、まず好みを1つ聞くか、雰囲気の違う2〜3個を紹介する。直前に断られたものは出さない。',
     '・「短めがいい」「手入れが楽なのがいい」「初めてで分からん」なども、会話を続けて希望をしぼる。',
@@ -59,6 +59,12 @@ function system(menus: readonly MenuInfo[], visited: boolean, who: string | null
     '・丁寧で親しみやすい広島弁。基本は「です・ます」に、広島弁のやわらかさ（〜けぇ、〜とります、〜ですのぉ、ええですか）を少しだけ。初めてのお客様にも馴れ馴れしくならないように。',
     '・「〜するん？」「〜でええ？」「〜したで！」のようなタメ口や命令口調（〜しんさい）は使わない。堅すぎる敬語（〜でございます）も使わない。80文字以内、1〜2文。',
     '',
+    '■ 理容技術（必ず守る）',
+    '・仕上がり・必要な髪の長さ・向いている髪質・施術できるかどうかは、下の「確認済みの理容知識」に書いてあることだけを言う。書いていないことを、自分の知識や想像で説明しない（「〇〇は細かいカール」「長さを活かして」などを作らない）。',
+    '・確認済みの理容知識が無いメニューの中身を聞かれたら、知ったかぶりせず「詳しい仕上がりは、お店の理容師が確認しますけぇね」と伝え、お客様の希望を聞く。写真で見たいなら HOT PEPPER（action "hotpepper"）、詳しく相談したいならお電話（"phone"）をすすめる。',
+    '・「今の髪の長さ」と「希望する仕上がり」は別のこと。混ぜずに、分からないほうを1つずつ聞く（例：「今の長さは、どのくらいですか？」「仕上がりは、どんな感じがお好みですか？」）。',
+    '・施術できるかどうかの最終判断は、お店の理容師がします。「できます」「できません」と言い切らず、必要なら「当日、理容師が髪を見て確認しますけぇね」と添える。',
+    '',
     '■ 決まりごと（必ず守る）',
     '・メニュー名・料金・時間は下の一覧のものだけ。一覧に無いメニューや金額を作らない。料金を言うなら一覧の値そのまま。「一番安い」「一番短い」などは一覧の数字を全部比べてから言う。',
     '・suggestions には、そのセリフで名前を出したメニューの code だけを入れる（0〜3個）。',
@@ -68,17 +74,20 @@ function system(menus: readonly MenuInfo[], visited: boolean, who: string | null
     '',
     'メニュー一覧（code | 名前 | 料金 | 時間 | 種類）：',
     list,
+    '',
+    '確認済みの理容知識：',
+    knowledge || '（まだありません。仕上がり・長さ・髪質については説明しない）',
   ].join('\n')
 }
 
-export async function runUsual(menus: readonly MenuInfo[], history: Turn[], message: string, opts: { visited: boolean; who: string | null; rejected?: string[]; visitDate?: string | null },
+export async function runUsual(menus: readonly MenuInfo[], history: Turn[], message: string, opts: { visited: boolean; who: string | null; rejected?: string[]; visitDate?: string | null; knowledge?: string },
   llm: { apiKey: string; model: string }, fetchImpl: typeof fetch = fetch): Promise<UsualReply> {
   const rejectedCodes = new Set((opts.rejected ?? []).filter(c => typeof c === 'string').slice(0, 20))
   // いつものにできるメニューだけ（アプリの canBeUsual と同じ：オプション・前髪・メンテナンスカットは除く）
   const usable = menus.filter(m => !/^(maintenance|opt-)/.test(m.code) && m.code !== 'cut-bangs')
   const codes = new Set(usable.map(m => m.code))
   const messages = [
-    { role: 'system', content: system(usable, opts.visited, opts.who, usable.filter(m => rejectedCodes.has(m.code)), opts.visitDate ?? null) },
+    { role: 'system', content: system(usable, opts.visited, opts.who, usable.filter(m => rejectedCodes.has(m.code)), opts.visitDate ?? null, opts.knowledge ?? '') },
     ...history.slice(-16).map(t => ({ role: t.role, content: t.text })),
     { role: 'user', content: message },
   ]

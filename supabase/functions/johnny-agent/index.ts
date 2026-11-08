@@ -179,8 +179,13 @@ Deno.serve(async (req) => {
     const said = str(body.message, 200)
     if (!said) return json(400, { error: 'invalid_request' })
     try {
-      const opts = await rpc<{ menus: MenuInfo[] }>('customer_booking_options', session)
-      const reply = await runUsual(opts.menus, cleanHistory(body.history), said, { visited: body.visited === true, who: str(body.who, 20) || null, visitDate: /^\d{4}-\d{2}-\d{2}$/.test(str(body.visit_date, 10)) ? str(body.visit_date, 10) : null, rejected: Array.isArray(body.rejected) ? body.rejected.filter((c): c is string => typeof c === 'string').map(c => c.slice(0, 60)).slice(0, 20) : [] }, { apiKey: OPENAI_KEY, model: MODEL })
+      const [opts, known] = await Promise.all([
+        rpc<{ menus: MenuInfo[] }>('customer_booking_options', session),
+        // 確認済みの理容知識だけ（無ければ空。銀ちゃんは技術を説明しない）
+        rpc<{ name: string; finish: string | null; length_needed: string | null; hair_fit: string | null; check_before: string | null }[] | null>('customer_menu_knowledge', session).catch(() => null),
+      ])
+      const knowledge = (known ?? []).map(k => [`・${k.name}`, k.finish && `仕上がり：${k.finish}`, k.length_needed && `必要な今の髪の長さ：${k.length_needed}`, k.hair_fit && `向いている髪質・条件：${k.hair_fit}`, k.check_before && `施術前に確認：${k.check_before}`].filter(Boolean).join(' ／ ')).join('\n')
+      const reply = await runUsual(opts.menus, cleanHistory(body.history), said, { knowledge, visited: body.visited === true, who: str(body.who, 20) || null, visitDate: /^\d{4}-\d{2}-\d{2}$/.test(str(body.visit_date, 10)) ? str(body.visit_date, 10) : null, rejected: Array.isArray(body.rejected) ? body.rejected.filter((c): c is string => typeof c === 'string').map(c => c.slice(0, 60)).slice(0, 20) : [] }, { apiKey: OPENAI_KEY, model: MODEL })
       return json(200, reply)
     } catch (e) {
       if (e instanceof RpcFailed) return json(e.code === 'customer_auth_required' ? 401 : 502, { error: e.code })
