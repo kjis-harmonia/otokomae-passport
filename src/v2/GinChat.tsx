@@ -112,6 +112,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const calRef = useRef<((d: string | null) => void) | null>(null)
   const menusRef = useRef<Menu[]>([])
   const started = useRef(false)
+  // いまの答えがボタンを押したものか（予約の確定はボタンだけ・11/8 慶一郎さん）
+  const fromChip = useRef(false)
   const api = bookingAssistantApi()
 
   useLayoutEffect(() => { const el = logRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? 'auto' : 'smooth' }) }, [msgs, chips, typing, reduce])
@@ -167,9 +169,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   // ── 声：サーバーで文字にして、同じ会話へ（AI予約と同じしくみ） ──
   const onAudio = useCallback((audio: Blob) => {
     setTyping(true)
-    void askAgentVoice(audio, [], undefined, true).then(r => { setTyping(false); if (r?.heard) answer(r.heard) })
+    void askAgentVoice(audio, [], undefined, true).then(r => { setTyping(false); if (r?.heard) { fromChip.current = false; answer(r.heard) } })
   }, [answer])
-  const voice = useVoice(answer, { server: api.serverVoice, onAudio, aiVoice: false })
+  const heardText = useCallback((t: string) => { fromChip.current = false; answer(t) }, [answer])
+  const voice = useVoice(heardText, { server: api.serverVoice, onAudio, aiVoice: false })
   const listening = voice.listen === 'listening'
 
   /** メニューを聞く：AI が相談に乗る。決まったら名前と料金で確かめる（「ちがう」は何が違うか聞き直す・同じものを押しつけない） */
@@ -500,30 +503,36 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const mine = await api.reservations().catch(() => [] as CustomerReservation[])
       const actives = d.who.map(p => mine.filter(r => isUpcoming(r) && (p.id ? r.companion_id === p.id : !r.companion_id && !r.companion_of && !r.companion_name)).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0] ?? null)
       const swaps = d.who.map((p, i) => actives[i] ? `※${d.who!.length > 1 ? p.label + 'の' : ''}${slotLabel(actives[i]!.starts_at)}のご予約は、こちらに入れ替えますね` : '').filter(Boolean)
-      const a = await ask(`この内容でご予約してもよろしいですか？\n${slotLabel(d.at)}\n${summary()}${swaps.length ? '\n' + swaps.join('\n') : ''}`,
-        [{ label: '予約する', strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, { label: '日にちを変える' }])
-      if (a === '人を変える') { d.who = null; d.at = null; d.plan = null; continue }
-      if (a === 'メニューを変える') {
+      const BOOK = 'この内容で予約する'
+      const a = await ask(`この内容でよろしければ、下の【${BOOK}】を押してくださいね。\n${slotLabel(d.at)}\n${summary()}${swaps.length ? '\n' + swaps.join('\n') : ''}`,
+        [{ label: BOOK, strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, { label: '日にちを変える' }])
+      const tapped = fromChip.current
+      if (tapped && a === '人を変える') { d.who = null; d.at = null; d.plan = null; continue }
+      if (tapped && a === 'メニューを変える') {
         const pickWho = d.who.length === 1 ? '' : await ask('どなたのメニューを変えますか？', d.who.map(x => ({ label: x.label })))
         const target = d.who.length === 1 ? d.who[0] : d.who.find(p => p.label === pickWho || pickWho.includes(p.name)) ?? d.who[0]
         delete d.menus[target.key]; d.at = null; d.plan = null; continue
       }
-      if (a === '日にちを変える') { d.when = null; d.at = null; d.plan = null; continue }
-      // 変更を先に読む。予約するのは【予約する】か、はっきりした「はい」のときだけ
-      if (a !== '予約する') {
+      if (tapped && a === '日にちを変える') { d.when = null; d.at = null; d.plan = null; continue }
+      // 予約が入るのは【この内容で予約する】のボタンを押したときだけ。文字・声の「はい」や、「ええわ」の意味の確認では確定しない
+      if (!(tapped && a === BOOK)) {
         if (await change(a)) continue
         const k = intent(a)
-        if (k === 'ambiguous') {
-          // 「ええわ」だけ：賛成にも断りにも取れるので、その言葉のまま聞き直す
-          const b = await askYN(`「${a}」は、これでOKということですか？それとも、今回はやめておきますか？`, 'これでOK！', '今回はやめとく')
-          if (b === 'yes') { /* 予約へ */ }
-          else if (b !== 'no' && await change(b)) continue
-          else { const again = await askYN('かしこまりました。今回はやめておきますね。', 'やっぱり予約する', 'ホームへ', false); if (again === 'yes') continue; break }
-        } else if (k === 'no') {
+        const cancel = async () => {
           const again = await askYN('かしこまりました。今回はやめておきますね。', 'やっぱり予約する', 'ホームへ', false)
-          if (again === 'yes') continue
+          return again === 'yes'
+        }
+        if (k === 'ambiguous') {
+          // 「ええわ」だけ：その言葉のまま意味を聞く（このボタンでは予約は入らない）
+          const b = await askYN(`「${a}」は、この内容でOKということですか？それとも、今回はやめておきますか？`, 'この内容でOK', '今回はやめておく')
+          if (b === 'yes') { await say(`ありがとうございます！では最後に【${BOOK}】を押して、ご予約を確定してくださいね。`); continue }
+          if (b !== 'no' && await change(b)) continue
+          if (await cancel()) continue
           break
-        } else if (k !== 'yes') continue
+        }
+        if (k === 'no') { if (await cancel()) continue; break }
+        if (k === 'yes' || a === BOOK) { await say(`ありがとうございます！最後に【${BOOK}】を押して、ご予約を確定してくださいね。`); continue }
+        continue
       }
       // 予約：1人ずつ押さえて確定（ご本人が先。お連れ様はご本人の予約につなぐ）
       setTyping(true)
@@ -568,7 +577,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- 開いたときに1回だけ
 
-  const send = () => { const t = text.trim(); if (!t || !waiting) return; setText(''); answer(t) }
+  const send = () => { const t = text.trim(); if (!t || !waiting) return; setText(''); fromChip.current = false; answer(t) }
   const shown = sheet ? (showAll ? sheet : sheet.slice(0, 7)) : null
 
   return (
@@ -598,7 +607,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         {chips.length > 0 && (
           <motion.div className="gc-chips lc-chips" initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
             {chips.map(c => (
-              <button key={c.label} type="button" className={c.strong ? 'gc-chip gc-chip-strong' : 'gc-chip'} onClick={() => answer(c.label)}>
+              <button key={c.label} type="button" className={c.strong ? 'gc-chip gc-chip-strong' : 'gc-chip'} onClick={() => { fromChip.current = true; answer(c.label) }}>
                 {c.label}{c.sub && <small>{c.sub}</small>}
               </button>
             ))}
