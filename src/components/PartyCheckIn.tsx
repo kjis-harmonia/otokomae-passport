@@ -53,7 +53,7 @@ export function PartyCheckIn({ userId, party, staffName, onDone }: {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 450, background: 'rgba(28,31,29,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }}>
-      <div role="dialog" aria-modal="true" aria-label="ご予約の受付" style={{ width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', borderRadius: 24, background: '#fff', border: '1px solid rgba(151,115,43,0.32)', boxShadow: '0 32px 80px rgba(28,31,29,0.42)', padding: '26px 24px 22px', color: INK }}>
+      <div role="dialog" aria-modal="true" aria-label="ご予約の受付" data-guide="party-checkin" data-step={mode} style={{ width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', borderRadius: 24, background: '#fff', border: '1px solid rgba(151,115,43,0.32)', boxShadow: '0 32px 80px rgba(28,31,29,0.42)', padding: '26px 24px 22px', color: INK }}>
         <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, lineHeight: 1.5, margin: 0 }}>
           {mode === 'ask' ? question : 'ご来店された方を選んでください'}
         </p>
@@ -82,13 +82,13 @@ export function PartyCheckIn({ userId, party, staffName, onDone }: {
         {error && <p role="alert" style={{ margin: '12px 0 0', fontSize: 14, color: '#B03A2E' }}>{error}</p>}
         {mode === 'ask' ? (
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            <button type="button" style={btn(false)} disabled={busy} onClick={() => { setMode('choose'); setPicked([]); setError(null) }}>いいえ</button>
-            <button type="button" style={btn(true)} disabled={busy} onClick={() => void checkIn(waiting.map(p => p.id))}>{busy ? '受付しています…' : 'はい'}</button>
+            <button type="button" data-guide="party-no" style={btn(false)} disabled={busy} onClick={() => { setMode('choose'); setPicked([]); setError(null) }}>いいえ</button>
+            <button type="button" data-guide="party-yes" style={btn(true)} disabled={busy} onClick={() => void checkIn(waiting.map(p => p.id))}>{busy ? '受付しています…' : 'はい'}</button>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
             <button type="button" style={btn(false)} disabled={busy} onClick={() => onDone(null)}>今は受付しない</button>
-            <button type="button" style={{ ...btn(true), opacity: picked.length ? 1 : 0.4 }} disabled={busy || !picked.length} onClick={() => void checkIn(picked)}>
+            <button type="button" data-guide="party-submit" style={{ ...btn(true), opacity: picked.length ? 1 : 0.4 }} disabled={busy || !picked.length} onClick={() => void checkIn(picked)}>
               {busy ? '受付しています…' : picked.length ? `${picked.length}名様を受付` : '受付'}
             </button>
           </div>

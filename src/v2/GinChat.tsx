@@ -645,6 +645,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
   // ガイド（「？」）の目印：いま銀ちゃんが何を聞いているか（who・menu・when・time・confirm・yesno・free・done）
   const askKind = finished && chips.some(c => c.label === 'ホームへ') ? 'done'
+    : chips.some(c => c.label === '会員QRを表示') ? 'verify'
     : chips.some(c => c.label === 'この内容で予約する') ? 'confirm'
     : chips.some(c => c.label === '最短で') ? 'when'
     : chips.some(c => c.label === 'ご本人') ? 'who'
