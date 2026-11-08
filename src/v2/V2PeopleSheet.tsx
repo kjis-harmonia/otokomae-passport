@@ -2,11 +2,13 @@
 //   ・ご本人と、登録したお連れ様（3名まで）を、それぞれのいつものメニューと並べる。選んだ方のいつもので AI予約へ
 //   ・メンテナンスカットは、その方が対象メニューの施術を終えてから14日以内のときだけ出す（ご本人の記録で、お連れ様は出さない）
 //   ・同じ画面の「お連れ様を追加・編集」で、追加・メニューの変更・削除
+//   ・☰ の「いつもの・お連れ様」からは、編集の画面から開く（ご本人のいつものも変えられる・11/8）
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
-import { canBeUsual, usualMenuOrder } from '../features/johnny/usualMenu'
+import { canBeUsual, setUsualMenu, usualMenuOrder } from '../features/johnny/usualMenu'
+import { callCustomerRpc } from '../utils/customerSession'
 import { fetchPeople, MAX_COMPANIONS, removeCompanion, saveCompanion, type People, type Person } from '../features/johnny/usualMembers'
 import { RpcError } from '../utils/staffSession'
 
@@ -15,11 +17,14 @@ type Menu = { code: string; name: string; duration_min: number; price: number | 
 const FEATURED = ['cut-regular', 'cut-skin-fade', 'perm-nurepan', 'perm-iper', 'perm-punch', 'perm-negro', 'store-teitei-gari']
 
 /** onBook：person が null ならご本人。menuCode が null ならメニューを AI が聞く（ご本人のいつものが無いとき） */
-export function V2PeopleSheet({ open, onClose, ownerMenu, onBook }: {
+export function V2PeopleSheet({ open, onClose, ownerMenu, onBook, manage = false }: {
   open: boolean
   onClose: () => void
   ownerMenu: { code: string; name: string } | null
-  onBook: (person: { id: string; name: string } | null, menuCode: string | null, label: string) => void
+  /** 無いとき（☰ から開いた）は予約の画面を出さず、編集だけ */
+  onBook?: (person: { id: string; name: string } | null, menuCode: string | null, label: string) => void
+  /** ☰ から：最初から編集の画面 */
+  manage?: boolean
 }) {
   const [people, setPeople] = useState<People | null>(null)
   const [failed, setFailed] = useState(false)
@@ -35,10 +40,10 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook }: {
   useEffect(() => {
     if (!open) return
     let live = true
-    setMode('pick'); setError(null); setArmed(null); setFailed(false) // eslint-disable-line react-hooks/set-state-in-effect -- 開くたびに最初から
+    setMode(manage ? 'edit' : 'pick'); setError(null); setArmed(null); setFailed(false) // eslint-disable-line react-hooks/set-state-in-effect -- 開くたびに最初から
     void fetchPeople().then(p => { if (live) setPeople(p) }, () => { if (live) setFailed(true) })
     return () => { live = false }
-  }, [open])
+  }, [open, manage])
   useEffect(() => {
     if (mode !== 'form' || menus) return
     let live = true
@@ -64,6 +69,17 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook }: {
       : 'うまく保存できませんでした。通信を確かめて、もう一度お試しください。'
   }
   const submit = async (menuCode: string) => {
+    // ご本人のいつもの（form.id = 'me'）
+    if (form.id === 'me') {
+      setBusy(true); setError(null)
+      try {
+        const m = menus?.find(x => x.code === menuCode)
+        if (m) setUsualMenu({ code: m.code, name: m.name })
+        await callCustomerRpc('customer_set_usual_menu', { p_code: menuCode })
+        setPeople(await fetchPeople()); setMode('edit'); setShowAll(false)
+      } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      return
+    }
     const name = form.name.trim()
     if (!name) { setError('お名前を入れてください。'); return }
     setBusy(true); setError(null)
@@ -91,7 +107,7 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook }: {
     }
     if (!maint) {
       return (
-        <button key={p?.id ?? 'owner'} type="button" className="v2-row" onClick={() => onBook(who, menuCode, menuName ?? '')}>
+        <button key={p?.id ?? 'owner'} type="button" className="v2-row" onClick={() => onBook?.(who, menuCode, menuName ?? '')}>
           <span style={{ flex: 1 }}>{name}{sub && <small>{sub}</small>}</span>
           <span className="v2-person-menu">{menuName ?? 'メニューを AI と決める'}</span><ChevronRight size={18} />
         </button>
@@ -101,8 +117,8 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook }: {
       <div key={p?.id ?? 'owner'} className="v2-row v2-person" role="group" aria-label={`${name}のメニュー`}>
         <span>{name}{sub && <small>{sub}</small>}</span>
         <div className="v2-person-choices">
-          <button type="button" className="v2-choice" onClick={() => onBook(who, menuCode, menuName ?? '')}>{menuName}</button>
-          <button type="button" className="v2-choice" onClick={() => onBook(who, 'maintenance', 'メンテナンスカット')}>
+          <button type="button" className="v2-choice" onClick={() => onBook?.(who, menuCode, menuName ?? '')}>{menuName}</button>
+          <button type="button" className="v2-choice" onClick={() => onBook?.(who, 'maintenance', 'メンテナンスカット')}>
             メンテナンスカット<small>{p!.days_left === 0 ? '今日まで' : `あと${p!.days_left}日`}</small>
           </button>
         </div>
@@ -120,7 +136,7 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook }: {
           <motion.div key="back" className="v2-sheet-back" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
           <motion.div key="sheet" className="v2-sheet" role="dialog" aria-modal="true" aria-label="どなたのご予約ですか"
             initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}>
-            <div className="v2-grab" />
+            <div className="v2-grab" data-guide="people-sheet" />
             {mode === 'pick' && <>
               <h2 className="v2-people-title">どなたのご予約ですか？</h2>
               <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }}>
@@ -128,20 +144,31 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook }: {
                 {companions.map(c => personRow(c, c.name, null, c.menu_code, c.menu_name))}
               </div>
               {failed && <p className="v2-people-note" role="status">お連れ様を読み込めませんでした。ご本人の予約はできます。</p>}
-              <p className="v2-people-note">2名以上でご一緒のご予約は、「いつもの」の2枚目からどうぞ。</p>
               <button type="button" className="v2-btn v2-btn-quiet" style={{ marginTop: 4, background: 'none' }} disabled={!people} onClick={() => setMode('edit')}>お連れ様を追加・編集</button>
             </>}
 
             {mode === 'edit' && <>
-              <button type="button" className="v2-people-back" onClick={() => { setMode('pick'); setError(null) }}><ChevronLeft size={18} />戻る</button>
-              <h2 className="v2-people-title">お連れ様</h2>
+              {!manage && <button type="button" className="v2-people-back" onClick={() => { setMode('pick'); setError(null) }}><ChevronLeft size={18} />戻る</button>}
+              <h2 className="v2-people-title">{manage ? 'いつもの・お連れ様' : 'お連れ様'}</h2>
+              {manage && (
+                <>
+                  <p className="v2-people-label">ご本人</p>
+                  <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }} data-guide="people-owner">
+                    <div className="v2-row">
+                      <span style={{ flex: 1 }}>{owner?.name ?? 'ご本人'}<small>{owner?.menu_name ? `いつもの：${owner.menu_name}` : 'いつものは、まだ決まっていません'}</small></span>
+                      <button type="button" className="v2-text-btn" data-guide="people-owner-edit" disabled={busy || !people} onClick={() => { setForm({ id: 'me', name: owner?.name ?? '', menu: owner?.menu_code ?? null }); setError(null); setMode('form') }}>変更</button>
+                    </div>
+                  </div>
+                  <p className="v2-people-label">お連れ様</p>
+                </>
+              )}
               {companions.length > 0 && (
-                <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }}>
+                <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }} data-guide="people-list">
                   {companions.map(c => (
                     <div key={c.id} className="v2-row">
                       <span style={{ flex: 1 }}>{c.name}<small>{c.menu_name ?? 'メニュー未登録'}</small></span>
-                      <button type="button" className="v2-text-btn" disabled={busy} onClick={() => { setForm({ id: c.id, name: c.name, menu: c.menu_code }); setError(null); setMode('form') }}>変更</button>
-                      <button type="button" className="v2-text-btn" data-danger={armed === c.id || undefined} disabled={busy} onClick={() => void remove(c)}>{armed === c.id ? 'もう一度で削除' : '削除'}</button>
+                      <button type="button" className="v2-text-btn" data-guide="people-edit" disabled={busy} onClick={() => { setForm({ id: c.id, name: c.name, menu: c.menu_code }); setError(null); setMode('form') }}>変更</button>
+                      <button type="button" className="v2-text-btn" data-guide="people-remove" data-danger={armed === c.id || undefined} disabled={busy} onClick={() => void remove(c)}>{armed === c.id ? 'もう一度で削除' : '削除'}</button>
                     </div>
                   ))}
                 </div>
@@ -149,19 +176,21 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook }: {
               {companions.length === 0 && <p className="v2-people-note">まだ登録されていません。ご家族やご友人など、一緒に来られる方を登録すると、次から押すだけで予約できます。</p>}
               {error && <p className="v2-people-error" role="alert">{error}</p>}
               {companions.length < MAX_COMPANIONS
-                ? <button type="button" className="v2-btn v2-btn-gold" style={{ marginTop: 14 }} onClick={() => { setForm({ id: null, name: '', menu: null }); setError(null); setMode('form') }}><Plus size={18} />お連れ様を追加</button>
+                ? <button type="button" className="v2-btn v2-btn-gold" data-guide="people-add" style={{ marginTop: 14 }} onClick={() => { setForm({ id: null, name: '', menu: null }); setError(null); setMode('form') }}><Plus size={18} />お連れ様を追加</button>
                 : <p className="v2-people-note">お連れ様は{MAX_COMPANIONS}名まで登録できます。</p>}
               <p className="v2-people-note">削除しても、すでに取ったご予約はそのまま残ります。</p>
             </>}
 
             {mode === 'form' && <>
               <button type="button" className="v2-people-back" onClick={() => { setMode('edit'); setError(null); setShowAll(false) }}><ChevronLeft size={18} />戻る</button>
-              <h2 className="v2-people-title">{form.id ? 'お連れ様を変更' : 'お連れ様を追加'}</h2>
-              <label className="v2-people-label" htmlFor="v2-mate-name">お名前（お店で呼ぶお名前）</label>
-              <input id="v2-mate-name" className="v2-people-input" value={form.name} maxLength={20} placeholder="例：父、たろう" autoComplete="off"
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <h2 className="v2-people-title">{form.id === 'me' ? 'いつものメニューを変更' : form.id ? 'お連れ様を変更' : 'お連れ様を追加'}</h2>
+              {form.id !== 'me' && <>
+                <label className="v2-people-label" htmlFor="v2-mate-name">お名前（お店で呼ぶお名前）</label>
+                <input id="v2-mate-name" className="v2-people-input" data-guide="people-name" value={form.name} maxLength={20} placeholder="例：父、たろう" autoComplete="off"
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              </>}
               <p className="v2-people-label">いつものメニュー</p>
-              <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }}>
+              <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }} data-guide="people-menus">
                 {!visibleMenus && <p className="v2-people-note" role="status">メニューを読み込んでいます…</p>}
                 {visibleMenus?.map(m => (
                   <button key={m.code} type="button" className="v2-row" disabled={busy} aria-pressed={form.menu === m.code} onClick={() => void submit(m.code)}>

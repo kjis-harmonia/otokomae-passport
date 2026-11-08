@@ -120,9 +120,13 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
 
   const reserve = () => {
     // いつものでメニューが分からないときは、メニューを決めずに Johnny（おかえりなさい から聞く）
+    // Staging：AI予約はぜんぶ銀ちゃんの会話（どなたの予約か・メニュー・いつ を銀ちゃんが聞く）。髪型の写真から来たら、そのメニューを入れて始める。本番は承認のあと
+    if (isStaging()) {
+      const style = selected?.kind === 'style' ? { menuCode: selected.code, label: selected.label } : { menuCode: null, label: '' }
+      window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: style }))
+      return
+    }
     if (!selected) { requestJohnny({ menuCode: null, label: '' }); return }
-    // Staging：銀ちゃんの会話で予約（どなたの予約か・メニュー・いつ を銀ちゃんが聞く）。本番は承認のあと
-    if (selected.kind === 'usual' && isStaging()) { window.dispatchEvent(new Event('ginjiro:gin-book')); return }
     if (selected.kind === 'usual') { setPeopleOpen(true); return }
     requestJohnny({ menuCode: selected.code, label: selected.label, usual: selected.kind !== 'style', group: selected.kind === 'group' })
   }

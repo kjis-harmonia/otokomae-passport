@@ -27,7 +27,8 @@ type Menu = { code: string; name: string; duration_min: number; price: number | 
 type Who = { kind: 'me' } | { kind: 'mate'; id: string | null; name: string }
 type Chip = { label: string; sub?: string; strong?: boolean }
 type Msg = { id: number; from: 'gin' | 'you'; text: string } | { id: number; from: 'cal'; open: string[]; first: string; last: string }
-export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book' }
+/** book.menuCode：ホームの髪型の写真から来たときのメニュー（label は髪型の名前） */
+export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string }
 
 const HOTPEPPER_MENU_URL = 'https://beauty.hotpepper.jp/slnH000583749/coupon/'
 const WEEK = '日月火水木金土'
@@ -304,7 +305,16 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   // ── book：予約。「誰が・何を・いつ」を1枚の予約メモにして、足りんところだけ聞く（11/8 慶一郎さん「変えたところだけ直す」）
   //   どの質問の途中でも「やっぱり朔耶だけ」「土曜がええ」「アイパーにする」で、そこだけ直す（ボタン・声・文字どれでも）
   //   人・メニューが変わったら施術時間も変わるので、時間は必ず選び直し（前の時間で取れると決めつけない）
-  const runBook = async (known?: People | null) => {
+  const runBook = async (known?: People | null, preset?: { menuCode?: string | null; label?: string }) => {
+    // 店頭で会員QRを読んでから AI予約が使えるようになる（まだの方には、そのご案内だけ）
+    const verified = await callCustomerRpc<{ verified?: boolean }>('customer_store_access_status').then(r => r?.verified === true, () => true)
+    if (!verified) {
+      const a = await askYN('AI予約は、お店で会員QRを読ませていただいてから使えるようになります。\n次のご来店のときに、スタッフに会員QRをお見せくださいね。', '会員QRを表示', 'ホームへ')
+      setFinished(true)
+      onClose()
+      if (a === 'yes') window.dispatchEvent(new Event('ginjiro:show-qr'))
+      return
+    }
     const people = known ?? await fetchPeople().catch(() => null)
     const owner: BookPerson = { key: 'me', id: null, name: people?.owner?.name ?? 'ご本人', label: 'ご本人', person: people?.owner ?? null }
     const mates: BookPerson[] = (people?.companions ?? []).filter(c => c.id).map(c => ({ key: c.id!, id: c.id!, name: c.name, label: honor(c.name), person: c }))
@@ -314,6 +324,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const staffList = opts?.staff ?? []
     const d: Draft = { who: mates.length ? null : [owner], menus: {}, when: null, at: null, plan: null, recheck: null }
+    // 髪型の写真から来た：最初の方のメニューはそれで聞く（1回だけ）
+    let presetMenu: Menu | null = preset?.menuCode ? all.find(m => m.code === preset.menuCode) ?? null : null
+    let presetLabel = preset?.label && !presetMenu ? preset.label : ''
 
     /** 言葉の中の人（「朔耶だけ」「本人と朔耶」「2人とも」） */
     const whoIn = (t: string): BookPerson[] | null => {
@@ -475,6 +488,18 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       // メニュー（決まっとらん人だけ）
       const need = d.who.find(p => !d.menus[p.key])
+      if (need && (presetMenu || presetLabel)) {
+        const pm = presetMenu, pl = presetLabel
+        presetMenu = null; presetLabel = ''
+        if (pm) {
+          const a = await askYN(`${d.who.length > 1 ? need.label + 'は' : ''}「${pm.name}」${pm.price != null ? ` ${yen(pm.price)}` : ''}でよろしいですか？`, 'はい', 'ほかのメニュー')
+          if (a === 'yes') { d.menus[need.key] = pm; continue }
+          if (a !== 'no' && await change(a)) continue
+        } else {
+          const m = await hearMenu(need.id ? { kind: 'mate', id: need.id, name: need.name } : { kind: 'me' }, `「${pl}」の髪型ですね。メニューは何にされますか？`, null)
+          if (m) { d.menus[need.key] = m; continue }
+        }
+      }
       if (need) {
         const m = await askMenuFor(need)
         if (m === 'changed') continue
@@ -614,15 +639,23 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const opts = await api.options().catch(() => null)
       menusRef.current = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : []
       if (mode.kind === 'welcome') await runWelcome(mode.pending)
-      else { await say('よう来んさったのぉ！ご予約ですね。'); await runBook() }
+      else { await say('よう来んさったのぉ！ご予約ですね。'); await runBook(null, { menuCode: mode.menuCode, label: mode.label }) }
     })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- 開いたときに1回だけ
 
+  // ガイド（「？」）の目印：いま銀ちゃんが何を聞いているか（who・menu・when・time・confirm・yesno・free・done）
+  const askKind = finished && chips.some(c => c.label === 'ホームへ') ? 'done'
+    : chips.some(c => c.label === 'この内容で予約する') ? 'confirm'
+    : chips.some(c => c.label === '最短で') ? 'when'
+    : chips.some(c => c.label === 'ご本人') ? 'who'
+    : chips.some(c => /\d\d:\d\d$/.test(c.label)) ? 'time'
+    : chips.some(c => c.label === '一覧から選ぶ' || c.label === 'ほかのメニュー') ? 'menu'
+    : chips.length === 2 ? 'yesno' : chips.length ? 'choice' : waiting ? 'free' : 'wait'
   const send = () => { const t = text.trim(); if (!t || !waiting) return; setText(''); fromChip.current = false; answer(t) }
   const shown = sheet ? (showAll ? sheet : sheet.slice(0, 7)) : null
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="銀ちゃん" className="v2 gc lc">
+    <div role="dialog" aria-modal="true" aria-label="銀ちゃん" className="v2 gc lc" data-guide="lc" data-ask={askKind}>
       <header className="lc-head">
         <p className="lc-head-name">銀ちゃん</p>
         <button type="button" className="gc-icon lc-close" aria-label={finished ? '閉じる' : 'あとで'} onClick={onClose}><X size={20} /></button>
@@ -646,18 +679,18 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       </div>
       <div className="lc-dock">
         {chips.length > 0 && (
-          <motion.div className="gc-chips lc-chips" initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+          <motion.div className="gc-chips lc-chips" data-guide="lc-chips" data-ask={askKind} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
             {chips.map(c => (
-              <button key={c.label} type="button" className={c.strong ? 'gc-chip gc-chip-strong' : 'gc-chip'} onClick={() => { fromChip.current = true; answer(c.label) }}>
+              <button key={c.label} type="button" className={c.strong ? 'gc-chip gc-chip-strong' : 'gc-chip'} data-guide={c.label === 'この内容で予約する' ? 'lc-book' : undefined} onClick={() => { fromChip.current = true; answer(c.label) }}>
                 {c.label}{c.sub && <small>{c.sub}</small>}
               </button>
             ))}
             {chips.some(c => c.label === '一覧から選ぶ') && <a className="gc-chip lc-link" href={HOTPEPPER_MENU_URL} target="_blank" rel="noopener noreferrer">HOT PEPPER</a>}
           </motion.div>
         )}
-        <form className={waiting ? 'gc-lens gc-composer' : 'gc-lens gc-composer gc-composer-off'} onSubmit={e => { e.preventDefault(); send() }}>
+        <form data-guide="lc-input" className={waiting ? 'gc-lens gc-composer' : 'gc-lens gc-composer gc-composer-off'} onSubmit={e => { e.preventDefault(); send() }}>
           {voice.listen !== 'unsupported' && voice.listen !== 'denied' && (
-            <button type="button" className={listening ? 'lc-mic lc-mic-on' : 'lc-mic'} disabled={!waiting} aria-label={listening ? '話し終わった' : '声で話す'}
+            <button type="button" data-guide="lc-mic" className={listening ? 'lc-mic lc-mic-on' : 'lc-mic'} disabled={!waiting} aria-label={listening ? '話し終わった' : '声で話す'}
               onClick={() => (listening ? voice.finishListening() : voice.startListening())}><Mic size={19} /></button>
           )}
           <input value={listening ? voice.interim || '聞いとります…' : text} onChange={e => setText(e.target.value)} readOnly={listening}
@@ -703,7 +736,7 @@ function LcCalendar({ open, first, last, onPick }: { open: string[]; first: stri
   const shift = (n: number) => setMonth(new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7))
   const canPrev = month > first.slice(0, 7), canNext = month < last.slice(0, 7)
   return (
-    <motion.div className="gc-lens lc-cal" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}>
+    <motion.div className="gc-lens lc-cal" data-guide="lc-cal" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}>
       <div className="lc-cal-head">
         <button type="button" aria-label="前の月" disabled={!canPrev} onClick={() => shift(-1)}><ChevronLeft size={20} /></button>
         <b>{y}年{m}月</b>

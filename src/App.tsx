@@ -363,7 +363,7 @@ function App() {
     }
     check()
     // ホームの「いつものでAI予約する」：銀ちゃんの会話で予約（Staging）
-    const onBook = () => setGinChat({ kind: 'book' })
+    const onBook = (e: Event) => { const d = (e as CustomEvent<{ menuCode?: string | null; label?: string } | null>).detail; setGinChat({ kind: 'book', menuCode: d?.menuCode ?? null, label: d?.label ?? '' }) }
     window.addEventListener('ginjiro:gin-book', onBook)
     const onVisible = () => { if (document.visibilityState === 'visible') check() }
     document.addEventListener('visibilitychange', onVisible)

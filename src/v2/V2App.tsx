@@ -14,6 +14,8 @@ import { V2Qr } from './V2Qr'
 import { V2Next } from './V2Next'
 import { V2Gacha } from './V2Gacha'
 import { V2Menu } from './V2Menu'
+import { V2PeopleSheet } from './V2PeopleSheet'
+import { isStaging } from '../utils/env'
 import { V2Account } from './V2Account'
 import { V2Ginpay } from './V2Ginpay'
 import { V2Campaign } from './V2Campaign'
@@ -31,6 +33,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   ticketFilter: WalletFilter; ticketKey: number; onModalChange: (open: boolean) => void
 }) {
   const [menu, setMenu] = useState(false)
+  const [people, setPeople] = useState(false)
   // 銀Pay のページ（ホームの帯から開く）。タブを切り替えたら閉じる
   const [pay, setPay] = useState(false)
   const go = (t: NavTab) => { setPay(false); setActiveTab(t) }
@@ -39,6 +42,8 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   const lastTab = useRef<NavTab>(isTab(activeTab) ? activeTab : 'home')
   const tab: NavTab = isTab(activeTab) ? activeTab : 'home'
   useEffect(() => { if (activeTab === 'home' || isTab(activeTab)) lastTab.current = activeTab }, [activeTab])
+  // 銀ちゃんの「会員QRを表示」（本人確認がまだの方）
+  useEffect(() => { const show = () => setActiveTab('qr'); window.addEventListener('ginjiro:show-qr', show); return () => window.removeEventListener('ginjiro:show-qr', show) }, [setActiveTab])
 
   // スタイルの「この髪型でAI予約する」：メニューは ReserveScreen が受け取る
   useEffect(() => {
@@ -101,7 +106,9 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
       </nav>
 
       {isHome && <V2Campaign onGacha={() => go('gacha')} />}
-      <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} />
+      <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} onPeople={isStaging() ? () => setPeople(true) : undefined} />
+      {/* ☰ の「いつもの・お連れ様」（Staging） */}
+      <V2PeopleSheet open={people} onClose={() => setPeople(false)} ownerMenu={null} manage />
     </div>
   )
 }
