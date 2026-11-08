@@ -10,6 +10,9 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowUp, ChevronLeft, ChevronRight, Mic, X } from 'lucide-react'
 import { bookingAssistantApi, linkCompanion, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
 import { matchMenu } from '../features/johnny/menuMatcher'
+import { ReservationMutationClient, reservationMenuCodes, type Confirmation, type MutationReply } from '../features/johnny/reservationMutation'
+import { getStoredValue } from '../utils/storage'
+import { USER_ID_KEY } from '../utils/userId'
 import { canBeUsual, setUsualMenu, usualMenuOrder } from '../features/johnny/usualMenu'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
 import { askUsualAi } from '../features/johnny/usualAi'
@@ -637,21 +640,73 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   // ── change：予約の変更・キャンセル（11/8 慶一郎さん「変更先が確保できるまでは元の予約を消さない」）
   //   変更はサーバーの1つの手続き（customer_change_reservation）。確定は【この内容に変更する】、取り消しは【キャンセルする】のボタンだけ
   //   通信が切れたら同じキーで送り直し、それでも分からなければ予約の一覧を読み直して確かめる
+  const endChange = async () => {
+    setFinished(true)
+    setChips([{ label: 'ホームへ', strong: true }])
+    setWaiting(true)
+    await new Promise<string>(resolve => { waitRef.current = resolve })
+    onClose()
+  }
+
+  const mutationClient = () => new ReservationMutationClient(
+    callCustomerRpc, localStorage, () => getStoredValue<string | null>(USER_ID_KEY, null),
+  )
+
+  const recoverMutation = async (client: ReservationMutationClient, initial: MutationReply) => {
+    let reply = initial
+    while (reply.state === 'unknown' || reply.state === 'conflict') {
+      const retry = reply.state === 'unknown'
+      const a = await ask('この依頼の結果をまだ確認できていません。確定と表示されるまでは、同じ予約を別の依頼で操作しないでください。', [
+        { label: '結果を確認', strong: true }, ...(retry ? [{ label: '同じ依頼を再送' }] : []), { label: 'あとで確認する' },
+      ])
+      if (!fromChip.current) continue
+      if (a === 'あとで確認する') return reply
+      setTyping(true)
+      const checked = a === '同じ依頼を再送' && retry && client.pending() ? await client.send() : await client.check()
+      if (retry || checked.state !== 'unknown') reply = checked
+      setTyping(false)
+    }
+    return reply
+  }
+
+  const showMutationResult = async (reply: MutationReply) => {
+    if (reply.state === 'completed') {
+      const { request, result } = reply
+      forgetReservation(request.reservation_id)
+      if (request.kind === 'cancel') {
+        const released = result.ginpay_released ?? 0
+        await say(`キャンセルしました。${released > 0 ? `\n銀Payの先払い ${yen(released)} は残高に戻しました。` : ''}`)
+      } else {
+        rememberReservation(result)
+        await say(`ご予約を変更しました！\n${slotLabel(result.starts_at)} ${result.items.map(i => i.name).join('・')}${result.ai_paused_until ? `\n※AI予約は ${md(result.ai_paused_until)} から、また使えます。` : ''}`)
+      }
+    } else if (reply.state === 'rejected') {
+      await say(reply.code === 'call_shop' ? '開始の30分前を過ぎたので、変更・キャンセルはお電話でお願いします。'
+        : reply.code === 'conditions_changed' ? '確認後に条件が変わったため、この依頼は確定していません。変更・キャンセルを開き直して、最新の内容をご確認ください。'
+        : 'この依頼は確定しませんでした。現在のご予約を確認してください。')
+    }
+  }
+
   const runChange = async () => {
+    const client = mutationClient()
     const all = menusRef.current
     const opts = await api.options().catch(() => null)
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const people = await fetchPeople().catch(() => null)
     const list = (await api.reservations().catch(() => [] as CustomerReservation[]))
       .filter(r => r.status === 'confirmed' && isUpcoming(r)).sort((a, b) => a.starts_at.localeCompare(b.starts_at))
-    const end = async () => { setFinished(true); setChips([{ label: 'ホームへ', strong: true }]); setWaiting(true); await new Promise<string>(res => { waitRef.current = res }); onClose() }
+    const end = endChange
     if (!list.length) { await say('今は、変更できるご予約がありません。'); return end() }
     const who = (r: CustomerReservation) => (r.companion_name ? `${honor(r.companion_name)}の` : '')
     const label = (r: CustomerReservation) => `${r.companion_name ? honor(r.companion_name) + '：' : ''}${slotLabel(r.starts_at)} ${r.items.map(i => i.name).join('・')}`
     let r = list[0]
     if (list.length > 1) {
-      const a = await ask('ご予約の変更ですね！どのご予約にしますか？', list.map(x => ({ label: label(x) })))
-      r = list.find(x => label(x) === a) ?? list[0]
+      const choices = list.map((x, i) => ({ label: `${i + 1}. ${label(x)}` }))
+      for (;;) {
+        const a = await ask('ご予約の変更ですね！どのご予約にしますか？', choices)
+        const index = choices.findIndex(x => x.label === a)
+        if (fromChip.current && index >= 0) { r = list[index]; break }
+      }
     }
     // 開始30分前を切ったら、お電話
     if (Date.parse(r.starts_at) < Date.now() + 30 * 60000) {
@@ -662,20 +717,39 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const person = r.companion_id ? people?.companions.find(c => c.id === r.companion_id) ?? null : people?.owner ?? null
     const whoArg: Who = r.companion_id ? { kind: 'mate', id: r.companion_id, name: r.companion_name ?? '' } : { kind: 'me' }
     let menu: Menu | null = all.find(m => m.code === r.items[0]?.menu_code) ?? (r.items[0]?.menu_code === 'maintenance' ? maintMenu ?? null : null)
+    const originalCodes = reservationMenuCodes(r)
+    let menuCodes = originalCodes
     let at = r.starts_at
-    const changeSlots = async (day: string, code: string) => {
-      const l = await callCustomerRpc<{ starts_at: string }[]>('customer_change_slots', { p_reservation_id: r.id, p_date: day, p_menu_codes: [code] }).catch(() => [])
+    const sameMenus = () => menuCodes.length === originalCodes.length && menuCodes.every((code, i) => code === originalCodes[i])
+    const forPerson = (c?: Confirmation) => c?.old?.id === r.id && c.old.companion_id === (r.companion_id ?? null)
+    const reviewedLabel = (c: Confirmation) => `${slotLabel(c.old.starts_at)} ${c.old.items.map(i => i.name).join('・')}`
+    const changeSlots = async (day: string) => {
+      const l = await callCustomerRpc<{ starts_at: string }[]>('customer_change_slots', { p_reservation_id: r.id, p_date: day, p_menu_codes: menuCodes }).catch(() => [])
       return Array.isArray(l) ? l.map(x => x.starts_at) : []
+    }
+    const changeDays = async (days: number, weekend: boolean) => {
+      const from = todayJst()
+      const chunks = Array.from({ length: Math.ceil(days / 7) }, (_, i) => addDays(from, i * 7))
+      const results = await Promise.all(chunks.map(d => callCustomerRpc<string[]>('customer_change_open_days', {
+        p_reservation_id: r.id, p_menu_codes: menuCodes, p_from: d, p_to: addDays(d, 6), p_weekend: weekend,
+      }).catch(() => [])))
+      return results.flat().filter(d => typeof d === 'string' && d < addDays(from, days))
     }
     let action = await ask(`ご予約の変更ですね！\n${label(r)}\nどちらを変更されますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, { label: 'キャンセル' }])
     let dayOnly: string | null = null
     for (let guard = 0; guard < 24; guard++) {
       // キャンセル
       if (/キャンセル|取り消/.test(action)) {
-        const late = Date.parse(r.starts_at) < Date.now() + 120 * 60000
-        const pv = await callCustomerRpc<{ ginpay_before?: number }>('customer_change_preview', { p_reservation_id: r.id, p_starts_at: r.starts_at, p_menu_codes: r.items.map(i => i.menu_code) }).catch(() => null)
-        const gp = pv?.ginpay_before ?? 0
-        const a = await ask(`${label(r)}\nのご予約をキャンセルしますか？${late ? '\n※開始2時間前を過ぎとるので、キャンセルすると AI予約がしばらく使えなくなります。' : ''}${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻ります。` : ''}\nキャンセルする場合は、下の【キャンセルする】を押してください。`,
+        const pv = await callCustomerRpc<{ confirmation: Confirmation; cancel_late: boolean; ginpay_before: number }>(
+          'customer_cancel_preview', { p_reservation_id: r.id },
+        ).catch((e: unknown) => ({ error: e instanceof RpcError ? e.code : 'network' } as const))
+        if ('error' in pv || !forPerson(pv.confirmation)) {
+          await say('error' in pv && pv.error === 'call_shop' ? '開始の30分前を過ぎたので、キャンセルはお電話でお願いします。' : 'ご予約の内容を確認できませんでした。')
+          return end()
+        }
+        const late = pv.cancel_late
+        const gp = pv.ginpay_before
+        const a = await ask(`${who(r)}${reviewedLabel(pv.confirmation)}\nのご予約をキャンセルしますか？${late ? '\n※開始2時間前を過ぎとるので、キャンセルすると AI予約がしばらく使えなくなります。' : ''}${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻ります。` : ''}\nキャンセルする場合は、下の【キャンセルする】を押してください。`,
           [{ label: 'キャンセルする', strong: true }, { label: 'やめておく' }])
         if (!(a === 'キャンセルする' && fromChip.current)) {
           // 「キャンセルして」「キャンセルお願い」はキャンセルしたいという意味（確定はボタンだけ）
@@ -684,24 +758,16 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           if (wantCancel) { await say('ありがとうございます。キャンセルする場合は、下の【キャンセルする】のボタンを押してくださいね。'); continue }
           await say('かしこまりました。ご予約はそのままです。'); return end()
         }
+        client.begin({ kind: 'cancel', reservation_id: r.id, starts_at: null, menu_codes: [], confirmation: pv.confirmation })
         setTyping(true)
-        let done = false
-        for (let i = 0; i < 2 && !done; i++) {
-          try { await api.cancel(r.id); done = true } catch (err) {
-            const code = err instanceof RpcError ? err.code : ''
-            if (code === 'cancel_deadline_passed') { setTyping(false); await say('開始の30分前を過ぎたので、キャンセルはお電話でお願いします。'); return end() }
-            if (code) break
-            await pause(1500)
-          }
-        }
-        if (!done) {
-          // 通信が分からない：予約の一覧で確かめる
-          const now = await api.reservations().catch(() => null)
-          done = !!now && !now.some(x => x.id === r.id && x.status === 'confirmed')
-        }
+        const first = await client.send()
         setTyping(false)
-        await say(done ? `キャンセルしました。${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻しました。` : ''}\nまたのご来店をお待ちしとりますけぇね。` : 'すみません、キャンセルできませんでした。ご予約はそのままです。お店にお電話いただけますか？')
-        if (done) forgetReservation(r.id)
+        const reply = await recoverMutation(client, first)
+        if (reply.state === 'rejected' && reply.code === 'conditions_changed') {
+          await say('確認後に条件が変わりました。最新の内容を確認してください。')
+          continue
+        }
+        await showMutationResult(reply)
         return end()
       }
       // メニューを変更
@@ -714,10 +780,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           : all.find(m => a.includes(m.name)) ?? await hearMenu(whoArg, '何のメニューにされますか？', null)
         if (!next) { action = '日時を変更'; continue }
         menu = next
+        menuCodes = [next.code]
         setTyping(true)
-        const free = await changeSlots(dayOf(at), menu.code)
+        const free = await changeSlots(dayOf(at))
         setTyping(false)
-        if (free.includes(at)) {
+        if (free.some(time => Date.parse(time) === Date.parse(at))) {
           const k = await askYN(`「${menu.name}」に変更しますね。\n${slotLabel(at)}のままでよろしいですか？`, 'そのまま', '時間を変更')
           if (k === 'yes') { action = 'summary'; continue }
           dayOnly = dayOf(at); action = '時間'; continue
@@ -727,28 +794,28 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       // 日時を変更（いつ頃 → 日 → 時間）
       if (/日時|日にち|時間|いつ|土|日曜|最短/.test(action) && action !== 'summary') {
-        if (!menu) { await say('すみません、このご予約のメニューが分からんので、お店にお電話いただけますか？'); return end() }
+        if (!menuCodes.length) { await say('すみません、このご予約のメニューが分からんので、お店にお電話いただけますか？'); return end() }
         let days: string[]
         if (dayOnly) { days = [dayOnly]; dayOnly = null }
         else {
           const w = /土|日曜|週末/.test(action) && !/日時|日付/.test(action) ? action : await ask('ご来店は、いつ頃がええですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
           if (/日付|カレンダー|選ぶ/.test(w)) {
-            setTyping(true); const open = await openDays(menu.code, todayJst(), 63, false); setTyping(false)
+            setTyping(true); const open = await changeDays(63, false); setTyping(false)
             if (!open.length) { await say('すみません、しばらく空きが無いんです。お店にお電話いただけますか？'); return end() }
             await say('空いとる日だけ、押せるようにしとりますけぇね。')
             const d = await pickDate(open); if (!d) continue
             days = [d]
           } else {
             const weekend = /土|日曜|週末/.test(w)
-            setTyping(true); days = (await openDays(menu.code, todayJst(), weekend ? 42 : 21, weekend)).slice(0, 4); setTyping(false)
+            setTyping(true); days = (await changeDays(weekend ? 42 : 21, weekend)).slice(0, 4); setTyping(false)
             if (/土曜/.test(w) && !/日曜/.test(w)) days = days.filter(x => dow(x) === '土')
           }
         }
         setTyping(true)
         let times: string[] = []
-        for (const d of days) { times = [...times, ...spreadSlots((await changeSlots(d, menu.code)).map(s => ({ starts_at: s })), days.length === 1 ? 6 : 2).map(s => s.starts_at)]; if (times.length >= 4) break }
+        for (const d of days) { times = [...times, ...spreadSlots((await changeSlots(d)).map(s => ({ starts_at: s })), days.length === 1 ? 6 : 2).map(s => s.starts_at)]; if (times.length >= 4) break }
         setTyping(false)
-        times = times.filter(t => t !== r.starts_at || menu!.code !== r.items[0]?.menu_code).slice(0, 6)
+        times = times.filter(t => Date.parse(t) !== Date.parse(r.starts_at) || !sameMenus()).slice(0, 6)
         if (!times.length) { await say('すみません、その日は空きが無かったんです。ほかの日にしてみましょう。'); action = '日時を変更'; continue }
         const oneDay = times.every(t => dayOf(t) === dayOf(times[0]))
         const a = await ask(oneDay ? `${mdw(dayOf(times[0]))}は、この時間が空いとりますよ。` : 'この時間が空いとりますよ。', [...times.map(t => ({ label: oneDay ? hm(t) : slotLabel(t) })), { label: 'ほかの日' }])
@@ -762,19 +829,24 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         continue
       }
       // まとめて確認：変更前と変更後・料金・銀Pay・外れる券・直前の扱い
-      if (!menu) { await say('すみません、このご予約のメニューが分からんので、お店にお電話いただけますか？'); return end() }
+      if (!menuCodes.length) { await say('すみません、このご予約のメニューが分からんので、お店にお電話いただけますか？'); return end() }
       setTyping(true)
-      const pv = await callCustomerRpc<{ error?: string; kind: string; late_penalty: boolean; price_before: number | null; price_after: number | null; slot_ok: boolean;
+      const pv = await callCustomerRpc<{ error?: string; kind: string; confirmation: Confirmation; menu_names: string[]; duration_after: number; late_penalty: boolean; price_before: number | null; price_after: number | null; slot_ok: boolean;
         ginpay_before: number; ginpay_after: number; tickets_drop: { title: string; why: string }[]; gacha: { title: string; keep: boolean; why: string | null } | null }>('customer_change_preview',
-        { p_reservation_id: r.id, p_starts_at: at, p_menu_codes: [menu.code] }).catch((e: unknown) => ({ error: e instanceof RpcError ? e.code : 'network' } as never))
+        { p_reservation_id: r.id, p_starts_at: at, p_menu_codes: menuCodes }).catch((e: unknown) => ({ error: e instanceof RpcError ? e.code : 'network' } as never))
       setTyping(false)
       if (pv.error === 'call_shop') { await say('開始の30分前を過ぎたので、変更はお電話でお願いします。'); return end() }
       if (pv.error) { await say('すみません、確認できませんでした。もう一度やってみましょう。'); action = '日時を変更'; continue }
       if (!pv.slot_ok) { await say(`すみません、${slotLabel(at)}はちょうど埋まってしまいました。ほかの時間を選びましょう。`); dayOnly = dayOf(at); action = '時間'; continue }
-      const why = (w: string) => (w === 'expired' ? '期限が切れるので' : w === 'weekday' ? '平日だけの券なので' : w === 'menu' ? 'このメニューでは使えないので' : w === 'owner_only' ? 'ご本人だけの券なので' : '使えないので')
+      if (!forPerson(pv.confirmation) || !pv.menu_names?.length) { await say('ご予約の内容を確認できませんでした。'); return end() }
+      if (sameMenus() && (pv.confirmation.old.items.length !== originalCodes.length || pv.confirmation.old.items.some((item, i) => item.menu_code !== originalCodes[i]))) {
+        await say('元のご予約のメニューが変わっています。変更・キャンセルを開き直して、最新のご予約をご確認ください。')
+        return end()
+      }
+      const why = (w: string) => (w === 'expired' ? '期限が切れるので' : w === 'weekday' ? '平日だけの券なので' : w === 'menu' ? 'このメニューでは使えないので' : w === 'owner_only' ? 'ご本人だけの券なので' : w === 'owner_changed' ? '券の持ち主が変わったので' : '使えないので')
       const lines = [
-        `変更前：${slotLabel(r.starts_at)} ${r.items.map(i => i.name).join('・')}${r.total_price != null ? ` ${yen(r.total_price)}` : ''}`,
-        `変更後：${slotLabel(at)} ${menu.name}${pv.price_after != null ? ` ${yen(pv.price_after)}` : ''}`,
+        `変更前：${reviewedLabel(pv.confirmation)}${pv.price_before != null ? ` ${yen(pv.price_before)}` : ''}`,
+        `変更後：${slotLabel(at)} ${pv.menu_names.join('・')}（${pv.duration_after}分）${pv.price_after != null ? ` ${yen(pv.price_after)}` : ''}`,
         ...(pv.ginpay_before > 0 ? [`銀Payの先払い：${yen(pv.ginpay_before)} → ${yen(pv.ginpay_after)}${pv.ginpay_after < pv.ginpay_before ? `（${yen(pv.ginpay_before - pv.ginpay_after)} は残高に戻ります）` : ''}`] : []),
         ...(pv.ginpay_before > 0 && pv.price_after != null && pv.price_after > pv.ginpay_after ? [`残りの ${yen(pv.price_after - pv.ginpay_after)} は、お店でお支払いください`] : []),
         ...pv.tickets_drop.map(t => `※「${t.title}」は${why(t.why)}、外れます`),
@@ -790,30 +862,20 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (intent(a) === 'ambiguous') { await say(`「${a}」は、この内容でOKということですか？よろしければ【${BTN}】を、やめるときは【やめておく】を押してくださいね。`); continue }
         action = a; continue
       }
-      // 変更（同じキーで最大3回。通信が分からなければ予約の一覧で確かめる）
-      const key = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+      client.begin({ kind: 'change', reservation_id: r.id, starts_at: at, menu_codes: menuCodes, confirmation: pv.confirmation })
       setTyping(true)
-      type ChangeResult = CustomerReservation & { error?: string; tickets_drop?: { title: string }[]; ai_paused_until?: string; idempotent?: boolean }
-      let res: ChangeResult | null = null
-      for (let i = 0; i < 3 && !res; i++) {
-        try { res = await callCustomerRpc<ChangeResult>('customer_change_reservation', { p_reservation_id: r.id, p_starts_at: at, p_menu_codes: [menu.code], p_idem_key: key }) }
-        catch (err) { if (err instanceof RpcError && err.code && err.code !== 'rpc_failed') { res = { error: err.code } as ChangeResult; break } await pause(1500) }
-      }
-      if (!res) {
-        const now = await api.reservations().catch(() => null)
-        const moved = now?.find(x => x.status === 'confirmed' && x.starts_at === at && x.items[0]?.menu_code === menu!.code && x.id !== r.id)
-        const kept = now?.some(x => x.id === r.id && x.status === 'confirmed')
-        res = moved ? (moved as ChangeResult) : ({ error: kept ? 'change_failed' : 'unknown' } as ChangeResult)
-      }
+      const first = await client.send()
       setTyping(false)
-      if (res.error) {
-        if (res.error === 'slot_taken') { await say('すみません、その時間はちょうど埋まってしまいました。元のご予約はそのままです。ほかの時間を選びましょう。'); dayOnly = dayOf(at); action = '時間'; continue }
-        if (res.error === 'call_shop') { await say('開始の30分前を過ぎたので、変更はお電話でお願いします。元のご予約はそのままです。'); return end() }
-        await say(res.error === 'unknown' ? '通信がうまくいかんかったので、変更できたか確かめられませんでした。下の「次回予約」でご確認いただけますか？' : 'すみません、変更できませんでした。元のご予約はそのままです。')
-        return end()
+      const reply = await recoverMutation(client, first)
+      if (reply.state === 'rejected' && reply.code === 'conditions_changed') {
+        await say('確認後に条件が変わりました。最新の内容を確認してください。')
+        continue
       }
-      forgetReservation(r.id); rememberReservation(res)
-      await say(`ご予約を変更しました！\n${slotLabel(res.starts_at)} ${menu.name}、お待ちしとりますけぇね。${res.ai_paused_until ? `\n※AI予約は ${md(res.ai_paused_until)} から、また使えます。` : ''}`)
+      if (reply.state === 'rejected' && reply.code === 'slot_taken') {
+        await say('その時間は埋まりました。ほかの時間を選んでください。')
+        dayOnly = dayOf(at); action = '時間'; continue
+      }
+      await showMutationResult(reply)
       return end()
     }
     await say('また変更したいときは、いつでも声をかけてくださいね。')
@@ -824,12 +886,23 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     if (started.current) return
     started.current = true
     void (async () => {
+      if (getStoredValue<string | null>(USER_ID_KEY, null)) {
+        const client = mutationClient()
+        if (client.pending()) {
+          await showMutationResult(await recoverMutation(client, await client.check()))
+          return endChange()
+        }
+      }
       const opts = await api.options().catch(() => null)
       menusRef.current = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : []
       if (mode.kind === 'welcome') await runWelcome(mode.pending)
       else if (mode.kind === 'change') await runChange()
       else { await say('よう来んさったのぉ！ご予約ですね。'); await runBook(null, { menuCode: mode.menuCode, label: mode.label }) }
-    })()
+    })().catch(async () => {
+      setTyping(false)
+      await say('手続きを続けられませんでした。送信した依頼がある場合は、もう一度この画面を開いて結果を確認してください。')
+      await endChange()
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- 開いたときに1回だけ
 
   // ガイド（「？」）の目印：いま銀ちゃんが何を聞いているか（who・menu・when・time・confirm・yesno・free・done）
