@@ -8,6 +8,11 @@ update public.service_menus set price = 8000, updated_at = now()
 update public.service_menus set price = 15000, updated_at = now()
   where code = 'perm-ginpara-curly' and price = 16000 and normal_price is null;
 
+-- クールシャンプー（300円）は HOT PEPPER の通常メニューに無い（夏限定クーポンの中身だった）→ 使わない（11/9 慶一郎さん「なし」）
+--   消さずに止める：過去の会計の明細から名前をたどれるように
+update public.service_menus set is_active = false, booking_enabled = false, checkout_enabled = false, updated_at = now()
+  where code = 'opt-cool-shampoo';
+
 -- スキンフェードの追加（＋1,000円）：お会計でスタッフが足すオプション。アプリの予約には出さない（時間は理容師の確認待ち）
 --   二重請求の防止：パーマ・アイパー系のメニューの料金にはスキンフェードを含めない（上で 8,000 / 15,000 にそろえた）
 insert into public.service_menus (code, name, duration_min, price, kind, category, is_active, checkout_enabled, booking_enabled, sort_order)
