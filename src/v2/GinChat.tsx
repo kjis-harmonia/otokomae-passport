@@ -100,6 +100,21 @@ function assign(n: number, m: number, ok: (person: number, staff: number) => boo
   return go(0) ? pick : null
 }
 
+/** 文の中の日付（「11月20日」「20日」）。過ぎた日なら：月まで言われたら来年、日だけなら来月。暦に無い日（11月31日など）は null */
+function dateIn(t: string): string | null {
+  const s = t.normalize('NFKC')
+  const md2 = s.match(/(\d{1,2})月(\d{1,2})日/), dOnly = s.match(/(?:^|[^\d月])(\d{1,2})日/)
+  if (!md2 && !dOnly) return null
+  const today = todayJst()
+  let y = +today.slice(0, 4), mo = md2 ? +md2[1] : +today.slice(5, 7)
+  const da = md2 ? +md2[2] : +dOnly![1]
+  const ymd = () => `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`
+  if (ymd() < today) { if (md2) y++; else { mo++; if (mo > 12) { mo = 1; y++ } } }
+  const day = ymd()
+  const real = new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10))).toISOString().slice(0, 10) === day
+  return real && day >= today ? day : null
+}
+
 /** 空きのある日（今の予約エンジンで判定）。1週間ずつ並べて調べる（1回で長く調べると時間切れになる） */
 async function openDays(menuCode: string, from: string, days: number, weekend: boolean): Promise<string[]> {
   const chunks = Array.from({ length: Math.ceil(days / 7) }, (_, i) => addDays(from, i * 7))
@@ -194,14 +209,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   }, [])
   const pickFromList = (): Promise<Menu | null> => { setSheet(menusRef.current); return new Promise(res => { sheetRef.current = res }) }
   /** 会話の中にカレンダーを出して、日付を待つ（選んだらカレンダーは畳んで、選んだ日だけ残す） */
-  const pickDate = async (open: string[]): Promise<string | null> => {
+  //   カレンダーの間も文字・声で答えられる（満席の日は押せないので「11月20日」と送ってキャンセル待ちへ・11/10 Codex 再検査）
+  const pickDate = async (open: string[]): Promise<{ day: string } | { text: string } | null> => {
     const id = nextId.current++
     const first = open[0] ?? todayJst(), last = open[open.length - 1] ?? first
     setMsgs(m => [...m, { id, from: 'cal', open, first, last }])
-    const d = await new Promise<string | null>(res => { calRef.current = res })
+    setWaiting(true)
+    const r = await new Promise<{ day: string } | { text: string } | null>(res => {
+      calRef.current = d => { waitRef.current = null; setWaiting(false); res(d ? { day: d } : null) }
+      waitRef.current = t => { calRef.current = null; res({ text: t }) }
+    })
     setMsgs(m => m.filter(x => x.id !== id))
-    if (d) push('you', mdw(d))
-    return d
+    if (r && 'day' in r) push('you', mdw(r.day))
+    return r
   }
 
   // ── 声：サーバーで文字にして、同じ会話へ（AI予約と同じしくみ） ──
@@ -289,16 +309,20 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   }
 
   /** お得な案内：使える割引券（期限内・条件に合うもの）と、メンテナンスの期限 */
-  const tips = async (owner: Person | null | undefined) => {
+  /** 使える割引券の一言（無い・読めんときは空） */
+  const ticketLine = async () => {
     try {
       const tickets = await callCustomerRpc<TicketRow[]>('customer_get_tickets')
       const usable = usableTickets(tickets ?? [], new Date().toISOString()).filter(t => t.type === 'discount' && (t.amount ?? 0) > 0)
-      if (usable.length) {
-        const best = Math.max(...usable.map(t => t.amount ?? 0))
-        // 「次のご予約で」と言うと、今取った予約では使えんように聞こえる（11/9 磨き）。券の条件に合えば、来店した日のお会計で使える
-        await say(usable.length === 1 ? `今、${best.toLocaleString('ja-JP')}円の割引券をお持ちですよ。ご来店のときに、お会計で使えますけぇね。` : `割引券を${usable.length}枚お持ちですよ（いちばん大きいのは${best.toLocaleString('ja-JP')}円）。ご来店のときに、お会計で使えますけぇね。`)
-      }
-    } catch { /* 券が読めんときは案内しない */ }
+      if (!usable.length) return ''
+      const best = Math.max(...usable.map(t => t.amount ?? 0))
+      // 「次のご予約で」と言うと、今取った予約では使えんように聞こえる（11/9 磨き）。券の条件に合えば、来店した日のお会計で使える
+      return usable.length === 1 ? `${best.toLocaleString('ja-JP')}円の割引券をお持ちです。ご来店のときに、お会計で使えますよ。` : `割引券を${usable.length}枚お持ちです（いちばん大きいのは${best.toLocaleString('ja-JP')}円）。ご来店のときに、お会計で使えますよ。`
+    } catch { return '' /* 券が読めんときは案内しない */ }
+  }
+  const tips = async (owner: Person | null | undefined) => {
+    const t = await ticketLine()
+    if (t) await say(t)
     if (owner?.maintenance_ok && owner.days_left != null) await say(owner.days_left === 0 ? 'メンテナンスカットは今日までですけぇ、よかったらどうぞ。' : `メンテナンスカットは、あと${owner.days_left}日ご利用いただけますよ。`)
   }
 
@@ -391,10 +415,25 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   // ── book：予約。「誰が・何を・いつ」を1枚の予約メモにして、足りんところだけ聞く（11/8 慶一郎さん「変えたところだけ直す」）
   //   どの質問の途中でも「やっぱり朔耶だけ」「土曜がええ」「アイパーにする」で、そこだけ直す（ボタン・声・文字どれでも）
   //   人・メニューが変わったら施術時間も変わるので、時間は必ず選び直し（前の時間で取れると決めつけない）
-  const runBook = async (known?: People | null, preset?: { menuCode?: string | null; label?: string }) => {
+  const runBook = async (known?: People | null, preset?: { menuCode?: string | null; label?: string }, askExisting = false) => {
     const session = getCustomerSession()
     if (await checkBookingAccess(session) === 'closed') return
     if (hasPendingBookingConfirmation()) return checkPreviousBooking()
+    // もうご予約があるのに、何も言わずに新しい予約を始めていた（11/10 慶一郎さん「予約確定してもう一度AI予約したら、いつもの文章」）
+    //   → 先に今のご予約を伝えて、もう1件か・変更かを選んでもらう
+    if (askExisting) {
+      const mine = await api.reservations().catch(() => null)
+      const upcoming = Array.isArray(mine) ? mine.filter(r => r.status === 'confirmed' && isUpcoming(r)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
+      if (upcoming.length) {
+        const r = upcoming[0]
+        const what = `${r.companion_name ? honor(r.companion_name) + 'の' : ''}${slotLabel(r.starts_at)} ${r.items.map(i => i.name).join('・')}`
+        const MORE = 'もう1件予約する', CHANGE = '今の予約を変更する'
+        const a = await ask(`今、${what}のご予約が入っとりますよ${upcoming.length > 1 ? `（ほかに${upcoming.length - 1}件）` : ''}。\nどうされますか？`,
+          [{ label: MORE, strong: true }, { label: CHANGE }, { label: '閉じる' }])
+        if (a === CHANGE || (!fromChip.current && /変更|変え|キャンセル|取り消/.test(a))) return runChange()
+        if (fromChip.current && a === '閉じる') return onClose()
+      }
+    }
     const people = known ?? await fetchPeople().catch(() => null)
     const owner: BookPerson = { key: 'me', id: null, name: people?.owner?.name ?? 'ご本人', label: 'ご本人', person: people?.owner ?? null }
     const mates: BookPerson[] = (people?.companions ?? []).filter(c => c.id).map(c => ({ key: c.id!, id: c.id!, name: c.name, label: honor(c.name), person: c }))
@@ -421,19 +460,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     }
     const whenIn = (t: string): Draft['when'] | undefined => {
       const s = t.normalize('NFKC')
-      const md2 = s.match(/(\d{1,2})月(\d{1,2})日/), dOnly = s.match(/(?:^|[^\d月])(\d{1,2})日/)
-      if (md2 || dOnly) {
-        const today = todayJst()
-        let y = +today.slice(0, 4), mo = md2 ? +md2[1] : +today.slice(5, 7)
-        const da = md2 ? +md2[2] : +dOnly![1]
-        const ymd = () => `${y}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`
-        // 過ぎた日なら：月まで言われたら来年、日だけなら来月
-        if (ymd() < today) { if (md2) y++; else { mo++; if (mo > 12) { mo = 1; y++ } } }
-        const day = ymd()
-        // 暦に無い日（11月31日など）は日付として受け取らない
-        const real = new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10))).toISOString().slice(0, 10) === day
-        if (real && day >= today) return { kind: 'day', day }
-      }
+      const day = dateIn(s)
+      if (day) return { kind: 'day', day }
       if (/土|日曜|週末/.test(s) && !/日付|日にち/.test(s)) {
         const sat = /土曜/.test(s), sun = /日曜/.test(s)
         return sat && !sun ? { kind: 'weekend', dow: 6 } : sun && !sat ? { kind: 'weekend', dow: 0 } : { kind: 'weekend' }
@@ -560,6 +588,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
     let hasOther = false
+    let ticketNote: string | null = null
     const canCreate = async (persons: BookPerson[], startsAt: string) => {
       const mine = await api.reservations().catch(() => null)
       if (!Array.isArray(mine)) {
@@ -643,9 +672,20 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const open = lists.reduce((a, b) => a.filter(x => b.includes(x)))
         setTyping(false)
         if (!open.length) { await say('すみません、しばらく全員そろって入れる日が無いんです。お店にお電話いただけますか？'); d.when = null; continue }
-        await say(d.who.length > 1 ? '全員そろって入れる日だけ、押せるようにしとりますけぇね。' : '空いとる日だけ、押せるようにしとりますけぇね。')
-        const day = await pickDate(open)
-        d.when = day ? { kind: 'day', day } : null
+        // 満席の日はカレンダーで押せない → ご本人1人なら、日付を送ればその日のキャンセル待ちに入れる（11/10 Codex 再検査 中）
+        const soloMe = d.who.length === 1 && d.who[0].key === 'me'
+        await say(d.who.length > 1 ? '全員そろって入れる日だけ、押せるようにしとりますけぇね。'
+          : soloMe ? '空いとる日だけ、押せるようにしとりますけぇね。\n満席の日のキャンセル待ちは、「11月20日」のように日付を送ってもらえたら入れますよ。'
+          : '空いとる日だけ、押せるようにしとりますけぇね。')
+        const picked = await pickDate(open)
+        if (picked && 'text' in picked) {
+          const wh = whenIn(picked.text)
+          if (wh) { d.when = wh; continue }
+          d.when = null
+          if (await change(picked.text)) continue
+          continue
+        }
+        d.when = picked ? { kind: 'day', day: picked.day } : null
         continue
       }
       // 人・メニューを変えた：前の時間で入れるか確かめ直す。入れたら「このままでよろしいですか？」だけ。入れんかったら理由を伝えて同じ日のほかの時間
@@ -690,7 +730,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             }
             d.when = null; continue
           }
-          await say(d.when.kind === 'day' ? `すみません、${mdw(d.when.day)}は${d.who.length > 1 ? '全員そろって' : ''}入れる時間が無かったんです。` : 'すみません、近いところに空きが無かったんです。\n「日付を選ぶ」から日を決めると、その日のキャンセル待ちにも入れますよ。')
+          await say(d.when.kind === 'day' ? `すみません、${mdw(d.when.day)}は${d.who.length > 1 ? '全員そろって' : ''}入れる時間が無かったんです。` : d.who.length === 1 && d.who[0].key === 'me'
+            ? 'すみません、近いところに空きが無かったんです。\nご希望の日を「11月20日」のように送ってもらえたら、その日のキャンセル待ちにも入れますよ。'
+            : 'すみません、近いところに空きが無かったんです。ほかの日を選んでくださいね。')
           d.when = null; continue
         }
         const oneDay = found.every(f => dayOf(f.at) === dayOf(found[0].at))
@@ -703,8 +745,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       if (!await canCreate(d.who, d.at)) return
       const BOOK = 'この内容で予約する'
+      // 割引券は、予約が終わってからではなく、決める前の確認に一緒に出す（11/10 慶一郎さん「伝えるタイミング」）
+      if (ticketNote === null) { setTyping(true); ticketNote = await ticketLine(); setTyping(false) }
       // 中身（日時・メニュー）を先に、案内を最後に（11/9 磨き）
-      const a = await ask(`${slotLabel(d.at)}\n${summary()}\n\n${hasOther ? '新しいご予約としてお取りします（今あるご予約はそのままです）。\n' : ''}よろしければ【${BOOK}】を押してくださいね。`,
+      const a = await ask(`${slotLabel(d.at)}\n${summary()}\n\n${ticketNote ? ticketNote + '\n\n' : ''}${hasOther ? '新しいご予約としてお取りします（今あるご予約はそのままです）。\n' : ''}よろしければ【${BOOK}】を押してくださいね。`,
         [{ label: BOOK, strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, { label: '日にちを変える' }])
       const tapped = fromChip.current
       if (tapped && a === '人を変える') { d.who = null; d.at = null; d.plan = null; continue }
@@ -791,7 +835,6 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const okAll = done.every(x => x.r)
       if (!done.some(x => x.r)) { await say('すみません、その時間はちょうど埋まってしまいました。時間を選び直しましょう。'); d.at = null; d.plan = null; continue }
       await say(okAll ? `ご予約を承りました！\n${slotLabel(d.at)}、お待ちしとりますけぇね。` : `${done.filter(x => x.r).map(x => x.p.label).join('と')}のご予約は取れました（${slotLabel(d.at)}）。\n${done.filter(x => !x.r).map(x => x.p.label).join('と')}はちょうど埋まってしまいました。お店にお電話いただけますか？`)
-      await tips(null)
       setBookingComplete(okAll)
       break
     }
@@ -1069,8 +1112,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             if (!open) return endWithoutAvailability()
             if (!open.length) { await say('すみません、しばらく空きが無いんです。お店にお電話いただけますか？'); return end() }
             await say('空いとる日だけ、押せるようにしとりますけぇね。')
-            const d = await pickDate(open); if (!d) continue
-            days = [d]
+            const picked = await pickDate(open); if (!picked) continue
+            const typed = 'text' in picked ? dateIn(picked.text) : picked.day
+            if (!typed) { action = 'text' in picked ? picked.text : action; continue }
+            days = [typed]
           } else {
             const weekend = /土|日曜|週末/.test(w)
             setTyping(true); const open = await changeDays(weekend ? 42 : 21, weekend); setTyping(false)
@@ -1178,7 +1223,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (mode.kind === 'welcome') await runWelcome(mode.pending)
       else if (mode.kind === 'change') await runChange(mode.reservationId)
       else if (mode.kind === 'offer') await runOffer(mode.holdId)
-      else { await say('よう来んさったのぉ！ご予約ですね。'); await runBook(null, { menuCode: mode.menuCode, label: mode.label }) }
+      else { await say('よう来んさったのぉ！ご予約ですね。'); await runBook(null, { menuCode: mode.menuCode, label: mode.label }, true) }
     })().catch(async () => {
       setTyping(false)
       await say('すみません、うまく続けられませんでした。ご予約が取れたか・変わったかは「次回予約」でご確認くださいね。')
