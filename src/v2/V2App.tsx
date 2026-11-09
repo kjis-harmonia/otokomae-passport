@@ -15,7 +15,7 @@ import { V2Next } from './V2Next'
 import { V2Gacha } from './V2Gacha'
 import { V2Menu } from './V2Menu'
 import { V2PeopleSheet } from './V2PeopleSheet'
-import { isStaging } from '../utils/env'
+import { ginFlow } from '../utils/env'
 import { V2Account } from './V2Account'
 import { V2Ginpay } from './V2Ginpay'
 import { V2Campaign } from './V2Campaign'
@@ -68,7 +68,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
 
   // Staging：予約タブ（?tab=reserve・ショートカット・店頭確認のあと）はすべて銀ちゃんの会話（11/9）。
   //   キャンセル待ちのお知らせ（?hold=…）は、押さえた枠を銀ちゃんが「予約しますか？」と聞く
-  const ginReserve = activeTab === 'reserve' && isStaging()
+  const ginReserve = activeTab === 'reserve' && ginFlow()
   useEffect(() => {
     if (!ginReserve) return
     // 起動直後は App の受け口（親の effect）がまだ無いので、1拍おいて送る（タブも同じときに戻す）
@@ -134,7 +134,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
       </nav>
 
       {isHome && showCampaign && <V2Campaign onGacha={() => go('gacha')} />}
-      <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} onPeople={isStaging() ? () => setPeople(true) : undefined} />
+      <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} onPeople={ginFlow() ? () => setPeople(true) : undefined} />
       {/* ☰ の「いつもの・お連れ様」（Staging） */}
       <V2PeopleSheet open={people} onClose={() => setPeople(false)} ownerMenu={null} manage />
     </div>

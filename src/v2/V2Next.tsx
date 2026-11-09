@@ -6,7 +6,7 @@ import { CalendarClock, Phone, Scissors } from 'lucide-react'
 import { companionName, formatVisit, useNextVisit } from '../features/johnny/nextReservation'
 import { heldFor, useGinpayHolds } from '../features/ginpay/holds'
 import { requestJohnny } from '../features/johnny/bookingIntent'
-import { isStaging } from '../utils/env'
+import { ginFlow } from '../utils/env'
 import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { hasCustomerSession } from '../utils/customerSession'
 import { getMaintenanceVisit, getDaysUntilRecommended, getNextRecommendedDate, fmtDate, MAINTENANCE_CYCLE_DAYS } from '../utils/maintenanceSchedule'
@@ -73,7 +73,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、お店からお電話します。</p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
             {status === 'failed' && <ReservationRetry onRetry={reload} />}
-            <button type="button" className="v2-btn v2-btn-quiet v2-glass" data-guide="next-change" onClick={() => { if (isStaging()) { window.dispatchEvent(new Event('ginjiro:gin-change')); return } requestJohnny({ menuCode: null, label: '', manage: true }); onJohnny() }}>{isStaging() ? '変更・キャンセル' : '変更・キャンセル（AI予約）'}</button>
+            <button type="button" className="v2-btn v2-btn-quiet v2-glass" data-guide="next-change" onClick={() => { if (ginFlow()) { window.dispatchEvent(new Event('ginjiro:gin-change')); return } requestJohnny({ menuCode: null, label: '', manage: true }); onJohnny() }}>{ginFlow() ? '変更・キャンセル' : '変更・キャンセル（AI予約）'}</button>
             {status !== 'failed' && <a className="v2-btn v2-btn-quiet v2-glass" href={SHOP_PHONE_TEL}><Phone size={18} />お店に電話する</a>}
           </div>
         </section>
@@ -96,7 +96,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           <p className="v2-note" style={{ margin: '6px 0 16px' }}>日時と髪型を伝えるだけで、AI が予約します。</p>
           {/* Staging：AI予約は銀ちゃんの会話（11/9 慶一郎さん「バイクの Johnny は古い」）。本番は承認のあと */}
           <button type="button" className="v2-btn v2-btn-gold" onClick={() => {
-            if (isStaging()) { window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })); return }
+            if (ginFlow()) { window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })); return }
             onJohnny()
           }}>AI予約する</button>
           <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>電話で予約する（{SHOP_PHONE_DISPLAY}）</a>

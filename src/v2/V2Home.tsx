@@ -14,7 +14,7 @@ import { V2GinpayBar } from './V2GinpayBar'
 import { loadUsual, type Usual } from './usualPicks'
 import { getCustomerSession } from '../utils/customerSession'
 import { V2PeopleSheet } from './V2PeopleSheet'
-import { isStaging } from '../utils/env'
+import { ginFlow } from '../utils/env'
 
 const yen = (n: number) => `¥${n.toLocaleString()}`
 
@@ -121,7 +121,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const reserve = () => {
     // いつものでメニューが分からないときは、メニューを決めずに Johnny（おかえりなさい から聞く）
     // Staging：AI予約はぜんぶ銀ちゃんの会話（どなたの予約か・メニュー・いつ を銀ちゃんが聞く）。髪型の写真から来たら、そのメニューを入れて始める。本番は承認のあと
-    if (isStaging()) {
+    if (ginFlow()) {
       const style = selected?.kind === 'style' ? { menuCode: selected.code, label: selected.label } : { menuCode: null, label: '' }
       window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: style }))
       return
@@ -154,7 +154,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
                 <motion.article key={item.key} data-guide={item.kind === 'group' ? 'home-group' : undefined} className="v2-card v2-glass" aria-current={i === index ? 'true' : undefined}
                   onClick={item.kind === 'group' ? () => {
                     // Staging：2名以上も銀ちゃんの会話で（どなたの予約かを銀ちゃんが聞く）
-                    if (isStaging()) { window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })); return }
+                    if (ginFlow()) { window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })); return }
                     requestJohnny({ menuCode: item.code, label: item.label, usual: true, group: true })
                   } : undefined}
                   style={item.kind === 'group' ? { cursor: 'pointer' } : undefined}

@@ -30,7 +30,7 @@ import { seedDevData } from './utils/devSeed'
 import { InstallGate, InstallGuide } from './components/InstallGuide'
 import { V2App } from './v2/V2App'
 import { needsInstallFirst } from './utils/installGuide'
-import { isStaging } from './utils/env'
+import { ginFlow, isStaging } from './utils/env'
 import { FirstGuide } from './v2/FirstGuide'
 import { GinChat, type GinMode } from './v2/GinChat'
 import { fetchVisitsToConfirm } from './v2/visitConfirm'
@@ -338,7 +338,7 @@ function App() {
     setMemberStatus(nextStatus)
     setPhase('app')
     // 登録のあとはそのままホームへ（11/8 慶一郎さん：いつものは店頭の QR のあと、銀ちゃんが聞く）。Staging から。本番は承認のあと
-    if (!isStaging()) {
+    if (!ginFlow()) {
       const guide = { visited: !!payload?.hasVisitedBefore }
       setStoredValue(FIRST_GUIDE_KEY, guide)
       setFirstGuide(guide)
@@ -355,7 +355,7 @@ function App() {
   //   「あとで」で閉じたら、このアプリを開いている間はもう出さない（次に開いたときにまた聞く）
   const [ginChat, setGinChat] = useState<GinMode | null>(null)
   useEffect(() => {
-    if (phase !== 'app' || !isStaging()) return
+    if (phase !== 'app' || !ginFlow()) return
     const onBook = (e: Event) => {
       // The style catalog remains available when signed out, but a booking
       // request must first take the customer to the existing sign-in screen.
@@ -377,7 +377,7 @@ function App() {
     return () => { window.removeEventListener('ginjiro:gin-book', onBook); window.removeEventListener('ginjiro:gin-offer', onOffer) }
   }, [phase, setActiveTab])
   useEffect(() => {
-    if (phase !== 'app' || !customerAccessSession || !isStaging()) return
+    if (phase !== 'app' || !customerAccessSession || !ginFlow()) return
     let alive = true
     const check = () => {
       try { if (sessionStorage.getItem('ginjiro_ginchat_later')) return } catch { /* 読めない端末は毎回確かめる */ }
