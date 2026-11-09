@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Check } from 'lucide-react'
 import { requestJohnny } from '../features/johnny/bookingIntent'
+import { isStaging } from '../utils/env'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { GachaShowcase } from './GachaShowcase'
 import { useThemeColor } from '../utils/themeColor'
@@ -96,7 +97,9 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
     if (!a) return
     if (a.kind === 'lineup') { setLineup(true); return } // ラインナップを閉じたら、告知に戻る
     close()
-    if (a.kind === 'johnny') requestJohnny({ menuCode: a.menuCode, label: CAMPAIGN.label })
+    // Staging：AI予約は銀ちゃんの会話（髪型のメニューを入れて始める）。本番は承認のあと
+    if (a.kind === 'johnny' && isStaging()) window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: a.menuCode, label: CAMPAIGN.label } }))
+    else if (a.kind === 'johnny') requestJohnny({ menuCode: a.menuCode, label: CAMPAIGN.label })
     else onGacha()
   }
 

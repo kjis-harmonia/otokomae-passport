@@ -152,7 +152,11 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
               const p = itemPrice(item)
               return (
                 <motion.article key={item.key} data-guide={item.kind === 'group' ? 'home-group' : undefined} className="v2-card v2-glass" aria-current={i === index ? 'true' : undefined}
-                  onClick={item.kind === 'group' ? () => requestJohnny({ menuCode: item.code, label: item.label, usual: true, group: true }) : undefined}
+                  onClick={item.kind === 'group' ? () => {
+                    // Staging：2名以上も銀ちゃんの会話で（どなたの予約かを銀ちゃんが聞く）
+                    if (isStaging()) { window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })); return }
+                    requestJohnny({ menuCode: item.code, label: item.label, usual: true, group: true })
+                  } : undefined}
                   style={item.kind === 'group' ? { cursor: 'pointer' } : undefined}
                   initial={reduce ? false : { opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.32, delay: reduce ? 0 : Math.min(i, 4) * 0.05, ease: [0.22, 1, 0.36, 1] }}>

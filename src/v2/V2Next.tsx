@@ -94,7 +94,11 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           <CalendarClock size={26} color="var(--v2-gold-deep)" />
           <p className="v2-big" style={{ fontSize: 22, marginTop: 10 }}>現在、ご予約はありません</p>
           <p className="v2-note" style={{ margin: '6px 0 16px' }}>日時と髪型を伝えるだけで、AI が予約します。</p>
-          <button type="button" className="v2-btn v2-btn-gold" onClick={onJohnny}>AI予約する</button>
+          {/* Staging：AI予約は銀ちゃんの会話（11/9 慶一郎さん「バイクの Johnny は古い」）。本番は承認のあと */}
+          <button type="button" className="v2-btn v2-btn-gold" onClick={() => {
+            if (isStaging()) { window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })); return }
+            onJohnny()
+          }}>AI予約する</button>
           <a href={SHOP_PHONE_TEL} style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 13, color: 'var(--v2-sub)' }}>電話で予約する（{SHOP_PHONE_DISPLAY}）</a>
         </section>
       )}
