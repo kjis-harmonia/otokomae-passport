@@ -17,7 +17,7 @@ export const hpbApi = {
 
 export const KIND: Record<HpbMail['kind'], string> = { booking: '予約', cancel: 'キャンセル', change: '変更', unknown: '読めないメール' }
 const REASON: Record<string, string> = {
-  slot_taken: 'その時間の枠が埋まっていて入れられません。予約表を空けてから入れ直してください。',
+  slot_taken: 'その時間の枠が埋まっているか、同じお客様の予約と重なっていて入れられません。予約表を確かめてから入れ直してください。',
   not_found: '取り消す予約が予約表にありません（取込を始める前の予約かもしれません）。',
   invalid_status: '来店済みなどで変更できない状態です。',
   unreadable: 'メールの内容を読み取れませんでした。',
