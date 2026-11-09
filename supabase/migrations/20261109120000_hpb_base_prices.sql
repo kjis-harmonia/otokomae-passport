@@ -8,6 +8,10 @@ update public.service_menus set price = 8000, updated_at = now()
 update public.service_menus set price = 15000, updated_at = now()
   where code = 'perm-ginpara-curly' and price = 16000 and normal_price is null;
 
+-- 銀二郎Special（スキンフェードカット 4,000円のクーポン）の「通常」料金 4,500 → 5,000（今のスキンフェードカットの料金・11/9 慶一郎さん）
+update public.service_menus set normal_price = 5000, updated_at = now()
+  where code = 'special-ginjiro' and normal_price = 4500;
+
 -- クールシャンプー（300円）は HOT PEPPER の通常メニューに無い（夏限定クーポンの中身だった）→ 使わない（11/9 慶一郎さん「なし」）
 --   消さずに止める：過去の会計の明細から名前をたどれるように
 update public.service_menus set is_active = false, booking_enabled = false, checkout_enabled = false, updated_at = now()

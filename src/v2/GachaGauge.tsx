@@ -17,9 +17,11 @@ export function GaugeMonth({ state }: { state: GachaState }) {
   const now = Math.min(Number(g.month.draw_pt) || 0, cap)
   return (
     <div className="v2-gauge-month">
-      <div className="v2-gauge-row"><b>今月の仮ポイント</b><b>{now.toFixed(1)} / {cap.toFixed(1)}pt</b></div>
+      {/* 正式の決まり（11/6）：ガチャ1回 0.1pt・月 1pt まで。その月にご来店があると景品のポイントに入る。
+          「仮ポイント」「付与上限に到達」はお客様に分かりにくい（11/9 慶一郎さん）→ 中身をそのまま言う */}
+      <div className="v2-gauge-row"><b>今月のガチャでたまった分</b><b>{now.toFixed(1)} / {cap.toFixed(1)}pt</b></div>
       <div className="v2-gauge-bar" role="progressbar" aria-valuemin={0} aria-valuemax={cap} aria-valuenow={now}><i style={{ width: `${(now / cap) * 100}%` }} /></div>
-      <small>{now >= cap ? '今月の付与上限に到達' : 'ガチャ1回で 0.1pt'}</small>
+      <small>{now >= cap ? '今月の分は、ここまでです。' : 'ガチャ1回で 0.1pt（月 1pt まで）。'}今月ご来店があると、狙っている景品のポイントに入ります。</small>
     </div>
   )
 }

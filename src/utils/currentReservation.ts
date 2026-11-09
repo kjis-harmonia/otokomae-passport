@@ -47,7 +47,7 @@ const RESERVATION_PRESETS: Record<string, ReservationPreset> = {
     id: 'cut-ginjiro-special',
     title: '銀二郎Specialクーポン',
     menuLabel: 'スキンフェードカット',
-    normalPrice: 4500,
+    normalPrice: 5000, // 11/9 慶一郎さん：旧料金 4,500 → 5,000（スキンフェードカットの今の料金）
     memberPrice: 4000,
     benefit: '顔剃り・シャンプー付き',
     bookingMethod: 'phone',

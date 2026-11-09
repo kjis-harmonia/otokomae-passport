@@ -40,7 +40,8 @@ revoke all on function app_private.customer_of_user(text) from public, anon, aut
 -- 予約が「お連れ様の施術」か（新しい予約は companion_id。前からの予約はメモ・つながりで見る）
 create or replace function app_private.res_is_companion(p_companion uuid, p_companion_of uuid, p_note text)
 returns boolean language sql immutable set search_path = '' as $$
-  select p_companion is not null or p_companion_of is not null or coalesce(p_note, '') like 'お連れ様：%'
+  -- 昔の版のアプリはメモが「お連れ様」だけ（「：」なし）。本番に5件ある（11/9 本番の下見）→ それもお連れ様として見る
+  select p_companion is not null or p_companion_of is not null or coalesce(p_note, '') like 'お連れ様%'
 $$;
 revoke all on function app_private.res_is_companion(uuid, uuid, text) from public, anon, authenticated;
 
