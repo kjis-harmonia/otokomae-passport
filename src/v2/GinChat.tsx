@@ -310,18 +310,18 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
   /** お得な案内：使える割引券（期限内・条件に合うもの）と、メンテナンスの期限 */
   /** 使える割引券の一言（無い・読めんときは空） */
-  const ticketLine = async () => {
-    try {
-      const tickets = await callCustomerRpc<TicketRow[]>('customer_get_tickets')
-      const usable = usableTickets(tickets ?? [], new Date().toISOString()).filter(t => t.type === 'discount' && (t.amount ?? 0) > 0)
-      if (!usable.length) return ''
-      const best = Math.max(...usable.map(t => t.amount ?? 0))
-      // 「次のご予約で」と言うと、今取った予約では使えんように聞こえる（11/9 磨き）。券の条件に合えば、来店した日のお会計で使える
-      return usable.length === 1 ? `${best.toLocaleString('ja-JP')}円の割引券をお持ちです。ご来店のときに、お会計で使えますよ。` : `割引券を${usable.length}枚お持ちです（いちばん大きいのは${best.toLocaleString('ja-JP')}円）。ご来店のときに、お会計で使えますよ。`
-    } catch { return '' /* 券が読めんときは案内しない */ }
+  const loadTickets = () => callCustomerRpc<TicketRow[]>('customer_get_tickets').then(t => t ?? [], () => null)
+  //   券の期限・条件は「ご来店の日時・メニュー」で判定する（今の時刻で見ると、来店前に切れる券まで「使えますよ」と言っていた・11/10 Codex 再検査）
+  const ticketText = (tickets: readonly TicketRow[] | null, at: string, menuCode?: string) => {
+    const usable = usableTickets(tickets ?? [], at, menuCode).filter(t => t.type === 'discount' && (t.amount ?? 0) > 0)
+    if (!usable.length) return ''
+    const best = Math.max(...usable.map(t => t.amount ?? 0))
+    // 「次のご予約で」と言うと、今取った予約では使えんように聞こえる（11/9 磨き）。券の条件に合えば、来店した日のお会計で使える
+    return usable.length === 1 ? `${best.toLocaleString('ja-JP')}円の割引券をお持ちです。ご来店のときに、お会計で使えますよ。` : `割引券を${usable.length}枚お持ちです（いちばん大きいのは${best.toLocaleString('ja-JP')}円）。ご来店のときに、お会計で使えますよ。`
   }
   const tips = async (owner: Person | null | undefined) => {
-    const t = await ticketLine()
+    // 予約前（登録のあと）：今使える券。期限が近いものは券の画面で日付が見える
+    const t = ticketText(await loadTickets(), new Date().toISOString())
     if (t) await say(t)
     if (owner?.maintenance_ok && owner.days_left != null) await say(owner.days_left === 0 ? 'メンテナンスカットは今日までですけぇ、よかったらどうぞ。' : `メンテナンスカットは、あと${owner.days_left}日ご利用いただけますよ。`)
   }
@@ -588,7 +588,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
     let hasOther = false
-    let ticketNote: string | null = null
+    let tickets: TicketRow[] | null | undefined
     const canCreate = async (persons: BookPerson[], startsAt: string) => {
       const mine = await api.reservations().catch(() => null)
       if (!Array.isArray(mine)) {
@@ -746,7 +746,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (!await canCreate(d.who, d.at)) return
       const BOOK = 'この内容で予約する'
       // 割引券は、予約が終わってからではなく、決める前の確認に一緒に出す（11/10 慶一郎さん「伝えるタイミング」）
-      if (ticketNote === null) { setTyping(true); ticketNote = await ticketLine(); setTyping(false) }
+      if (tickets === undefined) { setTyping(true); tickets = await loadTickets(); setTyping(false) }
+      // 券はご本人のもの：ご本人の予約があるときだけ、その日時・メニューで使えるかを見て一言
+      const ticketNote = d.menus.me && d.who.some(p => p.key === 'me') ? ticketText(tickets, d.at, d.menus.me.code) : ''
       // 中身（日時・メニュー）を先に、案内を最後に（11/9 磨き）
       const a = await ask(`${slotLabel(d.at)}\n${summary()}\n\n${ticketNote ? ticketNote + '\n\n' : ''}${hasOther ? '新しいご予約としてお取りします（今あるご予約はそのままです）。\n' : ''}よろしければ【${BOOK}】を押してくださいね。`,
         [{ label: BOOK, strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, { label: '日にちを変える' }])
