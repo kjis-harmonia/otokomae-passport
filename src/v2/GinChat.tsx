@@ -214,8 +214,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     let sugg: Menu[] = []
     for (let turn = 0; turn < 14; turn++) {
       const t = await ask(line, [...sugg.map(m => ({ label: m.name, sub: yen(m.price) })), { label: '一覧から選ぶ' }])
+      // ボタン・一覧から押して選んだメニューは、そのまま決める（もう一度「よろしいですか？」は聞かない・11/9 磨き）。
+      //   聞き直すのは、話した・打った言葉から読み取ったときだけ（聞き間違いを防ぐ）
+      let tapped = fromChip.current
       let menu: Menu | null = sugg.find(m => m.name === t) ?? null
-      if (!menu && t === '一覧から選ぶ') { menu = await pickFromList(); if (menu) push('you', menu.name); else { line = 'では、お話しして決めましょうか。どんなことでも、ええですよ。'; sugg = []; continue } }
+      if (!menu && t === '一覧から選ぶ') { menu = await pickFromList(); tapped = true; if (menu) push('you', menu.name); else { line = 'では、お話しして決めましょうか。どんなことでも、ええですよ。'; sugg = []; continue } }
+      if (menu && tapped) return menu
       if (!menu) {
         const plain = t.normalize('NFKC').replace(/[\s。、！!]/g, '').replace(/(でお願い(します)?|にする|でええ|で)$/, '')
         menu = all.find(m => m.name.normalize('NFKC').replace(/\s/g, '') === plain && !rejected.has(m.code)) ?? null
@@ -275,7 +279,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const usable = usableTickets(tickets ?? [], new Date().toISOString()).filter(t => t.type === 'discount' && (t.amount ?? 0) > 0)
       if (usable.length) {
         const best = Math.max(...usable.map(t => t.amount ?? 0))
-        await say(usable.length === 1 ? `今、${best.toLocaleString('ja-JP')}円の割引券をお持ちですよ。次のご予約で使えますけぇね。` : `割引券を${usable.length}枚お持ちですよ（いちばん大きいのは${best.toLocaleString('ja-JP')}円）。次のご予約で使えますけぇね。`)
+        // 「次のご予約で」と言うと、今取った予約では使えんように聞こえる（11/9 磨き）。券の条件に合えば、来店した日のお会計で使える
+        await say(usable.length === 1 ? `今、${best.toLocaleString('ja-JP')}円の割引券をお持ちですよ。ご来店のときに、お会計で使えますけぇね。` : `割引券を${usable.length}枚お持ちですよ（いちばん大きいのは${best.toLocaleString('ja-JP')}円）。ご来店のときに、お会計で使えますけぇね。`)
       }
     } catch { /* 券が読めんときは案内しない */ }
     if (owner?.maintenance_ok && owner.days_left != null) await say(owner.days_left === 0 ? 'メンテナンスカットは今日までですけぇ、よかったらどうぞ。' : `メンテナンスカットは、あと${owner.days_left}日ご利用いただけますよ。`)
@@ -646,7 +651,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       if (!await canCreate(d.who, d.at)) return
       const BOOK = 'この内容で予約する'
-      const a = await ask(`${hasOther ? '新しいご予約としてお取りします。今あるご予約はそのままです。' : 'この内容でよろしければ、下の【この内容で予約する】を押してくださいね。'}\n${slotLabel(d.at)}\n${summary()}`,
+      // 中身（日時・メニュー）を先に、案内を最後に（11/9 磨き）
+      const a = await ask(`${slotLabel(d.at)}\n${summary()}\n\n${hasOther ? '新しいご予約としてお取りします（今あるご予約はそのままです）。\n' : ''}よろしければ【${BOOK}】を押してくださいね。`,
         [{ label: BOOK, strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, { label: '日にちを変える' }])
       const tapped = fromChip.current
       if (tapped && a === '人を変える') { d.who = null; d.at = null; d.plan = null; continue }
