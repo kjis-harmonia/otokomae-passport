@@ -31,6 +31,9 @@ export class RpcError extends Error {
   }
 }
 
+/** Rejection returned in a successful RPC response. */
+export class RpcBusinessError extends RpcError {}
+
 // ── セッション保存 ────────────────────────────────────────────────────────────
 
 function readSession(): StoredSession | null {
@@ -89,7 +92,7 @@ export async function callRpc<T>(fn: string, params: Record<string, unknown>): P
   }
   if (data && typeof data === 'object' && !Array.isArray(data) && typeof (data as { error?: unknown }).error === 'string') {
     const code = (data as { error: string }).error
-    throw new RpcError(code, code, data)
+    throw new RpcBusinessError(code, code, data)
   }
   return data as T
 }

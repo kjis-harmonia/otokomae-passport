@@ -28,9 +28,9 @@ const TABS: { id: NavTab; label: string; icon: typeof Home }[] = [
   { id: 'gacha', label: 'ガチャ', icon: Sparkles },
 ]
 
-export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModalChange }: {
+export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModalChange, showCampaign }: {
   activeTab: NavTab; setActiveTab: (t: NavTab) => void
-  ticketFilter: WalletFilter; ticketKey: number; onModalChange: (open: boolean) => void
+  ticketFilter: WalletFilter; ticketKey: number; onModalChange: (open: boolean) => void; showCampaign: boolean
 }) {
   const [menu, setMenu] = useState(false)
   const [people, setPeople] = useState(false)
@@ -105,7 +105,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
         })}
       </nav>
 
-      {isHome && <V2Campaign onGacha={() => go('gacha')} />}
+      {isHome && showCampaign && <V2Campaign onGacha={() => go('gacha')} />}
       <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} onPeople={isStaging() ? () => setPeople(true) : undefined} />
       {/* ☰ の「いつもの・お連れ様」（Staging） */}
       <V2PeopleSheet open={people} onClose={() => setPeople(false)} ownerMenu={null} manage />

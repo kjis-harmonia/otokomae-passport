@@ -172,30 +172,9 @@ function App() {
   useEffect(() => { void flushPendingContact() }, [])
 
   // ── Loading state: min time + critical image preload ──────────────────────────
-  const quickBooking=CUSTOMER_ACCESS_ENABLED && new URLSearchParams(location.search).get('tab')==='reserve'
+  const [quickBooking] = useState(() => CUSTOMER_ACCESS_ENABLED && new URLSearchParams(location.search).get('tab') === 'reserve')
   const [minTimeDone, setMinTimeDone] = useState(quickBooking)
   const [imgReady,    setImgReady]    = useState(quickBooking)
-  const appLoading = !minTimeDone || !imgReady
-
-  useEffect(() => {
-    const t = setTimeout(() => setMinTimeDone(true), 1300)
-    return () => clearTimeout(t)
-  }, [])
-
-  useEffect(() => {
-    // 初回登録の背景に使う絵だけ先に読む。待つのは最大2.5秒：回線が遅くてもロゴのまま止めない（10/30 監査 R5）
-    const urls = ['/images/ginjiro-splash.png']
-    let remaining = urls.length
-    const onSettled = () => { if (--remaining <= 0) setImgReady(true) }
-    urls.forEach(src => {
-      const img = new Image()
-      img.onload  = onSettled
-      img.onerror = onSettled
-      img.src = src
-    })
-    const cap = setTimeout(() => setImgReady(true), 2500)
-    return () => clearTimeout(cap)
-  }, [])
 
   // ── Phase ─────────────────────────────────────────────────────────────────────
   // スマホでは、ホーム画面に追加してアイコンから開いたときだけ登録できる（iPhone は Safari とアプリで保存場所が別なので、二重登録を防ぐ）
@@ -205,6 +184,27 @@ function App() {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
     return done ? 'app' : 'onboarding'
   })
+  const needsOnboardingImage = phase === 'onboarding' && !installFirst && !CUSTOMER_ACCESS_ENABLED
+  const appLoading = !minTimeDone || (needsOnboardingImage && !imgReady)
+
+  useEffect(() => {
+    if (quickBooking) return
+    const t = setTimeout(() => setMinTimeDone(true), 1300)
+    return () => clearTimeout(t)
+  }, [quickBooking])
+
+  useEffect(() => {
+    if (!needsOnboardingImage) return
+    // 写真付きの登録画面だけ背景を待つ。画像が取れなくても2.5秒で案内を表示する。
+    const image = new Image()
+    image.onload = image.onerror = () => setImgReady(true)
+    image.src = '/images/ginjiro-splash.png'
+    const cap = setTimeout(() => setImgReady(true), 2500)
+    return () => {
+      image.onload = image.onerror = null
+      clearTimeout(cap)
+    }
+  }, [needsOnboardingImage])
   const [activeTab, setActiveTabState] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
@@ -355,6 +355,21 @@ function App() {
   //   「あとで」で閉じたら、このアプリを開いている間はもう出さない（次に開いたときにまた聞く）
   const [ginChat, setGinChat] = useState<GinMode | null>(null)
   useEffect(() => {
+    if (phase !== 'app' || !isStaging()) return
+    const onBook = (e: Event) => {
+      // The style catalog remains available when signed out, but a booking
+      // request must first take the customer to the existing sign-in screen.
+      if (!getCustomerSession()) {
+        setActiveTab('mypage')
+        return
+      }
+      const d = (e as CustomEvent<{ menuCode?: string | null; label?: string } | null>).detail
+      setGinChat({ kind: 'book', menuCode: d?.menuCode ?? null, label: d?.label ?? '' })
+    }
+    window.addEventListener('ginjiro:gin-book', onBook)
+    return () => window.removeEventListener('ginjiro:gin-book', onBook)
+  }, [phase, setActiveTab])
+  useEffect(() => {
     if (phase !== 'app' || !customerAccessSession || !isStaging()) return
     let alive = true
     const check = () => {
@@ -362,16 +377,19 @@ function App() {
       void fetchVisitsToConfirm().then(p => { if (alive && p) setGinChat(c => c ?? { kind: 'welcome', pending: p }) })
     }
     check()
-    // ホームの「いつものでAI予約する」：銀ちゃんの会話で予約（Staging）
-    const onBook = (e: Event) => { const d = (e as CustomEvent<{ menuCode?: string | null; label?: string } | null>).detail; setGinChat({ kind: 'book', menuCode: d?.menuCode ?? null, label: d?.label ?? '' }) }
-    window.addEventListener('ginjiro:gin-book', onBook)
-    // 次回予約の「変更・キャンセル」：銀ちゃんの会話で（Staging）
-    const onChange = () => setGinChat({ kind: 'change' })
-    window.addEventListener('ginjiro:gin-change', onChange)
     const onVisible = () => { if (document.visibilityState === 'visible') check() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => { alive = false; window.removeEventListener('ginjiro:gin-book', onBook); window.removeEventListener('ginjiro:gin-change', onChange); document.removeEventListener('visibilitychange', onVisible) }
+    return () => { alive = false; document.removeEventListener('visibilitychange', onVisible) }
   }, [phase, customerAccessSession])
+  useEffect(() => {
+    if (phase !== 'app') return
+    const onChange = (event: Event) => {
+      const reservationId = (event as CustomEvent<{ reservationId?: string }>).detail?.reservationId
+      setGinChat({ kind: 'change', reservationId })
+    }
+    window.addEventListener('ginjiro:gin-change', onChange)
+    return () => window.removeEventListener('ginjiro:gin-change', onChange)
+  }, [phase])
   const closeGinChat = () => { try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
 
   return (
@@ -391,7 +409,8 @@ function App() {
         /* App shell: mounted only after onboarding completes */
         <>
           {/* V2.0：上に正式ロゴと ☰、下にタブ3つ（ホーム｜会員QR｜次回予約）。チケット・ログインは ☰、AI予約は全画面 */}
-          <V2App activeTab={activeTab} setActiveTab={setActiveTab} ticketFilter={ticketInitialFilter} ticketKey={ticketRefreshKey} onModalChange={handleModalChange} />
+          <V2App activeTab={activeTab} setActiveTab={setActiveTab} ticketFilter={ticketInitialFilter} ticketKey={ticketRefreshKey}
+            onModalChange={handleModalChange} showCampaign={!welcomeCouponDialog && !firstGuide} />
 
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。クーポンのあと） */}
           <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />

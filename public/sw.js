@@ -42,21 +42,19 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
-  const url = event.notification.data?.url ?? '/'
+  const destination = new URL(event.notification.data?.url ?? '/', self.location.href)
 
-  event.waitUntil(
-    clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((windowClients) => {
-        // すでに開いているアプリがあれば、その画面で開いて前に出す
-        for (const client of windowClients) {
-          if ('focus' in client) {
-            const go = 'navigate' in client ? client.navigate(url).catch(() => client) : Promise.resolve(client)
-            return go.then((c) => (c || client).focus())
-          }
-        }
-        // なければ新しく開く
-        return clients.openWindow(url)
-      }),
-  )
+  event.waitUntil((async () => {
+    // 同じ入口の画面を再利用する。予約表の通知で店舗端末やお客様アプリを置き換えない。
+    const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const existing = windows.find(client => {
+      const current = new URL(client.url)
+      return current.origin === destination.origin && current.pathname === destination.pathname
+    })
+    if (existing) {
+      const navigated = await existing.navigate(destination.href).catch(() => null)
+      if (navigated) return navigated.focus()
+    }
+    return clients.openWindow(destination.href)
+  })())
 })

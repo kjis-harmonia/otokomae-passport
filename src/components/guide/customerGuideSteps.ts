@@ -55,13 +55,13 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
       },
       { target: CHIPS('when'), waitWhile: TALKING, until: PAST('when'), text: 'ご来店はいつ頃か押してください', sub: '「最短で」はいちばん早い空き、「土日希望」は土日、「日付を選ぶ」はカレンダーから選べます。' },
       // 「日付を選ぶ」のときだけ
-      { target: g('lc-cal'), optional: true, waitWhile: TALKING, until: ASK('time', 'confirm', 'done'), text: 'ご希望の日を押してください', sub: '空きのある日だけ押せます。' },
-      { target: CHIPS('time'), waitWhile: TALKING, until: ASK('confirm', 'done'), text: 'ご希望の時間を押してください', sub: '合わないときは「ほかの日」を押してください。' },
+      { target: g('lc-cal'), optional: true, waitWhile: TALKING, until: ASK('time', 'confirm', 'done', 'ended'), text: 'ご希望の日を押してください', sub: '空きのある日だけ押せます。' },
+      { target: CHIPS('time'), waitWhile: TALKING, until: ASK('confirm', 'done', 'ended'), text: 'ご希望の時間を押してください', sub: '合わないときは「ほかの日」を押してください。' },
       {
-        target: g('lc-book'), waitWhile: TALKING, until: ASK('done'), text: '内容を確かめて【この内容で予約する】を押してください',
+        target: g('lc-book'), waitWhile: TALKING, until: ASK('done', 'ended'), text: '内容を確かめて【この内容で予約する】を押してください',
         sub: '予約はこのボタンを押したときに入ります。途中で「やっぱり土曜」「アイパーにする」と言えば、そこだけ直せます。',
       },
-      { target: CHIPS('done'), next: true, read: true, text: 'ご予約できました', sub: '下の「次回予約」でいつでもご確認いただけます。' },
+      { target: CHIPS('done'), until: ASK('ended'), next: true, read: true, text: 'ご予約できました', sub: '下の「次回予約」でいつでもご確認いただけます。' },
     ],
   },
   {

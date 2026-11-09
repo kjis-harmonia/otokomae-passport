@@ -1,8 +1,10 @@
 // 予約アシスタントが使うお客様用の予約 RPC（顧客セッション必須）。空き枠・仮押さえ・確定はすべて DB の予約エンジンが決める。
 // 開発用のデモ（?johnny=demo、開発ビルドのときだけ）は通信せず、端末の中だけで動く。
-import { callCustomerRpc } from '../../utils/customerSession'
+import { callCustomerRpc, getCustomerSession } from '../../utils/customerSession'
+import { getStoredValue } from '../../utils/storage'
+import { USER_ID_KEY } from '../../utils/userId'
 import { ensurePriceRules, personalPrice } from '../../utils/bookingCoupons'
-import { RpcError } from '../../utils/staffSession'
+import { RpcBusinessError, RpcError } from '../../utils/staffSession'
 import { fetchContact, normalizePhone, saveContact, type CustomerContact } from '../../utils/customerContact'
 import type { MenuOption } from './menuMatcher'
 import type { Slot } from './slotPlanner'
@@ -11,6 +13,10 @@ import type { DayOverview } from './dayAdvisor'
 import type { VisitRecord } from './welcome'
 import type { TicketRow } from '../../data/ticket'
 import { askAgent, askAgentVoice, type AgentAnswer, type AgentShown, type AgentTurn, type VoiceAnswer } from './agentClient'
+
+export function isBookingRejection(error: unknown, code: 'reservation_person_overlap' | 'slot_taken'): boolean {
+  return error instanceof RpcBusinessError && error.code === code
+}
 
 export interface BookingSettings { slot_minutes: number; booking_window_days: number; min_lead_minutes: number; hold_minutes: number }
 export interface AssistantOptions { settings: BookingSettings; menus: MenuOption[]; staff?: { id: string; name: string }[] }
@@ -44,6 +50,57 @@ export async function linkCompanion(primaryId: string, companionId: string): Pro
 export interface AiBookingStatus { paused: boolean; resume_on?: string; reason?: 'late_cancel' | 'no_show' }
 
 export interface Hold { hold_id: string; starts_at: string; ends_at: string; staff_name: string; total_price: number | null }
+
+type BookingConfirmation = { p_hold_id: string; p_companion: string | null; p_note: string | null }
+const bookingConfirmationKey = () => {
+  const member = getStoredValue<string | null>(USER_ID_KEY, null)
+  if (!member || !getCustomerSession()) throw new Error('booking_confirmation_session_required')
+  return 'ginjiro_booking_confirmation:' + member
+}
+
+export function hasPendingBookingConfirmation(): boolean {
+  return getCustomerSession() !== null && localStorage.getItem(bookingConfirmationKey()) !== null
+}
+
+async function sendBookingConfirmation(key: string, raw: string): Promise<CustomerReservation> {
+  const request = JSON.parse(raw) as BookingConfirmation
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
+  if (!request || !uuid.test(request.p_hold_id) || (request.p_companion !== null && !uuid.test(request.p_companion))
+    || (request.p_note !== null && typeof request.p_note !== 'string')) throw new Error('invalid_pending_booking_confirmation')
+  const session = getCustomerSession()
+  const clear = () => {
+    if (getCustomerSession() !== session || bookingConfirmationKey() !== key) throw new Error('booking_confirmation_session_changed')
+    if (localStorage.getItem(key) === raw) localStorage.removeItem(key)
+  }
+  try {
+    const reservation = await callCustomerRpc<CustomerReservation>('customer_confirm_new_reservation', request)
+    if (!reservation || !uuid.test(reservation.id) || reservation.status !== 'confirmed' || reservation.companion_id !== request.p_companion) {
+      throw new Error('invalid_booking_confirmation')
+    }
+    clear()
+    return reservation
+  } catch (error) {
+    if (error instanceof RpcBusinessError && !['idempotency_conflict', 'legacy_confirmation_unresolved'].includes(error.code)) clear()
+    throw error
+  }
+}
+
+export async function recoverBookingConfirmation(): Promise<CustomerReservation | null> {
+  if (!hasPendingBookingConfirmation()) return null
+  const key = bookingConfirmationKey()
+  const raw = localStorage.getItem(key)
+  return raw === null ? null : sendBookingConfirmation(key, raw)
+}
+
+async function confirmNewBooking(holdId: string, note: string | null, personId: string | null): Promise<CustomerReservation> {
+  const key = bookingConfirmationKey()
+  const raw = JSON.stringify({ p_hold_id: holdId, p_companion: personId, p_note: note })
+  const current = localStorage.getItem(key)
+  if (current !== null && current !== raw) throw new Error('booking_confirmation_pending')
+  localStorage.setItem(key, raw)
+  if (localStorage.getItem(key) !== raw) throw new Error('booking_confirmation_storage_unavailable')
+  return sendBookingConfirmation(key, raw)
+}
 
 /** キャンセル待ちで押さえた枠（お知らせから開いたとき） */
 export interface HoldOffer {
@@ -114,15 +171,16 @@ export const customerBookingApi: BookingAssistantApi = {
   dayOverview: date => callCustomerRpc<DayOverview>('customer_day_overview', { p_date: date }),
   nextSlots: (menuCode, from, limit = 10) => callCustomerRpc<Slot[]>('customer_next_slots', { p_menu_codes: [menuCode], p_from: from, p_limit: limit }),
   // お連れ様（登録した番号あり）は、受ける人を付けて押さえ・確定する（メンテナンスカットはその方の14日で判定・お店の表示は「お連れ様：〇〇様」）
-  hold: (startsAt, menuCode, staffId = null, personId = null) => personId
-    ? callCustomerRpc<Hold>('customer_create_hold_for', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: staffId, p_companion: personId })
-    : callCustomerRpc<Hold>('customer_create_hold', { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: staffId }),
-  confirm: (holdId, note = null, personId = null) => personId
-    ? callCustomerRpc<CustomerReservation>('customer_confirm_for', { p_hold_id: holdId, p_companion: personId })
-    : callCustomerRpc<CustomerReservation>('customer_confirm_reservation', { p_hold_id: holdId, p_note: note }),
+  hold: async (startsAt, menuCode, staffId = null, personId = null) => {
+    if (hasPendingBookingConfirmation()) throw new Error('booking_confirmation_pending')
+    const params = { p_starts_at: startsAt, p_menu_codes: [menuCode], p_staff_id: staffId }
+    return personId ? callCustomerRpc<Hold>('customer_create_hold_for', { ...params, p_companion: personId })
+      : callCustomerRpc<Hold>('customer_create_hold', params)
+  },
+  confirm: (holdId, note = null, personId = null) => confirmNewBooking(holdId, note, personId),
   release: async holdId => { await callCustomerRpc('customer_release_hold', { p_hold_id: holdId }) },
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
-  cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation', { p_reservation_id: id }),
+  cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation_explicit', { p_reservation_id: id }),
   aiStatus: () => callCustomerRpc<AiBookingStatus>('customer_ai_booking_status'),
   joinWaitlist: (date, from, to, menuCode, staffId) => callCustomerRpc<WaitlistJoin>('customer_join_waitlist', { p_date: date, p_from: from, p_to: to, p_menu_codes: [menuCode], p_staff_id: staffId }),
   leaveWaitlist: async id => { await callCustomerRpc('customer_leave_waitlist', { p_id: id }) },

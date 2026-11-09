@@ -234,7 +234,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
         const margin = el.style.scrollMarginTop
         if (tall) el.style.scrollMarginTop = `${chibi ? 24 + CHIBI.h : 24}px`
         // 画面より横に長い枠（髪型の種類のボタンの列など）は、真ん中に合わせると先頭のボタン（昭和の漢）が左に隠れるので左に合わせる（11/7）
-        el.scrollIntoView({ block: tall ? 'start' : 'center', inline: r.width >= window.innerWidth - 1 ? 'start' : 'center', behavior: 'smooth' })
+        const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+        el.scrollIntoView({ block: tall ? 'start' : 'center', inline: r.width >= window.innerWidth - 1 ? 'start' : 'center', behavior })
         if (tall) el.style.scrollMarginTop = margin
       }
       setRect(prev => prev && prev.top === r.top && prev.left === r.left && prev.width === r.width && prev.height === r.height
@@ -283,12 +284,15 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   // 一覧も、ほかの案内（最初の案内・お知らせなど）が出ている間は休ませる。消えたらまた出す
   if (choosing) return hold ? null : createPortal(<Chooser tasks={tasks.filter(t => !t.hidden && (!t.available || t.available()))} words={words} onPick={start} onClose={() => setChoosing(false)} />, document.body)
   if (!task || !run || hold) return null
+  const conversation = chibi && findVisible('[data-guide="lc"]')
+  const bottomNav = chibi && !conversation ? findVisible('.v2-nav') : null
+  const aboveNav = bottomNav ? { bottom: window.innerHeight - bottomNav.getBoundingClientRect().top + 8 } : undefined
 
   if (finished) {
     // 1つだけの案内（ボタンの場所など）は、終わったらそのまま閉じる
     if (task.quiet) { stop(); return null }
     return createPortal(
-      <div className="gd-bubble gd-bottom" role="status">
+      <div className="gd-bubble gd-bottom" role="status" style={aboveNav}>
         <p className="gd-count">{task.title}</p>
         <p className="gd-text">これで終わりです</p>
         <div className="gd-actions">
@@ -327,7 +331,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   //   置く場所の順：指先を押す場所の真上 → 枠の右上の角 → 枠の左上の角。どこにも入らなければ出さない（吹き出しだけ）
   //   縦に大きい枠（写真の並び・一覧など）は、真上に置くと中身にかかるので角だけ
   let chibiAt: { left: number; top: number } | null = null
-  if (chibi && ring && !step.read) {
+  if (chibi && !conversation && ring && !step.read) {
     const vw = window.innerWidth
     const right = Math.min(ring.left + ring.width, vw)
     const left = Math.max(ring.left, 0)
@@ -359,7 +363,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
           </div>}
         </>
       )}
-      <div ref={bubbleRef} className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite">
+      <div ref={bubbleRef} className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite" style={bubbleTop ? undefined : aboveNav}>
         <p className="gd-count">{task.title}</p>
         <p className="gd-text">{alt ? alt.text : step.label ? step.text.replace('{label}', label) : step.text}</p>
         {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}

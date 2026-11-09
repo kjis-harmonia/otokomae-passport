@@ -21,6 +21,24 @@ function readState(): { count: number; last: number } {
 export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
   const [open, setOpen] = useState(false)
   const [kind] = useState<Kind>(() => detect())
+  const [canPrompt, setCanPrompt] = useState(() => !!installPrompt.get())
+
+  useEffect(() => {
+    if (kind !== 'android') return
+    const ready = () => setCanPrompt(!!installPrompt.get())
+    const done = () => {
+      installPrompt.clear()
+      setCanPrompt(false)
+      setOpen(false)
+    }
+    window.addEventListener('beforeinstallprompt', ready)
+    window.addEventListener('appinstalled', done)
+    ready()
+    return () => {
+      window.removeEventListener('beforeinstallprompt', ready)
+      window.removeEventListener('appinstalled', done)
+    }
+  }, [kind])
 
   // 自動で出す：ホーム画面で、ほかの案内が無いとき
   useEffect(() => {
@@ -45,10 +63,16 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
   }, [])
 
   const installAndroid = async () => {
-    if (!installPrompt.get()) return
-    await installPrompt.get()!.prompt()
-    const r = await installPrompt.get()!.userChoice.catch(() => ({ outcome: 'dismissed' }))
+    const pending = installPrompt.get()
+    if (!pending) return
     installPrompt.clear()
+    setCanPrompt(false)
+    try {
+      await pending.prompt()
+    } catch {
+      return // ブラウザのメニューから追加する手順を表示したままにする
+    }
+    const r = await pending.userChoice.catch(() => ({ outcome: 'dismissed' }))
     if (r.outcome === 'accepted') { try { localStorage.setItem(KEY, JSON.stringify({ count: MAX_AUTO, last: Date.now() })) } catch { /* ignore */ } }
     setOpen(false)
   }
@@ -113,7 +137,7 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
 
             {kind === 'android' && (
               <p style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.9, color: CREAM }}>
-                {installPrompt.get() ? '下のボタンから追加できます。' : 'ブラウザのメニュー（︙）から「ホーム画面に追加」を選んでください。'}
+                {canPrompt ? '下のボタンから追加できます。' : 'ブラウザのメニュー（︙）から「ホーム画面に追加」を選んでください。'}
               </p>
             )}
 
@@ -123,7 +147,7 @@ export function InstallGuide({ autoAllowed }: { autoAllowed: boolean }) {
                   <ExternalLink size={17} /> {externalBrowserName()} で開く
                 </a>
               )}
-              {kind === 'android' && installPrompt.get() && <button type="button" onClick={installAndroid} style={primary}>ホーム画面に追加</button>}
+              {kind === 'android' && canPrompt && <button type="button" onClick={installAndroid} style={primary}>ホーム画面に追加</button>}
               <button type="button" onClick={close} style={kind === 'ios' || kind === 'ios-other' ? primary : secondary}>
                 {kind === 'ios' ? 'わかりました' : 'あとで'}
               </button>
