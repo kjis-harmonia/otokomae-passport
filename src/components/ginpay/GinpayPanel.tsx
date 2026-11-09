@@ -328,7 +328,7 @@ function TransactionRow({ tx, canReverse, reversed, onReverse }: {
         </span>
       </span>
       <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: amountColor }}>
-        {tx.amount > 0 ? '+' : ''}{yen(tx.amount)}
+        {tx.amount > 0 ? '+' : tx.amount < 0 ? '−' : ''}{yen(Math.abs(tx.amount))}
         {reversed && <span style={{ display: 'block', marginTop: 4, fontSize: 12, color: C.mute }}>取消済み</span>}
         {(canRefund || canVoid) && (
           <span style={{ display: 'block', marginTop: 4 }}>

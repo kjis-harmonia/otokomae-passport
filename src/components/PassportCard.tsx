@@ -241,9 +241,10 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
               <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
 
                 {/* ── 会員名 ── */}
+                {/* 長い名前は少し小さく。最後の1文字と「様」は離さない（「様」だけ次の行に落ちていた・11/9 点検） */}
                 <p style={{
                   fontFamily: SERIF,
-                  fontSize: 'clamp(26px, 7.2vw, 34px)',
+                  fontSize: [...memberName].length >= 7 ? 'clamp(20px, 5.4vw, 28px)' : [...memberName].length >= 5 ? 'clamp(23px, 6.2vw, 30px)' : 'clamp(26px, 7.2vw, 34px)',
                   fontWeight: 700,
                   color: '#1c1f1d',
                   lineHeight: 1.15,
@@ -252,16 +253,19 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   marginBottom: 6,
                   overflowWrap: 'anywhere', // 長い英字の名前も切らずに折り返す（10/30 監査 R6）
                 }}>
-                  {memberName}
-                  {/* 「様」— 会員名の約52%サイズ、シルバー系 */}
-                  <span style={{
-                    fontSize: 'clamp(14px, 3.6vw, 18px)',
-                    fontWeight: 300,
-                    color: 'rgba(28,31,29,0.5)',
-                    marginLeft: '0.30em',
-                    verticalAlign: 'baseline',
-                  }}>
-                    様
+                  {[...memberName].slice(0, -1).join('')}
+                  <span style={{ whiteSpace: 'nowrap' }}>
+                    {[...memberName].slice(-1).join('')}
+                    {/* 「様」— 会員名の約52%サイズ、シルバー系 */}
+                    <span style={{
+                      fontSize: 'clamp(14px, 3.6vw, 18px)',
+                      fontWeight: 300,
+                      color: 'rgba(28,31,29,0.5)',
+                      marginLeft: '0.30em',
+                      verticalAlign: 'baseline',
+                    }}>
+                      様
+                    </span>
                   </span>
                 </p>
 

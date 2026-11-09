@@ -102,7 +102,7 @@ function HistoryRow({ tx }: { tx: GinpayTransaction }) {
         <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: MUTED }}>{formatDateTime(tx.created_at)}</span>
       </span>
       <span style={{ fontSize: 14, fontVariantNumeric: 'tabular-nums', color: tx.amount > 0 ? GOLD : IVORY }}>
-        {tx.amount > 0 ? '+' : ''}{yen(tx.amount)}
+        {tx.amount > 0 ? '+' : tx.amount < 0 ? '−' : ''}{yen(Math.abs(tx.amount))}
       </span>
     </div>
   )

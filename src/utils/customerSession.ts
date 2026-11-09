@@ -9,7 +9,7 @@
  */
 
 import { callRpc, isMissingRpc, RpcError } from './staffSession'
-import { getStoredValue, setStoredValue } from './storage'
+import { getStoredValue, loadMemberStatus, saveMemberStatus, setStoredValue, ONBOARDING_NAME_KEY } from './storage'
 import { USER_ID_KEY } from './userId'
 
 const CUSTOMER_SESSION_KEY = 'ginjiro_customer_session'
@@ -129,13 +129,19 @@ export async function bindWithCode(userId: string, code: string): Promise<{ ok: 
 }
 
 /** 端末の会員番号が、ログインの鍵（セッション）の会員とずれていたら、鍵の会員に合わせる（11/6：PC の古い状態で QR に別の番号が出て「ゲスト」ができた）。
- *  合わせたら true。鍵が無い・読めないときは何もしない */
+ *  合わせたら true（名前だけ入れ直したときも true＝会員証を描き直す）。鍵が無い・読めないときは何もしない */
 export async function repairUserIdFromSession(): Promise<boolean> {
   if (!hasCustomerSession()) return false
   try {
-    const r = await callCustomerRpc<{ user_id?: string } | null>('customer_get_profile')
+    const r = await callCustomerRpc<{ user_id?: string; name?: string } | null>('customer_get_profile')
     const owner = r?.user_id
     const previous = getStoredValue<string | null>(USER_ID_KEY, null)
+    // 同じ会員で、端末に名前だけ無い（古い版から使っている等）：会員証が「ゲスト様」にならんよう名前を入れる（11/9 点検）
+    if (owner && previous === owner && typeof r?.name === 'string' && r.name.trim() && !getStoredValue<string | null>(ONBOARDING_NAME_KEY, null)) {
+      setStoredValue(ONBOARDING_NAME_KEY, r.name.trim())
+      saveMemberStatus({ ...loadMemberStatus(), memberName: r.name.trim() })
+      return true // 会員証を描き直す
+    }
     if (!owner || previous === owner) return false
     if (previous) clearMemberLocal()
     setStoredValue(USER_ID_KEY, owner)

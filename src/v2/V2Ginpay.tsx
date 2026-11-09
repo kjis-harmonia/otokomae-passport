@@ -57,7 +57,8 @@ export function V2Ginpay({ onBack, onShowQr }: { onBack: () => void; onShowQr: (
                   <span style={{ display: 'block', fontSize: 12, color: 'var(--v2-faint)', marginTop: 2 }}>{when(tx.created_at)}</span>
                 </span>
                 <span style={{ font: '700 16px/1 var(--v2-serif)', fontVariantNumeric: 'tabular-nums', color: tx.amount > 0 ? 'var(--v2-gold-deep)' : 'var(--v2-ink)' }}>
-                  {tx.amount > 0 ? '+' : ''}{yen(tx.amount)}
+                  {/* +¥11,000 と −¥11,000 で書き方をそろえる（「¥-11,000」になっていた・11/9 点検） */}
+                  {tx.amount > 0 ? '+' : tx.amount < 0 ? '−' : ''}{yen(Math.abs(tx.amount))}
                 </span>
               </div>
             ))}

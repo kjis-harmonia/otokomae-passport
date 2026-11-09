@@ -35,6 +35,12 @@ type Msg = { id: number; from: 'gin' | 'you'; text: string } | { id: number; fro
 export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string } | { kind: 'change'; reservationId?: string } | { kind: 'offer'; holdId: string }
 
 const HOTPEPPER_MENU_URL = 'https://beauty.hotpepper.jp/slnH000583749/coupon/'
+// お客様向けの言葉（システムの言葉を出さない・11/9 点検）
+const CHECK_DONE = '済んだか確かめる'
+const SEND_AGAIN = 'もう一度送る'
+const CHECK_BOOKED = '取れたか確かめる'
+const CHANGED_AFTER_REVIEW = 'ご案内したあとに、空きや料金が変わってしまいました。お手続きは済んでいません。お手数ですが、もう一度「変更・キャンセル」から選び直してくださいね。'
+const CHANGED_RETRY = 'ご案内したあとに、空きや料金が変わってしまいました。新しい内容で、もう一度ご案内しますね。'
 const WEEK = '日月火水木金土'
 const yen = (n: number | null) => (n == null ? '' : `¥${n.toLocaleString('ja-JP')}`)
 const md = (d: string) => `${Number(d.slice(5, 7))}月${Number(d.slice(8, 10))}日`
@@ -314,8 +320,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
     }
     let count = people?.companions.length ?? 0
-    if (count === 0) {
+    // お連れ様の登録のおすすめは1回だけ。「今はしない」と答えた方に、来店のたびに聞かない（11/9 点検）。登録は ☰ からいつでもできる
+    const askedKey = 'ginjiro_companion_offer_declined:' + (getStoredValue<string | null>(USER_ID_KEY, null) ?? '')
+    let declined = false
+    try { declined = localStorage.getItem(askedKey) === '1' } catch { /* 読めん端末は今までどおり聞く */ }
+    if (count === 0 && !declined) {
       let a = await askYN('お連れ様も登録できますよ。どうされますか？', '登録する', '今はしない')
+      if (a !== 'yes') { try { localStorage.setItem(askedKey, '1') } catch { /* 保存できん端末は次も聞く */ } await say('かしこまりました。ご一緒の方が来られるときは、☰ の「いつもの・お連れ様」からも登録できますけぇね。') }
       while (a === 'yes' && count < MAX_COMPANIONS) {
         const n = await ask('お名前を教えてください。お店でお呼びするお名前で大丈夫ですよ。', [])
         const name = n.slice(0, 20)
@@ -386,6 +397,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     // 髪型の写真から来た：最初の方のメニューはそれで聞く（1回だけ）
     let presetMenu: Menu | null = preset?.menuCode ? all.find(m => m.code === preset.menuCode) ?? null : null
     let presetLabel = preset?.label && !presetMenu ? preset.label : ''
+    let styleLabel = preset?.label ?? ''
 
     /** 言葉の中の人（「朔耶だけ」「本人と朔耶」「2人とも」） */
     const whoIn = (t: string): BookPerson[] | null => {
@@ -584,7 +596,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const pm = presetMenu, pl = presetLabel
         presetMenu = null; presetLabel = ''
         if (pm) {
-          const a = await askYN(`${d.who.length > 1 ? need.label + 'は' : ''}「${pm.name}」${pm.price != null ? ` ${yen(pm.price)}` : ''}でよろしいですか？`, 'はい', 'ほかのメニュー')
+          // 髪型の写真から来たら、その名前を受けてからメニューを伝える（「ちょい悪オヤジ」→ 通常カット・11/9 磨き）
+          const style = styleLabel && styleLabel !== pm.name ? `「${styleLabel}」ですね！メニューは` : ''
+          styleLabel = ''
+          const a = await askYN(`${d.who.length > 1 ? need.label + 'は' : ''}${style}「${pm.name}」${pm.price != null ? ` ${yen(pm.price)}` : ''}${style ? 'になります。よろしいですか？' : 'でよろしいですか？'}`, 'はい', 'ほかのメニュー')
           if (a === 'yes') { d.menus[need.key] = pm; continue }
           if (a !== 'no' && await change(a)) continue
         } else {
@@ -823,12 +838,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const session = getCustomerSession()
     while (reply.state === 'unknown' || reply.state === 'conflict') {
       const retry = reply.state === 'unknown'
-      const a = await ask('この依頼の結果をまだ確認できていません。確定と表示されるまでは、同じ予約を別の依頼で操作しないでください。', [
-        { label: '結果を確認', strong: true }, ...(retry ? [{ label: '同じ依頼を再送' }] : []), { label: 'あとで確認する' },
+      // お客様に「依頼」「確定と表示」などシステムの言葉を出さない（11/9 点検）。押す言葉と比べる所も同じ定数で
+      const a = await ask('通信の具合で、さっきのお手続きが済んだか、まだ確かめられていません。\n済んだと分かるまでは、ほかの変更はせずにお待ちくださいね。', [
+        { label: CHECK_DONE, strong: true }, ...(retry ? [{ label: SEND_AGAIN }] : []), { label: 'あとで確認する' },
       ])
       if (!fromChip.current) continue
       if (a === 'あとで確認する') return reply
-      const resend = a === '同じ依頼を再送' && retry && !!client.pending()
+      const resend = a === SEND_AGAIN && retry && !!client.pending()
       if (resend) {
         const access = await checkBookingAccess(session)
         if (access === 'closed') return reply
@@ -855,20 +871,20 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
     } else if (reply.state === 'rejected') {
       await say(reply.code === 'call_shop' ? '開始の30分前を過ぎたので、変更・キャンセルはお電話でお願いします。'
-        : reply.code === 'conditions_changed' ? '確認後に条件が変わったため、この依頼は確定していません。変更・キャンセルを開き直して、最新の内容をご確認ください。'
+        : reply.code === 'conditions_changed' ? CHANGED_AFTER_REVIEW
         : reply.code === 'reservation_person_overlap' ? 'この方は、その時間にすでに別の予約があります。今のご予約はそのままです。'
-        : 'この依頼は確定しませんでした。現在のご予約を確認してください。')
+        : 'お手続きができませんでした。今のご予約はそのままです。「次回予約」でご確認くださいね。')
     }
   }
 
   const checkPreviousBooking = async () => {
     while (hasPendingBookingConfirmation()) {
-      const a = await ask('前回の予約結果をまだ確認できていません。同じ依頼の結果を確認できます。', [
-        { label: '結果を確認', strong: true }, { label: 'あとで確認する' },
+      const a = await ask('通信の具合で、さっきのご予約が取れたか、まだ確かめられていません。', [
+        { label: CHECK_BOOKED, strong: true }, { label: 'あとで確認する' },
       ])
       if (!fromChip.current) continue
       if (a === 'あとで確認する') return endChange()
-      if (a !== '結果を確認') continue
+      if (a !== CHECK_BOOKED) continue
       try {
         const result = await recoverBookingConfirmation()
         if (result) {
@@ -878,7 +894,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         }
       } catch { /* Keep the saved request until the server returns its result. */ }
     }
-    await say('確認できる前回の依頼がありません。次回予約をご確認ください。')
+    await say('さっきのご予約は見つかりませんでした。「次回予約」でご確認くださいね。')
     return endChange()
   }
 
@@ -978,7 +994,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         setTyping(false)
         const reply = await recoverMutation(client, first)
         if (reply.state === 'rejected' && reply.code === 'conditions_changed') {
-          await say('確認後に条件が変わりました。最新の内容を確認してください。')
+          await say(CHANGED_RETRY)
           continue
         }
         await showMutationResult(reply)
@@ -1094,7 +1110,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       setTyping(false)
       const reply = await recoverMutation(client, first)
       if (reply.state === 'rejected' && reply.code === 'conditions_changed') {
-        await say('確認後に条件が変わりました。最新の内容を確認してください。')
+        await say(CHANGED_RETRY)
         continue
       }
       if (reply.state === 'rejected' && reply.code === 'slot_taken') {
@@ -1131,7 +1147,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       else { await say('よう来んさったのぉ！ご予約ですね。'); await runBook(null, { menuCode: mode.menuCode, label: mode.label }) }
     })().catch(async () => {
       setTyping(false)
-      await say('手続きを続けられませんでした。送信した依頼がある場合は、もう一度この画面を開いて結果を確認してください。')
+      await say('すみません、うまく続けられませんでした。ご予約が取れたか・変わったかは「次回予約」でご確認くださいね。')
       await endChange()
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- 開いたときに1回だけ
