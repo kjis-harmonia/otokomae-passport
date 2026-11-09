@@ -21,6 +21,18 @@ import { V2Ginpay } from './V2Ginpay'
 import { V2Campaign } from './V2Campaign'
 import './v2.css'
 
+/** お知らせのリンクの ?hold=…（キャンセル待ちで押さえた枠）を1回だけ読む（読んだら URL から消す） */
+function takeHoldParam(): string | null {
+  try {
+    const url = new URL(window.location.href)
+    const id = url.searchParams.get('hold')
+    url.searchParams.delete('hold')
+    url.searchParams.delete('tab')
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+    return id && /^[0-9a-f-]{36}$/i.test(id) ? id : null
+  } catch { return null }
+}
+
 const TABS: { id: NavTab; label: string; icon: typeof Home }[] = [
   { id: 'home', label: 'ホーム', icon: Home },
   { id: 'qr', label: '会員QR', icon: QrCode },
@@ -54,14 +66,16 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
 
   const back = () => setActiveTab(lastTab.current)
 
-  // Staging：?tab=reserve（ショートカット・店頭確認のあと）も銀ちゃんの会話で予約（11/9）。
-  //   キャンセル待ちのお知らせ（?hold=…）だけは、押さえた枠を出す今の予約画面のまま
-  const ginReserve = activeTab === 'reserve' && isStaging() && !new URLSearchParams(window.location.search).get('hold')
+  // Staging：予約タブ（?tab=reserve・ショートカット・店頭確認のあと）はすべて銀ちゃんの会話（11/9）。
+  //   キャンセル待ちのお知らせ（?hold=…）は、押さえた枠を銀ちゃんが「予約しますか？」と聞く
+  const ginReserve = activeTab === 'reserve' && isStaging()
   useEffect(() => {
     if (!ginReserve) return
     // 起動直後は App の受け口（親の effect）がまだ無いので、1拍おいて送る（タブも同じときに戻す）
     const t = setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } }))
+      const holdId = takeHoldParam()
+      if (holdId) window.dispatchEvent(new CustomEvent('ginjiro:gin-offer', { detail: { holdId } }))
+      else window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } }))
       setActiveTab(lastTab.current === 'reserve' ? 'home' : lastTab.current)
     }, 0)
     return () => clearTimeout(t)

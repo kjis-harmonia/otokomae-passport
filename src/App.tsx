@@ -366,8 +366,15 @@ function App() {
       const d = (e as CustomEvent<{ menuCode?: string | null; label?: string } | null>).detail
       setGinChat({ kind: 'book', menuCode: d?.menuCode ?? null, label: d?.label ?? '' })
     }
+    // キャンセル待ちのお知らせ（?hold=…）：押さえた枠を銀ちゃんが聞く（11/9）
+    const onOffer = (e: Event) => {
+      if (!getCustomerSession()) { setActiveTab('mypage'); return }
+      const holdId = (e as CustomEvent<{ holdId?: string } | null>).detail?.holdId
+      if (holdId) setGinChat({ kind: 'offer', holdId })
+    }
     window.addEventListener('ginjiro:gin-book', onBook)
-    return () => window.removeEventListener('ginjiro:gin-book', onBook)
+    window.addEventListener('ginjiro:gin-offer', onOffer)
+    return () => { window.removeEventListener('ginjiro:gin-book', onBook); window.removeEventListener('ginjiro:gin-offer', onOffer) }
   }, [phase, setActiveTab])
   useEffect(() => {
     if (phase !== 'app' || !customerAccessSession || !isStaging()) return

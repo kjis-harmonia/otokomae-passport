@@ -18,7 +18,6 @@ import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type P
 import { askUsualAi } from '../features/johnny/usualAi'
 import { askAgentVoice, type AgentTurn } from '../features/johnny/agentClient'
 import { useVoice } from '../features/johnny/useVoice'
-import { JohnnyRider } from '../features/johnny/JohnnyRider'
 import { spreadSlots } from '../features/johnny/dayAdvisor'
 import { forgetReservation, isUpcoming, rememberReservation } from '../features/johnny/nextReservation'
 import { callCustomerRpc, getCustomerSession } from '../utils/customerSession'
@@ -33,7 +32,7 @@ type Who = { kind: 'me' } | { kind: 'mate'; id: string | null; name: string }
 type Chip = { label: string; sub?: string; strong?: boolean }
 type Msg = { id: number; from: 'gin' | 'you'; text: string } | { id: number; from: 'cal'; open: string[]; first: string; last: string }
 /** book.menuCode：ホームの髪型の写真から来たときのメニュー（label は髪型の名前） */
-export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string } | { kind: 'change'; reservationId?: string }
+export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string } | { kind: 'change'; reservationId?: string } | { kind: 'offer'; holdId: string }
 
 const HOTPEPPER_MENU_URL = 'https://beauty.hotpepper.jp/slnH000583749/coupon/'
 const WEEK = '日月火水木金土'
@@ -744,6 +743,53 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     onClose()
   }
 
+  // ── offer：キャンセル待ちのお知らせから（?hold=…）。押さえた枠を見せて、確定は【この内容で予約する】のボタンだけ（11/9）
+  //   確定はほかの予約と同じ安全な入口（customer_confirm_new_reservation：同じ依頼の送り直しでも1件だけ）
+  const runOffer = async (holdId: string) => {
+    const session = getCustomerSession()
+    if (await checkBookingAccess(session) === 'closed') return
+    if (hasPendingBookingConfirmation()) return checkPreviousBooking()
+    setTyping(true)
+    const hold = await api.getHold(holdId).catch((e: unknown) => (e instanceof RpcError ? e.code : 'network'))
+    setTyping(false)
+    if (typeof hold === 'string') {
+      await say(hold === 'already_booked' ? 'このお時間は、もうご予約済みです。「次回予約」でご確認ください。'
+        : hold === 'network' ? 'お取りしている枠を確認できませんでした。通信を確認して、お知らせからもう一度開いてください。'
+        : 'すみません、お取りしていたお時間が過ぎてしまいました。またキャンセルが出たら、お知らせしますけぇね。')
+      return endChange()
+    }
+    const BOOK = 'この内容で予約する'
+    for (;;) {
+      const a = await ask(`キャンセルが出ました！\n${slotLabel(hold.starts_at)} ${hold.menu_names ?? 'ご希望のメニュー'}${hold.total_price != null ? ` ${yen(hold.total_price)}` : ''}\n${hm(hold.expires_at)}までお取りしとります。よろしければ、下の【${BOOK}】を押してくださいね。`,
+        [{ label: BOOK, strong: true }, { label: '今回は見送る' }])
+      if (!fromChip.current) { await say(`ご予約は【${BOOK}】、見送るときは【今回は見送る】を押してくださいね。`); continue }
+      if (a === '今回は見送る') {
+        if (hold.waitlist_id) await api.leaveWaitlist(hold.waitlist_id).catch(() => {})
+        else await api.release(hold.hold_id).catch(() => {})
+        await say('承知しました。キャンセル待ちを外しておきますね。')
+        return endChange()
+      }
+      if (a === BOOK) break
+    }
+    const access = await checkBookingAccess(session)
+    if (access === 'closed') return
+    setTyping(true)
+    try {
+      const r = await api.confirm(hold.hold_id)
+      setTyping(false)
+      rememberReservation(r)
+      setBookingComplete(true)
+      await say(`ご予約を承りました！\n${slotLabel(r.starts_at)} ${r.items.map(i => i.name).join('・')}\nお待ちしとりますけぇね。`)
+    } catch (error) {
+      setTyping(false)
+      const code = error instanceof RpcError ? error.code : ''
+      if (code === 'hold_expired' || code === 'hold_not_found') await say('すみません、お取りしていたお時間が過ぎてしまいました。')
+      else if (isBookingRejection(error, 'reservation_person_overlap')) await say('その時間に、すでに別のご予約があります。今のご予約はそのままです。')
+      else return checkPreviousBooking()
+    }
+    return endChange()
+  }
+
   // ── change：予約の変更・キャンセル（11/8 慶一郎さん「変更先が確保できるまでは元の予約を消さない」）
   //   変更はサーバーの1つの手続き（customer_change_reservation）。確定は【この内容に変更する】、取り消しは【キャンセルする】のボタンだけ
   //   通信が切れたら同じキーで送り直し、それでも分からなければ予約の一覧を読み直して確かめる
@@ -1068,6 +1114,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       menusRef.current = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : []
       if (mode.kind === 'welcome') await runWelcome(mode.pending)
       else if (mode.kind === 'change') await runChange(mode.reservationId)
+      else if (mode.kind === 'offer') await runOffer(mode.holdId)
       else { await say('よう来んさったのぉ！ご予約ですね。'); await runBook(null, { menuCode: mode.menuCode, label: mode.label }) }
     })().catch(async () => {
       setTyping(false)
@@ -1096,14 +1143,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         <button type="button" className="gc-icon lc-close" aria-label={finished ? '閉じる' : 'あとで'} onClick={onClose}><X size={20} /></button>
       </header>
       <div className="gc-log lc-log" ref={logRef} aria-live="polite">
-        <div className="lc-hero" aria-hidden="true"><JohnnyRider state="idle" width={210} /></div>
         {msgs.map((m, i) => {
           if (m.from === 'cal') return <LcCalendar key={m.id} open={m.open} first={m.first} last={m.last} onPick={d => { calRef.current?.(d); calRef.current = null }} />
           const head = m.from === 'gin' && msgs[i - 1]?.from !== 'gin'
           return m.from === 'gin' ? (
             <motion.div key={m.id} className={head ? 'lc-row lc-row-head' : 'lc-row'}
               initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}>
-              {head ? <img className="lc-avatar" src="/johnny/gin-avatar.webp" alt="" /> : <span className="lc-avatar-gap" />}
+              {head ? <img className="lc-avatar" src="/guide/gin-avatar.png" alt="" /> : <span className="lc-avatar-gap" />}
               <div className="lc-col">{head && <p className="lc-name">銀ちゃん</p>}<p className="gc-msg gc-gin">{m.text}</p></div>
             </motion.div>
           ) : (
