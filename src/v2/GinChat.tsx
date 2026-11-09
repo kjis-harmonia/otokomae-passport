@@ -22,7 +22,8 @@ import { spreadSlots } from '../features/johnny/dayAdvisor'
 import { forgetReservation, isUpcoming, rememberReservation } from '../features/johnny/nextReservation'
 import { callCustomerRpc, getCustomerSession } from '../utils/customerSession'
 import { SHOP_PHONE_TEL } from '../data/wallet'
-import { RpcError } from '../utils/staffSession'
+import { RpcBusinessError, RpcError } from '../utils/staffSession'
+import { longestIn, namesIn } from './ginWords'
 import { usableTickets } from '../utils/bookingCoupons'
 import type { TicketRow } from '../data/ticket'
 import type { PendingVisits as Pending, PendingVisit as Visit } from './visitConfirm'
@@ -211,6 +212,15 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const heardText = useCallback((t: string) => { fromChip.current = false; answer(t) }, [answer])
   const voice = useVoice(heardText, { server: api.serverVoice, onAudio, aiVoice: false })
   const listening = voice.listen === 'listening'
+  // マイクを断られたら、ボタンが黙って消えるだけにせず一言伝える（11/9 Codex 検査 低）
+  const micToldRef = useRef(false)
+  useEffect(() => {
+    if (micToldRef.current || (voice.listen !== 'denied' && voice.listen !== 'unsupported') || !voice.notice && voice.listen === 'unsupported') return
+    micToldRef.current = true
+    push('gin', voice.listen === 'denied'
+      ? 'マイクが使えんようになっとります。スマホの設定でマイクを許可するか、下の欄に文字で入れてくださいね。'
+      : voice.notice ?? 'このスマホでは声の入力が使えませんでした。下の欄に文字で入れてくださいね。')
+  }, [voice.listen, voice.notice])
 
   /** メニューを聞く：AI が相談に乗る。決まったら名前と料金で確かめる（「ちがう」は何が違うか聞き直す・同じものを押しつけない） */
   const hearMenu = async (who: Who, opener: string, visitDate: string | null): Promise<Menu | null> => {
@@ -403,7 +413,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const whoIn = (t: string): BookPerson[] | null => {
       const s = t.normalize('NFKC')
       if (/全員|みんな|皆|[2２二]人とも|[3３三]人とも|一緒/.test(s)) return everyone.slice(0, 3)
-      const hit = mates.filter(p => s.includes(p.name.replace(/(さん|様|ちゃん|くん|君)$/, '')))
+      // 長い名前に含まれる短い名前は数えない（「太郎丸だけ」で太郎まで選ばれていた・11/9 Codex 検査 高）
+      const hit = namesIn(s, mates, p => p.name.replace(/(さん|様|ちゃん|くん|君)$/, ''))
       const me = /本人|わし|自分|私|僕|俺|お母さん本人/.test(s)
       const list = [...(me ? [owner] : []), ...hit]
       return list.length ? list.slice(0, 3) : null
@@ -435,7 +446,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       // 「パンチじゃなくてアイパー」は後ろのほう（言い直したメニュー）
       const s = t.normalize('NFKC').split(/じゃなく(?:て)?|ではなく(?:て)?|やなくて|より/).pop() ?? ''
       if (/メンテ/.test(s) && maintMenu) return maintMenu
-      return all.find(m => s.includes(m.name.normalize('NFKC'))) ?? matchMenu(t, all)
+      return longestIn(s, all, m => m.name.normalize('NFKC')) ?? matchMenu(t, all)
     }
     /** 途中の変更を読み取って、予約メモのそこだけ直す。直したら true */
     const change = async (t: string): Promise<boolean> => {
@@ -456,7 +467,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         let target = d.who.length === 1 ? d.who[0] : (whoIn(s)?.[0] ?? null)
         if (!target) {
           const a = await ask(`「${m.name}」は、どなたのメニューですか？`, d.who.map(p => ({ label: p.label })))
-          target = d.who.find(p => p.label === a || a.includes(p.name)) ?? d.who[0]
+          target = d.who.find(p => p.label === a) ?? longestIn(a, d.who, p => p.name) ?? d.who[0]
         }
         if (m.code === 'maintenance' && !target.person?.maintenance_ok) { await say(`${target.label}は、今はメンテナンスカットの期限が過ぎとるんです。`); return true }
         const note = `${d.who.length > 1 ? target.label + 'は' : ''}「${m.name}」に変更しました。`
@@ -578,14 +589,16 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (!d.who) {
         // ボタンの言葉で「誰と誰か」が分かるように（11/9 慶一郎さん「複数人選べると思えない人もいる」）。
         //   ご本人だけ → ご本人と〇〇さん（2人） → 3人とも → 〇〇さんだけ の順。読み取りは whoIn（「と」「だけ」「とも」）
-        const chips: Chip[] = [
-          { label: 'ご本人だけ', strong: true },
-          ...mates.map(p => ({ label: `ご本人と${p.label}` })),
-          ...(everyone.length === 3 ? [{ label: '3人とも' }] : []),
-          ...mates.map(p => ({ label: `${p.label}だけ` })),
-        ]
+        // 押したボタンは、言葉から読み直さずに人を直接つなぐ（名前の部分一致で別の人まで入っていた・11/9 Codex 検査 高）
+        const byChip = new Map<string, BookPerson[]>([
+          ['ご本人だけ', [owner]],
+          ...mates.map(p => [`ご本人と${p.label}`, [owner, p]] as [string, BookPerson[]]),
+          ...(everyone.length === 3 ? [['3人とも', everyone.slice(0, 3)] as [string, BookPerson[]]] : []),
+          ...mates.map(p => [`${p.label}だけ`, [p]] as [string, BookPerson[]]),
+        ])
+        const chips: Chip[] = [...byChip.keys()].map((label, i) => ({ label, strong: i === 0 }))
         const a = await ask('どなたのご予約ですか？\nご一緒の方の分も、まとめてお取りできますよ。', chips)
-        const w = a === 'ご本人だけ' ? [owner] : whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
+        const w = (fromChip.current ? byChip.get(a) : undefined) ?? whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
         if (w) { d.who = w; continue }
         if (await change(a)) continue
         d.who = [owner]; continue
@@ -660,7 +673,24 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const found = await findTimes().catch(() => [])
         setTyping(false)
         if (!found.length) {
-          await say(d.when.kind === 'day' ? `すみません、${mdw(d.when.day)}は${d.who.length > 1 ? '全員そろって' : ''}入れる時間が無かったんです。` : 'すみません、近いところに空きが無かったんです。')
+          // 空きが無いとき：ご本人1人で日を決めていれば、その日のキャンセル待ちに入れる（旧画面にあった入口・11/9 Codex 検査 中）
+          //   キャンセル待ちはサーバーの作りが「ご本人1人・1メニュー」なので、お連れ様と一緒のときは今までどおり
+          const solo = d.who.length === 1 && d.who[0].key === 'me' && d.when.kind === 'day' && api.joinWaitlist
+          if (solo && d.when.kind === 'day') {
+            const day = d.when.day, menu = d.menus[d.who[0].key]
+            const WAIT = 'キャンセル待ちに入る'
+            const a = await ask(`すみません、${mdw(day)}は入れる時間が無かったんです。\nキャンセルが出たらお知らせしましょうか？`, [{ label: WAIT, strong: true }, { label: 'ほかの日にする' }])
+            if (fromChip.current && a === WAIT) {
+              setTyping(true)
+              const r = await api.joinWaitlist(day, '00:00', '23:59', menu.code, null).catch(() => null)
+              setTyping(false)
+              if (!r) { await say('すみません、キャンセル待ちに入れられませんでした。通信を確かめて、もう一度お試しくださいね。'); d.when = null; continue }
+              await say(`${mdw(day)}のキャンセル待ちに入れました。キャンセルが出たら、お知らせしますけぇね。${r.has_push ? '' : '\nお知らせを受け取るには、☰ の「銀二郎のお知らせを受け取る」をオンにしてくださいね。'}`)
+              return endChange()
+            }
+            d.when = null; continue
+          }
+          await say(d.when.kind === 'day' ? `すみません、${mdw(d.when.day)}は${d.who.length > 1 ? '全員そろって' : ''}入れる時間が無かったんです。` : 'すみません、近いところに空きが無かったんです。\n「日付を選ぶ」から日を決めると、その日のキャンセル待ちにも入れますよ。')
           d.when = null; continue
         }
         const oneDay = found.every(f => dayOf(f.at) === dayOf(found[0].at))
@@ -680,7 +710,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (tapped && a === '人を変える') { d.who = null; d.at = null; d.plan = null; continue }
       if (tapped && a === 'メニューを変える') {
         const pickWho = d.who.length === 1 ? '' : await ask('どなたのメニューを変えますか？', d.who.map(x => ({ label: x.label })))
-        const target = d.who.length === 1 ? d.who[0] : d.who.find(p => p.label === pickWho || pickWho.includes(p.name)) ?? d.who[0]
+        const target = d.who.length === 1 ? d.who[0] : d.who.find(p => p.label === pickWho) ?? longestIn(pickWho, d.who, p => p.name) ?? d.who[0]
         if (d.at) d.recheck = { at: d.at, note: '', why: 'メニューが変わって施術の時間も変わるので' }
         delete d.menus[target.key]; d.at = null; d.plan = null; continue
       }
@@ -778,12 +808,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     if (await checkBookingAccess(session) === 'closed') return
     if (hasPendingBookingConfirmation()) return checkPreviousBooking()
     setTyping(true)
-    const hold = await api.getHold(holdId).catch((e: unknown) => (e instanceof RpcError ? e.code : 'network'))
+    // 期限切れと通信の不具合を分ける（503 などを「お時間が過ぎた」と言っていた・11/9 Codex 検査 中）
+    const hold = await api.getHold(holdId).catch((e: unknown) => (e instanceof RpcBusinessError ? e.code : 'network'))
     setTyping(false)
     if (typeof hold === 'string') {
       await say(hold === 'already_booked' ? 'このお時間は、もうご予約済みです。「次回予約」でご確認ください。'
-        : hold === 'network' ? 'お取りしている枠を確認できませんでした。通信を確認して、お知らせからもう一度開いてください。'
-        : 'すみません、お取りしていたお時間が過ぎてしまいました。またキャンセルが出たら、お知らせしますけぇね。')
+        : hold === 'hold_expired' || hold === 'hold_not_found' ? 'すみません、お取りしていたお時間が過ぎてしまいました。またキャンセルが出たら、お知らせしますけぇね。'
+        : 'お取りしている枠を、通信の具合で確認できませんでした。電波の良い所で、お知らせからもう一度開いてくださいね。')
       return endChange()
     }
     const BOOK = 'この内容で予約する'
@@ -792,9 +823,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         [{ label: BOOK, strong: true }, { label: '今回は見送る' }])
       if (!fromChip.current) { await say(`ご予約は【${BOOK}】、見送るときは【今回は見送る】を押してくださいね。`); continue }
       if (a === '今回は見送る') {
-        if (hold.waitlist_id) await api.leaveWaitlist(hold.waitlist_id).catch(() => {})
-        else await api.release(hold.hold_id).catch(() => {})
-        await say('承知しました。キャンセル待ちを外しておきますね。')
+        // 外せたか確かめてから言う（503 でも「外しておきますね」と言っていた・11/9 Codex 検査 中）
+        setTyping(true)
+        const ok = await (hold.waitlist_id ? api.leaveWaitlist(hold.waitlist_id) : api.release(hold.hold_id)).then(() => true, () => false)
+        setTyping(false)
+        await say(ok ? '承知しました。キャンセル待ちを外しておきました。'
+          : `すみません、通信の具合でキャンセル待ちを外せませんでした。お取りしている枠は ${hm(hold.expires_at)} に自動で外れます。`)
         return endChange()
       }
       if (a === BOOK) break
@@ -1007,7 +1041,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const chips: Chip[] = [...(usual && usual.code !== menu?.code ? [{ label: usual.name, sub: yen(usual.price) }] : []), ...(maintOk && menu?.code !== 'maintenance' ? [{ label: 'メンテナンスカット', sub: person?.days_left != null ? `あと${person.days_left}日` : undefined }] : []), { label: 'ほかのメニュー' }]
         const a = await ask(`${who(r)}何のメニューに変更されますか？`, chips)
         const next = a === 'メンテナンスカット' || /メンテ/.test(a) ? maintMenu ?? null : usual && a === usual.name ? usual
-          : all.find(m => a.includes(m.name)) ?? await hearMenu(whoArg, '何のメニューにされますか？', null)
+          : (all.find(m => m.name === a) ?? longestIn(a, all, m => m.name)) ?? await hearMenu(whoArg, '何のメニューにされますか？', null)
         if (!next) { action = '日時を変更'; continue }
         menu = next
         menuCodes = [next.code]

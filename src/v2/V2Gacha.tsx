@@ -164,12 +164,16 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
 
   // 今日の状態（選んでいない券・回したか）が届くまでは押せない。届く前の一瞬「本日のガチャを回す」が出て、押すと演出だけ流れていた（11/7 慶一郎さん）
   const [stateReady, setStateReady] = useState(() => !canUseGacha())
+  // 状態が読めなかったら回させない（当選券の有無が分からんまま「回す」が押せた・11/9 Codex 検査 中）。「読み込み直す」で取り直す
+  const [stateFailed, setStateFailed] = useState(false)
+  const [stateTry, setStateTry] = useState(0)
   useEffect(() => {
     if (!canUseGacha()) return
     let live = true
-    loadGacha().then(s => { if (live) setGacha(s) }).catch(() => {}).finally(() => { if (live) setStateReady(true) })
+    loadGacha().then(s => { if (live) { setGacha(s); setStateFailed(false) } }).catch(() => { if (live) setStateFailed(true) }).finally(() => { if (live) setStateReady(true) })
     return () => { live = false }
-  }, [])
+  }, [stateTry])
+  const retryState = () => { setStateReady(false); setStateFailed(false); setStateTry(n => n + 1) }
 
   const choose = async (choice: 'new' | 'old') => {
     if (keeping) return
@@ -215,7 +219,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
 
   const start = () => {
     if (loadFailed) { setLoadFailed(false); setPct(0); setAttempt(n => n + 1); return }
-    if (phaseRef.current !== 'idle' || !cache || !stateReady) return
+    if (phaseRef.current !== 'idle' || !cache || !stateReady || stateFailed) return
     const i = intro.current
     const w = wait.current
     const b = burst.current
@@ -335,7 +339,10 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
-          <button type="button" className="v2-gacha-start" data-guide="gacha-start" onClick={pending ? resume : start} disabled={(!src && !loadFailed) || (!loadFailed && !stateReady)}>{loadFailed ? '読み込み直す' : src && !stateReady ? '確認しています…' : src ? <><Sparkles size={20} />{pending ? (gacha?.held?.reserved ? '当選した券を見る' : '当選した券を選ぶ') : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>
+          {!loadFailed && stateFailed ? (
+            <button type="button" className="v2-gacha-start" data-guide="gacha-start" onClick={retryState}>読み込み直す</button>
+          ) : <button type="button" className="v2-gacha-start" data-guide="gacha-start" onClick={pending ? resume : start} disabled={(!src && !loadFailed) || (!loadFailed && !stateReady)}>{loadFailed ? '読み込み直す' : src && !stateReady ? '確認しています…' : src ? <><Sparkles size={20} />{pending ? (gacha?.held?.reserved ? '当選した券を見る' : '当選した券を選ぶ') : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>}
+          {!loadFailed && stateFailed && <p className="v2-gacha-again">今日のガチャの状態を確かめられませんでした。電波の良い所で、読み込み直してください。</p>}
           {pending && <p className="v2-gacha-again">{gacha?.held?.reserved ? '新しい券は、ご来店のあとに受け取れます' : '当選した券がまだ選ばれていません'}</p>}
           {gacha?.today?.choice && !gacha.repeat && <p className="v2-gacha-again">次のガチャは明日 0:00 から回せます</p>}
           {onChoose && (
