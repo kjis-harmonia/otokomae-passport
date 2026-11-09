@@ -54,6 +54,20 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
 
   const back = () => setActiveTab(lastTab.current)
 
+  // Staging：?tab=reserve（ショートカット・店頭確認のあと）も銀ちゃんの会話で予約（11/9）。
+  //   キャンセル待ちのお知らせ（?hold=…）だけは、押さえた枠を出す今の予約画面のまま
+  const ginReserve = activeTab === 'reserve' && isStaging() && !new URLSearchParams(window.location.search).get('hold')
+  useEffect(() => {
+    if (!ginReserve) return
+    // 起動直後は App の受け口（親の effect）がまだ無いので、1拍おいて送る（タブも同じときに戻す）
+    const t = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } }))
+      setActiveTab(lastTab.current === 'reserve' ? 'home' : lastTab.current)
+    }, 0)
+    return () => clearTimeout(t)
+  }, [ginReserve, setActiveTab])
+
+  if (ginReserve) return null
   if (activeTab === 'reserve') {
     return <div className="v2"><ReserveScreen onShowQr={() => setActiveTab('qr')} onClose={back} /></div>
   }

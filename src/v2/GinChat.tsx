@@ -532,6 +532,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}`).join('\n')
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
+    let hasOther = false
     const canCreate = async (persons: BookPerson[], startsAt: string) => {
       const mine = await api.reservations().catch(() => null)
       if (!Array.isArray(mine)) {
@@ -539,6 +540,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         await endChange()
         return false
       }
+      // 「今あるご予約はそのままです」は、ほかに予約があるときだけ言う（11/9）
+      hasOther = mine.some(r => isUpcoming(r) && r.status === 'confirmed')
       const starts = Date.parse(startsAt)
       const existing = persons.filter(p => {
         const ends = starts + d.menus[p.key].duration_min * 60000
@@ -644,7 +647,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       if (!await canCreate(d.who, d.at)) return
       const BOOK = 'この内容で予約する'
-      const a = await ask(`新しいご予約としてお取りします。今あるご予約はそのままです。\n${slotLabel(d.at)}\n${summary()}`,
+      const a = await ask(`${hasOther ? '新しいご予約としてお取りします。今あるご予約はそのままです。' : 'この内容でよろしければ、下の【この内容で予約する】を押してくださいね。'}\n${slotLabel(d.at)}\n${summary()}`,
         [{ label: BOOK, strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, { label: '日にちを変える' }])
       const tapped = fromChip.current
       if (tapped && a === '人を変える') { d.who = null; d.at = null; d.plan = null; continue }
