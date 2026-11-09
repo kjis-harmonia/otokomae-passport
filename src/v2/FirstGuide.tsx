@@ -16,7 +16,6 @@ import type { AgentTurn } from '../features/johnny/agentClient'
 import { canBeUsual, setUsualMenu, usualMenuOrder } from '../features/johnny/usualMenu'
 import { loadUsual } from './usualPicks'
 import { MAX_COMPANIONS, saveCompanion, setOwnerMaintenance } from '../features/johnny/usualMembers'
-import { JohnnyRider } from '../features/johnny/JohnnyRider'
 import { callCustomerRpc } from '../utils/customerSession'
 import { useStoreAccess } from '../features/customerAccess/storeAccess'
 import { SHOP_PHONE_TEL } from '../data/wallet'
@@ -254,7 +253,8 @@ export function FirstGuide({ visited, onClose }: { visited: boolean; onClose: ()
 
       {mode === 'intro' ? (
         <div className="gc-intro">
-          <div className="gc-rider" aria-hidden="true"><JohnnyRider state="idle" width={260} /></div>
+          {/* 銀ちゃん（リーゼントの子）。バイクの絵は使わない（11/9 慶一郎さん） */}
+          <div className="gc-rider" aria-hidden="true"><img src="/guide/chibi-squat.png" alt="" style={{ height: 'min(30dvh, 220px)', width: 'auto' }} /></div>
           <p className="gc-hello">よう来んさったのぉ！<br />いつものメニュー、<br />一緒に決めよう！</p>
           <button type="button" className="gc-lens gc-start" onClick={start} disabled={!menus}>
             <span className="gc-start-text">銀ちゃんとAIで話して決める</span>
