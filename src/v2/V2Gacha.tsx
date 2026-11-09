@@ -162,14 +162,14 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     }
   }, [THEME.id, phase, drawn, audioBlocked])
 
+  // 今日の状態（選んでいない券・回したか）が届くまでは押せない。届く前の一瞬「本日のガチャを回す」が出て、押すと演出だけ流れていた（11/7 慶一郎さん）
+  const [stateReady, setStateReady] = useState(() => !canUseGacha())
   useEffect(() => {
     if (!canUseGacha()) return
     let live = true
     loadGacha().then(s => { if (live) setGacha(s) }).catch(() => {}).finally(() => { if (live) setStateReady(true) })
     return () => { live = false }
   }, [])
-  // 今日の状態（選んでいない券・回したか）が届くまでは押せない。届く前の一瞬「本日のガチャを回す」が出て、押すと演出だけ流れていた（11/7 慶一郎さん）
-  const [stateReady, setStateReady] = useState(() => !canUseGacha())
 
   const choose = async (choice: 'new' | 'old') => {
     if (keeping) return
