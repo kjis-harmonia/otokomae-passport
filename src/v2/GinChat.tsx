@@ -82,6 +82,8 @@ type Draft = {
   plan: Record<string, string | null> | null
   /** 人・メニューを変えたとき：前に選んだ時間。空きを確かめ直して、空いとれば「このままでよろしいですか？」だけ聞く（11/8 慶一郎さん） */
   recheck: { at: string; note: string; why: string } | null
+  /** 1人の予約：担当のご希望（id）。null＝どちらでも、undefined＝まだ聞いていない（11/10 慶一郎さん「ご来店を聞く前に、テイテイ・銀二郎・どちらでも」） */
+  staff?: string | null
 }
 const sameWho = (a: BookPerson[], b: BookPerson[]) => a.length === b.length && a.every(x => b.some(y => y.key === x.key))
 /** n 人に、別々の担当（m 人の中から）を割り当てる。できなければ null（人数は3人までなので総当たりで足りる） */
@@ -116,10 +118,10 @@ function dateIn(t: string): string | null {
 }
 
 /** 空きのある日（今の予約エンジンで判定）。1週間ずつ並べて調べる（1回で長く調べると時間切れになる） */
-async function openDays(menuCode: string, from: string, days: number, weekend: boolean): Promise<string[]> {
+async function openDays(menuCode: string, from: string, days: number, weekend: boolean, staffId: string | null = null): Promise<string[]> {
   const chunks = Array.from({ length: Math.ceil(days / 7) }, (_, i) => addDays(from, i * 7))
   const parts = await Promise.all(chunks.map(d => callCustomerRpc<string[]>('customer_open_days',
-    { p_menu_codes: [menuCode], p_from: d, p_to: addDays(d, 6), p_staff_id: null, p_weekend: weekend }).catch(() => [] as string[])))
+    { p_menu_codes: [menuCode], p_from: d, p_to: addDays(d, 6), p_staff_id: staffId, p_weekend: weekend }).catch(() => [] as string[])))
   return [...new Set(parts.flat())].sort()
 }
 
@@ -443,6 +445,15 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const staffList = opts?.staff ?? []
     const d: Draft = { who: mates.length ? null : [owner], menus: {}, when: null, at: null, plan: null, recheck: null }
+    /** 空きを探す担当：1人の予約で担当を選んだときだけ（2人以上は同じ時間に別々の担当が要るので、今までどおり自動） */
+    const staffOf = () => (d.who?.length === 1 ? d.staff ?? null : null)
+    const staffName = (id: string | null | undefined) => staffList.find(s => s.id === id)?.name ?? ''
+    /** 文の中の担当（「銀二郎で」）。どちらでも・おまかせ は null、無ければ undefined */
+    const staffIn = (t: string): string | null | undefined => {
+      const s = t.normalize('NFKC')
+      if (/どちらでも|どっちでも|誰でも|だれでも|おまかせ|お任せ|指名なし/.test(s)) return null
+      return longestIn(s, staffList, x => x.name)?.id
+    }
     // 髪型の写真から来た：最初の方のメニューはそれで聞く（1回だけ）
     let presetMenu: Menu | null = preset?.menuCode ? all.find(m => m.code === preset.menuCode) ?? null : null
     let presetLabel = preset?.label && !presetMenu ? preset.label : ''
@@ -504,6 +515,14 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         d.menus[target.key] = m; d.at = null; d.plan = null
         return true
       }
+      // 担当の言い直し（「やっぱり銀二郎で」）：1人の予約のときだけ
+      const st = staffIn(s)
+      if (st !== undefined && d.who?.length === 1 && staffList.length > 1 && st !== (d.staff ?? null)
+        && (changing || /担当|指名|さんで|で$|でお願い/.test(s) || st === null)) {
+        d.staff = st; d.at = null; d.plan = null
+        await say(st ? `かしこまりました！${staffName(st)}の空きで探しますね。` : 'かしこまりました！どちらの担当でも、で探しますね。')
+        return true
+      }
       const wh = whenIn(s)
       if (wh && (changing || d.when !== null)) {
         d.when = wh; d.at = null; d.plan = null
@@ -544,7 +563,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       let days: string[]
       if (d.when?.kind === 'day') days = [d.when.day]
       else {
-        const lists = await Promise.all(codes.map(c => openDays(c, todayJst(), d.when?.kind === 'weekend' ? 42 : 21, d.when?.kind === 'weekend')))
+        const lists = await Promise.all(codes.map(c => openDays(c, todayJst(), d.when?.kind === 'weekend' ? 42 : 21, d.when?.kind === 'weekend', staffOf())))
         days = lists.reduce((a, b) => a.filter(x => b.includes(x)))
         const w = d.when
         if (w?.kind === 'weekend' && w.dow != null) days = days.filter(x => new Date(Date.UTC(+x.slice(0, 4), +x.slice(5, 7) - 1, +x.slice(8, 10))).getUTCDay() === w.dow)
@@ -553,8 +572,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const want = d.when?.kind === 'day' ? 6 : 3
       for (const day of days.slice(0, 8)) {
         if (who.length === 1) {
-          const slots = spreadSlots(await api.slots(day, menus[0].code), d.when?.kind === 'day' ? 6 : d.when?.kind === 'weekend' ? 2 : 3)
-          out.push(...slots.map(s => ({ at: s.starts_at, staff: { [who[0].key]: null } })))
+          const st = staffOf()
+          const slots = spreadSlots(await (st ? api.staffSlots(day, menus[0].code, st) : api.slots(day, menus[0].code)), d.when?.kind === 'day' ? 6 : d.when?.kind === 'weekend' ? 2 : 3)
+          out.push(...slots.map(s => ({ at: s.starts_at, staff: { [who[0].key]: st } })))
         } else {
           // 担当ごと・メニューごとの空き → 同じ時間に、全員へ別々の担当を割り当てられる時間
           const free = await Promise.all(who.map((_, i) => Promise.all(staffList.map(st => api.staffSlots(day, menus[i].code, st.id).then(l => new Set(l.map(x => Date.parse(x.starts_at)))).catch(() => new Set<number>())))))
@@ -575,8 +595,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const planAt = async (at: string): Promise<Record<string, string | null> | null> => {
       const who = d.who!, menus = who.map(p => d.menus[p.key]), day = dayOf(at), t = Date.parse(at)
       if (who.length === 1) {
-        const l = await api.slots(day, menus[0].code)
-        return l.some(x => Date.parse(x.starts_at) === t) ? { [who[0].key]: null } : null
+        const st = staffOf()
+        const l = await (st ? api.staffSlots(day, menus[0].code, st) : api.slots(day, menus[0].code))
+        return l.some(x => Date.parse(x.starts_at) === t) ? { [who[0].key]: st } : null
       }
       const free = await Promise.all(who.map((_, i) => Promise.all(staffList.map(st => api.staffSlots(day, menus[i].code, st.id)
         .then(l => l.some(x => Date.parse(x.starts_at) === t)).catch(() => false)))))
@@ -584,7 +605,18 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       return pick ? Object.fromEntries(who.map((p, i) => [p.key, staffList[pick[i]].id])) : null
     }
 
+    /** 選んだ担当に空きが無い：どちらでも に広げるか聞く。広げたら true（やめたら false） */
+    const offerAnyStaff = async (when: string) => {
+      const name = staffName(staffOf())
+      const a = await ask(`すみません、${name}は${when}このメニューの空きが無いんです。\nどちらの担当でもよければ、お探ししますよ。`, [{ label: 'どちらでも', strong: true }, ...(d.when?.kind === 'pick' ? [] : [{ label: '日付を選ぶ' }]), { label: 'やめておく' }])
+      if (fromChip.current && a === 'やめておく') { await say('また決まりましたら、いつでも声をかけてくださいね。'); return false }
+      if (fromChip.current && a === '日付を選ぶ') { d.when = { kind: 'pick' }; return true }
+      if (fromChip.current && a === 'どちらでも') { d.staff = null; d.when = d.when?.kind === 'pick' ? { kind: 'pick' } : d.when; return true }
+      if (await change(a)) return true
+      d.staff = null; return true
+    }
     const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}`).join('\n')
+      + (staffOf() ? `\n担当：${staffName(staffOf())}` : '')
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
     let hasOther = false
@@ -657,6 +689,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (d.recheck && !d.recheck.note) d.recheck.note = `${d.who.length > 1 ? need.label + 'は' : ''}「${m.name}」に変更しました。`
         continue
       }
+      // 担当（1人の予約・ご来店を聞く前）：選んだ担当の空きで日時を決める（11/10 慶一郎さん）
+      if (d.who.length === 1 && staffList.length > 1 && d.staff === undefined) {
+        const ANY = 'どちらでも'
+        const a = await ask('ご担当のご希望はありますか？', [...staffList.map(s => ({ label: s.name })), { label: ANY }])
+        const st = fromChip.current ? (a === ANY ? null : staffList.find(s => s.name === a)?.id) : staffIn(a)
+        if (st !== undefined) {
+          d.staff = st
+          if (d.recheck && !d.recheck.note) d.recheck.note = st ? `担当を${staffName(st)}に変更しました。` : '担当は、どちらでも に変更しました。'
+          continue
+        }
+        if (await change(a)) continue
+        d.staff = null; continue
+      }
       // いつ？
       if (!d.when) {
         const a = await ask('ご来店は、いつ頃がええですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
@@ -668,9 +713,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (d.when.kind === 'pick') {
         setTyping(true)
         const codes = [...new Set(d.who.map(p => d.menus[p.key].code))]
-        const lists = await Promise.all(codes.map(c => openDays(c, todayJst(), 63, false)))
+        const lists = await Promise.all(codes.map(c => openDays(c, todayJst(), 63, false, staffOf())))
         const open = lists.reduce((a, b) => a.filter(x => b.includes(x)))
         setTyping(false)
+        if (!open.length && staffOf()) { if (await offerAnyStaff('しばらく')) continue; break }
         if (!open.length) { await say('すみません、しばらく全員そろって入れる日が無いんです。お店にお電話いただけますか？'); d.when = null; continue }
         // 満席の日はカレンダーで押せない → ご本人1人なら、日付を送ればその日のキャンセル待ちに入れる（11/10 Codex 再検査 中）
         const soloMe = d.who.length === 1 && d.who[0].key === 'me'
@@ -722,7 +768,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             const a = await ask(`すみません、${mdw(day)}は入れる時間が無かったんです。\nキャンセルが出たらお知らせしましょうか？`, [{ label: WAIT, strong: true }, { label: 'ほかの日にする' }])
             if (fromChip.current && a === WAIT) {
               setTyping(true)
-              const r = await api.joinWaitlist(day, '00:00', '23:59', menu.code, null).catch(() => null)
+              const r = await api.joinWaitlist(day, '00:00', '23:59', menu.code, staffOf()).catch(() => null)
               setTyping(false)
               if (!r) { await say('すみません、キャンセル待ちに入れられませんでした。通信を確かめて、もう一度お試しくださいね。'); d.when = null; continue }
               await say(`${mdw(day)}のキャンセル待ちに入れました。キャンセルが出たら、お知らせしますけぇね。${r.has_push ? '' : '\nお知らせを受け取るには、☰ の「銀二郎のお知らせを受け取る」をオンにしてくださいね。'}`)
@@ -730,6 +776,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             }
             d.when = null; continue
           }
+          if (staffOf() && d.when.kind !== 'day') { if (await offerAnyStaff('近いところに')) continue; break }
           await say(d.when.kind === 'day' ? `すみません、${mdw(d.when.day)}は${d.who.length > 1 ? '全員そろって' : ''}入れる時間が無かったんです。` : d.who.length === 1 && d.who[0].key === 'me'
             ? 'すみません、近いところに空きが無かったんです。\nご希望の日を「11月20日」のように送ってもらえたら、その日のキャンセル待ちにも入れますよ。'
             : 'すみません、近いところに空きが無かったんです。ほかの日を選んでくださいね。')
@@ -751,9 +798,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const ticketNote = d.menus.me && d.who.some(p => p.key === 'me') ? ticketText(tickets, d.at, d.menus.me.code) : ''
       // 中身（日時・メニュー）を先に、案内を最後に（11/9 磨き）
       const a = await ask(`${slotLabel(d.at)}\n${summary()}\n\n${ticketNote ? ticketNote + '\n\n' : ''}${hasOther ? '新しいご予約としてお取りします（今あるご予約はそのままです）。\n' : ''}よろしければ【${BOOK}】を押してくださいね。`,
-        [{ label: BOOK, strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, { label: '日にちを変える' }])
+        [{ label: BOOK, strong: true }, ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, ...(d.who.length === 1 && staffList.length > 1 ? [{ label: '担当を変える' }] : []), { label: '日にちを変える' }])
       const tapped = fromChip.current
-      if (tapped && a === '人を変える') { d.who = null; d.at = null; d.plan = null; continue }
+      // 担当を変える：時間はその担当の空きで選び直し（前の時間で入れるかは確かめ直す）
+      if (tapped && a === '担当を変える') { d.recheck = { at: d.at, note: '', why: '担当が変わって' }; d.staff = undefined; d.at = null; d.plan = null; continue }
+      if (tapped && a === '人を変える') { d.who = null; d.staff = undefined; d.at = null; d.plan = null; continue }
       if (tapped && a === 'メニューを変える') {
         const pickWho = d.who.length === 1 ? '' : await ask('どなたのメニューを変えますか？', d.who.map(x => ({ label: x.label })))
         const target = d.who.length === 1 ? d.who[0] : d.who.find(p => p.label === pickWho) ?? longestIn(pickWho, d.who, p => p.name) ?? d.who[0]
