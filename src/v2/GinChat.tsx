@@ -761,12 +761,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (!found.length) {
           // 空きが無いとき：ご本人1人で日を決めていれば、その日のキャンセル待ちに入れる（旧画面にあった入口・11/9 Codex 検査 中）
           //   キャンセル待ちはサーバーの作りが「ご本人1人・1メニュー」なので、お連れ様と一緒のときは今までどおり
+          // 担当を決めて日付を指定：その日にもう1人の担当なら空いとれば【どちらでも】も出す（11/10 Codex 検査 ④）
+          const ANY = 'どちらでも'
+          const anyFree = staffOf() && d.when.kind === 'day'
+            ? await api.slots(d.when.day, d.menus[d.who[0].key].code).then(l => l.length > 0, () => false) : false
           const solo = d.who.length === 1 && d.who[0].key === 'me' && d.when.kind === 'day' && api.joinWaitlist
-          if (solo && d.when.kind === 'day') {
+          if ((solo || anyFree) && d.when.kind === 'day') {
             const day = d.when.day, menu = d.menus[d.who[0].key]
             const WAIT = 'キャンセル待ちに入る'
-            const a = await ask(`すみません、${mdw(day)}は入れる時間が無かったんです。\nキャンセルが出たらお知らせしましょうか？`, [{ label: WAIT, strong: true }, { label: 'ほかの日にする' }])
-            if (fromChip.current && a === WAIT) {
+            const who = staffOf() ? `${staffName(staffOf())}は` : ''
+            const a = await ask(`すみません、${mdw(day)}は${who}入れる時間が無かったんです。${anyFree ? '\nもう1人の担当なら、空いとりますよ。' : ''}${solo ? '\nキャンセルが出たらお知らせもできますよ。' : ''}`,
+              [...(anyFree ? [{ label: ANY, strong: true }] : []), ...(solo ? [{ label: WAIT, strong: !anyFree }] : []), { label: 'ほかの日にする' }])
+            if (fromChip.current && a === ANY) { d.staff = null; continue }
+            if (solo && fromChip.current && a === WAIT) {
               setTyping(true)
               const r = await api.joinWaitlist(day, '00:00', '23:59', menu.code, staffOf()).catch(() => null)
               setTyping(false)
@@ -774,6 +781,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
               await say(`${mdw(day)}のキャンセル待ちに入れました。キャンセルが出たら、お知らせしますけぇね。${r.has_push ? '' : '\nお知らせを受け取るには、☰ の「銀二郎のお知らせを受け取る」をオンにしてくださいね。'}`)
               return endChange()
             }
+            if (!fromChip.current && await change(a)) continue
             d.when = null; continue
           }
           if (staffOf() && d.when.kind !== 'day') { if (await offerAnyStaff('近いところに')) continue; break }
