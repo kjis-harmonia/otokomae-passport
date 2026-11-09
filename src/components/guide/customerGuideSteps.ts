@@ -47,7 +47,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
       },
       { target: g('lc-input'), next: true, waitWhile: TALKING, text: '話しかけても、文字で書いても答えられます', sub: '左のマイクを押すと声で、ここに書いて送ると文字で。下のボタンを押しても進めます。' },
       // お連れ様がいない方は出ない
-      { target: CHIPS('who'), optional: true, waitWhile: TALKING, until: PAST('who'), text: 'どなたのご予約か押してください', sub: 'ご一緒なら「2人とも」「全員」も選べます。' },
+      { target: CHIPS('who'), optional: true, waitWhile: TALKING, until: PAST('who'), text: 'どなたのご予約か押してください', sub: 'ご一緒なら「ご本人と〇〇さん」「3人とも」を押すと、まとめてお取りします。' },
       // いつものがある方・髪型の写真から来た方は「はい／ほかのメニュー」、メンテナンスの期限内の方は3つから
       {
         target: CHIPS('menu', 'yesno'), optional: true, waitWhile: TALKING, until: PAST('menu', 'yesno'), text: 'メニューを押してください', sub: 'ほかのメニューは「一覧から選ぶ」から選べます。',

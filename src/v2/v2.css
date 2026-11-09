@@ -876,6 +876,8 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .lc-avatar-gap { flex: none; width: 40px; }
 .lc-name { margin: 0 0 4px 4px; font-size: 11px; font-weight: 600; color: var(--v2-faint); letter-spacing: .04em; }
 .lc .gc-gin { max-width: none; padding-left: 14px; padding-right: 14px; border-radius: 4px 20px 20px 20px; }
+/* 「ね。」だけが次の行に残らないように、文節で折り返し、最後の行が1〜2文字にならんようにする（効かんブラウザは今までどおり） */
+.lc .gc-msg { word-break: auto-phrase; text-wrap: pretty; }
 .lc .lc-row + .lc-row .gc-gin, .lc .lc-row:not(.lc-row-head) .gc-gin { border-radius: 20px; }
 .lc .gc-you { max-width: 78%; border-radius: 20px 4px 20px 20px; }
 .lc .gc-gin[data-name]::before { display: none; }

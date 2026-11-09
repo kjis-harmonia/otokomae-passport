@@ -468,7 +468,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const maint = p.person?.maintenance_ok ? maintMenu : undefined
       const whoText = d.who && d.who.length > 1 ? `${p.label}は` : ''
       if (!usual) {
-        const m = await hearMenu(p.id ? { kind: 'mate', id: p.id, name: p.name } : { kind: 'me' }, `${whoText}メニューは、何にされますか？`, null)
+        const m = await hearMenu(p.id ? { kind: 'mate', id: p.id, name: p.name } : { kind: 'me' }, `${whoText ? `${p.label}の` : ''}メニューは、何にされますか？`, null)
         return m
       }
       const a = await ask(maint ? `${whoText}いつもの「${usual.name}」にされますか？それとも、メンテナンスカットにされますか？` : `${whoText}いつもの「${usual.name}」${usual.price != null ? ` ${yen(usual.price)}` : ''}でよろしいですか？`,
@@ -564,9 +564,16 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     for (let guard = 0; guard < 40; guard++) {
       // 誰の予約？
       if (!d.who) {
-        const chips: Chip[] = [{ label: 'ご本人', strong: true }, ...mates.map(p => ({ label: p.label })), ...(everyone.length > 1 && everyone.length <= 3 ? [{ label: everyone.length === 2 ? '2人とも' : '全員' }] : [])]
-        const a = await ask('どなたのご予約にしますか？', chips)
-        const w = a === 'ご本人' ? [owner] : whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
+        // ボタンの言葉で「誰と誰か」が分かるように（11/9 慶一郎さん「複数人選べると思えない人もいる」）。
+        //   ご本人だけ → ご本人と〇〇さん（2人） → 3人とも → 〇〇さんだけ の順。読み取りは whoIn（「と」「だけ」「とも」）
+        const chips: Chip[] = [
+          { label: 'ご本人だけ', strong: true },
+          ...mates.map(p => ({ label: `ご本人と${p.label}` })),
+          ...(everyone.length === 3 ? [{ label: '3人とも' }] : []),
+          ...mates.map(p => ({ label: `${p.label}だけ` })),
+        ]
+        const a = await ask('どなたのご予約ですか？\nご一緒の方の分も、まとめてお取りできますよ。', chips)
+        const w = a === 'ご本人だけ' ? [owner] : whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
         if (w) { d.who = w; continue }
         if (await change(a)) continue
         d.who = [owner]; continue
@@ -1134,7 +1141,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     : chips.some(c => c.label === '会員QRを表示') ? 'verify'
     : chips.some(c => c.label === 'この内容で予約する') ? 'confirm'
     : chips.some(c => c.label === '最短で') ? 'when'
-    : chips.some(c => c.label === 'ご本人') ? 'who'
+    : chips.some(c => c.label === 'ご本人だけ') ? 'who'
     : chips.some(c => /\d\d:\d\d$/.test(c.label)) ? 'time'
     : chips.some(c => c.label === '一覧から選ぶ' || c.label === 'ほかのメニュー') ? 'menu'
     : chips.length === 2 ? 'yesno' : chips.length ? 'choice' : waiting ? 'free' : 'wait'
@@ -1165,7 +1172,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         {typing && <div className="lc-row"><span className="lc-avatar-gap" /><p className="gc-msg gc-gin gc-typing" aria-label="銀ちゃんが考えています"><i /><i /><i /></p></div>}
       </div>
       <div className="lc-dock">
-        {dockGuide && <GinNavigationMark key={askKind} step={askKind} />}
+        {/* ボタンの列の上には指さしの子を出さない：真ん中に立つと、たまたま真ん中のボタンを指して見える（11/9 慶一郎さん）。
+            カレンダー・メニュー一覧の上（面全体）には出す */}
         {chips.length > 0 && (
           <motion.div className={dockGuide ? 'gc-chips lc-chips lc-guided-chips' : 'gc-chips lc-chips'} data-guide="lc-chips" data-ask={askKind} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduce ? 0 : 0.22 }}>
             {chips.map(c => (
