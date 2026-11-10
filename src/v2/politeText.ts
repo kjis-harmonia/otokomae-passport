@@ -13,7 +13,7 @@ const RULES: [RegExp, string][] = [
   [/しとる/g, 'している'],
   [/(ん|く)さった/g, '$1ださった'],
   [/のぉ/g, 'ね'],
-  [/ええ(です|ね|よ|と思)/g, 'いい$1'],
+  [/ええ(です|ね|よ|と思|から|けど|な|の)/g, 'いい$1'],
 ]
 export function politeText(s: string): string {
   return RULES.reduce((t, [re, to]) => t.replace(re, to), s)

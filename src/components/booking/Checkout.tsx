@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { RpcError, callStaffRpc, rpcErrorMessage } from '../../utils/staffSession'
+import { RpcError, callRpc, getStaffToken, rpcErrorMessage } from '../../utils/staffSession'
 import { yen } from '../../utils/bookingApi'
 import { reservationSaleLines } from '../../utils/checkoutPricing'
 import { idempotencyKey } from '../../utils/ginpayApi'
@@ -132,7 +132,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   useEffect(() => {
     if (!reservationId) return
     let alive = true
-    void callStaffRpc<{ ticket_ids?: string[] } | null>('staff_reservation_ticket_plan', { p_reservation_id: reservationId })
+    // この関数だけ鍵の名前が p_token（p_staff で送ると毎回失敗して、選んだ券が最初から選ばれていなかった・11/10 Codex 検査）
+    void callRpc<{ ticket_ids?: string[] } | null>('staff_reservation_ticket_plan', { p_token: getStaffToken(), p_reservation_id: reservationId })
       .then(r => { if (alive) setPlan(Array.isArray(r?.ticket_ids) ? r.ticket_ids : []) }, () => { if (alive) setPlan([]) })
     return () => { alive = false }
   }, [reservationId])

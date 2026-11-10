@@ -591,6 +591,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       const out: { at: string; staff: Record<string, string | null> }[] = []
       const want = d.when?.kind === 'day' ? 6 : 3
+      let groupFailed = false
       for (const day of days.slice(0, 8)) {
         if (who.length === 1) {
           const st = staffOf()
@@ -598,7 +599,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           out.push(...slots.map(s => ({ at: s.starts_at, staff: { [who[0].key]: st } })))
         } else {
           // 担当ごと・メニューごとの空き → 同じ時間に、全員へ別々の担当を割り当てられる時間
-          const free = await Promise.all(who.map((_, i) => Promise.all(staffList.map(st => api.staffSlots(day, menus[i].code, st.id).then(l => new Set(l.map(x => Date.parse(x.starts_at)))).catch(() => new Set<number>())))))
+          const free = await Promise.all(who.map((_, i) => Promise.all(staffList.map(st => api.staffSlots(day, menus[i].code, st.id).then(l => new Set(l.map(x => Date.parse(x.starts_at))), () => { groupFailed = true; return new Set<number>() })))))
           const times = [...new Set(free.flatMap(per => per.flatMap(set => [...set])))].sort((a, b) => a - b)
           const ok: { at: string; staff: Record<string, string | null> }[] = []
           for (const t of times) {
@@ -610,6 +611,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         }
         if (out.length >= want) break
       }
+      // 2人以上：担当ごとの空きが通信で読めず、時間が1つも見つからんときは「空きが無い」ではなく通信の不具合（11/10 Codex 検査 ③）
+      if (groupFailed && !out.length) throw new Error('slots_unreachable')
       return out.slice(0, want)
     }
 
@@ -908,7 +911,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       // 中身（日時・メニュー・担当・差し引き）を先に、案内を最後に
       // ガチャ券を持っているのに、このご予約では使えないときは理由を一言（期限・平日だけ・メニュー。11/10 Codex 検査 ⑤）
-      const gNote = gachaHeld && !gachaFor() && me ? gachaNote(gachaHeld, d.menus.me.code, d.at) : null
+      //   お連れ様だけの予約：ご本人だけの券（割引・ゲージの券）なら、そのことを言う（11/10 Codex 検査 ⑤）
+      const gNote = !gachaHeld || gachaFor() ? null
+        : me ? gachaNote(gachaHeld, d.menus.me.code, d.at)
+        : !gachaHeld.free_menu || gachaHeld.self_only ? `ガチャ券（${gachaHeld.title}）は、ご本人のご予約で使えます。`
+        : gachaNote(gachaHeld, d.menus[d.who[0].key].code, d.at)
       const lines = [priceLines(), gNote ? `※${gNote}` : ''].filter(Boolean).join('\n')
       const a = await ask(`${slotLabel(d.at)}\n${summary()}${lines ? `\n\n${lines}` : ''}\n\n${hasOther ? '新しいご予約としてお取りします（今あるご予約はそのままです）。\n' : ''}こちらでよろしければ【${BOOK}】を押してください。`,
         [{ label: BOOK, strong: true }, ...(usable.length ? [{ label: '券を変える' }] : []), ...(mates.length ? [{ label: '人を変える' }] : []), { label: 'メニューを変える' }, ...(d.who.length === 1 && staffList.length > 1 ? [{ label: '担当を変える' }] : []), { label: '日にちを変える' }])
@@ -1001,8 +1008,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const mine = done.find(x => x.p.key === 'me')?.r
       if (mine && picked) {
         saveCouponPlan({ date: dayOf(mine.starts_at), reservationId: mine.id, ticketIds: [picked.id] })
-        ticketFailed = !(await callCustomerRpc<{ ok?: boolean; error?: string }>('customer_set_ticket_plan', { p_reservation_id: mine.id, p_ticket_ids: [picked.id] })
-          .then(r => r?.ok === true, () => false))
+        ticketFailed = !(await callCustomerRpc<{ ok?: boolean; count?: number; error?: string }>('customer_set_ticket_plan', { p_reservation_id: mine.id, p_ticket_ids: [picked.id] })
+          .then(r => r?.ok === true && r.count !== 0, () => false))
       }
       const gp = gachaFor()
       const gr = gp ? done.find(x => x.p.key === gp.key)?.r : undefined
