@@ -1020,9 +1020,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       setTyping(false)
       const okAll = done.every(x => x.r)
       if (!done.some(x => x.r)) { await say('すみません、その時間はちょうど埋まってしまいました。時間を選び直しましょう。'); d.at = null; d.plan = null; continue }
-      if (gachaFailed) await say('ガチャ券は、このご予約に付けられませんでした。券はお手元に残っていますので、ご来店のときにお会計でお見せください。')
-      if (ticketFailed) await say(`選んだ券（${picked!.title}）を、通信の具合でご予約に付けられませんでした。ご予約は取れています。ご来店のときに、お会計で券をお見せください。`)
       await say(okAll ? `ご予約を承りました！\n${slotLabel(d.at)}、お待ちしております。` : `${done.filter(x => x.r).map(x => x.p.label).join('と')}のご予約は取れました（${slotLabel(d.at)}）。\n${done.filter(x => !x.r).map(x => x.p.label).join('と')}はちょうど埋まってしまいました。お店にお電話いただけますか？`)
+      // 予約が取れたことを先に、券が付かなかった案内はそのあと（11/10 確認）
+      if (ticketFailed) await say(`ただ、選んだ券（${picked!.title}）を、通信の具合でご予約に付けられませんでした。ご来店のときに、お会計で券をお見せください。`)
+      if (gachaFailed) await say('ガチャ券も、このご予約に付けられませんでした。券はお手元に残っていますので、ご来店のときにお会計でお見せください。'.replace(/^ガチャ券も/, ticketFailed ? 'ガチャ券も' : 'ただ、ガチャ券は'))
       setBookingComplete(okAll)
       break
     }
