@@ -937,3 +937,5 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .launch-notice-main { width: 100%; min-height: 50px; border: 0; border-radius: 12px; background: #28231e; color: #f8f6f1; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
 .launch-notice-sub { width: 100%; min-height: 44px; margin-top: 6px; border: 0; background: transparent; color: #62594e; font: inherit; font-size: 15px; cursor: pointer; }
 .launch-layer.is-zero .launch-ring-arc { transition: stroke-dashoffset 0.25s ease-out, stroke 0.6s; }
+/* ログインと引き継ぎ：カードの中では、かんたんログインの上の線と余白はいらない（11/10 夜の点検） */
+.v2-account .access-settings { border-top: 0; padding-top: 0; }
