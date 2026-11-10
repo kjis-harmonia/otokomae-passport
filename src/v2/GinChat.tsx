@@ -593,7 +593,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const askMenuFor = async (p: BookPerson): Promise<Menu | null | 'changed'> => {
       // ご本人で「いつもの」を登録していないときは、ホームの「いつものでAI予約する」と同じ探し方（端末の記録・前回のご来店）にそろえる
       //   （11/10 夜の点検：ホームは「いつもの アイパー」なのに、押すと「メニューは、何にされますか？」と聞き直していた）
-      const homeCode = !p.person?.menu_code && p.key === 'me' ? (await loadUsual().catch(() => null))?.menu?.code ?? null : null
+      let homeCode: string | null = null
+      if (!p.person?.menu_code && p.key === 'me') { setTyping(true); homeCode = (await loadUsual().catch(() => null))?.menu?.code ?? null; setTyping(false) }
       const usualCode = p.person?.menu_code ?? homeCode
       const usual = usualCode ? all.find(m => m.code === usualCode) ?? null : null
       const maint = p.person?.maintenance_ok ? maintMenu : undefined
@@ -795,21 +796,27 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const a = usualSt
           ? await ask(`担当はいつもの${staffName(usualSt)}でよろしいですか？`, [{ label: YES, strong: true }, ...staffList.filter(s => s.id !== usualSt).map(s => ({ label: s.name })), { label: ANY }])
           : await ask('ご担当のご希望はありますか？', [...staffList.map(s => ({ label: s.name })), { label: ANY }])
-        const st = fromChip.current
+        let st = fromChip.current
           ? (a === ANY ? null : a === YES ? usualSt : staffList.find(s => s.name === a)?.id)
           : usualSt && intent(a) === 'yes' ? usualSt : staffIn(a)
-        if (usualSt && !fromChip.current && st === undefined && intent(a) === 'no') { usualStaffDeclined = true; continue }
+        if (usualSt && !fromChip.current && st === undefined) {
+          if (intent(a) === 'no') { usualStaffDeclined = true; continue }
+          // 「大丈夫です」「いつもので」「ええよ」なども、いつもの担当で（黙って「どちらでも」にしない・11/11 点検）
+          if (intent(a) === 'ambiguous' || /いつも|大丈夫|だいじょうぶ|お願い|おねがい|それで|そのまま/.test(a)) st = usualSt
+        }
         if (st !== undefined) {
           d.staff = st
           if (d.recheck && !d.recheck.note) d.recheck.note = st ? `担当を${staffName(st)}に変更しました。` : '担当は、どちらでも に変更しました。'
-          // 次回から選ばなくていいように、登録するか聞く（11/10 慶一郎さん）
-          if (st && st !== usualSt) {
+          // 次回から選ばなくていいように、登録するか聞く（11/10 慶一郎さん）。もういつもの担当なら聞かない
+          if (st && st !== known) {
             const r = await askYN(`次回からも${staffName(st)}で、いつもの担当に登録しておきましょうか？\n登録すると、次からは【はい】を押すだけで選べます。`, '登録する', '毎回選ぶ')
             if (r === 'yes') { setUsualStaffOf(pk, st); await say(`かしこまりました。いつもの担当を${staffName(st)}で登録しました。`) }
           }
           continue
         }
         if (await change(a)) continue
+        // いつもの担当を聞いているときは、分からない返事で勝手に「どちらでも」にしない
+        if (usualSt) { await say('担当は、下のボタンで教えてくださいね。'); continue }
         d.staff = null; continue
       }
       // いつ？
@@ -962,7 +969,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (tapped && a === '券を変える') { picked = undefined; continue }
       // 担当を変える：時間はその担当の空きで選び直し（前の時間で入れるかは確かめ直す）
       if (tapped && a === '担当を変える') { usualStaffDeclined = true; d.recheck = { at: d.at, note: '', why: '担当が変わって' }; d.staff = undefined; d.at = null; d.plan = null; continue }
-      if (tapped && a === '人を変える') { d.who = null; d.staff = undefined; d.at = null; d.plan = null; continue }
+      if (tapped && a === '人を変える') { usualStaffDeclined = false; d.who = null; d.staff = undefined; d.at = null; d.plan = null; continue }
       if (tapped && a === 'メニューを変える') {
         const pickWho = d.who.length === 1 ? '' : await ask('どなたのメニューを変えますか？', d.who.map(x => ({ label: x.label })))
         const target = d.who.length === 1 ? d.who[0] : d.who.find(p => p.label === pickWho) ?? longestIn(pickWho, d.who, p => p.name) ?? d.who[0]
@@ -1294,7 +1301,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         }
         const late = pv.cancel_late
         const gp = pv.ginpay_before
-        const a = await ask(`${who(r)}${reviewedLabel(pv.confirmation)}\nこのご予約をキャンセルしますか？${late ? '\n※開始2時間前を過ぎているので、キャンセルすると AI予約がしばらく使えなくなります。' : ''}${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻ります。` : ''}\nキャンセルする場合は、下の【キャンセルする】を押してください。`,
+        const a = await ask(`${r.companion_name ? honor(r.companion_name) + '：' : ''}${reviewedLabel(pv.confirmation)}\nこのご予約をキャンセルしますか？${late ? '\n※開始2時間前を過ぎているので、キャンセルすると AI予約がしばらく使えなくなります。' : ''}${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻ります。` : ''}\nキャンセルする場合は、下の【キャンセルする】を押してください。`,
           [{ label: 'キャンセルする', strong: true }, { label: 'やめておく' }])
         if (!(a === 'キャンセルする' && fromChip.current)) {
           // 「キャンセルして」「キャンセルお願い」はキャンセルしたいという意味（確定はボタンだけ）
