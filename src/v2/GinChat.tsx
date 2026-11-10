@@ -491,7 +491,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const d: Draft = { who: everyone.length > 1 ? null : everyone, menus: {}, when: null, at: null, plan: null, recheck: null }
     /** 空きを探す担当：1人の予約で担当を選んだときだけ（2人以上は同じ時間に別々の担当が要るので、今までどおり自動） */
     const staffOf = () => (d.who?.length === 1 ? d.staff ?? null : null)
-    let usualStaffTried = false
+    /** 「いつもの〇〇でよろしいですか？」に「いいえ」と打たれたら、次は担当の一覧で聞く */
+    let usualStaffDeclined = false
     const staffName = (id: string | null | undefined) => staffList.find(s => s.id === id)?.name ?? ''
     /** 文の中の担当（「銀二郎で」）。どちらでも・おまかせ は null、無ければ undefined */
     const staffIn = (t: string): string | null | undefined => {
@@ -770,25 +771,25 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       // 担当（1人の予約・ご来店を聞く前）：選んだ担当の空きで日時を決める（11/10 慶一郎さん）
       if (d.who.length === 1 && staffList.length > 1 && d.staff === undefined) {
-        // いつもの担当を登録している方は聞かずにその担当で（最初の1回だけ。【担当を変える】のあとは聞く）
+        // いつもの担当を登録している方にも毎回聞く：「担当はいつもの〇〇でよろしいですか？」【はい】【ほかの担当】【どちらでも】
+        //   （11/10 夜 慶一郎さん「AI が聞いてくれんと言われたらむかつく」）
         const pk = d.who[0].key
-        const usualSt = usualStaffOf(pk)
-        if (!usualStaffTried && usualSt && staffList.some(s => s.id === usualSt)) {
-          usualStaffTried = true
-          d.staff = usualSt
-          await say(`担当は、いつもの${staffName(usualSt)}で探しますね。`)
-          continue
-        }
-        usualStaffTried = true
-        const ANY = 'どちらでも'
-        const a = await ask('ご担当のご希望はありますか？', [...staffList.map(s => ({ label: s.name })), { label: ANY }])
-        const st = fromChip.current ? (a === ANY ? null : staffList.find(s => s.name === a)?.id) : staffIn(a)
+        const known = usualStaffOf(pk)
+        const usualSt = !usualStaffDeclined && known && staffList.some(s => s.id === known) ? known : null
+        const ANY = 'どちらでも', YES = 'はい'
+        const a = usualSt
+          ? await ask(`担当はいつもの${staffName(usualSt)}でよろしいですか？`, [{ label: YES, strong: true }, ...staffList.filter(s => s.id !== usualSt).map(s => ({ label: s.name })), { label: ANY }])
+          : await ask('ご担当のご希望はありますか？', [...staffList.map(s => ({ label: s.name })), { label: ANY }])
+        const st = fromChip.current
+          ? (a === ANY ? null : a === YES ? usualSt : staffList.find(s => s.name === a)?.id)
+          : usualSt && intent(a) === 'yes' ? usualSt : staffIn(a)
+        if (usualSt && !fromChip.current && st === undefined && intent(a) === 'no') { usualStaffDeclined = true; continue }
         if (st !== undefined) {
           d.staff = st
           if (d.recheck && !d.recheck.note) d.recheck.note = st ? `担当を${staffName(st)}に変更しました。` : '担当は、どちらでも に変更しました。'
           // 次回から選ばなくていいように、登録するか聞く（11/10 慶一郎さん）
           if (st && st !== usualSt) {
-            const r = await askYN(`次回からも${staffName(st)}で、いつもの担当に登録しておきましょうか？\n登録すると、次からは担当を聞かずにお探しします。`, '登録する', '毎回選ぶ')
+            const r = await askYN(`次回からも${staffName(st)}で、いつもの担当に登録しておきましょうか？\n登録すると、次からは【はい】を押すだけで選べます。`, '登録する', '毎回選ぶ')
             if (r === 'yes') { setUsualStaffOf(pk, st); await say(`かしこまりました。いつもの担当を${staffName(st)}で登録しました。`) }
           }
           continue
@@ -944,7 +945,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const tapped = fromChip.current
       if (tapped && a === '券を変える') { picked = undefined; continue }
       // 担当を変える：時間はその担当の空きで選び直し（前の時間で入れるかは確かめ直す）
-      if (tapped && a === '担当を変える') { d.recheck = { at: d.at, note: '', why: '担当が変わって' }; d.staff = undefined; d.at = null; d.plan = null; continue }
+      if (tapped && a === '担当を変える') { usualStaffDeclined = true; d.recheck = { at: d.at, note: '', why: '担当が変わって' }; d.staff = undefined; d.at = null; d.plan = null; continue }
       if (tapped && a === '人を変える') { d.who = null; d.staff = undefined; d.at = null; d.plan = null; continue }
       if (tapped && a === 'メニューを変える') {
         const pickWho = d.who.length === 1 ? '' : await ask('どなたのメニューを変えますか？', d.who.map(x => ({ label: x.label })))
