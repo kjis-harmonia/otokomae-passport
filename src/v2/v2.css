@@ -894,3 +894,6 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .lc-cal-grid button { height: 42px; border: 0; border-radius: 21px; background: none; color: var(--v2-ink); font: 600 16px/1 var(--v2-sans); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .14s ease, transform .14s ease; }
 .lc-cal-grid button:not(:disabled):active { background: #2a241d; color: #fff; transform: scale(.94); }
 .lc-cal-grid button:disabled { color: rgba(40,35,30,.22); font-weight: 400; cursor: default; }
+
+/* ログインと引き継ぎ：カードの中では、かんたんログインの上の線と余白はいらない（11/10 夜の点検） */
+.v2-account .access-settings { border-top: 0; padding-top: 0; }
