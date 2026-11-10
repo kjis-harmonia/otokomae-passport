@@ -50,6 +50,8 @@ export function GachaGauge({ state, onChange }: { state: GachaState; onChange: (
     void run(claimGauge).then(ok => { if (ok) setConfirm(false) })
   }
   const choosing = !goal || picking
+  // ポイントのため方を一言（11/10 夜の点検：初めての方は「50pt」だけ見ても、どうためるか分からなかった）
+  const howTo = 'ガチャ券を使ってご来店すると、メニュー 5,000円以上で 1pt・3,000円以上で 0.5pt たまります。'
 
   return (
     <section className="v2-gauge" aria-label="狙っている景品">
@@ -72,9 +74,10 @@ export function GachaGauge({ state, onChange }: { state: GachaState; onChange: (
             </>
           )}
           {full && held?.reserved && <small>ご予約のガチャ券を使ったあとに受け取れます。</small>}
-          {!full && <small>ガチャ券のご利用で、景品に向けてポイントがたまります。</small>}
+          {!full && <small>{howTo}</small>}
         </>
       )}
+      {choosing && <small>{howTo}</small>}
       {choosing && (
         <div className="v2-gauge-goals" role="radiogroup" aria-label="狙う景品">
           {gauge.goals.map(g => (
