@@ -472,25 +472,30 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
     )
   }
   if (choice === null && held) {
+    // 同じ券どうし（例：昨日も今日も 100円引き）は違いが期限だけ。迷わないよう、期限の長い新しい券を先に選んでおく（11/10 夜の点検）
+    const same = held.title === prize.title && gachaDays(held) === gachaDays(prize)
+    const chosen = pick ?? (same ? 'new' : null)
     return (
       <>
         <Head prize={prize} />
-        <span>ガチャ券は1枚だけお持ちいただけます。<br />どちらを残しますか？</span>
+        {same
+          ? <span>お持ちの券と同じ券です。<br />新しい券にすると、期限が30日後までのびます。</span>
+          : <span>ガチャ券は1枚だけお持ちいただけます。<br />どちらを残しますか？</span>}
         <div className="v2-gacha-pick">
-          <button type="button" aria-pressed={pick === 'new'} disabled={keeping} onClick={() => setPick('new')}>
+          <button type="button" aria-pressed={chosen === 'new'} disabled={keeping} onClick={() => setPick('new')}>
             <small className="v2-pick-label"><Sparkles size={14} aria-hidden />新しいガチャ券</small>
             <strong>{prize.title}</strong>
             <small>{gachaDays(prize)}<br />30日間有効</small>
             <em>この券に交換</em>
           </button>
-          <button type="button" aria-pressed={pick === 'old'} disabled={keeping} onClick={() => setPick('old')}>
+          <button type="button" aria-pressed={chosen === 'old'} disabled={keeping} onClick={() => setPick('old')}>
             <small className="v2-pick-label">現在お持ちのガチャ券</small>
             <strong>{held.title}</strong>
             <small>{gachaDays(held)}<br />{gachaUntil(held.expires_at)}</small>
             <em>この券を残す</em>
           </button>
         </div>
-        <button type="button" className="v2-gold-btn" disabled={!pick || keeping} onClick={() => pick && onChoose(pick)}>{keeping ? '保存しています…' : '決定する'}</button>
+        <button type="button" className="v2-gold-btn" disabled={!chosen || keeping} onClick={() => chosen && onChoose(chosen)}>{keeping ? '保存しています…' : '決定する'}</button>
         <small className="v2-gacha-fine">どちらもAI予約でご利用いただけます。<br />閉じても、あとから選べます。</small>
       </>
     )
