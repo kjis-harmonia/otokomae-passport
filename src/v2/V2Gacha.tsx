@@ -5,6 +5,8 @@
 // 3本は別の video を重ねる。次の動画が実際に動き出してから前の動画を隠す（切り替えで黒や下絵が挟まらない）。開放はタップのあと待ちを早送りで終わりまで進め、待ちの最後のコマ＝開放の最初のコマでつなぐ（11/1）。
 // iPhone は preload を守らず流しながら読むので、電波しだいでカクカクする（10/30「球体もカクカク」）。タブを開いたら3本とも先に全部読み、読み終わってからボタンを押せる。
 // 音は独立したWeb Audioのクロックでつなぐ。videoは常にミュートし、待機のループでAACの再始動やended待ちの無音を挟まない。
+import { useServerSecond } from './launchTime'
+import { launchAt, launched, launchHm, serverNow } from '../utils/launch'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronRight, Pointer, Sparkles, Volume2, X } from 'lucide-react'
 import { canUseGacha, drawGacha, gachaDays, gachaReservedLabel, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
@@ -102,17 +104,23 @@ const rewind = (v: HTMLVideoElement) => { v.pause(); v.currentTime = 0 }
 // 解禁日（11/5 慶一郎さん「ガチャ解禁は11/11って決まってる」）。それまで本番はタブを開くと「準備中」だけ出す（動画も読まない）。Staging は試すのでいつでも開く
 // サーバーも app_private.gacha_settings.opens_on より前は抽選しない（customer_gacha_draw → not_open）
 const GACHA_OPENS = '2026-11-11'
-const gachaOpen = () => isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS
+// 11/11：新しい銀二郎と同時に 12:00（launched＝サーバー時刻）で解禁。Staging も同じ（?launch=分 で確かめる）
+const gachaOpen = () => launched() && (isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS)
+const sameDay = () => new Date(launchAt() + 9 * 3600e3).toISOString().slice(0, 10) === new Date(serverNow() + 9 * 3600e3).toISOString().slice(0, 10)
 
 // 今月のラインナップも解禁日まで見せない（11/6 慶一郎さん「今月のラインナップも見れないようにして」）
-function GachaSoon() {
+function GachaSoon({ onOpen }: { onOpen: () => void }) {
+  // 12:00 になったら、開いているこの画面もガチャに切り替える（回すボタンは 12:00 まで出さない）
+  const now = useServerSecond()
+  useEffect(() => { if (gachaOpen()) onOpen() }, [now, onOpen])
+  const today = sameDay()
   return (
     <div className="v2-page">
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
-          <p className="v2-big" style={{ fontSize: 20, textAlign: 'center' }}>ただいま準備中です</p>
-          <p className="v2-note" style={{ textAlign: 'center', margin: '6px 0 0' }}>11月11日（水）からお楽しみいただけます。</p>
+          <p className="v2-big" style={{ fontSize: 20, textAlign: 'center' }}>{today ? `本日 ${launchHm()} 解禁` : 'ただいま準備中です'}</p>
+          <p className="v2-note" style={{ textAlign: 'center', margin: '6px 0 0' }}>{today ? `${launchHm()} になると、ここからガチャを回せます。` : '11月11日（水）からお楽しみいただけます。'}</p>
         </div>
       </section>
     </div>
@@ -121,7 +129,9 @@ function GachaSoon() {
 
 export function V2Gacha() {
   const [chosen, setChosen] = useState<Theme["id"] | null>(null)
-  if (!gachaOpen()) return <GachaSoon />
+  const [open, setOpen] = useState(gachaOpen)
+  const onOpen = useCallback(() => setOpen(true), [])
+  if (!open) return <GachaSoon onOpen={onOpen} />
   return <GachaScreen key={chosen ?? "auto"} chosen={chosen} onChoose={isStaging() ? setChosen : undefined} />
 }
 

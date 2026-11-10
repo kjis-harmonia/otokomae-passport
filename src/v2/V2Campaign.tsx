@@ -1,6 +1,7 @@
 // アプリを開いたときのキャンペーン（10/30 慶一郎さん：APACHI を季節限定に）。ホームの上に写真を1枚大きく出し、「この髪型でAI予約する」か「閉じる」。
 // アプリを開くたびに1回出す（タブを行き来しても出し直さない）。「次回から表示しない」にチェックして閉じたら、その端末ではもう出さない（10/30 慶一郎さん）。
 // 次のキャンペーンは CAMPAIGN を書き換える（id を変えれば、前のを止めた人にも出る）。終わりの日は決めない（ホットペッパーからアパッチが消えたら CAMPAIGN を外す・10/30 慶一郎さん）
+import { launched, launchHm } from '../utils/launch'
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Check } from 'lucide-react'
@@ -44,6 +45,8 @@ const GACHA_OPEN: Campaign = {
 }
 function pickCampaign(): Campaign {
   const d = jstToday()
+  // 当日も 12:00（launched）までは予告のまま。タイトルは「本日 12:00 ガチャ解禁」・ボタンなし（11/11）
+  if (d === GACHA_OPENS && !launched()) return { ...GACHA_SOON, id: 'gacha-2026-11-today', title: `本日 ${launchHm()} ガチャ解禁` }
   if (d < GACHA_OPENS) return GACHA_SOON
   if (d <= GACHA_NEWS_UNTIL) return GACHA_OPEN
   return APACHI
@@ -65,7 +68,7 @@ function Kaikin({ reduce }: { reduce: boolean | null }) {
         <small>ガチャ</small><img src="/gacha/kaikin-brush.png" alt="解禁" draggable={false} />
       </motion.h2>
       <motion.p className="v2-kaikin-count" {...rise(0.9)}>
-        {soon ? (n <= 1 ? <>いよいよ<b>明日</b>解禁</> : <>解禁まで あと<b>{n}</b>日</>) : jstToday() === GACHA_OPENS ? <><b>本日</b>解禁</> : <>ただいま解禁中</>}
+        {soon ? (n <= 1 ? <>いよいよ<b>明日</b>解禁</> : <>解禁まで あと<b>{n}</b>日</>) : jstToday() === GACHA_OPENS ? (launched() ? <><b>本日</b>解禁</> : <><b>本日 {launchHm()}</b> 解禁</>) : <>ただいま解禁中</>}
       </motion.p>
     </div>
   )

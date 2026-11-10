@@ -4,7 +4,7 @@
 //   - 00:00：開いている画面も読み込み直して新画面へ。読み込み後に新しい告知 →【見てみる】で銀ちゃんの案内
 //   時刻・公開時刻は utils/launch.ts（定数は公開時刻ひとつ）
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { hms, launchAt, launched, syncServerClock } from '../utils/launch'
+import { hms, launchAt, launched, launchHm, syncServerClock } from '../utils/launch'
 import { KAIKIN_DONE_EVENT, KAIKIN_FADE_KEY, kaikinSeen, markKaikinSeen, phaseAt, useServerSecond } from './launchTime'
 const RELOADS_KEY = 'ginjiro_launch_reloads'
 import { ginFlow, ginFlowConfigured } from '../utils/env'
@@ -13,8 +13,6 @@ import { BOOKING_IDLE_EVENT, bookingInFlight } from '../utils/bookingInFlight'
 const NOTICE_KEY = 'ginjiro_launch_notice_seen'
 const PRE_NOTICE_SESSION = 'ginjiro_launch_pre_seen'
 export const LAUNCH_NOTICE_EVENT = 'ginjiro:launch-notice'
-/** 公開時刻の「12:00」（日本時間） */
-const launchHm = () => new Date(launchAt() + 9 * 3600_000).toISOString().slice(11, 16)
 
 // ── 音（すべてこのアプリのために作ったもの。ほかの作品の音は使わない） ──
 let audio: AudioContext | null = null

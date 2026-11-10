@@ -86,3 +86,6 @@ export function hms(ms: number): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`
 }
+
+/** 公開時刻の「12:00」（日本時間） */
+export function launchHm(): string { return new Date(launchAt() + 9 * 3600_000).toISOString().slice(11, 16) }

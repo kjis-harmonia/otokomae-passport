@@ -1,5 +1,6 @@
 // お客様アプリ（銀二郎app）の使い方ガイド：作業ごとの手順。書き方は guideSteps.ts（店舗端末）と同じ。
 // 押す場所は各画面の data-guide。画面の中身（銀ちゃんの会話・いつもの/お連れ様・最初の案内・会計）は変えず、目印だけ付けている。
+import { launched } from '../../utils/launch'
 import { isStaging } from '../../utils/env'
 import type { GuideStep, GuideTask } from './guideSteps'
 
@@ -7,7 +8,8 @@ const g = (name: string) => `[data-guide="${name}"]`
 
 // ガチャの解禁日（V2Gacha と同じ。Staging はいつでも開いている）
 const GACHA_OPENS = '2026-11-11'
-const gachaOpen = () => isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS
+// 11/11：新しい銀二郎と同時に 12:00（launched）で解禁
+const gachaOpen = () => launched() && (isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS)
 
 // 銀ちゃんの会話（GinChat）：いま聞いていることが data-ask に入る
 //   verify・who・menu・when・time・yesno・confirm・done、話している途中は wait
