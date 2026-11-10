@@ -70,7 +70,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
             )
           })}
           {/* AI予約は受けた時点で確定。サロンボードへの転記はお店の仕事。重なったときだけお店から電話する（そのことを1行だけ） */}
-          {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、<br />お店からお電話します。</p>}
+          {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}><span style={{ display: 'inline-block' }}>万一お時間の調整が必要なときは、</span><span style={{ display: 'inline-block' }}>お店からお電話します。</span></p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
             {status === 'failed' && <ReservationRetry onRetry={reload} />}
             <button type="button" className="v2-btn v2-btn-quiet v2-glass" data-guide="next-change" onClick={() => { if (ginFlow()) { window.dispatchEvent(new Event('ginjiro:gin-change')); return } requestJohnny({ menuCode: null, label: '', manage: true }); onJohnny() }}>{ginFlow() ? '変更・キャンセル' : '変更・キャンセル（AI予約）'}</button>
@@ -109,7 +109,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
         {last && days !== null ? (
           <>
             <p style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>
-              {days > 0 ? `あと ${days} 日（${fmtDate(getNextRecommendedDate(last))} ごろ）` : days === 0 ? '今日が目安です' : `目安を ${-days} 日過ぎています`}
+              {days > 0 ? `あと${days}日（${fmtDate(getNextRecommendedDate(last))}ごろ）` : days === 0 ? '今日が目安です' : `目安を${-days}日過ぎています`}
             </p>
             <p className="v2-note" style={{ margin: '4px 0 0' }}>前回のご来店 {fmtDate(last)}。{MAINTENANCE_CYCLE_DAYS}日以内のメンテナンスカットはお得な料金です。</p>
           </>

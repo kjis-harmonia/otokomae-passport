@@ -939,3 +939,6 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .launch-layer.is-zero .launch-ring-arc { transition: stroke-dashoffset 0.25s ease-out, stroke 0.6s; }
 /* ログインと引き継ぎ：カードの中では、かんたんログインの上の線と余白はいらない（11/10 夜の点検） */
 .v2-account .access-settings { border-top: 0; padding-top: 0; }
+
+/* ログインと引き継ぎ：カードの中の余白を上下そろえる（11/11） */
+.v2-account .access-settings { padding-bottom: 0; }

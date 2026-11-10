@@ -687,8 +687,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (await change(a)) return true
       d.staff = null; return true
     }
-    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}`).join('\n')
-      + (staffOf() ? `\n担当：${staffName(staffOf())}` : '')
+    // 担当は「どちらでも」・2人以上でも、空きを探して決まった担当を出す（11/11：確認に担当が無く、予約後に初めて分かった）
+    const planned = (p: BookPerson) => staffName(d.plan?.[p.key] ?? null)
+    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}${d.who!.length > 1 && planned(p) ? `（担当：${planned(p)}）` : ''}`).join('\n')
+      + (staffOf() ? `\n担当：${staffName(staffOf())}` : d.who!.length === 1 && staffList.length > 1 ? '\n担当：どちらでも' : '')
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
     let hasOther = false
@@ -821,7 +823,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       // いつ？
       if (!d.when) {
-        const a = await ask('ご来店は、いつ頃がよろしいですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
+        const a = await ask('ご来店は、\nいつ頃がよろしいですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
         const wh = whenIn(a)
         if (wh) { d.when = wh; continue }
         if (await change(a)) continue
@@ -1354,7 +1356,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         let days: string[]
         if (dayOnly) { days = [dayOnly]; dayOnly = null }
         else {
-          const w = /土|日曜|週末/.test(action) && !/日時|日付/.test(action) ? action : await ask('ご来店は、いつ頃がよろしいですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
+          const w = /土|日曜|週末/.test(action) && !/日時|日付/.test(action) ? action : await ask('ご来店は、\nいつ頃がよろしいですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
           if (/日付|カレンダー|選ぶ/.test(w)) {
             setTyping(true); const open = await changeDays(63, false); setTyping(false)
             if (!open) return endWithoutAvailability()

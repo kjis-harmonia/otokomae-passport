@@ -253,7 +253,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       <p className="access-hint">入力なしで、すぐにログインできます。</p>
       <PasskeyLoginButton quiet disabled={submitting||authBusy} onBusyChange={setAuthBusy} onSignedIn={()=>onDone(loadMemberStatus())}/>
       {/* 同じ電話番号でも会員は二重にできてしまうので、Face ID の無い会員さんは登録し直さずお店で引き継ぐ */}
-      <p className="access-hint access-note">Face ID を設定していない方は、<br />登録し直さずに、店頭でスタッフにお声がけください。</p>
+      <p className="access-hint access-note"><span style={{ display: 'inline-block' }}>Face ID を設定していない方は、</span><span style={{ display: 'inline-block' }}>登録し直さずに、</span><span style={{ display: 'inline-block' }}>店頭でスタッフにお声がけください。</span></p>
     </section>
   </main>
 
