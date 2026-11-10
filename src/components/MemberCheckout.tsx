@@ -84,10 +84,10 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         <p style={{ fontSize: 13, fontWeight: 600, color: '#2F7D5B', margin: '0 0 4px' }}>✓ お会計が終わりました</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
           <span style={{ fontSize: 15, color: '#6B6B66' }}>お会計済み（{PAYMENT_LABEL[paid.payment_method ?? ''] ?? paid.payment_method}）</span>
-          <span style={{ fontSize: 28, fontWeight: 700, color: '#1B1B1A', fontVariantNumeric: 'tabular-nums' }}>{yen(paid.total)}</span>
+          <span style={{ fontFamily: '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN",serif', fontSize: 30, fontWeight: 700, color: '#1B1B1A', fontVariantNumeric: 'tabular-nums' }}>{yen(paid.total)}</span>
         </div>
         {error && <p style={{ marginTop: 8, fontSize: 13, color: '#b23a3a' }}>{error}</p>}
-        {!(paidWho && !paidWho.is_owner) && <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />}
+        {!(paidWho && !paidWho.is_owner) && <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} pickedName={paidWho?.menu ?? null} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />}
         {/* グループ（2名様以上）：全員のお会計が済んだら、グループ全体の完了を出す（11/10 慶一郎さん） */}
         {!next && group.length > 1 && group.every(p => p.status === 'completed') && (
           <p style={{ margin: '14px 0 0', padding: '12px 14px', borderRadius: 12, background: 'rgba(47,125,91,0.07)', color: '#2F7D5B', fontSize: 15, fontWeight: 600 }}>
@@ -148,11 +148,12 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
 
 /** 会計のあと：お客様の「いつものメニュー」を登録する（11/6 慶一郎さん「次から楽じゃない？」）。
  *  会計でメニューを選んでいればそれを出す（押すだけ）。任意金額のときは一覧から選ぶ。登録は会員の記録に残り、お客様のアプリの「いつもの」に出る */
-function UsualMenuRow({ userId, staffName, picked, loadMenus }: { userId: string; staffName: string; picked: string | null; loadMenus: () => Promise<{ id: string; name: string }[]> }) {
+function UsualMenuRow({ userId, staffName, picked, pickedName, loadMenus }: { userId: string; staffName: string; picked: string | null; pickedName?: string | null; loadMenus: () => Promise<{ id: string; name: string }[]> }) {
   const [menus, setMenus] = useState<{ id: string; name: string }[] | null>(null)
   const [code, setCode] = useState<string | null>(picked)
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  useEffect(() => { let live = true; void loadMenus().then(m => { if (live) setMenus(m) }).catch(() => { if (live) setMenus([]) }); return () => { live = false } }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // 予約のメニューで会計したとき（メニューを選び直していない）は、そのメニューを最初から選んでおく（11/10 慶一郎さんの確認）
+  useEffect(() => { let live = true; void loadMenus().then(m => { if (!live) return; setMenus(m); if (!picked && pickedName) setCode(c => c ?? m.find(x => x.name === pickedName)?.id ?? null) }).catch(() => { if (live) setMenus([]) }); return () => { live = false } }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const name = menus?.find(m => m.id === code)?.name
   const save = async () => {
     if (!code || state === 'saving') return
