@@ -7,8 +7,8 @@ export function StoreRequestNotice({mode,error,onRefresh}:{mode:StoreAccessMode;
   if(!CUSTOMER_ACCESS_ENABLED||mode==='verified')return null
   return <section className="customer-access access-settings" aria-label="来店時の本人確認">
     {/* 11/10 夜の点検：家で開いた初めての方にも「確認を待っています。この画面のままで」と出て、何か止まっているように見えた → どこで見ても正しい言い方に */}
-    <h2>AI予約は、<br />初回のご来店のあとから</h2>
-    <p>ご来店のときに、この会員QRをスタッフにお見せください。確認が済むと、AI予約ができます。</p>
+    <h2><span style={{display:'inline-block'}}>AI予約は、</span><span style={{display:'inline-block'}}>初回のご来店のあとから</span></h2>
+    <p>ご来店のときに、この会員QRをスタッフにお見せください。<span style={{display:'inline-block'}}>確認が済むと、AI予約ができます。</span></p>
     {error?<><p role="alert" className="access-error">{error}</p><button type="button" className="access-secondary" onClick={onRefresh}>確認用QRを更新</button></>:<p role="status" className="access-hint">読み取りが済むと、自動で切り替わります。</p>}
   </section>
 }
