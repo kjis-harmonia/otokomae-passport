@@ -4,7 +4,7 @@
 //   来店も登録も無いお客様には出さない。予約のメニューで推測はしない。
 import { bookingAssistantApi, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
 import { buildWelcome, type VisitRecord } from '../features/johnny/welcome'
-import { canBeUsual, fetchServerUsualMenuState, getUsualMenu, USUAL_MENU_KEY, USUAL_STAFF_KEY } from '../features/johnny/usualMenu'
+import { canBeUsual, fetchServerUsualMenuState, getUsualMenu, USUAL_MENU_KEY } from '../features/johnny/usualMenu'
 import { removeStoredValue, setStoredValue } from '../utils/storage'
 import { isStaging } from '../utils/env'
 import { STYLE_MENU_CODES } from '../data/reserveLinks'
@@ -45,7 +45,8 @@ export async function loadUsual(): Promise<Usual> {
   const state = await fetchServerUsualMenuState()
   // Staging だけ：会員の記録に無ければ端末の写しも消す（テスト会員を DB でリセットしたら、端末も登録したての状態に・11/7 慶一郎さん）
   //   本番は 11/6 より前に端末だけに登録した方がいるので消さない
-  if (state === 'none' && isStaging()) { removeStoredValue(USUAL_MENU_KEY); removeStoredValue(USUAL_STAFF_KEY) }
+  //   いつもの担当は DB に無い（端末だけ）ので消さない（担当を登録しても、ホームを開くと消えていた・11/10 Codex 検査 ③）
+  if (state === 'none' && isStaging()) removeStoredValue(USUAL_MENU_KEY)
   const server = state === 'none' || state === 'unknown' ? null : state
   if (server && canBeUsual(server.code)) {
     if (getUsualMenu()?.code !== server.code) setStoredValue(USUAL_MENU_KEY, server)

@@ -1,5 +1,6 @@
 // 登録直後の「いつものメニュー」決めで、銀ちゃん（AI）に聞く（johnny-agent の mode: usual・11/8）
 //   返事は「セリフ」と「候補の menu_code」「導線」だけ。登録はアプリが確かめてから。使えないときは null（決まった規則で続ける）
+import { politeText } from '../../v2/politeText'
 import { supabase } from '../../lib/supabase'
 import { getCustomerSession } from '../../utils/customerSession'
 import type { AgentTurn } from './agentClient'
@@ -26,7 +27,7 @@ export async function askUsualAi(message: string, history: readonly AgentTurn[],
     const d = res && !res.error ? res.data : null
     if (!d || typeof d.say !== 'string' || !d.say.trim()) return null
     return {
-      say: d.say.trim().slice(0, 120),
+      say: politeText(d.say.trim()).slice(0, 120),
       suggestions: Array.isArray(d.suggestions) ? d.suggestions.filter((c): c is string => typeof c === 'string').slice(0, 3) : [],
       ready: typeof d.ready === 'string' ? d.ready : null,
       action: d.action === 'hotpepper' || d.action === 'phone' || d.action === 'list' ? d.action : null,
