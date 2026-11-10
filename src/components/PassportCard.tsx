@@ -1,6 +1,6 @@
 import {useStoreAccess,useStoreRequest} from '../features/customerAccess/storeAccess'
 import {StoreRequestNotice} from '../features/customerAccess/StoreVerification'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { getUserId } from '../utils/userId'
 import { repairUserIdFromSession } from '../utils/customerSession'
@@ -42,6 +42,40 @@ const CARD_CSS = `
   100% { background-position:  200% center; }
 }
 `
+
+/** 会員名＋「様」を必ず1行に。入りきらなければ枠の幅に合わせて字を小さくする（11/11 慶一郎さん「ミナミの帝／王 様」と折り返した） */
+function MemberName({ name }: { name: string }) {
+  const ref = useRef<HTMLParagraphElement>(null)
+  const len = [...name].length
+  const max = len >= 7 ? 28 : len >= 5 ? 30 : 34
+  const [size, setSize] = useState(max)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const fit = () => {
+      el.style.fontSize = `${max}px`
+      const room = el.clientWidth, need = el.scrollWidth
+      const next = need > room && need > 0 ? Math.max(12, Math.floor(max * room / need * 10) / 10) : max
+      el.style.fontSize = `${next}px`
+      setSize(next)
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    void document.fonts?.ready.then(fit) // 明朝体が読み終わると幅が変わる
+    return () => ro.disconnect()
+  }, [name, max])
+  return (
+    <p ref={ref} style={{
+      fontFamily: SERIF, fontSize: size, fontWeight: 700, color: '#1c1f1d', lineHeight: 1.15, letterSpacing: '0.06em',
+      textShadow: '0 1px 0 rgba(255,255,255,0.8)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden',
+    }}>
+      {name}
+      {/* 「様」— 会員名の約52%、シルバー系。名前と一緒に縮む */}
+      <span style={{ fontSize: 'max(11px, 0.52em)', fontWeight: 300, color: 'rgba(28,31,29,0.5)', marginLeft: '0.30em', verticalAlign: 'baseline' }}>様</span>
+    </p>
+  )
+}
 
 function fmtLastVisit(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
@@ -241,33 +275,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
               <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
 
                 {/* ── 会員名 ── */}
-                {/* 長い名前は少し小さく。最後の1文字と「様」は離さない（「様」だけ次の行に落ちていた・11/9 点検） */}
-                <p style={{
-                  fontFamily: SERIF,
-                  fontSize: [...memberName].length >= 7 ? 'clamp(20px, 5.4vw, 28px)' : [...memberName].length >= 5 ? 'clamp(23px, 6.2vw, 30px)' : 'clamp(26px, 7.2vw, 34px)',
-                  fontWeight: 700,
-                  color: '#1c1f1d',
-                  lineHeight: 1.15,
-                  letterSpacing: '0.06em',
-                  textShadow: '0 1px 0 rgba(255,255,255,0.8)',
-                  marginBottom: 6,
-                  overflowWrap: 'anywhere', // 長い英字の名前も切らずに折り返す（10/30 監査 R6）
-                }}>
-                  {[...memberName].slice(0, -1).join('')}
-                  <span style={{ whiteSpace: 'nowrap' }}>
-                    {[...memberName].slice(-1).join('')}
-                    {/* 「様」— 会員名の約52%サイズ、シルバー系 */}
-                    <span style={{
-                      fontSize: 'clamp(14px, 3.6vw, 18px)',
-                      fontWeight: 300,
-                      color: 'rgba(28,31,29,0.5)',
-                      marginLeft: '0.30em',
-                      verticalAlign: 'baseline',
-                    }}>
-                      様
-                    </span>
-                  </span>
-                </p>
+                <MemberName name={memberName} />
 
                 {/* ── 会員ID（シャンパンゴールド、先頭8文字） ── */}
                 <p style={{
