@@ -14,6 +14,7 @@ import { ReservationMutationClient, reservationMenuCodes, type Confirmation, typ
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
 import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
+import { loadUsual } from './usualPicks'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
 import { askUsualAi } from '../features/johnny/usualAi'
 import { askAgentVoice, type AgentTurn } from '../features/johnny/agentClient'
@@ -589,7 +590,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
     /** その人のメニュー（いつもの・メンテナンス・ほか） */
     const askMenuFor = async (p: BookPerson): Promise<Menu | null | 'changed'> => {
-      const usual = p.person?.menu_code ? all.find(m => m.code === p.person!.menu_code) ?? null : null
+      // ご本人で「いつもの」を登録していないときは、ホームの「いつものでAI予約する」と同じ探し方（端末の記録・前回のご来店）にそろえる
+      //   （11/10 夜の点検：ホームは「いつもの アイパー」なのに、押すと「メニューは、何にされますか？」と聞き直していた）
+      const homeCode = !p.person?.menu_code && p.key === 'me' ? (await loadUsual().catch(() => null))?.menu?.code ?? null : null
+      const usualCode = p.person?.menu_code ?? homeCode
+      const usual = usualCode ? all.find(m => m.code === usualCode) ?? null : null
       const maint = p.person?.maintenance_ok ? maintMenu : undefined
       const whoText = d.who && (d.who.length > 1 || p.key !== 'me') ? `${p.label}は` : ''
       if (!usual) {
