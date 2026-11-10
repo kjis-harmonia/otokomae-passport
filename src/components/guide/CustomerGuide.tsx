@@ -7,7 +7,8 @@ import { CUSTOMER_GUIDE_OPEN_EVENT } from './guideEvents'
 // お知らせのポップアップ・ホーム画面に追加・ガチャの演出・銀ちゃんの会話が出ている間は何も出さない。
 // 銀ちゃんの会話は「銀ちゃんとAI予約する」だけ中を案内する（customerGuideSteps の inside）。
 const WORDS: GuideWords = { kicker: '使い方ガイド', title: '何をしますか？', lead: '選ぶと、押す場所を順番にご案内します。', others: 'ほかの使い方を見る' }
-const COVERS = ['.v2-campaign', '.customer-install-sheet', '.v2-gacha-stage.is-on', '[data-guide="lc"]'].join(', ')
+// 下から開く画面（☰メニュー・いつもの・お連れ様）の上にも出さない（11/10 夜の点検：お連れ様の追加の上に重なっていた）
+const COVERS = ['.v2-campaign', '.customer-install-sheet', '.v2-gacha-stage.is-on', '[data-guide="lc"]', '.v2-sheet'].join(', ')
 
 export function CustomerGuide({ paused }: { paused: boolean }) {
   return <GuideRunner ns="customer" tasks={CUSTOMER_GUIDE_TASKS} openEvent={CUSTOMER_GUIDE_OPEN_EVENT} autoTask="c-hint" paused={paused} pauseWhen={COVERS} words={WORDS} chibi />

@@ -68,6 +68,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     id: 'c-usual',
     title: 'いつものを登録・変更する',
     sub: 'ご本人のいつものメニュー',
+    inside: '.v2-sheet', // ☰メニュー・いつもの・お連れ様の中を案内する
     steps: [
       MENU_OPEN(g('people-owner-edit')),
       MENU_PEOPLE(g('people-owner-edit')),
@@ -82,6 +83,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     id: 'c-people',
     title: 'お連れ様を登録・管理する',
     sub: 'ご家族・ご友人と一緒に予約',
+    inside: '.v2-sheet',
     steps: [
       MENU_OPEN(`${g('people-add')}, ${g('people-name')}`),
       MENU_PEOPLE(`${g('people-add')}, ${g('people-name')}`),
@@ -107,6 +109,7 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     id: 'c-tickets',
     title: 'チケットを見る・使う',
     sub: '割引券・特典・プレゼント',
+    inside: '.v2-sheet',
     steps: [
       { target: g('menu-open'), text: '右上の ☰ を押してください', skipIf: `${g('menu-tickets')}, ${g('wallet')}` },
       { target: g('menu-tickets'), text: '「すべてのチケット」を押してください', skipIf: g('wallet') },
