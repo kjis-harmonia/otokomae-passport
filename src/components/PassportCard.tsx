@@ -46,33 +46,45 @@ const CARD_CSS = `
 /** 会員名＋「様」を必ず1行に。入りきらなければ枠の幅に合わせて字を小さくする（11/11 慶一郎さん「ミナミの帝／王 様」と折り返した） */
 function MemberName({ name }: { name: string }) {
   const ref = useRef<HTMLParagraphElement>(null)
+  const nameRef = useRef<HTMLSpanElement>(null)
+  const samaRef = useRef<HTMLSpanElement>(null)
   const len = [...name].length
   const max = len >= 7 ? 28 : len >= 5 ? 30 : 34
   const [size, setSize] = useState(max)
   useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
+    const el = ref.current, nm = nameRef.current, sama = samaRef.current
+    if (!el || !nm || !sama) return
+    let live = true
+    // 「様」は 11px より小さくしないので、比例の1回計算ではずれる → 入るまで数回測り直す（11/11 2回目の点検）
     const fit = () => {
-      el.style.fontSize = `${max}px`
-      const room = el.clientWidth, need = el.scrollWidth
-      const next = need > room && need > 0 ? Math.max(12, Math.floor(max * room / need * 10) / 10) : max
-      el.style.fontSize = `${next}px`
+      if (!live) return
+      let next = max
+      for (let i = 0; i < 6; i++) {
+        el.style.fontSize = `${next}px`
+        const room = el.clientWidth
+        const need = nm.scrollWidth + sama.getBoundingClientRect().width + parseFloat(getComputedStyle(sama).marginLeft || '0')
+        if (need <= room - 1 || next <= 12) break // 1px の余裕（ぴったりだと名前が押し縮められて「…」になる）
+        next = Math.max(12, Math.floor(next * (room - 2) / need * 10) / 10)
+      }
       setSize(next)
     }
     fit()
     const ro = new ResizeObserver(fit)
     ro.observe(el)
-    void document.fonts?.ready.then(fit) // 明朝体が読み終わると幅が変わる
-    return () => ro.disconnect()
+    // 明朝体が読み終わると幅が変わる（読み込みは名前を描いたあとに始まることがあるので、読み込むたびに測り直す）
+    void document.fonts?.ready.then(fit)
+    document.fonts?.addEventListener?.('loadingdone', fit)
+    return () => { live = false; ro.disconnect(); document.fonts?.removeEventListener?.('loadingdone', fit) }
   }, [name, max])
   return (
     <p ref={ref} style={{
       fontFamily: SERIF, fontSize: size, fontWeight: 700, color: '#1c1f1d', lineHeight: 1.15, letterSpacing: '0.06em',
-      textShadow: '0 1px 0 rgba(255,255,255,0.8)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden',
+      textShadow: '0 1px 0 rgba(255,255,255,0.8)', marginBottom: 6, display: 'flex', alignItems: 'baseline', whiteSpace: 'nowrap', minWidth: 0,
     }}>
-      {name}
-      {/* 「様」— 会員名の約52%、シルバー系。名前と一緒に縮む */}
-      <span style={{ fontSize: 'max(11px, 0.52em)', fontWeight: 300, color: 'rgba(28,31,29,0.5)', marginLeft: '0.30em', verticalAlign: 'baseline' }}>様</span>
+      {/* 12px でも入らない長い名前は、名前の最後を「…」に（「様」は必ず残す） */}
+      <span ref={nameRef} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+      {/* 「様」— 会員名の約52%（11px より小さくしない）、シルバー系。名前のすぐ後ろ */}
+      <span ref={samaRef} style={{ flexShrink: 0, fontSize: 'max(11px, 0.52em)', fontWeight: 300, color: 'rgba(28,31,29,0.5)', marginLeft: '0.30em' }}>様</span>
     </p>
   )
 }

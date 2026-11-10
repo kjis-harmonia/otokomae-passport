@@ -159,7 +159,7 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook, manage = false
                   <p className="v2-people-label">ご本人</p>
                   <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }} data-guide="people-owner">
                     <div className="v2-row">
-                      <span style={{ flex: 1 }}>{owner?.name ?? 'ご本人'}<small>{owner?.menu_name ? `いつもの：${owner.menu_name}` : lastMenu ? `いつもの：${lastMenu}（ご来店の記録から）` : 'いつものは、まだ決まっていません'}</small></span>
+                      <span style={{ flex: 1 }}>{owner?.name ?? 'ご本人'}<small>{owner?.menu_name ? `いつもの：${owner.menu_name}` : lastMenu ? `いつもの：${lastMenu}` : 'いつものは、まだ決まっていません'}</small></span>
                       <button type="button" className="v2-text-btn" data-guide="people-owner-edit" disabled={busy || !people} onClick={() => { setForm({ id: 'me', name: owner?.name ?? '', menu: owner?.menu_code ?? null }); setError(null); setMode('form') }}>変更</button>
                     </div>
                   </div>
