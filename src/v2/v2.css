@@ -868,7 +868,7 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .lc-head-name { margin: 0; font: 600 15px/1 var(--v2-sans); letter-spacing: .06em; color: var(--v2-ink); }
 .lc-close { top: 2px; }
 .lc-hero { display: flex; justify-content: center; margin: 4px 0 2px; }
-.lc-row { display: flex; align-items: flex-start; gap: 8px; max-width: 96%; } /* 88% だと「ご来店は、いつ頃がええですか？」程度でも折り返した（11/9 磨き） */
+.lc-row { display: flex; align-items: flex-start; gap: 8px; max-width: 96%; } /* 88% だと「ご来店は、いつ頃がよろしいですか？」程度でも折り返した（11/9 磨き） */
 .lc-row-head { margin-top: 6px; }
 .lc-col { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
 /* 銀ちゃんのアイコン（金の縁は絵に入っているので、こちらでは縁を足さない・11/8 慶一郎さんの絵） */
