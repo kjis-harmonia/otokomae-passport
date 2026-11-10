@@ -420,7 +420,8 @@ function MemberTicketWallet({
       setTransferTicket(ticket)
     } catch (err) {
       setDetailId(null)
-      setXferError(err instanceof Error ? err.message : '渡す処理が失敗しました。')
+      // 日本語の理由だけそのまま出す（英語のエラー文はお客様に出さない・11/10 夜の点検）
+      setXferError(err instanceof Error && /[ぁ-んァ-ヶ一-龠]/.test(err.message) ? err.message : '渡す処理ができませんでした。電波の良いところで、もう一度お試しください。')
     } finally {
       setXferring(false)
     }
