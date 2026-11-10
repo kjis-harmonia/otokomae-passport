@@ -77,6 +77,8 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   if (paid) {
     // 2名様以上：受付済みでまだ会計していない方がいれば、その方の会計へ（メニュー・担当は予約から）
     const next = party.filter(p => UNPAID.includes(p.status) && p.id !== paidWho?.id).sort((a, b) => Number(b.is_owner) - Number(a.is_owner))[0]
+    /** ご来店のグループ（受付した方。来ていない方・取消は入れない） */
+    const group = party.filter(p => [...UNPAID, 'completed'].includes(p.status))
     return (
       <div data-guide="paid" style={{ textAlign: 'left', fontFamily: UI }}>
         <p style={{ fontSize: 13, fontWeight: 600, color: '#2F7D5B', margin: '0 0 4px' }}>✓ お会計が終わりました</p>
@@ -86,9 +88,17 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         </div>
         {error && <p style={{ marginTop: 8, fontSize: 13, color: '#b23a3a' }}>{error}</p>}
         {!(paidWho && !paidWho.is_owner) && <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />}
+        {/* グループ（2名様以上）：全員のお会計が済んだら、グループ全体の完了を出す（11/10 慶一郎さん） */}
+        {!next && group.length > 1 && group.every(p => p.status === 'completed') && (
+          <p style={{ margin: '14px 0 0', padding: '12px 14px', borderRadius: 12, background: 'rgba(47,125,91,0.07)', color: '#2F7D5B', fontSize: 15, fontWeight: 600 }}>
+            ✓ {group.length}名様のお会計がすべて終わりました
+          </p>
+        )}
         <button type="button" disabled={loading} onClick={() => { setPaid(null); setPickedMenu(null); setPaidWho(null); void open(true) }}
-          style={{ width: '100%', marginTop: 12, minHeight: 46, borderRadius: 10, background: '#ffffff', border: '1px solid #D9D9D4', color: '#1B1B1A', fontFamily: UI, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
-          {next ? `次：${next.name}様のお会計${next.menu ? `（${next.menu}）` : ''}` : 'もう1件お会計する（お子様・お連れ様）'}
+          style={next
+            ? { width: '100%', marginTop: 14, minHeight: 54, borderRadius: 14, background: '#161513', border: 'none', color: '#F2E6CC', fontFamily: UI, fontSize: 17, fontWeight: 600, cursor: 'pointer' }
+            : { width: '100%', marginTop: 12, minHeight: 46, borderRadius: 10, background: '#ffffff', border: '1px solid #D9D9D4', color: '#1B1B1A', fontFamily: UI, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+          {next ? `次：${next.name}様のお会計${next.menu ? `（${next.menu}）` : ''}` : 'もう1件お会計する（予約のない方）'}
         </button>
       </div>
     )

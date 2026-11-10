@@ -443,28 +443,49 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     if (hasPendingBookingConfirmation()) return checkPreviousBooking()
     // もうご予約があるのに、何も言わずに新しい予約を始めていた（11/10 慶一郎さん「予約確定してもう一度AI予約したら、いつもの文章」）
     //   → 先に今のご予約を伝えて、もう1件か・変更かを選んでもらう
-    if (askExisting) {
-      const mine = await api.reservations().catch(() => null)
-      const upcoming = Array.isArray(mine) ? mine.filter(r => r.status === 'confirmed' && isUpcoming(r)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
-      if (upcoming.length) {
-        const r = upcoming[0]
-        const what = `${r.companion_name ? honor(r.companion_name) + 'の' : ''}${slotLabel(r.starts_at)} ${r.items.map(i => i.name).join('・')}`
-        const MORE = 'もう1件予約する', CHANGE = '今の予約を変更する'
-        const a = await ask(`今、${what}のご予約が入っていますよ${upcoming.length > 1 ? `（ほかに${upcoming.length - 1}件）` : ''}。\nどうされますか？`,
-          [{ label: MORE, strong: true }, { label: CHANGE }, { label: '閉じる' }])
-        if (a === CHANGE || (!fromChip.current && /変更|変え|キャンセル|取り消/.test(a))) return runChange()
-        if (fromChip.current && a === '閉じる') return onClose()
-      }
-    }
+    // 予約は「1人につき1件まで」（11/10 慶一郎さん「原則、1名につき一回の予約まで」）。
+    //   もう予約がある方は、新しい予約の人に入れない。変更は「今の予約を変更する」から
     const people = known ?? await fetchPeople().catch(() => null)
     const owner: BookPerson = { key: 'me', id: null, name: people?.owner?.name ?? 'ご本人', label: 'ご本人', person: people?.owner ?? null }
-    const mates: BookPerson[] = (people?.companions ?? []).filter(c => c.id).map(c => ({ key: c.id!, id: c.id!, name: c.name, label: honor(c.name), person: c }))
-    const everyone = [owner, ...mates]
+    const allMates: BookPerson[] = (people?.companions ?? []).filter(c => c.id).map(c => ({ key: c.id!, id: c.id!, name: c.name, label: honor(c.name), person: c }))
+    const mineNow = await api.reservations().catch(() => null)
+    const upcoming = Array.isArray(mineNow) ? mineNow.filter(r => r.status === 'confirmed' && isUpcoming(r)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
+    /** もう予約がある人（ご本人は 'me'、お連れ様はその id） */
+    const booked = new Set(upcoming.flatMap(r => (r.companion_id ? [r.companion_id] : !r.companion_of && !r.companion_name ? ['me'] : [])))
+    const ownerFree = !booked.has('me')
+    const mates = allMates.filter(p => !booked.has(p.key))
+    const whatOf = (r: CustomerReservation) => `${r.companion_name ? honor(r.companion_name) + 'の' : ''}${slotLabel(r.starts_at)} ${r.items.map(i => i.name).join('・')}`
+    /** お連れ様が登録されていない：会話を閉じて「お連れ様を登録」のガイドを出す */
+    const guidePeople = async () => {
+      await say('お連れ様のご予約は、先にお連れ様を登録すると取れます。\n登録の場所をご案内しますね。')
+      await pause(900)
+      onClose()
+      window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-people' } }))
+    }
+    if (askExisting && upcoming.length) {
+      const r = upcoming[0]
+      const CHANGE = '今の予約を変更する', MATE = 'お連れ様の予約をする'
+      const a = await ask(`今、${whatOf(r)}のご予約が入っていますよ${upcoming.length > 1 ? `（ほかに${upcoming.length - 1}件）` : ''}。\n${ownerFree ? '' : 'ご予約は、お一人さま1件までです。'}どうされますか？`,
+        [...(ownerFree ? [{ label: 'もう1件予約する', strong: true }] : []), { label: CHANGE, strong: !ownerFree }, { label: MATE }, { label: '閉じる' }])
+      if (a === CHANGE || (!fromChip.current && /変更|変え|キャンセル|取り消/.test(a))) return runChange()
+      if (fromChip.current && a === '閉じる') return onClose()
+      if (a === MATE || (!fromChip.current && /連れ|家族|子/.test(a))) {
+        if (!allMates.length) return guidePeople()
+        if (!mates.length) { await say('ご登録のお連れ様は、みなさんもうご予約があります。変更は「今の予約を変更する」からどうぞ。'); return endChange() }
+      } else if (!ownerFree) {
+        await say('ご予約は、お一人さま1件までです。日時やメニューを変えるときは「今の予約を変更する」からどうぞ。'); return endChange()
+      }
+    }
+    if (!ownerFree && !mates.length) {
+      if (!allMates.length) return guidePeople()
+      await say('みなさん、もうご予約があります。日時やメニューを変えるときは「次回予約」の「変更・キャンセル」からどうぞ。'); return endChange()
+    }
+    const everyone = [...(ownerFree ? [owner] : []), ...mates]
     const opts = await api.options().catch(() => null)
     const all = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : menusRef.current
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const staffList = opts?.staff ?? []
-    const d: Draft = { who: mates.length ? null : [owner], menus: {}, when: null, at: null, plan: null, recheck: null }
+    const d: Draft = { who: everyone.length > 1 ? null : everyone, menus: {}, when: null, at: null, plan: null, recheck: null }
     /** 空きを探す担当：1人の予約で担当を選んだときだけ（2人以上は同じ時間に別々の担当が要るので、今までどおり自動） */
     const staffOf = () => (d.who?.length === 1 ? d.staff ?? null : null)
     let usualStaffTried = false
@@ -486,7 +507,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (/全員|みんな|皆|[2２二]人とも|[3３三]人とも|一緒/.test(s)) return everyone.slice(0, 3)
       // 長い名前に含まれる短い名前は数えない（「太郎丸だけ」で太郎まで選ばれていた・11/9 Codex 検査 高）
       const hit = namesIn(s, mates, p => p.name.replace(/(さん|様|ちゃん|くん|君)$/, ''))
-      const me = /本人|わし|自分|私|僕|俺|お母さん本人/.test(s)
+      const me = ownerFree && /本人|わし|自分|私|僕|俺|お母さん本人/.test(s)
       const list = [...(me ? [owner] : []), ...hit]
       return list.length ? list.slice(0, 3) : null
     }
@@ -557,7 +578,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const askMenuFor = async (p: BookPerson): Promise<Menu | null | 'changed'> => {
       const usual = p.person?.menu_code ? all.find(m => m.code === p.person!.menu_code) ?? null : null
       const maint = p.person?.maintenance_ok ? maintMenu : undefined
-      const whoText = d.who && d.who.length > 1 ? `${p.label}は` : ''
+      const whoText = d.who && (d.who.length > 1 || p.key !== 'me') ? `${p.label}は` : ''
       if (!usual) {
         const m = await hearMenu(p.id ? { kind: 'mate', id: p.id, name: p.name } : { kind: 'me' }, `${whoText ? `${p.label}の` : ''}メニューは、何にされますか？`, null)
         return m
@@ -678,7 +699,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         `お支払い予定 ${yen(Math.max(0, sum - tOff - gOff))}`,
       ].join('\n')
     }
-    const canCreate = async (persons: BookPerson[], startsAt: string) => {
+    const canCreate = async (persons: BookPerson[]) => {
       const mine = await api.reservations().catch(() => null)
       if (!Array.isArray(mine)) {
         await say('今のご予約を確認できませんでした。通信を確認してから、もう一度お試しください。')
@@ -687,15 +708,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       // 「今あるご予約はそのままです」は、ほかに予約があるときだけ言う（11/9）
       hasOther = mine.some(r => isUpcoming(r) && r.status === 'confirmed')
-      const starts = Date.parse(startsAt)
-      const existing = persons.filter(p => {
-        const ends = starts + d.menus[p.key].duration_min * 60000
-        return mine.some(r => isUpcoming(r) && (
-          p.id ? r.companion_id === p.id : !r.companion_id && !r.companion_of && !r.companion_name
-        ) && Date.parse(r.starts_at) < ends && starts < Date.parse(r.ends_at))
-      })
+      // 1人1件：日時に関係なく、もう予約がある方は新しく取らない（会話の途中に別の端末で取った場合も・11/10 慶一郎さん）
+      const existing = persons.filter(p => mine.some(r => isUpcoming(r) && r.status === 'confirmed' && (
+        p.id ? r.companion_id === p.id : !r.companion_id && !r.companion_of && !r.companion_name
+      )))
       if (existing.length === 0) return true
-      const a = await ask(`${existing.map(p => p.label).join('と')}のご予約がこの時間帯にあります。今のご予約を動かす場合は、予約変更へお進みください。`, [
+      const a = await ask(`${existing.map(p => p.label).join('と')}は、もうご予約があります。ご予約はお一人さま1件までです。\n日時やメニューを変える場合は、予約変更へお進みください。`, [
         { label: '予約変更へ', strong: true }, { label: '閉じる' },
       ])
       if (fromChip.current && a === '予約変更へ') await runChange()
@@ -709,8 +727,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         //   ご本人だけ → ご本人と〇〇さん（2人） → 3人とも → 〇〇さんだけ の順。読み取りは whoIn（「と」「だけ」「とも」）
         // 押したボタンは、言葉から読み直さずに人を直接つなぐ（名前の部分一致で別の人まで入っていた・11/9 Codex 検査 高）
         const byChip = new Map<string, BookPerson[]>([
-          ['ご本人だけ', [owner]],
-          ...mates.map(p => [`ご本人と${p.label}`, [owner, p]] as [string, BookPerson[]]),
+          // もう予約があるご本人は入れない（1人1件・11/10）
+          ...(ownerFree ? [['ご本人だけ', [owner]] as [string, BookPerson[]], ...mates.map(p => [`ご本人と${p.label}`, [owner, p]] as [string, BookPerson[]])] : []),
+          ...(!ownerFree && mates.length === 2 ? [[`${mates[0].label}と${mates[1].label}`, mates] as [string, BookPerson[]]] : []),
           ...(everyone.length === 3 ? [['3人とも', everyone.slice(0, 3)] as [string, BookPerson[]]] : []),
           ...mates.map(p => [`${p.label}だけ`, [p]] as [string, BookPerson[]]),
         ])
@@ -719,7 +738,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const w = (fromChip.current ? byChip.get(a) : undefined) ?? whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
         if (w) { d.who = w; continue }
         if (await change(a)) continue
-        d.who = [owner]; continue
+        d.who = ownerFree ? [owner] : [mates[0]]; continue
       }
       // メニュー（決まっとらん人だけ）
       const need = d.who.find(p => !d.menus[p.key])
@@ -884,7 +903,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (await change(a)) continue
         continue
       }
-      if (!await canCreate(d.who, d.at)) return
+      if (!await canCreate(d.who)) return
       const BOOK = 'この内容で予約する'
       // 券：決める前に、お持ちの券から選んでもらう（11/10 慶一郎さん）。券はご本人のもの＝ご本人の予約があるときだけ。
       //   期限・条件は「ご来店の日時・メニュー」で判定（11/10 Codex 再検査）
@@ -952,7 +971,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         continue
       }
       // 予約：1人ずつ押さえて確定（ご本人が先。お連れ様はご本人の予約につなぐ）
-      if (!await canCreate(d.who, d.at)) return
+      if (!await canCreate(d.who)) return
       const access = await checkBookingAccess(session)
       if (access === 'closed') return
       if (access === 'retried') continue

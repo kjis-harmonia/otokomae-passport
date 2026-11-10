@@ -133,6 +133,16 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     return () => window.removeEventListener(SYNC_EVENT, sync)
   }, [ns])
 
+  // ほかの画面から決まった案内を始める（銀ちゃん：お連れ様が未登録なら「お連れ様を登録」の案内・11/10）
+  useEffect(() => {
+    const runTask = (e: Event) => {
+      const d = (e as CustomEvent<{ ns?: string; task?: string }>).detail
+      if (d?.ns === ns && d.task && tasks.some(t => t.id === d.task)) setShared(ns, { task: d.task, step: 0 })
+    }
+    window.addEventListener('ginjiro-guide:run', runTask)
+    return () => window.removeEventListener('ginjiro-guide:run', runTask)
+  }, [ns, tasks])
+
   // 開くボタン・初めての端末
   useEffect(() => {
     const open = () => setChoosing(true)
