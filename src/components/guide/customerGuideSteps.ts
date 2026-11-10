@@ -9,7 +9,8 @@ const g = (name: string) => `[data-guide="${name}"]`
 // ガチャの解禁日（V2Gacha と同じ。Staging はいつでも開いている）
 const GACHA_OPENS = '2026-11-11'
 // 11/11：新しい銀二郎と同時に 12:00（launched）で解禁
-const gachaOpen = () => launched() && (isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS)
+// Staging はいつでも回せる（試すため）。本番は 12:00（launched）まで閉じたまま（11/11 慶一郎さん）
+const gachaOpen = () => isStaging() || (launched() && new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS)
 
 // 銀ちゃんの会話（GinChat）：いま聞いていることが data-ask に入る
 //   verify・who・menu・when・time・yesno・confirm・done、話している途中は wait
