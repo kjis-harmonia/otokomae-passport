@@ -9,7 +9,7 @@ const isStaging = () => import.meta.env.VITE_APP_ENV === 'staging'
 export const GIN_LAUNCH_AT = '2026-11-11T12:00:00+09:00'
 
 const COUNTDOWN_MS = 60_000 // 3時間前からの帯は出さない（11/11 慶一郎さん「帯やめて」）。全画面の時計（60秒前）だけ
-const FULLSCREEN_MS = 60_000 // 60秒前から画面いっぱいの時計
+const FULLSCREEN_MS = 0 // 全画面の時計は出さない（11/11 慶一郎さん：Vercel の回数のため演出は作らない）。12:00 に筆文字の「解禁」だけ出して新しい画面へ
 const BACKDOOR_USER_IDS = ['u-8ecabf88182ba1f9351805f1', 'u-4aa4b95cf293253a2915bbc0'] // 平田慶一郎（Staging の会員・本番 iPhone の会員 U-4AA4B9）
 
 const OVERRIDE_KEY = 'ginjiro_launch_override'
