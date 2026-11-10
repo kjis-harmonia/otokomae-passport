@@ -40,7 +40,7 @@ const MUTE = '#A1A19B'
 const LINE = '#D9D9D4'
 const HAIR = '#ECECE8'
 const OK = '#2F7D5B'
-const GROUP: React.CSSProperties = { background: '#FFFFFF', borderRadius: 16, border: `1px solid ${HAIR}` }
+const GROUP: React.CSSProperties = { background: '#FFFFFF', borderRadius: 20, boxShadow: '0 0 0 1px rgba(28,24,18,0.04), 0 1px 2px rgba(28,24,18,0.04), 0 14px 36px rgba(28,24,18,0.07)' }
 
 /** 畳んだ行（押すと開く）。iOS の設定画面の行と同じ形 */
 function DisclosureRow({ label, value, open, onClick }: { label: string; value?: string; open: boolean; onClick: () => void }) {
@@ -941,8 +941,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           <div data-guide="member-result">
             {/* ── お客様（1〜2行）。お会計をすぐ下に出す（11/10 慶一郎さん「下までスクロールせんと見れん」「Apple風で」） ── */}
             <section aria-label="お客様" style={{ padding: '2px 4px 16px', fontFamily: UI }}>
-              <h2 style={{ margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.25, color: INK }}>
-                {scannedData.name}<span style={{ fontSize: 16, fontWeight: 500, marginLeft: 4 }}>様</span>
+              <h2 style={{ margin: 0, fontFamily: SERIF, fontSize: 30, fontWeight: 700, letterSpacing: '0.04em', lineHeight: 1.25, color: INK }}>
+                {scannedData.name}<span style={{ fontSize: 16, fontWeight: 500, marginLeft: 6 }}>様</span>
               </h2>
               <p style={{ margin: '6px 0 0', fontSize: 14, lineHeight: 1.6, color: SUB }}>
                 {checkInStatus === 'done' && checkInDate
@@ -979,7 +979,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
             {useError && <p role="alert" style={{ color: '#b23a3a', marginBottom: 14 }}>{useError}</p>}
 
             {/* ── お会計（画面の主役） ── */}
-            <section aria-label="お会計" style={{ ...GROUP, padding: '16px 18px 20px', marginBottom: 20 }}>
+            <section aria-label="お会計" style={{ ...GROUP, padding: '20px 20px 22px', marginBottom: 20 }}>
               {checkInStatus === 'done' && checkInDate ? (
                 /* メニューはお会計の中で選ぶ。券は会計確定と同時に使用済みにする */
                 <MemberCheckout

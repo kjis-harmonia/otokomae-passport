@@ -10,6 +10,8 @@ import {
   type Catalog, type CatalogItem, type CheckoutApi, type CheckoutContext, type CheckoutTicket, type PaymentMethod, type Sale, type SaleLine,
 } from '../../utils/checkoutApi'
 import { PrimaryButton } from './ledgerUi'
+// 店舗端末の会計（quick）の合計だけ明朝（11/10 慶一郎さん「もっとゴージャスに、美しく」）
+const MINCHO = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN",serif'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
 import { playCue } from '../../audio/cue'
 import { isPermOnlyCoupon } from '../../utils/welcomeCoupon'
@@ -316,7 +318,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
             <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
               {/* お客様・担当 */}
               {/* 店舗端末（quick）で予約から開いたときは、お名前は上の行に出ているので繰り返さない */}
-              {quick && ctx.reservation ? null : ctx.reservation || clientInfo || anonymous ? (
+              {quick && (ctx.reservation || clientInfo) ? null : ctx.reservation || clientInfo || anonymous ? (
                 <div data-guide="co-client-picked" style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
                   <h1 style={{ fontSize: 22, fontWeight: 600 }}>{clientInfo?.name ?? ctx.reservation?.customer_name ?? '匿名'}</h1>
                   {!ctx.reservation && <button type="button" onClick={() => { setClient(undefined); setAnonymous(false); setTicketIds([]); setGinpayAccountId(null); setMethod(m => m === 'ginpay' ? null : m) }} style={{ ...linkStyle, minHeight: 32, marginLeft: 'auto' }}>変更</button>}
@@ -477,7 +479,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 // 11/10 慶一郎さん「Apple風で気持ちよく」：黒地・金のグラデーションをやめて、白地に黒の数字。色は支払い方法の小さな印だけ
                 const row = { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 15, lineHeight: 1.9, fontVariantNumeric: 'tabular-nums' } as const
                 return (
-                  <div role="status" aria-label={`${title} ${totalLabel} ${ready ? yen(Math.max(0, totals.total)) : ''}`} style={{ marginTop: 20, paddingTop: 14, borderTop: `1px solid ${C.text}` }}>
+                  <div role="status" aria-label={`${title} ${totalLabel} ${ready ? yen(Math.max(0, totals.total)) : ''}`} style={{ marginTop: 22, paddingTop: 16, borderTop: '1px solid rgba(168,130,63,0.45)' }}>
                     {ready && totals.discount > 0 && (
                       <div style={{ marginBottom: 6 }}>
                         <div style={{ ...row, color: C.sub }}><span>料金</span><span>{yen(totals.subtotal)}</span></div>
@@ -486,8 +488,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                       </div>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-                      <span style={{ fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap' }}>{totalLabel}</span>
-                      <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>{ready ? yen(Math.max(0, totals.total)) : '—'}</span>
+                      <span style={{ fontSize: 13, letterSpacing: '0.08em', color: C.sub, whiteSpace: 'nowrap' }}>{totalLabel}</span>
+                      <span style={{ fontFamily: MINCHO, fontSize: 44, fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>{ready ? yen(Math.max(0, totals.total)) : '—'}</span>
                     </div>
                     <p style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '8px 0 0', fontSize: 13, lineHeight: 1.6, color: C.sub }}>
                       <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, transform: 'translateY(-1px)', background: ready ? accent : C.lineStrong }} />
@@ -574,7 +576,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       {(ctx || attempt) && !attemptError && (
         <div style={quick ? { marginTop: 16 } : { flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div data-guide="co-confirm" style={quick ? undefined : { maxWidth: 640, margin: '0 auto' }}>
-            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : quick && method === 'cash' ? `現金 ${yen(Math.max(0, totals.total))} を受け取って会計を確定` : quick && method === 'ginpay' ? `銀Payで会計を確定 ${yen(Math.max(0, totals.total))}` : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)} style={quick && !(busy || (attempt ? !matchesAttempt : !canConfirm)) ? { minHeight: 56, borderRadius: 14, background: '#161513', color: '#F2E6CC', fontSize: 17, letterSpacing: '0.04em' } : quick ? { minHeight: 56, borderRadius: 14 } : undefined}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : quick && method === 'cash' ? `現金 ${yen(Math.max(0, totals.total))} を受け取って会計を確定` : quick && method === 'ginpay' ? `銀Payで会計を確定 ${yen(Math.max(0, totals.total))}` : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
       )}
