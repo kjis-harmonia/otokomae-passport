@@ -940,7 +940,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         // 同じ券（名前・金額が同じ）は1つのボタンにまとめる
         const groups = [...new Map(usable.map(t => [`${t.title}|${t.amount}`, t])).values()]
         const label = (t: TicketRow) => groups.filter(x => x.title === t.title).length > 1 ? `${t.title}（${yen(t.amount)}）` : t.title
-        const a = await ask(`お持ちの券を、このご予約で使いますか？\nご来店のときのお会計で差し引きます。`,
+        // 2人以上のときは、券が付くのはご本人の予約だけと分かるように（11/10 夜の点検）
+        const a = await ask(`お持ちの券を、${d.who.length > 1 ? 'ご本人の' : 'この'}ご予約で使いますか？\nご来店のときのお会計で差し引きます。`,
           [...groups.map(t => ({ label: label(t), sub: `−${yen(t.amount)}`, strong: groups.length === 1 })), { label: NO_TICKET }])
         if (fromChip.current) { picked = groups.find(t => label(t) === a) ?? null; continue }
         if (await change(a)) continue
@@ -1234,7 +1235,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     }
     let r = requested ?? list[0]
     if (!requested && list.length > 1) {
-      const choices = list.map((x, i) => ({ label: `${i + 1}. ${label(x)}` }))
+      // ボタンは「どなた」を大きく、日時・メニューは下の小さい字に（11/10 夜の点検：番号つきの長い1行が折り返して読みにくかった）
+      const choices = list.map(x => ({ label: `${x.companion_name ? honor(x.companion_name) : 'ご本人'}：${slotLabel(x.starts_at)}`, sub: x.items.map(i => i.name).join('・') }))
       for (;;) {
         const a = await ask('ご予約の変更・キャンセルですね。\nどのご予約にしますか？', choices)
         const index = choices.findIndex(x => x.label === a)
