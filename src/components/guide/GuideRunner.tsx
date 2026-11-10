@@ -233,20 +233,32 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
         return
       }
       if (step.label) { const t = (el.querySelector(step.label) ?? el).textContent?.trim() ?? ''; setLabel(t) }
-      const r = el.getBoundingClientRect()
+      // お客様アプリ：縦に長い一覧（狙う景品・メニューなど）を押す手順は、一番上の1つだけ光らせる（11/11：一覧の下がカードに隠れていた）
+      let focus: HTMLElement = el
+      if (chibi && !step.read && el.getBoundingClientRect().height > window.innerHeight * 0.4) {
+        const first = el.querySelector<HTMLElement>('button:not([disabled]), [role="radio"], a[href], li')
+        if (first && first.getBoundingClientRect().height > 0) focus = first
+      }
+      const r = focus.getBoundingClientRect()
       const key = `${runTask}:${at}`
-      // 見えていなければ真ん中までスクロール（手順ごとに1回）
-      if (scrolledFor.current !== key && (r.top < 64 || r.bottom > window.innerHeight - 150 || r.left < 0 || r.right > window.innerWidth)) {
+      // 見えていなければスクロール（手順ごとに1回）。お客様アプリは、下のカード（吹き出し）と下のタブの高さぶん空けて、隠れない所まで
+      const bubbleH = chibi ? (bubbleRef.current?.getBoundingClientRect().height ?? 120) : 0
+      const navEl = chibi ? document.querySelector<HTMLElement>('.v2-nav') : null
+      const navH = navEl && !findVisible('[data-guide="lc"]') ? window.innerHeight - navEl.getBoundingClientRect().top : 0
+      const bottomRoom = chibi ? bubbleH + navH + 20 : 150
+      if (scrolledFor.current !== key && (r.top < 64 || r.bottom > window.innerHeight - bottomRoom || r.left < 0 || r.right > window.innerWidth)) {
         scrolledFor.current = key
-        // 見える所（上 64px・下 150px を除く）より高い枠は、真ん中に合わせると一番上が隠れるので上に合わせる
-        const tall = r.height > window.innerHeight - 214
+        // 見える所より高い枠は、真ん中に合わせると一番上が隠れるので上に合わせる
+        const tall = r.height > window.innerHeight - 64 - bottomRoom
         //   上に合わせるときは、枠の上の線と 👇 が見えるよう少し空ける（ちび銀ちゃんは枠の右上の角に座るので、その分も空ける）
-        const margin = el.style.scrollMarginTop
-        if (tall) el.style.scrollMarginTop = `${chibi ? 24 + CHIBI.h : 24}px`
+        const mt = focus.style.scrollMarginTop, mb = focus.style.scrollMarginBottom
+        focus.style.scrollMarginTop = `${chibi ? 24 + CHIBI.h : 24}px`
+        focus.style.scrollMarginBottom = `${bottomRoom}px`
         // 画面より横に長い枠（髪型の種類のボタンの列など）は、真ん中に合わせると先頭のボタン（昭和の漢）が左に隠れるので左に合わせる（11/7）
         const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
-        el.scrollIntoView({ block: tall ? 'start' : 'center', inline: r.width >= window.innerWidth - 1 ? 'start' : 'center', behavior })
-        if (tall) el.style.scrollMarginTop = margin
+        const block = tall || r.top < 64 ? 'start' : chibi ? 'end' : 'center'
+        focus.scrollIntoView({ block, inline: r.width >= window.innerWidth - 1 ? 'start' : 'center', behavior })
+        focus.style.scrollMarginTop = mt; focus.style.scrollMarginBottom = mb
       }
       setRect(prev => prev && prev.top === r.top && prev.left === r.left && prev.width === r.width && prev.height === r.height
         ? prev : { top: r.top, left: r.left, width: r.width, height: r.height })
@@ -373,15 +385,29 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
           </div>}
         </>
       )}
-      <div ref={bubbleRef} className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite" style={bubbleTop ? undefined : aboveNav}>
-        <p className="gd-count">{task.title}</p>
-        <p className="gd-text">{alt ? alt.text : step.label ? step.text.replace('{label}', label) : step.text}</p>
-        {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}
-        <div className="gd-actions">
-          <button type="button" className="gd-ghost" onClick={stop}>ガイドを終わる</button>
-          {step.next && <button type="button" className="gd-main" onClick={pressNext}>{step.nextLabel ?? '次へ'}</button>}
+      {chibi ? (
+        // お客様アプリ：小さいカード（見出しと一言だけ）。終わるは右上の ×（11/11：一覧の下が隠れていた）
+        <div ref={bubbleRef} className={`gd-bubble gd-compact ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite" style={bubbleTop ? undefined : aboveNav}>
+          <button type="button" className="gd-x" aria-label="ガイドを終わる" onClick={stop}>×</button>
+          <div className="gd-compact-row">
+            <div className="gd-compact-text">
+              <p className="gd-text">{alt ? alt.text : step.label ? step.text.replace('{label}', label) : step.text}</p>
+              {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}
+            </div>
+            {step.next && <button type="button" className="gd-main" onClick={pressNext}>{step.nextLabel ?? '次へ'}</button>}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div ref={bubbleRef} className={`gd-bubble ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite" style={bubbleTop ? undefined : aboveNav}>
+          <p className="gd-count">{task.title}</p>
+          <p className="gd-text">{alt ? alt.text : step.label ? step.text.replace('{label}', label) : step.text}</p>
+          {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}
+          <div className="gd-actions">
+            <button type="button" className="gd-ghost" onClick={stop}>ガイドを終わる</button>
+            {step.next && <button type="button" className="gd-main" onClick={pressNext}>{step.nextLabel ?? '次へ'}</button>}
+          </div>
+        </div>
+      )}
     </>,
     layer && layer.isConnected ? layer : document.body,
   )

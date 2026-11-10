@@ -157,11 +157,11 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
       { target: g('gauge-goals'), optional: true, text: '狙う景品を押してください', sub: '上ほど高い景品で、必要なポイントが多くなります。あとから「変える」で選び直せます。' },
       {
         target: g('gauge-month'), optional: true, next: true, read: true, text: 'ガチャを回すと、ここが 0.1pt ずつたまります',
-        sub: 'ひと月 1pt までです。その月にご来店があると、たまった分が狙っている景品のメーターに入ります。',
+        sub: 'ひと月 1pt まで。その月にご来店があると、景品のメーターに入ります。',
       },
       {
         target: g('gauge'), next: true, read: true, text: 'ご来店でも、景品のメーターがたまります',
-        sub: 'ガチャ券を使ってご来店すると、メニュー 5,000円以上で 1pt・3,000円以上で 0.5pt。いっぱいになったら「受け取る」で券に交換できます。',
+        sub: 'ガチャ券でご来店：5,000円以上 1pt・3,000円以上 0.5pt。満タンで「受け取る」。',
       },
     ],
   },
