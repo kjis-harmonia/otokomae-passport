@@ -14,6 +14,7 @@ import { V2GinpayBar } from './V2GinpayBar'
 import { loadUsual, type Usual } from './usualPicks'
 import { getCustomerSession } from '../utils/customerSession'
 import { V2PeopleSheet } from './V2PeopleSheet'
+import { LaunchStrip } from './LaunchClock'
 import { ginFlow } from '../utils/env'
 
 const yen = (n: number) => `¥${n.toLocaleString()}`
@@ -136,6 +137,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
 
   return (
     <>
+      <LaunchStrip />
       <div className="v2-pay-wrap"><V2GinpayBar onOpen={onGinpay} /></div>
       <div className="v2-cats" data-guide="home-cats" ref={catsRail} role="tablist" aria-label="スタイルのカテゴリ">
         {cats.map(id => (

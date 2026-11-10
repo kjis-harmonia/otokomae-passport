@@ -32,6 +32,7 @@ import { V2App } from './v2/V2App'
 import { needsInstallFirst } from './utils/installGuide'
 import { ginFlow, isStaging } from './utils/env'
 import { FirstGuide } from './v2/FirstGuide'
+import { LaunchClock } from './v2/LaunchClock'
 import { GinChat, type GinMode } from './v2/GinChat'
 import { fetchVisitsToConfirm } from './v2/visitConfirm'
 import { CustomerGuide } from './components/guide/CustomerGuide'
@@ -426,6 +427,9 @@ function App() {
           {ginChat && !firstGuide && !welcomeCouponDialog && <GinChat key={ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
 
           {/* 使い方ガイド：最初の案内・Welcome クーポン・Face ID の案内が出ている間は出さない */}
+          {/* 新しい銀二郎の公開（11/11 12:00）：60秒前からの全画面の時計・00:00 の切り替え */}
+          <LaunchClock />
+
           <CustomerGuide paused={!!firstGuide || ginChat?.kind === 'welcome' || !!welcomeCouponDialog || passkeyOffer || appLoading} />
 
           <AnimatePresence>

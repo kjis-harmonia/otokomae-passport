@@ -1,7 +1,7 @@
 // 銀二郎App V2.0 の外枠：上に正式ロゴと ☰、下に浮かぶガラスのタブ4つ（ホーム｜会員QR｜次回予約｜ガチャ）。
 // チケット・ログインと引き継ぎは ☰ から開くページ、AI予約（Johnny）は全画面。どの機能も消さず、入口だけ整理する。
 // 画面の切り替えは App の activeTab（お知らせのリンク ?tab=reserve・?tab=tickets もそのまま効く）。
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CalendarClock, ChevronLeft, CircleHelp, Home, Menu, QrCode, Sparkles } from 'lucide-react'
 import { openCustomerGuide } from '../components/guide/guideEvents'
 import type { NavTab } from '../data/brand'
@@ -18,6 +18,7 @@ import { V2PeopleSheet } from './V2PeopleSheet'
 import { ginFlow } from '../utils/env'
 import { V2Account } from './V2Account'
 import { V2Ginpay } from './V2Ginpay'
+import { LaunchNotice } from './LaunchClock'
 import { V2Campaign } from './V2Campaign'
 import './v2.css'
 
@@ -45,6 +46,10 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   ticketFilter: WalletFilter; ticketKey: number; onModalChange: (open: boolean) => void; showCampaign: boolean
 }) {
   const [menu, setMenu] = useState(false)
+  // 公開の告知が出たアプリでは、ほかのお知らせ（キャンペーン）は出さない（重ねない・11/11）
+  const [launchNotice, setLaunchNotice] = useState(false)
+  const [noticeShown, setNoticeShown] = useState(false)
+  const onLaunchNotice = useCallback((open: boolean) => { setLaunchNotice(open); if (open) setNoticeShown(true) }, [])
   const [people, setPeople] = useState(false)
   // 銀Pay のページ（ホームの帯から開く）。タブを切り替えたら閉じる
   const [pay, setPay] = useState(false)
@@ -133,7 +138,8 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
         })}
       </nav>
 
-      {isHome && showCampaign && <V2Campaign onGacha={() => go('gacha')} />}
+      {isHome && showCampaign && <LaunchNotice onOpenChange={onLaunchNotice} />}
+      {isHome && showCampaign && !launchNotice && !noticeShown && <V2Campaign onGacha={() => go('gacha')} />}
       <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} onPeople={ginFlow() ? () => setPeople(true) : undefined} />
       {/* ☰ の「いつもの・お連れ様」（Staging） */}
       <V2PeopleSheet open={people} onClose={() => setPeople(false)} ownerMenu={null} manage />

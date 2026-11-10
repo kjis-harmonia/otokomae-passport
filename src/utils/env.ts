@@ -1,3 +1,4 @@
+import { launchBackdoor, launched } from './launch'
 export type AppEnv = 'production' | 'staging'
 
 export function getAppEnv(): AppEnv {
@@ -13,5 +14,6 @@ export function isStaging(): boolean {
  *  Staging は常に入。本番は Vercel の VITE_GIN_FLOW=true で入る（戻すときはこの設定を外して公開し直すだけ）。
  *  新しい機能を Staging だけに出したいときも isStaging() ではなく、これを使う（引っ越しの日に漏れないように） */
 export function ginFlow(): boolean {
-  return isStaging() || import.meta.env.VITE_GIN_FLOW === 'true'
+  // 11/11：公開時刻（utils/launch.ts の GIN_LAUNCH_AT）までは旧画面。慶一郎さんの端末だけ先に新画面（裏口）
+  return (isStaging() || import.meta.env.VITE_GIN_FLOW === 'true') && (launched() || launchBackdoor())
 }
