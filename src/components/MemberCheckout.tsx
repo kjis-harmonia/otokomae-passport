@@ -9,10 +9,13 @@ import { yen } from '../utils/bookingApi'
 import { callStaffRpc, rpcErrorMessage } from '../utils/staffSession'
 import { getStoredValue } from '../utils/storage'
 import { readCheckoutAttempt, startNextCheckout } from '../utils/checkoutAttempt'
+import { fetchTodayParty, type PartyEntry } from '../utils/partyCheckIn'
 
 const UI = '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif'
 
-type Target = { reservationId: string | null; clientId: string }
+type Target = { reservationId: string | null; clientId: string; who: PartyEntry | null }
+/** 受付済みでまだ会計していない予約 */
+const UNPAID = ['checked_in', 'in_service', 'awaiting_payment']
 // 店舗端末の「担当者」（AdminScreen が端末に保存する）。会計の記録には確定した時点の名前を残す
 const readActor = () => getStoredValue<string>('ginjiro_staff_name', '')
 
@@ -28,6 +31,9 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paid, setPaid] = useState<Sale | null>(null)
+  const [party, setParty] = useState<PartyEntry[]>([])
+  /** 会計したのはどなたの予約か（お連れ様なら、ご本人のいつものメニュー・来店の記録には入れない） */
+  const [paidWho, setPaidWho] = useState<PartyEntry | null>(null)
   // お会計で選んだメニュー（いつものメニューに登録する候補・11/6）
   const [pickedMenu, setPickedMenu] = useState<string | null>(null)
   const opening = useRef(false)
@@ -49,7 +55,12 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
       // 今日の予約がもう会計済みなら（QR を読み直した・2件目）、予約なしの会計にする
       let reservationId = again ? null : r.reservation_id ?? null
       if (reservationId && (await api.context(reservationId, null)).paid_sale_id) reservationId = null
-      setTarget({ reservationId, clientId: r.client_id })
+      // 2名様以上：受付済みでまだ会計していない今日のご予約（ご本人が先）。2件目もメニュー・担当が入った会計にする（11/10 慶一郎さん「選び直すのは面倒」）
+      const today = await fetchTodayParty(userId)
+      const waiting = today.filter(p => UNPAID.includes(p.status)).sort((a, b) => Number(b.is_owner) - Number(a.is_owner) || a.starts_at.localeCompare(b.starts_at))
+      if (!reservationId) reservationId = waiting[0]?.id ?? null
+      setParty(today)
+      setTarget({ reservationId, clientId: r.client_id, who: today.find(p => p.id === reservationId) ?? null })
     } catch (err) {
       setError(rpcErrorMessage(err))
     } finally {
@@ -64,6 +75,8 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   useEffect(() => { if (staffName.trim()) void open() }, [])
 
   if (paid) {
+    // 2名様以上：受付済みでまだ会計していない方がいれば、その方の会計へ（メニュー・担当は予約から）
+    const next = party.filter(p => UNPAID.includes(p.status) && p.id !== paidWho?.id).sort((a, b) => Number(b.is_owner) - Number(a.is_owner))[0]
     return (
       <div data-guide="paid" style={{ textAlign: 'left', fontFamily: UI }}>
         <p style={{ fontSize: 13, fontWeight: 600, color: '#2F7D5B', margin: '0 0 4px' }}>✓ お会計が終わりました</p>
@@ -72,10 +85,10 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
           <span style={{ fontSize: 28, fontWeight: 700, color: '#1B1B1A', fontVariantNumeric: 'tabular-nums' }}>{yen(paid.total)}</span>
         </div>
         {error && <p style={{ marginTop: 8, fontSize: 13, color: '#b23a3a' }}>{error}</p>}
-        <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />
-        <button type="button" disabled={loading} onClick={() => { setPaid(null); setPickedMenu(null); void open(true) }}
+        {!(paidWho && !paidWho.is_owner) && <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />}
+        <button type="button" disabled={loading} onClick={() => { setPaid(null); setPickedMenu(null); setPaidWho(null); void open(true) }}
           style={{ width: '100%', marginTop: 12, minHeight: 46, borderRadius: 10, background: '#ffffff', border: '1px solid #D9D9D4', color: '#1B1B1A', fontFamily: UI, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
-          もう1件お会計する（お子様・お連れ様）
+          {next ? `次：${next.name}様のお会計${next.menu ? `（${next.menu}）` : ''}` : 'もう1件お会計する（お子様・お連れ様）'}
         </button>
       </div>
     )
@@ -92,9 +105,9 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         initialTicketIds={ticketIds}
         ensureActor={() => !!readActor().trim()}
         onClose={() => setTarget(null)}
-        onDone={sale => { setTarget(null); setPaid(sale); onPaid(sale) }}
+        onDone={sale => { setPaidWho(target.who); setTarget(null); setPaid(sale); onPaid(sale); void fetchTodayParty(userId).then(setParty) }}
         // お会計で選んだメニューを今日のメニューとして記録する（いつものメニュー・来店の記録に使う。失敗しても会計は続ける）
-        onMenuPicked={code => { setPickedMenu(code); void callStaffRpc('staff_set_visit_menu', { p_user_id: userId, p_menu_code: code, p_staff_name: staffName || null }).catch(() => {}) }}
+        onMenuPicked={code => { setPickedMenu(code); if (target.who && !target.who.is_owner) return; void callStaffRpc('staff_set_visit_menu', { p_user_id: userId, p_menu_code: code, p_staff_name: staffName || null }).catch(() => {}) }}
       />
     )
   }

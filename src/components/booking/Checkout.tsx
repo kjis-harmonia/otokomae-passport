@@ -489,7 +489,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
                       <span style={{ fontSize: 13, letterSpacing: '0.08em', color: C.sub, whiteSpace: 'nowrap' }}>{totalLabel}</span>
-                      <span style={{ fontFamily: MINCHO, fontSize: 44, fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>{ready ? yen(Math.max(0, totals.total)) : '—'}</span>
+                      <span style={{ fontFamily: MINCHO, fontSize: 44, fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>{ready ? yen(Math.max(0, totals.total)) : ''}</span>
                     </div>
                     <p style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '8px 0 0', fontSize: 13, lineHeight: 1.6, color: C.sub }}>
                       <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, transform: 'translateY(-1px)', background: ready ? accent : C.lineStrong }} />
