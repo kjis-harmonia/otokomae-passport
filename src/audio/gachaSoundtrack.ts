@@ -2,7 +2,7 @@
 export const GACHA_AUDIO_FILES = {
   intro: '/gacha/gacha-intro-audio.m4a?v=deep2',
   wait: '/gacha/gacha-wait-audio.wav?v=deep2',
-  open: '/gacha/gacha-open-audio.m4a?v=deep2',
+  open: '/gacha/gacha-open-audio.m4a?v=deep-pace1',
   result: '/gacha/gacha-result-audio.m4a?v=deep3',
 } as const
 export type GachaAudioFiles = Record<'intro' | 'wait' | 'open', string> & { result?: string }
