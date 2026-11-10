@@ -1532,14 +1532,20 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const askKind = finished && chips.some(c => c.label === 'ホームへ') ? (bookingComplete ? 'done' : 'ended')
     : chips.some(c => c.label === '会員QRを表示') ? 'verify'
     : chips.some(c => c.label === 'この内容で予約する') ? 'confirm'
+    // お持ちの券を使うか（11/11 案内の点検：この段階が無く、案内が消えていた）
+    : chips.some(c => c.label === '券を使わない') ? 'ticket'
     : chips.some(c => c.label === '最短で') ? 'when'
     : whoPick || chips.some(c => c.label === 'ご本人だけ') ? 'who'
+    // 担当（11/11 案内の点検：担当の段階が無く、案内が消えていた）
+    : chips.some(c => c.label === 'どちらでも') ? 'staff'
     : chips.some(c => /\d\d:\d\d$/.test(c.label)) ? 'time'
+    // いつもののメニューの確認（はい／ほかのメニュー）は yesno：案内の「このメニューでよろしければ…」が出るように（11/11）
+    : chips.some(c => c.label === 'はい') && chips.some(c => c.label === 'ほかのメニュー') ? 'yesno'
     : chips.some(c => c.label === '一覧から選ぶ' || c.label === 'ほかのメニュー') ? 'menu'
     : chips.length === 2 ? 'yesno' : chips.length ? 'choice' : waiting ? 'free' : 'wait'
   const send = () => { const t = text.trim(); if (!t || !waiting) return; setText(''); fromChip.current = false; answer(t) }
   const shown = sheet ? (showAll ? sheet : sheet.slice(0, 7)) : null
-  const dockGuide = !sheet && ['who', 'menu', 'when', 'time', 'confirm'].includes(askKind)
+  const dockGuide = !sheet && ['who', 'menu', 'yesno', 'staff', 'when', 'time', 'ticket', 'confirm'].includes(askKind)
 
   return (
     <div ref={chatRef} role="dialog" aria-modal="true" aria-label="銀ちゃん" className="v2 gc lc" data-guide="lc" data-ask={askKind}>

@@ -55,10 +55,18 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
         target: CHIPS('menu', 'yesno'), optional: true, waitWhile: TALKING, until: PAST('menu', 'yesno'), text: 'メニューを押してください', sub: 'ほかのメニューは「一覧から選ぶ」から選べます。',
         alts: [{ when: CHIPS('yesno'), text: 'このメニューでよろしければ「はい」を押してください', sub: '違うときは「ほかのメニュー」を押してください。' }],
       },
+      // 担当（1人の予約のとき）。続けて「いつもの担当に登録しますか？」が出たら、その説明も
+      {
+        target: CHIPS('staff', 'yesno'), optional: true, waitWhile: TALKING, until: PAST('staff', 'yesno'), text: 'ご担当を押してください',
+        sub: 'いつもの担当なら「はい」、どちらでもよければ「どちらでも」を押してください。',
+        alts: [{ when: CHIPS('yesno'), text: '次回からも同じ担当にするか選んでください', sub: '登録すると、次から選ぶのが楽になります。' }],
+      },
       { target: CHIPS('when'), waitWhile: TALKING, until: PAST('when'), text: 'ご来店はいつ頃か押してください', sub: '「最短で」はいちばん早い空き、「土日希望」は土日、「日付を選ぶ」はカレンダーから選べます。' },
       // 「日付を選ぶ」のときだけ
-      { target: g('lc-cal'), optional: true, waitWhile: TALKING, until: ASK('time', 'confirm', 'done', 'ended'), text: 'ご希望の日を押してください', sub: '空きのある日だけ押せます。' },
-      { target: CHIPS('time'), waitWhile: TALKING, until: ASK('confirm', 'done', 'ended'), text: 'ご希望の時間を押してください', sub: '合わないときは「ほかの日」を押してください。' },
+      { target: g('lc-cal'), optional: true, waitWhile: TALKING, until: ASK('time', 'ticket', 'confirm', 'done', 'ended'), text: 'ご希望の日を押してください', sub: '空きのある日だけ押せます。' },
+      { target: CHIPS('time'), waitWhile: TALKING, until: ASK('ticket', 'confirm', 'done', 'ended'), text: 'ご希望の時間を押してください', sub: '合わないときは「ほかの日」を押してください。' },
+      // お持ちの券があるときだけ
+      { target: CHIPS('ticket'), optional: true, waitWhile: TALKING, until: ASK('confirm', 'done', 'ended'), text: 'このご予約で使う券を押してください', sub: '使わないときは「券を使わない」。ご来店のときのお会計で差し引きます。' },
       {
         target: g('lc-book'), waitWhile: TALKING, until: ASK('done', 'ended'), text: '内容を確かめて【この内容で予約する】を押してください',
         sub: '予約はこのボタンを押したときに入ります。途中で「やっぱり土曜」「アイパーにする」と言えば、そこだけ直せます。',
@@ -103,7 +111,11 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     sub: '日時の確認・変更・キャンセル',
     steps: [
       { target: g('tab-next'), text: '下の「次回予約」を押してください', skipIf: g('next-panel') },
-      { target: g('next-panel'), next: true, read: true, text: 'ご予約の日時・メニュー・担当が出ます' },
+      {
+        target: g('next-panel'), next: true, read: true, text: 'ご予約の日時・メニュー・担当が出ます',
+        // 予約が無い方（11/11 案内の点検：「現在、ご予約はありません」と食い違っていた）
+        alts: [{ when: `${g('next-panel')}:not(:has(${g('next-change')}))`, text: 'ご予約が入ると、ここに日時・メニュー・担当が出ます', sub: '「AI予約する」から、銀ちゃんに予約をお伝えください。' }],
+      },
       { target: g('next-change'), optional: true, next: true, text: '変更・キャンセルはここから', sub: 'お電話でも承ります。' },
     ],
   },
@@ -128,6 +140,28 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     steps: [
       { target: g('tab-gacha'), text: '下の「ガチャ」を押してください', skipIf: g('gacha-start') },
       { target: g('gacha-start'), text: '「本日のガチャを回す」を押してください', sub: '当たった券は AI予約で使えます。音が出ます。' },
+    ],
+  },
+  // 景品を狙ってポイントをためる（11/11 慶一郎さん）。決まりは DB の gacha_gauge と同じ：
+  //   ガチャ1回 0.1pt・月 1pt まで（その月にご来店があると景品のポイントへ）／ガチャ券を使ったご来店でメニュー 5,000円以上 1pt・3,000円以上 0.5pt
+  {
+    id: 'c-gauge',
+    title: '景品を狙ってポイントをためる',
+    sub: '狙う景品の選び方・メーターのたまり方',
+    available: gachaOpen,
+    steps: [
+      { target: g('tab-gacha'), text: '下の「ガチャ」を押してください', skipIf: g('gauge') },
+      // もう狙う景品を選んでいる方：「変える」から選び直せる
+      { target: g('gauge-change'), optional: true, next: true, skipIf: g('gauge-goals'), text: '狙う景品は「変える」から選び直せます', sub: '上ほど高い景品で、必要なポイントが多くなります。' },
+      { target: g('gauge-goals'), optional: true, text: '狙う景品を押してください', sub: '上ほど高い景品で、必要なポイントが多くなります。あとから「変える」で選び直せます。' },
+      {
+        target: g('gauge-month'), optional: true, next: true, read: true, text: 'ガチャを回すと、ここが 0.1pt ずつたまります',
+        sub: 'ひと月 1pt までです。その月にご来店があると、たまった分が狙っている景品のメーターに入ります。',
+      },
+      {
+        target: g('gauge'), next: true, read: true, text: 'ご来店でも、景品のメーターがたまります',
+        sub: 'ガチャ券を使ってご来店すると、メニュー 5,000円以上で 1pt・3,000円以上で 0.5pt。いっぱいになったら「受け取る」で券に交換できます。',
+      },
     ],
   },
   // 初めて開いたときに1回だけ：使い方の場所
