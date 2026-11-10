@@ -70,7 +70,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
             )
           })}
           {/* AI予約は受けた時点で確定。サロンボードへの転記はお店の仕事。重なったときだけお店から電話する（そのことを1行だけ） */}
-          {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、お店からお電話します。</p>}
+          {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}>万一お時間の調整が必要なときは、<br />お店からお電話します。</p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
             {status === 'failed' && <ReservationRetry onRetry={reload} />}
             <button type="button" className="v2-btn v2-btn-quiet v2-glass" data-guide="next-change" onClick={() => { if (ginFlow()) { window.dispatchEvent(new Event('ginjiro:gin-change')); return } requestJohnny({ menuCode: null, label: '', manage: true }); onJohnny() }}>{ginFlow() ? '変更・キャンセル' : '変更・キャンセル（AI予約）'}</button>
