@@ -10,7 +10,7 @@ export const GIN_LAUNCH_AT = '2026-11-11T12:00:00+09:00'
 
 const COUNTDOWN_MS = 3 * 3600_000 // 3時間前から「新しい銀二郎まで HH:MM:SS」
 const FULLSCREEN_MS = 60_000 // 60秒前から画面いっぱいの時計
-const BACKDOOR_USER_IDS = ['u-8ecabf88182ba1f9351805f1'] // 平田慶一郎
+const BACKDOOR_USER_IDS = ['u-8ecabf88182ba1f9351805f1', 'u-4aa4b95cf293253a2915bbc0'] // 平田慶一郎（Staging の会員・本番 iPhone の会員 U-4AA4B9）
 
 const OVERRIDE_KEY = 'ginjiro_launch_override'
 const NO_BACKDOOR_KEY = 'ginjiro_launch_no_backdoor'
