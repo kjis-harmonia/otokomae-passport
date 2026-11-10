@@ -1159,7 +1159,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       forgetReservation(request.reservation_id)
       if (request.kind === 'cancel') {
         const released = result.ginpay_released ?? 0
-        await say(`キャンセルしました。${released > 0 ? `\n銀Payの先払い ${yen(released)} は残高に戻しました。` : ''}`)
+        await say(`ご予約をキャンセルしました。${released > 0 ? `\n銀Payの先払い ${yen(released)} は残高に戻しました。` : ''}\nまたのご来店をお待ちしております。`)
       } else {
         rememberReservation(result)
         await say(`ご予約を変更しました！\n${slotLabel(result.starts_at)} ${result.items.map(i => i.name).join('・')}${result.ai_paused_until ? `\n※AI予約は ${md(result.ai_paused_until)} から、また使えます。` : ''}`)
@@ -1220,7 +1220,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     if (!requested && list.length > 1) {
       const choices = list.map((x, i) => ({ label: `${i + 1}. ${label(x)}` }))
       for (;;) {
-        const a = await ask('ご予約の変更ですね！どのご予約にしますか？', choices)
+        const a = await ask('ご予約の変更・キャンセルですね。\nどのご予約にしますか？', choices)
         const index = choices.findIndex(x => x.label === a)
         if (fromChip.current && index >= 0) { r = list[index]; break }
       }
@@ -1261,7 +1261,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (!results.every(Array.isArray)) return null
       return results.flat().filter(d => typeof d === 'string' && d < addDays(from, days))
     }
-    let action = await ask(`ご予約の変更ですね！\n${label(r)}\nどちらを変更されますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(staffNames.length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
+    // 「変更・キャンセル」から入るので、キャンセルしたい方にも合う言い方（11/10 夜の点検）
+    let action = await ask(`ご予約の変更・キャンセルですね。\n${label(r)}\nどうされますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(staffNames.length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
     let dayOnly: string | null = null
     for (let guard = 0; guard < 24; guard++) {
       // キャンセル
@@ -1275,7 +1276,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         }
         const late = pv.cancel_late
         const gp = pv.ginpay_before
-        const a = await ask(`${who(r)}${reviewedLabel(pv.confirmation)}\nのご予約をキャンセルしますか？${late ? '\n※開始2時間前を過ぎているので、キャンセルすると AI予約がしばらく使えなくなります。' : ''}${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻ります。` : ''}\nキャンセルする場合は、下の【キャンセルする】を押してください。`,
+        const a = await ask(`${who(r)}${reviewedLabel(pv.confirmation)}\nこのご予約をキャンセルしますか？${late ? '\n※開始2時間前を過ぎているので、キャンセルすると AI予約がしばらく使えなくなります。' : ''}${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻ります。` : ''}\nキャンセルする場合は、下の【キャンセルする】を押してください。`,
           [{ label: 'キャンセルする', strong: true }, { label: 'やめておく' }])
         if (!(a === 'キャンセルする' && fromChip.current)) {
           // 「キャンセルして」「キャンセルお願い」はキャンセルしたいという意味（確定はボタンだけ）
