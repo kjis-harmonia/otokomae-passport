@@ -1349,6 +1349,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (!hit) { action = a === 'ほかの日' ? '日時を変更' : a; continue }
         at = hit; action = 'summary'; continue
       }
+      if (action !== 'summary' && /担当|指名|スタイリスト/.test(action)) {
+        // 予約の変更では担当は変えられない（指名はそのまま）。担当を変えたいときはお店へ（11/10・サーバーの変更に担当の指定が無い）
+        const a = await askYN('ご予約の変更では、担当はそのままになります。\n担当を変えたいときは、お手数ですがお店にお電話ください。', 'お店に電話する', '日時・メニューを変える', false)
+        if (a === 'yes') { window.location.href = SHOP_PHONE_TEL; return end() }
+        action = '日時を変更'; continue
+      }
       if (action !== 'summary') {
         // 分からない言葉：もう一度どれを変えるか聞く
         action = await ask('どちらを変更されますか？', [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, { label: 'キャンセル' }])
@@ -1370,9 +1376,16 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         return end()
       }
       const why = (w: string) => (w === 'expired' ? '期限が切れるので' : w === 'weekday' ? '平日だけの券なので' : w === 'menu' ? 'このメニューでは使えないので' : w === 'owner_only' ? 'ご本人だけの券なので' : w === 'owner_changed' ? '券の持ち主が変わったので' : '使えないので')
+      // 担当も出す（11/10 慶一郎さん「スタイリストの指名がねーよ！」）。指名の予約は、変更しても同じ担当のまま（サーバーがその担当の空きで探す）
+      const nw = (pv.confirmation as { new?: { staff_id?: string | null; nominated?: boolean } }).new
+      const staffAfter = opts?.staff?.find(s => s.id === nw?.staff_id)?.name ?? ''
+      const staffLine = nw?.nominated
+        ? `担当：${r.staff_name || staffAfter}（ご指名のまま）`
+        : staffAfter ? `担当：${staffAfter}${r.staff_name && r.staff_name !== staffAfter ? `（${r.staff_name}から変わります）` : ''}` : ''
       const lines = [
         `変更前：${reviewedLabel(pv.confirmation)}${pv.price_before != null ? ` ${yen(pv.price_before)}` : ''}`,
         `変更後：${slotLabel(at)} ${pv.menu_names.join('・')}（${pv.duration_after}分）${pv.price_after != null ? ` ${yen(pv.price_after)}` : ''}`,
+        ...(staffLine ? [staffLine] : []),
         ...(pv.ginpay_before > 0 ? [`銀Payの先払い：${yen(pv.ginpay_before)} → ${yen(pv.ginpay_after)}${pv.ginpay_after < pv.ginpay_before ? `（${yen(pv.ginpay_before - pv.ginpay_after)} は残高に戻ります）` : ''}`] : []),
         ...(pv.ginpay_before > 0 && pv.price_after != null && pv.price_after > pv.ginpay_after ? [`残りの ${yen(pv.price_after - pv.ginpay_after)} は、お店でお支払いください`] : []),
         ...pv.tickets_drop.map(t => `※「${t.title}」は${why(t.why)}、外れます`),
