@@ -134,6 +134,6 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
     sub: '',
     hidden: true,
     quiet: true,
-    steps: [{ target: g('guide-open'), next: true, nextLabel: 'わかりました', text: '使い方はここから見られます', sub: '予約のしかたなど、押す場所を順番にご案内します。' }],
+    steps: [{ target: g('guide-open'), next: true, nextLabel: 'わかりました', text: '使い方はここから見られます', sub: '予約のしかたなどを、順番にご案内します。' }],
   },
 ]

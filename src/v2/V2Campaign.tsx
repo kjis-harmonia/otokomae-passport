@@ -10,6 +10,13 @@ import { ginFlow } from '../utils/env'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { GachaShowcase } from './GachaShowcase'
 import { useThemeColor } from '../utils/themeColor'
+import { MEMBER_ISSUED_AT_KEY } from '../utils/userId'
+
+/** 登録したばかり（6時間以内）：Welcome クーポン・使い方の案内と重ならないよう、お知らせは次に開いたときに（11/10 夜の点検） */
+function justRegistered(): boolean {
+  const at = Date.parse(getStoredValue<string | null>(MEMBER_ISSUED_AT_KEY, null) ?? '')
+  return Number.isFinite(at) && Date.now() - at < 6 * 3600_000
+}
 
 type Campaign = {
   id: string; image: string; wide?: boolean; kaikin?: boolean; alt: string; label: string; kicker: string; title: string; lead?: string; detail: string[]
@@ -89,7 +96,7 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
     // 新しい銀二郎の公開の直後（解禁→銀ちゃんの案内）は、この起動ではキャンペーンを重ねない（11/11）
     let guided = false
     try { guided = !!sessionStorage.getItem('ginjiro_launch_guided') } catch { /* なし */ }
-    if (shownThisLaunch || guided || getStoredValue<string>(HIDE_KEY, '') === CAMPAIGN.id) return
+    if (shownThisLaunch || guided || getStoredValue<string>(HIDE_KEY, '') === CAMPAIGN.id || justRegistered()) return
     const img = new Image()
     img.src = CAMPAIGN.image
     if (CAMPAIGN.kaikin) new Image().src = '/gacha/kaikin-brush.png'
