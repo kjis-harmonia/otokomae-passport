@@ -3,10 +3,12 @@
 //   - 60秒前から：画面いっぱいのデジタル時計（00:59 → 00:00、1秒ごとにカチッ）
 //   - 00:00：開いている画面も読み込み直して新画面へ。読み込み後に新しい告知 →【見てみる】で銀ちゃんの案内
 //   時刻・公開時刻は utils/launch.ts（定数は公開時刻ひとつ）
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { hms, launchAt, launched, syncServerClock } from '../utils/launch'
-import { phaseAt, useServerSecond } from './launchTime'
-import { ginFlow } from '../utils/env'
+import { KAIKIN_DONE_EVENT, KAIKIN_FADE_KEY, kaikinSeen, markKaikinSeen, phaseAt, useServerSecond } from './launchTime'
+const RELOADS_KEY = 'ginjiro_launch_reloads'
+import { ginFlow, ginFlowConfigured } from '../utils/env'
+import { BOOKING_IDLE_EVENT, bookingInFlight } from '../utils/bookingInFlight'
 
 const NOTICE_KEY = 'ginjiro_launch_notice_seen'
 const PRE_NOTICE_SESSION = 'ginjiro_launch_pre_seen'
@@ -14,7 +16,7 @@ export const LAUNCH_NOTICE_EVENT = 'ginjiro:launch-notice'
 /** 公開時刻の「12:00」（日本時間） */
 const launchHm = () => new Date(launchAt() + 9 * 3600_000).toISOString().slice(11, 16)
 
-/** カチッ（オリジナル：短いクリック音を2つ重ねて作る） */
+// ── 音（すべてこのアプリのために作ったもの。ほかの作品の音は使わない） ──
 let audio: AudioContext | null = null
 function unlockAudio() {
   try {
@@ -23,64 +25,187 @@ function unlockAudio() {
     void audio?.resume()
   } catch { /* 音が出せない端末 */ }
 }
-function click(last: boolean) {
-  if (!audio || audio.state !== 'running') return
-  const t = audio.currentTime
-  for (const [freq, at, len, vol] of [[last ? 880 : 2400, 0, 0.012, 0.35], [last ? 440 : 1200, 0.018, 0.03, 0.18]] as const) {
-    const o = audio.createOscillator(), g = audio.createGain()
+const ready = () => !!audio && audio.state === 'running'
+/** 1秒ごとのカチッ。残り10秒からは少し強く */
+function tick(strong: boolean) {
+  if (!ready()) return
+  const a = audio!, t = a.currentTime
+  const parts = strong ? [[1800, 0, 0.016, 0.55], [900, 0.02, 0.04, 0.3]] : [[2400, 0, 0.01, 0.28], [1200, 0.016, 0.025, 0.14]]
+  for (const [freq, at, len, vol] of parts) {
+    const o = a.createOscillator(), g = a.createGain()
     o.type = 'square'; o.frequency.value = freq
-    g.gain.setValueAtTime(vol, t + at); g.gain.exponentialRampToValueAtTime(0.0001, t + at + len + (last ? 0.25 : 0))
-    o.connect(g).connect(audio.destination); o.start(t + at); o.stop(t + at + len + (last ? 0.3 : 0.02))
+    g.gain.setValueAtTime(vol, t + at); g.gain.exponentialRampToValueAtTime(0.0001, t + at + len)
+    o.connect(g).connect(a.destination); o.start(t + at); o.stop(t + at + len + 0.02)
   }
 }
+/** 0 の「ドン」：低い音が沈んでいく太鼓のような一打 */
+function don() {
+  if (!ready()) return
+  const a = audio!, t = a.currentTime
+  const o = a.createOscillator(), g = a.createGain()
+  o.type = 'sine'; o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.6)
+  g.gain.setValueAtTime(1, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6)
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t + 1.7)
+  // 叩いた瞬間の「ザッ」
+  const n = a.createBuffer(1, Math.floor(a.sampleRate * 0.12), a.sampleRate), d = n.getChannelData(0)
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length)
+  const src = a.createBufferSource(), f = a.createBiquadFilter(), ng = a.createGain()
+  src.buffer = n; f.type = 'lowpass'; f.frequency.value = 900; ng.gain.value = 0.5
+  src.connect(f).connect(ng).connect(a.destination); src.start(t)
+}
 
-/** アプリのいちばん上に置く：サーバー時刻合わせ・全画面の時計・00:00 の切り替え */
+/** 公開の60秒間・解禁のあいだ、アプリのほかの操作を一切受け付けない層（いちばん上に開く dialog） */
+function BlockLayer({ children, tone }: { children: React.ReactNode; tone: string }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    // ほかに開いている dialog（Face ID の案内など）より上に出すため、いったん閉じて開き直す
+    if (!el.open) { try { el.showModal() } catch { el.setAttribute('open', '') } }
+    const cancel = (e: Event) => e.preventDefault() // Esc で閉じない
+    const key = (e: KeyboardEvent) => { e.preventDefault(); e.stopPropagation() }
+    // 戻る（ブラウザの戻る・Android の戻る）も効かないように
+    history.pushState({ launchLock: true }, '')
+    const pop = () => history.pushState({ launchLock: true }, '')
+    el.addEventListener('cancel', cancel)
+    window.addEventListener('keydown', key, true)
+    window.addEventListener('popstate', pop)
+    return () => {
+      el.removeEventListener('cancel', cancel)
+      window.removeEventListener('keydown', key, true)
+      window.removeEventListener('popstate', pop)
+      if (el.open) el.close()
+    }
+  }, [])
+  return <dialog ref={ref} className={`launch-layer ${tone}`} aria-label="新しい銀二郎" onPointerDown={unlockAudio}>{children}</dialog>
+}
+
+// 12:00:00 の流れ：00:00:00（0.4秒）→ 真っ暗（0.25秒）→ 白い筆文字「解禁」をドンと押す＋ドン（1.7秒）→ ふわっと新しい画面（0.7秒）→ 銀ちゃんの案内
+//   旧画面だった人は、読み込み直すと音が出せないので「解禁」とドンを読み込み直す前に見せ、新しい画面で「解禁」からふわっと明ける
+type Seq = 'none' | 'zero' | 'black' | 'stamp' | 'reveal' | 'out'
+const T_ZERO = 400, T_BLACK = 250, T_STAMP = 1700, T_OUT = 700
+
+/** 案内を始める：銀ちゃんとAI予約する（既存のガイド） */
+function startGuide() {
+  try { sessionStorage.setItem('ginjiro_launch_guided', '1') } catch { /* なし */ }
+  try { localStorage.setItem('ginjiro_launch_notice_seen', String(launchAt())) } catch { /* なし */ } // 公開後の告知の代わりに案内へ
+  window.setTimeout(() => window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-book' } })), 300)
+}
+
+/** アプリのいちばん上に置く（お客様アプリだけ）：時刻合わせ・最後の60秒・00:00:00・解禁・切り替え */
 export function LaunchClock() {
   const now = useServerSecond()
   const phase = phaseAt(now)
-  // 開いたときに公開前だった画面だけ、00:00 で読み込み直す（もう新画面の画面は読み込み直さない）
-  const startedNew = useRef(ginFlow())
+  const on = ginFlowConfigured() // 新しい流れが入る環境だけ（本番で VITE_GIN_FLOW が無ければ何もしない）
+  const [startedNew] = useState(ginFlow) // 開いたときに旧画面だった画面だけ、00:00 で読み込み直す
+  const [, setIdleTick] = useState(0)
+  const [clockOn, setClockOn] = useState(false)
+  const [finished, setFinished] = useState(false)
+  const [seq, setSeq] = useState<Seq>(() => {
+    // 読み込み直した直後：「解禁」からふわっと明ける
+    try { return sessionStorage.getItem(KAIKIN_FADE_KEY) === String(launchAt()) ? 'reveal' : 'none' } catch { return 'none' }
+  })
   const lastSec = useRef<number | null>(null)
+  const seqStarted = useRef(false)
 
   useEffect(() => {
     void syncServerClock()
     const onShow = () => { if (document.visibilityState === 'visible') void syncServerClock() }
+    const idle = () => setIdleTick(n => n + 1)
     document.addEventListener('visibilitychange', onShow)
+    window.addEventListener(BOOKING_IDLE_EVENT, idle)
     // 音は最初に触ったときに出せるようにする（iPhone は触るまで音を出せない）
     window.addEventListener('pointerdown', unlockAudio, { once: true })
-    return () => { document.removeEventListener('visibilitychange', onShow); window.removeEventListener('pointerdown', unlockAudio) }
+    return () => {
+      document.removeEventListener('visibilitychange', onShow)
+      window.removeEventListener(BOOKING_IDLE_EVENT, idle)
+      window.removeEventListener('pointerdown', unlockAudio)
+    }
   }, [])
 
-  // 時刻を合わせた結果、もう公開時刻を過ぎていて旧画面のまま → 読み込み直す
-  useEffect(() => {
-    if (phase === 'after' && !startedNew.current && ginFlow()) {
-      startedNew.current = true
-      window.location.reload()
-    }
-  }, [phase])
+  // 予約の確定・変更・取消の通信中は、終わるまで暗転しない（公開を20秒過ぎたら待たない）
+  const waiting = bookingInFlight() && now < launchAt() + 20_000
+  const sec = Math.max(0, Math.ceil((launchAt() - now) / 1000))
 
-  const left = launchAt() - now
-  const sec = Math.max(0, Math.ceil(left / 1000))
+  // 最後の60秒：通信が終わっていれば時計を出す（いったん出したら公開まで消さない）
   useEffect(() => {
-    if (phase !== 'full' && !(phase === 'after' && lastSec.current !== null && lastSec.current > 0)) return
-    if (lastSec.current !== sec) click(sec === 0)
+    if (on && phase === 'full' && !waiting && !clockOn) setClockOn(true) // eslint-disable-line react-hooks/set-state-in-effect -- 60秒前に1回だけ
+  }, [on, phase, waiting, clockOn])
+
+  // 1秒ごとのカチッ（残り10秒から少し強く）
+  useEffect(() => {
+    if (!clockOn || phase !== 'full' || lastSec.current === sec) return
+    if (lastSec.current !== null && sec > 0) tick(sec <= 10)
     lastSec.current = sec
-  }, [phase, sec])
+  }, [clockOn, phase, sec])
 
-  if (phase !== 'full') return null
-  const mm = String(Math.floor(sec / 60)).padStart(2, '0'), ss = String(sec % 60).padStart(2, '0')
+  // 読み込み直した直後：「解禁」から新しい画面へふわっと
+  useEffect(() => {
+    if (seq !== 'reveal' || seqStarted.current) return
+    seqStarted.current = true
+    try { sessionStorage.removeItem(KAIKIN_FADE_KEY) } catch { /* なし */ }
+    window.setTimeout(() => setSeq('out'), 350)
+    window.setTimeout(() => { setSeq('none'); window.dispatchEvent(new Event(KAIKIN_DONE_EVENT)); startGuide() }, 350 + T_OUT)
+  }, [seq])
+
+  // 公開の瞬間
+  useEffect(() => {
+    if (!on || phase !== 'after' || seqStarted.current || waiting) return
+    const needReload = !startedNew && ginFlow()
+    if (!clockOn && !needReload && (!ginFlow() || kaikinSeen())) return
+    seqStarted.current = true
+    let t = 0
+    const at = (ms: number, f: () => void) => { t += ms; window.setTimeout(f, t) }
+    // 公開の瞬間に1回だけ流れを始める
+    if (clockOn) { setSeq('zero'); at(T_ZERO, () => setSeq('black')) } else setSeq('black') // eslint-disable-line react-hooks/set-state-in-effect -- 公開の瞬間に1回だけ
+    at(T_BLACK, () => { setSeq('stamp'); don() })
+    markKaikinSeen()
+    try { sessionStorage.setItem('ginjiro_launch_guided', '1') } catch { /* なし */ } // この起動ではキャンペーンのお知らせを出さず案内へ
+    if (needReload) {
+      at(T_STAMP, () => {
+        let n = 0
+        try { n = Number(sessionStorage.getItem(RELOADS_KEY) || 0); sessionStorage.setItem(RELOADS_KEY, String(n + 1)) } catch { /* なし */ }
+        if (n < 2) {
+          try { sessionStorage.setItem(KAIKIN_FADE_KEY, String(launchAt())) } catch { /* なし */ }
+          window.location.reload()
+        } else { setFinished(true); setSeq('none'); startGuide() } // 読み込み直しを繰り返さない（端末の時計が大きくずれているときなど）
+      })
+    } else {
+      at(T_STAMP, () => setSeq('out'))
+      at(T_OUT, () => { setFinished(true); setSeq('none'); window.dispatchEvent(new Event(KAIKIN_DONE_EVENT)); startGuide() })
+    }
+    // タイマーは片付けない（1回だけ・数秒で終わる。途中で消すと真っ暗のまま止まるため）
+  }, [on, phase, waiting, clockOn, startedNew])
+
+  // 0 になった瞬間も時計の層を出したまま（消して出し直すと暗転がもう一度かかる）。流れが終わったら出さない
+  const showClock = clockOn && !finished && (phase === 'full' || phase === 'after')
+  if (seq === 'none' && !showClock) return null
+  if (seq === 'black') return <BlockLayer tone="is-black"><span /></BlockLayer>
+  if (seq === 'stamp' || seq === 'reveal' || seq === 'out') {
+    return (
+      <BlockLayer tone={`is-kaikin${seq === 'stamp' ? ' is-stamp' : ''}${seq === 'out' ? ' is-out' : ''}`}>
+        <img className="launch-kaikin" src="/gacha/kaikin-brush.png" alt="解禁" />
+      </BlockLayer>
+    )
+  }
+  const shown = seq === 'zero' || phase === 'after' ? 0 : sec
+  const p = (n: number) => String(n).padStart(2, '0')
   return (
-    <div className="launch-full" role="timer" aria-live="off" aria-label={`新しい銀二郎まで ${sec} 秒`} onPointerDown={unlockAudio}>
-      <p className="launch-full-kicker">新しい銀二郎まで</p>
-      <p className="launch-full-time"><span>{mm}</span><i>:</i><span>{ss}</span></p>
-    </div>
+    <BlockLayer tone={shown <= 10 ? 'is-clock is-gold' : 'is-clock'}>
+      <div className="launch-clock" role="timer" aria-label={`新しい銀二郎まで ${shown} 秒`}>
+        <p className="launch-clock-kicker">新しい銀二郎まで</p>
+        <p className="launch-clock-time">
+          <span>{p(Math.floor(shown / 3600))}</span><i>:</i><span>{p(Math.floor(shown / 60) % 60)}</span><i>:</i><span>{p(shown % 60)}</span>
+        </p>
+      </div>
+    </BlockLayer>
   )
 }
 
 /** ホーム上部：「新しい銀二郎まで HH:MM:SS」（3時間前〜） */
 export function LaunchStrip() {
   const now = useServerSecond()
-  if (phaseAt(now) !== 'countdown' || ginFlow()) return null
+  if (!ginFlowConfigured() || phaseAt(now) !== 'countdown' || ginFlow()) return null
   return (
     <button type="button" className="launch-strip" onClick={() => window.dispatchEvent(new Event(LAUNCH_NOTICE_EVENT))}>
       <span>新しい銀二郎まで</span><b>{hms(launchAt() - now)}</b>
@@ -94,15 +219,23 @@ export function LaunchNotice({ onOpenChange }: { onOpenChange?: (open: boolean) 
   const phase = phaseAt(now)
   const after = phase === 'after' && launched() && ginFlow()
   const [open, setOpen] = useState(false)
+  // 公開後の告知は「解禁」を見終わってから
+  const [kaikinDone, setKaikinDone] = useState(kaikinSeen)
+  useEffect(() => {
+    const done = () => setKaikinDone(true)
+    window.addEventListener(KAIKIN_DONE_EVENT, done)
+    return () => window.removeEventListener(KAIKIN_DONE_EVENT, done)
+  }, [])
 
   useEffect(() => {
     let want = false
     try {
-      if (after) want = localStorage.getItem(NOTICE_KEY) !== String(launchAt())
+      if (!ginFlowConfigured()) want = false
+      else if (after) want = kaikinDone && localStorage.getItem(NOTICE_KEY) !== String(launchAt())
       else if (phase === 'countdown' && !ginFlow()) want = !sessionStorage.getItem(PRE_NOTICE_SESSION)
     } catch { /* 保存できない端末 */ }
     if (want) setOpen(true) // eslint-disable-line react-hooks/set-state-in-effect -- 公開の前後で1回だけ開く
-  }, [after, phase])
+  }, [after, phase, kaikinDone])
   useEffect(() => {
     const show = () => setOpen(true)
     window.addEventListener(LAUNCH_NOTICE_EVENT, show)

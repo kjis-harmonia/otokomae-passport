@@ -8,6 +8,7 @@
  *   保存失敗を localStorage で成功扱いにする処理は行わない。
  */
 
+import { trackBookingCall } from './bookingInFlight'
 import { supabase } from '../lib/supabase'
 
 const STAFF_TOKEN_KEY = 'ginjiro_staff_session'
@@ -81,7 +82,11 @@ function notifyAuthRequired(): void {
  * 通信・DBエラー、または戻り値が { error } の場合は RpcError を投げる。
  */
 export async function callRpc<T>(fn: string, params: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.rpc(fn, params)
+  // 予約の書き込みの通信中は、公開の時計（11/11）が画面を止めずに待つ
+  const done = trackBookingCall(fn)
+  let res: Awaited<ReturnType<typeof supabase.rpc>>
+  try { res = await supabase.rpc(fn, params) } finally { done() }
+  const { data, error } = res
   if (error) {
     if ((error.message ?? '').includes('staff_locked')) notifyStaffLocked()
     if ((error.message ?? '').includes('staff_auth_required')) {

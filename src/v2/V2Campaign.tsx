@@ -83,7 +83,10 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
 
   // ホームが出てから少し待って出す（いきなり覆わない）
   useEffect(() => {
-    if (shownThisLaunch || getStoredValue<string>(HIDE_KEY, '') === CAMPAIGN.id) return
+    // 新しい銀二郎の公開の直後（解禁→銀ちゃんの案内）は、この起動ではキャンペーンを重ねない（11/11）
+    let guided = false
+    try { guided = !!sessionStorage.getItem('ginjiro_launch_guided') } catch { /* なし */ }
+    if (shownThisLaunch || guided || getStoredValue<string>(HIDE_KEY, '') === CAMPAIGN.id) return
     const img = new Image()
     img.src = CAMPAIGN.image
     if (CAMPAIGN.kaikin) new Image().src = '/gacha/kaikin-brush.png'

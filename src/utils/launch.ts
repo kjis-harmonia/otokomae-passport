@@ -33,7 +33,10 @@ if (typeof window !== 'undefined' && isStaging()) {
   } catch { /* 保存できない端末 */ }
 }
 
-let offset = 0 // サーバー時刻 − 端末時刻（ミリ秒）
+const OFFSET_KEY = 'ginjiro_clock_offset'
+// サーバー時刻 − 端末時刻（ミリ秒）。読み込み直したあとも使えるよう、タブの間は覚えておく
+//   （端末の時計が遅いと、読み込み直した直後に旧画面になり、また読み込み直す…を繰り返すため）
+let offset = (() => { try { const v = Number(sessionStorage.getItem(OFFSET_KEY)); return Number.isFinite(v) ? v : 0 } catch { return 0 } })()
 let synced = false
 
 export function serverNow(): number { return Date.now() + offset }
@@ -72,6 +75,7 @@ export async function syncServerClock(): Promise<void> {
     // Date ヘッダーは秒まで。行き来の半分と 0.5 秒を足して真ん中に合わせる
     offset = date + 500 - (t0 + t1) / 2
     synced = true
+    try { sessionStorage.setItem(OFFSET_KEY, String(Math.round(offset))) } catch { /* なし */ }
     window.dispatchEvent(new Event(CLOCK_SYNCED_EVENT))
   } catch { /* 通信できなければ端末の時計のまま */ }
 }
