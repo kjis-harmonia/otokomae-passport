@@ -36,7 +36,7 @@ export function buildWelcome(lastVisit: string | null, reservations: readonly Cu
   const byDay = new Map<string, string | null>()
   visits.forEach(v => { const d = v.visit_date.slice(0, 10); if (d <= today && (!byDay.has(d) || (v.menu_code && !byDay.get(d)))) byDay.set(d, v.menu_code) })
   reservations
-    .filter(r => DONE.includes(r.status) && Date.parse(r.starts_at) <= now && r.items[0])
+    .filter(r => DONE.includes(r.status) && Date.parse(r.starts_at) <= now && r.items[0] && !r.companion_id && !r.companion_name && !r.companion_of) // お連れ様の予約はご本人のいつものにしない（11/11 点検）
     .forEach(r => { const d = jstDay(r.starts_at); if (!byDay.get(d)) byDay.set(d, r.items[0].menu_code) })
   const history = [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
   const dates = [lastVisit?.slice(0, 10), history[0]?.[0]].filter((d): d is string => !!d && d <= today).sort()

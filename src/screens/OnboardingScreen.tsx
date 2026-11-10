@@ -239,7 +239,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
 
   if(CUSTOMER_ACCESS_ENABLED)return <main className="customer-access access-welcome">
     {/* 初めて開く方がほとんどなので「はじめての登録」を先に、ログインは下の「すでに会員の方」へ（11/10 夜の点検：ログインと長い説明が先で迷った） */}
-    <header><img className="access-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" /><h1>銀二郎へようこそ</h1><p>お名前と電話番号を入れるだけで始められます。</p></header>
+    <header><img className="access-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" /><h1>銀二郎へようこそ</h1><p>お名前と電話番号で、すぐに始められます。</p></header>
     <form onSubmit={event=>{event.preventDefault();void handleFinish()}}>
       <h2>はじめての登録</h2>
       <label htmlFor="access-name">お名前</label><input id="access-name" autoComplete="name" value={name} maxLength={20} required disabled={submitting||authBusy} onChange={event=>setName(event.target.value)}/>
