@@ -903,12 +903,18 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .launch-layer::backdrop { background: #000; }
 .launch-layer.is-black { animation: none; }
 @keyframes launch-dark { from { opacity: 0; } to { opacity: 1; } }
-.launch-clock { text-align: center; padding: 0 12px; }
-.launch-clock-kicker { margin: 0 0 18px; font-size: 14px; letter-spacing: 0.32em; color: rgba(255, 255, 255, 0.5); }
-.launch-clock-time { margin: 0; display: flex; align-items: center; justify-content: center; font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; font-weight: 700; font-size: clamp(44px, 16.5vw, 132px); line-height: 1; letter-spacing: 0.01em; color: #e3261c; text-shadow: 0 0 18px rgba(227, 38, 28, 0.45); transition: color 0.35s, text-shadow 0.35s; }
-.launch-clock-time i { font-style: normal; padding: 0 0.02em 0.06em; opacity: 0.85; animation: launch-colon 1s steps(1) infinite; }
-@keyframes launch-colon { 50% { opacity: 0.25; } }
-.launch-layer.is-gold .launch-clock-time { color: #e6bd56; text-shadow: 0 0 22px rgba(230, 189, 86, 0.55); }
+/* 最後の1分（11/11 作り直し）：秒の数字だけ・細い書体・深いえんじ・金の細い輪が60秒かけて減る。光らせない */
+.launch-clock { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 0 16px; }
+.launch-clock-kicker { margin: 0; font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 15px; font-weight: 300; letter-spacing: 0.28em; color: rgba(255, 255, 255, 0.55); }
+.launch-dial { position: relative; width: min(78vw, 340px); aspect-ratio: 1; display: grid; place-items: center; }
+.launch-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.launch-ring-track { fill: none; stroke: rgba(196, 160, 82, 0.14); stroke-width: 1.2; }
+.launch-ring-arc { fill: none; stroke: rgba(196, 160, 82, 0.6); stroke-width: 1.6; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.6s; }
+.launch-layer.is-gold .launch-ring-arc { stroke: rgba(224, 188, 104, 0.95); }
+.launch-sec { grid-area: 1 / 1; font-family: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif; font-weight: 200; font-variant-numeric: tabular-nums; font-size: clamp(96px, 34vw, 168px); line-height: 1; letter-spacing: -0.02em; color: #8f1d2c; animation: launch-sec-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.launch-layer.is-gold .launch-sec { color: #d4ab5a; }
+@keyframes launch-sec-in { from { opacity: 0; transform: scale(1.14); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .launch-sec { animation: none; } .launch-ring-arc { transition: none; } }
 .launch-layer.is-kaikin { animation: none; }
 .launch-kaikin { width: min(82vw, 520px); height: auto; pointer-events: none; }
 .launch-layer.is-stamp .launch-kaikin { animation: launch-stamp 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.25) both; }
@@ -930,3 +936,4 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .launch-notice-note { margin: 0 0 20px; font-size: 13px; color: #62594e; }
 .launch-notice-main { width: 100%; min-height: 50px; border: 0; border-radius: 12px; background: #28231e; color: #f8f6f1; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
 .launch-notice-sub { width: 100%; min-height: 44px; margin-top: 6px; border: 0; background: transparent; color: #62594e; font: inherit; font-size: 15px; cursor: pointer; }
+.launch-layer.is-zero .launch-ring-arc { transition: stroke-dashoffset 0.25s ease-out, stroke 0.6s; }

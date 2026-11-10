@@ -26,17 +26,22 @@ function unlockAudio() {
   } catch { /* 音が出せない端末 */ }
 }
 const ready = () => !!audio && audio.state === 'running'
-/** 1秒ごとのカチッ。残り10秒からは少し強く */
-function tick(strong: boolean) {
+/** 低い一打（周波数が沈んでいく正弦波） */
+function thump(at: number, vol: number, from: number, to: number, len: number) {
+  const a = audio!, o = a.createOscillator(), g = a.createGain()
+  o.type = 'sine'; o.frequency.setValueAtTime(from, at); o.frequency.exponentialRampToValueAtTime(to, at + len)
+  g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(vol, at + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, at + len)
+  o.connect(g).connect(a.destination); o.start(at); o.stop(at + len + 0.02)
+}
+/** 1秒ごとの音：ふだんは小さく静かなカチッ。残り10秒からは鼓動のような重い「ドクン」 */
+function tick(heart: boolean) {
   if (!ready()) return
-  const a = audio!, t = a.currentTime
-  const parts = strong ? [[1800, 0, 0.016, 0.55], [900, 0.02, 0.04, 0.3]] : [[2400, 0, 0.01, 0.28], [1200, 0.016, 0.025, 0.14]]
-  for (const [freq, at, len, vol] of parts) {
-    const o = a.createOscillator(), g = a.createGain()
-    o.type = 'square'; o.frequency.value = freq
-    g.gain.setValueAtTime(vol, t + at); g.gain.exponentialRampToValueAtTime(0.0001, t + at + len)
-    o.connect(g).connect(a.destination); o.start(t + at); o.stop(t + at + len + 0.02)
-  }
+  const t = audio!.currentTime
+  if (heart) { thump(t, 0.9, 78, 42, 0.28); thump(t + 0.2, 0.55, 66, 40, 0.24); return }
+  const a = audio!, o = a.createOscillator(), g = a.createGain()
+  o.type = 'triangle'; o.frequency.value = 1600
+  g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03)
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t + 0.05)
 }
 /** 0 の「ドン」：低い音が沈んでいく太鼓のような一打 */
 function don() {
@@ -188,15 +193,22 @@ export function LaunchClock() {
       </BlockLayer>
     )
   }
-  const shown = seq === 'zero' || phase === 'after' ? 0 : sec
-  const p = (n: number) => String(n).padStart(2, '0')
+  // 発表会のような静かな時計：秒の数字だけを中央に。周りの金の細い輪が60秒かけて減る（11/11 慶一郎さん）
+  const shown = seq === 'zero' || phase === 'after' ? 0 : Math.min(59, sec)
+  const R = 92, C = 2 * Math.PI * R
+  const rest = seq === 'zero' || phase === 'after' ? 0 : Math.max(0, Math.min(1, (launchAt() - now) / 60_000))
   return (
-    <BlockLayer tone={shown <= 10 ? 'is-clock is-gold' : 'is-clock'}>
+    <BlockLayer tone={`is-clock${shown <= 10 ? ' is-gold' : ''}${shown === 0 ? ' is-zero' : ''}`}>
       <div className="launch-clock" role="timer" aria-label={`新しい銀二郎まで ${shown} 秒`}>
         <p className="launch-clock-kicker">新しい銀二郎まで</p>
-        <p className="launch-clock-time">
-          <span>{p(Math.floor(shown / 3600))}</span><i>:</i><span>{p(Math.floor(shown / 60) % 60)}</span><i>:</i><span>{p(shown % 60)}</span>
-        </p>
+        <div className="launch-dial">
+          <svg className="launch-ring" viewBox="0 0 200 200" aria-hidden="true">
+            <circle className="launch-ring-track" cx="100" cy="100" r={R} />
+            <circle className="launch-ring-arc" cx="100" cy="100" r={R} strokeDasharray={C} strokeDashoffset={C * (1 - rest)} />
+          </svg>
+          {/* key を変えて、1秒ごとにふわっと入れ替える */}
+          <span key={shown} className="launch-sec">{shown}</span>
+        </div>
       </div>
     </BlockLayer>
   )
