@@ -150,6 +150,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const reduce = useReducedMotion()
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [chips, setChips] = useState<Chip[]>([])
+  /** 「どなたのご予約ですか？」の人ごとのトグル。sel は選んでいる人の key（ご本人は 'me'） */
+  const [whoPick, setWhoPick] = useState<{ list: { key: string; label: string; booked: boolean }[]; sel: string[] } | null>(null)
+  const whoChosen = useRef<string[] | null>(null)
+  /** 押した選択肢：金色に光らせてから進む（11/11 慶一郎さん「選択式は全部合わせて」） */
+  const [pressed, setPressed] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
   const [waiting, setWaiting] = useState(false)
   const [text, setText] = useState('')
@@ -226,7 +231,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const w = waitRef.current
     if (!w || !t.trim()) return
     waitRef.current = null
-    setChips([]); setWaiting(false)
+    setChips([]); setWhoPick(null); setWaiting(false)
     push('you', t.trim())
     w(t.trim())
   }, [])
@@ -755,9 +760,18 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           ...(everyone.length === 3 ? [['3人とも', everyone.slice(0, 3)] as [string, BookPerson[]]] : []),
           ...mates.map(p => [`${p.label}だけ`, [p]] as [string, BookPerson[]]),
         ])
-        const chips: Chip[] = [...byChip.keys()].map((label, i) => ({ label, strong: i === 0 }))
-        const a = await ask('どなたのご予約ですか？\nご一緒の方の分も、まとめてお取りできますよ。', chips)
-        const w = (fromChip.current ? byChip.get(a) : undefined) ?? whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
+        // 人ごとのトグル（ご本人・〇〇さん）＋【次へ（N名）】（11/11 慶一郎さん）。予約済みの人は灰色で押せない。
+        //   声・文字の答え（「ご本人と〇〇さん」「3人とも」「〇〇さんだけ」）は今まで通り whoIn で読む
+        const pickList = [owner, ...allMates].map(p => ({ key: p.key, label: p.label, booked: booked.has(p.key) }))
+        await say('どなたのご予約ですか？\nご一緒の方の分も、まとめてお取りできますよ。')
+        const a = await new Promise<string>(res => {
+          whoChosen.current = null
+          setWhoPick({ list: pickList, sel: [ownerFree ? 'me' : everyone[0].key] })
+          setWaiting(true)
+          waitRef.current = res
+        })
+        const chosenKeys = fromChip.current ? whoChosen.current : null
+        const w = (chosenKeys ? everyone.filter(p => chosenKeys.includes(p.key)) : null) ?? (fromChip.current ? byChip.get(a) : undefined) ?? whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
         if (w) { d.who = w; continue }
         if (await change(a)) continue
         d.who = ownerFree ? [owner] : [mates[0]]; continue
@@ -1519,7 +1533,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     : chips.some(c => c.label === '会員QRを表示') ? 'verify'
     : chips.some(c => c.label === 'この内容で予約する') ? 'confirm'
     : chips.some(c => c.label === '最短で') ? 'when'
-    : chips.some(c => c.label === 'ご本人だけ') ? 'who'
+    : whoPick || chips.some(c => c.label === 'ご本人だけ') ? 'who'
     : chips.some(c => /\d\d:\d\d$/.test(c.label)) ? 'time'
     : chips.some(c => c.label === '一覧から選ぶ' || c.label === 'ほかのメニュー') ? 'menu'
     : chips.length === 2 ? 'yesno' : chips.length ? 'choice' : waiting ? 'free' : 'wait'
@@ -1550,12 +1564,41 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         {typing && <div className="lc-row"><span className="lc-avatar-gap" /><p className="gc-msg gc-gin gc-typing" aria-label="銀ちゃんが考えています"><i /><i /><i /></p></div>}
       </div>
       <div className="lc-dock">
+        {/* どなたのご予約か：人ごとのトグル＋【次へ（N名）】（11/11）。選んだ人は金の縁とやわらかい光・✓ */}
+        {whoPick && (
+          <motion.div className="lc-who" data-guide="lc-chips" data-ask={askKind} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduce ? 0 : 0.22 }}>
+            <div className="lc-who-list" role="group" aria-label="ご予約の方">
+              {whoPick.list.map(p => {
+                const on = whoPick.sel.includes(p.key)
+                return (
+                  <button key={p.key} type="button" className={`lc-who-btn${on ? ' on' : ''}`} aria-pressed={on} disabled={p.booked}
+                    onClick={() => setWhoPick(w => w && ({ ...w, sel: on ? w.sel.filter(k => k !== p.key) : [...w.sel, p.key] }))}>
+                    <span>{p.label}</span>
+                    {p.booked ? <small>ご予約済み</small> : <i aria-hidden="true">{on ? '✓' : ''}</i>}
+                  </button>
+                )
+              })}
+            </div>
+            <button type="button" className="gc-chip gc-chip-strong lc-who-next" disabled={!whoPick.sel.length} onClick={() => {
+              const keys = whoPick.list.filter(p => whoPick.sel.includes(p.key)).map(p => p.key)
+              const names = whoPick.list.filter(p => keys.includes(p.key)).map(p => p.label)
+              whoChosen.current = keys
+              fromChip.current = true
+              answer(names.length === 1 ? `${names[0]}だけ` : names.join('と'))
+            }}>次へ（{whoPick.sel.length}名）</button>
+          </motion.div>
+        )}
         {/* ボタンの列の上には指さしの子を出さない：真ん中に立つと、たまたま真ん中のボタンを指して見える（11/9 慶一郎さん）。
             カレンダー・メニュー一覧の上（面全体）には出す */}
         {chips.length > 0 && (
           <motion.div className={dockGuide ? 'gc-chips lc-chips lc-guided-chips' : 'gc-chips lc-chips'} data-guide="lc-chips" data-ask={askKind} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduce ? 0 : 0.22 }}>
             {chips.map(c => (
-              <button key={c.label} type="button" className={c.strong ? 'gc-chip gc-chip-strong' : 'gc-chip'} data-guide={c.label === 'この内容で予約する' ? 'lc-book' : undefined} onClick={() => { fromChip.current = true; answer(c.label) }}>
+              <button key={c.label} type="button" className={`gc-chip${c.strong ? ' gc-chip-strong' : ''}${pressed === c.label ? ' gc-chip-on' : ''}`} disabled={pressed !== null && pressed !== c.label} data-guide={c.label === 'この内容で予約する' ? 'lc-book' : undefined}
+                onClick={() => {
+                  if (pressed) return
+                  setPressed(c.label)
+                  window.setTimeout(() => { fromChip.current = true; answer(c.label); setPressed(null) }, reduce ? 0 : 240)
+                }}>
                 {c.label}{c.sub && <small>{c.sub}</small>}
               </button>
             ))}
@@ -1609,6 +1652,9 @@ function GinNavigationMark({ step }: { step: string }) {
 /** 会話の中のカレンダー：年月・曜日は暦どおり計算。空きのある日だけ押せる */
 function LcCalendar({ open, first, last, onPick }: { open: string[]; first: string; last: string; onPick: (d: string | null) => void }) {
   const reduce = useReducedMotion()
+  const [picked, setPicked] = useState<string | null>(null)
+  // ほかの選択肢と同じ：押した日が金色に光ってから進む（11/11）
+  const choose = (d: string) => { if (picked) return; setPicked(d); window.setTimeout(() => onPick(d), reduce ? 0 : 240) }
   const [month, setMonth] = useState(first.slice(0, 7))
   const set = new Set(open)
   const y = +month.slice(0, 4), m = +month.slice(5, 7)
@@ -1628,7 +1674,7 @@ function LcCalendar({ open, first, last, onPick }: { open: string[]; first: stri
       <div className="lc-cal-grid">
         {WEEK.split('').map((w, i) => <span key={w} className={i === 0 ? 'lc-sun' : i === 6 ? 'lc-sat' : undefined}>{w}</span>)}
         {cells.map((d, i) => d
-          ? <button key={d} type="button" disabled={!set.has(d)} onClick={() => onPick(d)} aria-label={`${md(d)}（${dow(d)}）`}>{Number(d.slice(8, 10))}</button>
+          ? <button key={d} type="button" className={picked === d ? 'lc-day-on' : undefined} disabled={!set.has(d) || (picked !== null && picked !== d)} onClick={() => choose(d)} aria-label={`${md(d)}（${dow(d)}）`}>{Number(d.slice(8, 10))}</button>
           : <span key={`e${i}`} />)}
       </div>
     </motion.div>
