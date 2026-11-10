@@ -14,7 +14,7 @@ import type { VisitRecord } from './welcome'
 import type { TicketRow } from '../../data/ticket'
 import { askAgent, askAgentVoice, type AgentAnswer, type AgentShown, type AgentTurn, type VoiceAnswer } from './agentClient'
 
-export function isBookingRejection(error: unknown, code: 'reservation_person_overlap' | 'slot_taken'): boolean {
+export function isBookingRejection(error: unknown, code: 'reservation_person_overlap' | 'slot_taken' | 'person_has_reservation'): boolean {
   return error instanceof RpcBusinessError && error.code === code
 }
 

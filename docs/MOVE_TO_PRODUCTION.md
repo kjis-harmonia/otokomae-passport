@@ -22,6 +22,7 @@
   8. 20261108220801_booking_person_overlap（本番に同じ人の重なり予約が残っていると止まる＝先に調べる）
   9. 20261109045326_customer_booking_cutover（旧版PWAの曖昧な確定・取消を断る）
   10. 20261109120000_hpb_base_prices（基本料金を HOT PEPPER に・スキンフェード追加・クールシャンプー停止・銀二郎Special 通常 5,000）
+  12. 20261110130000_one_reservation_per_person（11/10 追加：1人1件をサーバーでも守る。確定の中で、施術を受ける人ごとにこれからの予約が無いかを見る。9本目の後に流す）
   11. 20261110120000_change_staff（11/10 追加：予約の変更で担当・指名も変えられる。担当を指定しない呼び方は今までと同じ結果＝Staging で確認済み。7・8本目の後に流す）
 - Edge Function `johnny-agent`（usual モード）
 - 理容知識 `app_private.menu_knowledge`（記入表が戻ったら `confirmed_at` 付きで入れる。空でも動く）
@@ -37,7 +38,7 @@
 
 ## 順番（引っ越しの日・お客様の少ない夜にまとめて）
 
-1. **DB migration 1〜11 を本番へ**（1本ずつ、失敗したら止める。1本は「全部入る」か「何も変わらない」）。
+1. **DB migration 1〜12 を本番へ**（11・12 は番号順に）（1本ずつ、失敗したら止める。1本は「全部入る」か「何も変わらない」）。
 2. **すぐに main へ PR → マージ → 公開**。★9本目を入れた瞬間から、今の本番アプリでは予約の取消・2件目の予約が断られる。1 と 2 の間は空けない。
    新しいアプリは `VITE_GIN_FLOW` が無くても新しい安全な入口を使うので、2 の時点で取消・予約は戻る（見た目は今のまま。登録画面のクリーム色だけ先に変わる）。
 3. **Edge Function `johnny-agent` を本番へ deploy**（銀ちゃんの AI。無いと銀ちゃんの相談の返事が出ない）。
@@ -49,6 +50,7 @@
 - 画面：Vercel の `VITE_GIN_FLOW` を外して公開し直す → 銀ちゃん以前の画面に戻る（予約・取消は新しい安全な入口のまま動く）。
 - 9本目（旧版アプリの対策）：`supabase/rollback/20261109_cutover_restore.sql`（本番の11/9時点の関数そのもの）。古いアプリをまた使わせるときだけ。
 - 10本目（料金）：`supabase/rollback/20261109_prices_restore.sql`。
+- 12本目（1人1件）：`supabase/rollback/20261110_one_per_person_off.sql`（9本目の confirm_customer_hold に戻す。11/10 Staging で確認）。
 - 11本目（変更で担当を選ぶ）：`supabase/rollback/20261110_change_staff_off.sql`（7・8本目の時点の reservation_review・reservation_mutate に戻す。11/10 Staging で中身を確認）。
 - 8本目（重なり防止）：`supabase/rollback/20261108_overlap_off.sql`（制約だけ外す。データは変えない）。
 - 1〜7本目：足すだけの変更（新しい表・列・関数）なので戻さない。古い画面は新しい列を使わないだけ。

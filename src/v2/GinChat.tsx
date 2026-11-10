@@ -34,7 +34,7 @@ type Who = { kind: 'me' } | { kind: 'mate'; id: string | null; name: string }
 type Chip = { label: string; sub?: string; strong?: boolean }
 type Msg = { id: number; from: 'gin' | 'you'; text: string } | { id: number; from: 'cal'; open: string[]; first: string; last: string }
 /** book.menuCode：ホームの髪型の写真から来たときのメニュー（label は髪型の名前） */
-export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string } | { kind: 'change'; reservationId?: string } | { kind: 'offer'; holdId: string }
+export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string; group?: boolean } | { kind: 'change'; reservationId?: string } | { kind: 'offer'; holdId: string }
 
 const HOTPEPPER_MENU_URL = 'https://beauty.hotpepper.jp/slnH000583749/coupon/'
 // お客様向けの言葉（システムの言葉を出さない・11/9 点検）
@@ -437,7 +437,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   // ── book：予約。「誰が・何を・いつ」を1枚の予約メモにして、足りんところだけ聞く（11/8 慶一郎さん「変えたところだけ直す」）
   //   どの質問の途中でも「やっぱり朔耶だけ」「土曜がええ」「アイパーにする」で、そこだけ直す（ボタン・声・文字どれでも）
   //   人・メニューが変わったら施術時間も変わるので、時間は必ず選び直し（前の時間で取れると決めつけない）
-  const runBook = async (known?: People | null, preset?: { menuCode?: string | null; label?: string }, askExisting = false) => {
+  const runBook = async (known?: People | null, preset?: { menuCode?: string | null; label?: string; group?: boolean }, askExisting = false) => {
     const session = getCustomerSession()
     if (await checkBookingAccess(session) === 'closed') return
     if (hasPendingBookingConfirmation()) return checkPreviousBooking()
@@ -449,6 +449,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const owner: BookPerson = { key: 'me', id: null, name: people?.owner?.name ?? 'ご本人', label: 'ご本人', person: people?.owner ?? null }
     const allMates: BookPerson[] = (people?.companions ?? []).filter(c => c.id).map(c => ({ key: c.id!, id: c.id!, name: c.name, label: honor(c.name), person: c }))
     const mineNow = await api.reservations().catch(() => null)
+    // 今のご予約が読めないときは、1人1件を確かめられないので進めない（11/10 Codex 検査）
+    if (!Array.isArray(mineNow)) { await say('今のご予約を確認できませんでした。電波の良いところで、もう一度開いてくださいね。'); return endChange() }
     const upcoming = Array.isArray(mineNow) ? mineNow.filter(r => r.status === 'confirmed' && isUpcoming(r)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
     /** もう予約がある人（ご本人は 'me'、お連れ様はその id） */
     const booked = new Set(upcoming.flatMap(r => (r.companion_id ? [r.companion_id] : !r.companion_of && !r.companion_name ? ['me'] : [])))
@@ -462,6 +464,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       onClose()
       window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-people' } }))
     }
+    if (preset?.group && !allMates.length) return guidePeople()
     if (askExisting && upcoming.length) {
       const r = upcoming[0]
       const CHANGE = '今の予約を変更する', MATE = 'お連れ様の予約をする'
@@ -1008,6 +1011,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           }
           setTyping(false)
           const confirmed = confirmedPeople()
+          if (isBookingRejection(error, 'person_has_reservation')) {
+            const prefix = confirmed ? `${confirmed}のご予約は確定しました。
+` : ''
+            await say(`${prefix}${p.label}は、もうご予約があります。ご予約はお一人さま1件までです。変更は「次回予約」からどうぞ。`)
+            return endChange()
+          }
           if (isBookingRejection(error, 'reservation_person_overlap')) {
             const prefix = confirmed ? `${confirmed}のご予約は確定しました。\n` : ''
             const person = order.length > 1 ? p.label : 'この方'
@@ -1098,6 +1107,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const code = error instanceof RpcError ? error.code : ''
       if (code === 'hold_expired' || code === 'hold_not_found') await say('すみません、お取りしていたお時間が過ぎてしまいました。')
       else if (isBookingRejection(error, 'reservation_person_overlap')) await say('その時間に、すでに別のご予約があります。今のご予約はそのままです。')
+      else if (isBookingRejection(error, 'person_has_reservation')) await say('もうご予約があります。ご予約はお一人さま1件までです。変更は「次回予約」からどうぞ。')
       else return checkPreviousBooking()
     }
     return endChange()
@@ -1461,7 +1471,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (mode.kind === 'welcome') await runWelcome(mode.pending)
       else if (mode.kind === 'change') await runChange(mode.reservationId)
       else if (mode.kind === 'offer') await runOffer(mode.holdId)
-      else { await say('いらっしゃいませ。ご予約ですね。'); await runBook(null, { menuCode: mode.menuCode, label: mode.label }, true) }
+      else { await say('いらっしゃいませ。ご予約ですね。'); await runBook(null, { menuCode: mode.menuCode, label: mode.label, group: mode.group }, true) }
     })().catch(async () => {
       setTyping(false)
       await say('すみません、うまく続けられませんでした。ご予約が取れたか・変わったかは「次回予約」でご確認くださいね。')

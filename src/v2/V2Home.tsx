@@ -154,7 +154,7 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
                 <motion.article key={item.key} data-guide={item.kind === 'group' ? 'home-group' : undefined} className="v2-card v2-glass" aria-current={i === index ? 'true' : undefined}
                   onClick={item.kind === 'group' ? () => {
                     // Staging：2名以上も銀ちゃんの会話で（どなたの予約かを銀ちゃんが聞く）
-                    if (ginFlow()) { window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })); return }
+                    if (ginFlow()) { window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '', group: true } })); return }
                     requestJohnny({ menuCode: item.code, label: item.label, usual: true, group: true })
                   } : undefined}
                   style={item.kind === 'group' ? { cursor: 'pointer' } : undefined}

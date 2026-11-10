@@ -363,8 +363,8 @@ function App() {
         setActiveTab('mypage')
         return
       }
-      const d = (e as CustomEvent<{ menuCode?: string | null; label?: string } | null>).detail
-      setGinChat({ kind: 'book', menuCode: d?.menuCode ?? null, label: d?.label ?? '' })
+      const d = (e as CustomEvent<{ menuCode?: string | null; label?: string; group?: boolean } | null>).detail
+      setGinChat({ kind: 'book', menuCode: d?.menuCode ?? null, label: d?.label ?? '', group: !!d?.group })
     }
     // キャンセル待ちのお知らせ（?hold=…）：押さえた枠を銀ちゃんが聞く（11/9）
     const onOffer = (e: Event) => {

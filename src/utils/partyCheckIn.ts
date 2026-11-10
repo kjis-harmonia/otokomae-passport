@@ -19,6 +19,14 @@ export async function fetchTodayParty(userId: string): Promise<PartyEntry[]> {
   } catch { return [] }
 }
 
+/** 今日のご予約。読めなければ null（空の一覧と分ける：お会計の「次の方」が消えないように・11/10 Codex 検査 高） */
+export async function fetchTodayPartyOrNull(userId: string): Promise<PartyEntry[] | null> {
+  try {
+    const r = await callStaffRpc<PartyEntry[]>('staff_today_party', { p_user_id: userId })
+    return Array.isArray(r) ? r : null
+  } catch { return null }
+}
+
 /** 聞く必要があるか：まだ受付していない予約があり、2名以上か、お連れ様のご予約があるとき（ご本人だけ1件はいつもどおり） */
 export function partyNeedsAsk(party: readonly PartyEntry[]): boolean {
   return party.some(p => p.status === 'confirmed') && (party.length >= 2 || party.some(p => !p.is_owner))
