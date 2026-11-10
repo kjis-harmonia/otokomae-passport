@@ -31,3 +31,11 @@
 .access-welcome>.customer-access .access-primary{background:transparent;color:#28231e;border:1px solid rgba(70,55,34,.35)}
 .access-welcome button:focus-visible,.access-welcome input:focus-visible{outline-color:#28231e}
 .access-welcome .access-error{color:#a12828}
+
+/* すでに会員の方（11/10 夜）：はじめての登録の下に、控えめに */
+.access-welcome .access-returning{margin-top:32px;padding-top:24px;border-top:1px solid rgba(70,55,34,.12)}
+.access-welcome .access-returning h2{font-size:16px;margin:0 0 4px}
+.access-welcome .access-returning .access-hint{margin:0 0 4px;color:#62594e}
+.access-welcome .access-returning .access-text{color:#28231e;padding:0}
+.access-welcome header{padding-bottom:0}.access-welcome header p{margin-bottom:0}
+.access-welcome .access-returning .access-note{margin:12px 0 0;font-size:12px}

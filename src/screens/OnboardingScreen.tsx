@@ -238,8 +238,8 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   }
 
   if(CUSTOMER_ACCESS_ENABLED)return <main className="customer-access access-welcome">
-    <header><img className="access-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" /><h1>銀二郎へようこそ</h1><p>かんたんログインを設定済みの方は、入力せずにログインできます。</p></header>
-    <PasskeyLoginButton disabled={submitting||authBusy} onBusyChange={setAuthBusy} onSignedIn={()=>onDone(loadMemberStatus())}/>
+    {/* 初めて開く方がほとんどなので「はじめての登録」を先に、ログインは下の「すでに会員の方」へ（11/10 夜の点検：ログインと長い説明が先で迷った） */}
+    <header><img className="access-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" /><h1>銀二郎へようこそ</h1><p>お名前と電話番号を入れるだけで始められます。</p></header>
     <form onSubmit={event=>{event.preventDefault();void handleFinish()}}>
       <h2>はじめての登録</h2>
       <label htmlFor="access-name">お名前</label><input id="access-name" autoComplete="name" value={name} maxLength={20} required disabled={submitting||authBusy} onChange={event=>setName(event.target.value)}/>
@@ -248,6 +248,13 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       {submitError&&<p role="alert" className="access-error">{submitError}</p>}
       <button className="access-primary" disabled={submitting||authBusy} type="submit">{submitting?'登録しています…':'登録して始める'}</button>
     </form>
+    <section className="access-returning" aria-label="すでに会員の方">
+      <h2>すでに会員の方</h2>
+      <p className="access-hint">入力なしで、すぐにログインできます。</p>
+      <PasskeyLoginButton quiet disabled={submitting||authBusy} onBusyChange={setAuthBusy} onSignedIn={()=>onDone(loadMemberStatus())}/>
+      {/* 同じ電話番号でも会員は二重にできてしまうので、Face ID の無い会員さんは登録し直さずお店で引き継ぐ */}
+      <p className="access-hint access-note">Face ID を設定していない方は、<br />登録し直さずに、店頭でスタッフにお声がけください。</p>
+    </section>
   </main>
 
   return (
