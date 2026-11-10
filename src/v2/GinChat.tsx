@@ -420,8 +420,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             ])
             onClose()
             // 文字・声でも選べるように。HOT PEPPER はほかのリンクと同じく別の画面で開く（11/11 点検）
-            const pick = fromChip.current ? answer : /電話/.test(answer) ? TEL : /ホットペッパー|hot\s*pepper/i.test(answer) ? HPB : /QR|ＱＲ/i.test(answer) || intent(answer) === 'yes' ? QR : ''
-            if (pick === HPB) window.open(HOTPEPPER_MENU_URL, '_blank', 'noopener')
+            //   文字・声は、断り（「電話はいいです」「電話じゃなくて」）では何もしない。「はい」だけでは選ばない
+            const refuse = /いい(です|よ|わ)?$|いら|じゃな|ではな|やめ/.test(answer)
+            const pick = fromChip.current ? answer : refuse ? '' : /電話/.test(answer) ? TEL : /ホットペッパー|hot\s*pepper/i.test(answer) ? HPB : /QR|ＱＲ/i.test(answer) ? QR : ''
+            // 押したときは別の画面で。声・文字のときは、ブラウザに止められないよう同じ画面で開く
+            if (pick === HPB) { if (fromChip.current) window.open(HOTPEPPER_MENU_URL, '_blank', 'noopener'); else window.location.href = HOTPEPPER_MENU_URL }
             else if (pick === TEL) window.location.href = SHOP_PHONE_TEL
             else if (pick === QR) window.dispatchEvent(new Event('ginjiro:show-qr'))
             return 'closed'
@@ -800,7 +803,14 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           ? (a === ANY ? null : a === YES ? usualSt : staffList.find(s => s.name === a)?.id)
           : usualSt && intent(a) === 'yes' ? usualSt : staffIn(a)
         if (usualSt && !fromChip.current && st === undefined) {
-          if (intent(a) === 'no') { usualStaffDeclined = true; continue }
+          // 断り・「ほかの人」は一覧で聞き直す（「ほかの人でお願いします」を「いつもの」と取らない・11/11 2回目の点検）
+          if (intent(a) === 'no' || /ほか|他の|別|以外|じゃな|ではな|違|ちが|変え|かえ/.test(a)) { usualStaffDeclined = true; continue }
+          // 日にちなどの希望（「土曜でお願いします」）は、そちらとして受ける
+          if (whenIn(a) && await change(a)) continue
+          // 「ええわ」「いいわ」だけは賛成か断りか分からないので聞き直す（ほかの確認と同じ）
+          if (intent(a) === 'ambiguous' && !/よ$/.test(a.normalize('NFKC').replace(/[\s。！!]+$/g, ''))) {
+            await say(`「${a}」は、いつもの${staffName(usualSt)}でよろしいということですか？ボタンで教えてくださいね。`); continue
+          }
           // 「大丈夫です」「いつもので」「ええよ」なども、いつもの担当で（黙って「どちらでも」にしない・11/11 点検）
           if (intent(a) === 'ambiguous' || /いつも|大丈夫|だいじょうぶ|お願い|おねがい|それで|そのまま/.test(a)) st = usualSt
         }
