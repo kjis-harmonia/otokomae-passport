@@ -10,7 +10,7 @@ import { callStaffRpc, rpcErrorMessage } from '../utils/staffSession'
 import { getStoredValue } from '../utils/storage'
 import { readCheckoutAttempt, startNextCheckout } from '../utils/checkoutAttempt'
 
-const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+const UI = '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif'
 
 type Target = { reservationId: string | null; clientId: string }
 // 店舗端末の「担当者」（AdminScreen が端末に保存する）。会計の記録には確定した時点の名前を残す
@@ -65,16 +65,16 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
 
   if (paid) {
     return (
-      <div data-guide="paid" style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, textAlign: 'left', background: 'rgba(36,107,82,0.06)', border: '1px solid rgba(36,107,82,0.35)' }}>
-        <p style={{ fontSize: 9, letterSpacing: '0.26em', color: '#246b52', marginBottom: 6 }}>完了</p>
+      <div data-guide="paid" style={{ textAlign: 'left', fontFamily: UI }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: '#2F7D5B', margin: '0 0 4px' }}>✓ お会計が終わりました</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-          <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: '#1c1f1d' }}>お会計済み（{PAYMENT_LABEL[paid.payment_method ?? ''] ?? paid.payment_method}）</span>
-          <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: '#1c1f1d' }}>{yen(paid.total)}</span>
+          <span style={{ fontSize: 15, color: '#6B6B66' }}>お会計済み（{PAYMENT_LABEL[paid.payment_method ?? ''] ?? paid.payment_method}）</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: '#1B1B1A', fontVariantNumeric: 'tabular-nums' }}>{yen(paid.total)}</span>
         </div>
         {error && <p style={{ marginTop: 8, fontSize: 13, color: '#b23a3a' }}>{error}</p>}
         <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />
         <button type="button" disabled={loading} onClick={() => { setPaid(null); setPickedMenu(null); void open(true) }}
-          style={{ width: '100%', marginTop: 12, minHeight: 48, borderRadius: 12, background: '#ffffff', border: '1px solid rgba(151,115,43,0.5)', color: '#1c1f1d', fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.08em', cursor: 'pointer' }}>
+          style={{ width: '100%', marginTop: 12, minHeight: 46, borderRadius: 10, background: '#ffffff', border: '1px solid #D9D9D4', color: '#1B1B1A', fontFamily: UI, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
           もう1件お会計する（お子様・お連れ様）
         </button>
       </div>
@@ -107,14 +107,14 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         onClick={() => void open()}
         disabled={loading}
         style={{
-          width: '100%', marginTop: 16, minHeight: 56, borderRadius: 14,
-          background: '#97732b', border: 'none', boxShadow: '0 4px 18px rgba(151,115,43,0.28)',
-          color: '#ffffff', fontFamily: SERIF, fontSize: 16, fontWeight: 700, letterSpacing: '0.16em',
+          width: '100%', minHeight: 52, borderRadius: 12,
+          background: '#1B1B1A', border: 'none',
+          color: '#ffffff', fontFamily: UI, fontSize: 17, fontWeight: 600,
           cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.6 : 1,
         }}
       >
         {loading ? '準備しています…' : 'お会計に進む'}
-        <span style={{ display: 'block', fontSize: 10, fontWeight: 400, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
+        <span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: 'rgba(255,255,255,0.72)', marginTop: 2 }}>
           銀Pay・現金・カード・QR
         </span>
       </button>
