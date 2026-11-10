@@ -413,9 +413,15 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (getCustomerSession() === session) {
           if (status?.verified === true) return retried ? 'retried' : 'ready'
           if (status?.verified === false) {
-            const answer = await askYN('AI予約は、お店で会員QRを読ませていただいてから使えるようになります。\n次のご来店のときに、スタッフに会員QRをお見せくださいね。', '会員QRを表示', 'ホームへ')
+            // 初めての方は、ここで行き止まりにならないよう HOT PEPPER・お電話へ（11/10 夜の点検：【会員QRを表示】【ホームへ】だけで、初回の予約のしかたが分からなかった）
+            const HPB = 'HOT PEPPER で予約', TEL = '電話で予約', QR = '会員QRを表示'
+            const answer = await ask('AI予約は、お店で会員QRを読ませていただいてから使えるようになります。\nそれまでのご予約は、HOT PEPPER Beauty かお電話でお願いします。', [
+              { label: HPB, strong: true }, { label: TEL }, { label: QR }, { label: 'ホームへ' },
+            ])
             onClose()
-            if (answer === 'yes') window.dispatchEvent(new Event('ginjiro:show-qr'))
+            if (fromChip.current && answer === HPB) window.location.href = HOTPEPPER_MENU_URL
+            else if (fromChip.current && answer === TEL) window.location.href = SHOP_PHONE_TEL
+            else if (fromChip.current && answer === QR) window.dispatchEvent(new Event('ginjiro:show-qr'))
             return 'closed'
           }
           for (;;) {
