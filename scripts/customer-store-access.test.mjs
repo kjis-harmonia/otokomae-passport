@@ -13,7 +13,7 @@ async function loadEdgeEntry(name,environment){
  const entry=new URL('../supabase/functions/'+name+'/index.ts',import.meta.url)
  let source=stripTypeScriptTypes(await readFile(entry,'utf8'),{mode:'transform'})
  source=source.replaceAll("'../_shared/johnny-store-access.ts'",JSON.stringify(new URL('../supabase/functions/_shared/johnny-store-access.ts',import.meta.url).href))
- if(name==='johnny-agent')source=source.replaceAll("'./agent.ts'",JSON.stringify(new URL('./agent.ts',entry).href))
+ if(name==='johnny-agent')source=source.replaceAll("'./agent.ts'",JSON.stringify(new URL('./agent.ts',entry).href)).replaceAll("'./usual.ts'",JSON.stringify(new URL('./usual.ts',entry).href))
  assert.doesNotMatch(source,/from\s*['"]\.\.?\//,'Entry imports must resolve to the real source files')
  await import('data:text/javascript;base64,'+Buffer.from(source+'\n// environment: '+environment).toString('base64'))
 }

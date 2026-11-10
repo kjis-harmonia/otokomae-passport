@@ -1,9 +1,24 @@
+import { launchBackdoor, launched } from './launch'
 export type AppEnv = 'production' | 'staging'
 
 export function getAppEnv(): AppEnv {
   return import.meta.env.VITE_APP_ENV === 'staging' ? 'staging' : 'production'
 }
 
+/** テスト用の道具（Staging の帯・リセット・ガチャの先行公開など）だけに使う。新しい機能の出し分けには ginFlow() を使う */
 export function isStaging(): boolean {
   return getAppEnv() === 'staging'
+}
+
+/** 新しいお客様の流れ（LINE 型の銀ちゃん・お連れ様・予約の変更・キャンセル待ち）のスイッチ。11/9 にひとつにまとめた。
+ *  Staging は常に入。本番は Vercel の VITE_GIN_FLOW=true で入る（戻すときはこの設定を外して公開し直すだけ）。
+ *  新しい機能を Staging だけに出したいときも isStaging() ではなく、これを使う（引っ越しの日に漏れないように） */
+/** 新しい流れが入る環境か（公開時刻に関係なく）。公開の時計・告知はこれが true のときだけ */
+export function ginFlowConfigured(): boolean {
+  return isStaging() || import.meta.env.VITE_GIN_FLOW === 'true'
+}
+
+export function ginFlow(): boolean {
+  // 11/11：公開時刻（utils/launch.ts の GIN_LAUNCH_AT）までは旧画面。慶一郎さんの端末だけ先に新画面（裏口）
+  return ginFlowConfigured() && (launched() || launchBackdoor())
 }

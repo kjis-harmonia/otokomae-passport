@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react'
 import { pushState, turnOffPush, turnOnPush, type PushState } from '../utils/webPush'
 import { SHOW_INSTALL_GUIDE_EVENT } from '../utils/installGuide'
+import { Bell } from 'lucide-react'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
 
 /** tone：gold＝マイページ（黒と金）、mono＝JOHNNY の画面（白黒） */
-export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWhenOn?: boolean }) {
+/** menu：☰ の中。見出しの「銀二郎のお知らせ」ごと出し、受け取り中も「受け取り中 ✓」を出す（空の欄にしない・11/7）。受け取れない端末は欄ごと出さない */
+export function PushToggle({ tone, hideWhenOn, menu }: { tone: 'gold' | 'mono'; hideWhenOn?: boolean; menu?: boolean }) {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -15,8 +17,8 @@ export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWh
   useEffect(() => { pushState().then(setState, () => setState('off')) }, [])
   if (!state) return null
   // 受け取れない端末：QR の画面では理由を出す（ホームでは出さない）
-  if (state === 'unsupported') return tone === 'gold' && !hideWhenOn ? <Unsupported /> : null
-  if ((tone === 'mono' || hideWhenOn) && state === 'on') return null
+  if (state === 'unsupported') return tone === 'gold' && !hideWhenOn && !menu ? <Unsupported /> : null
+  if (!menu && (tone === 'mono' || hideWhenOn) && state === 'on') return null
 
   const act = async () => {
     setBusy(true); setError(null)
@@ -35,8 +37,8 @@ export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWh
     : 'メンテナンスカットの期限が近づいたら、お知らせします'
 
   const gold = tone === 'gold'
-  return (
-    <div style={{ width: '100%', marginTop: gold ? 0 : 16 }}>
+  const body = (
+    <div style={{ width: '100%', marginTop: gold || menu ? 0 : 16 }}>
       <button type="button" className="push-toggle-action" onClick={() => void act()} disabled={busy || state === 'denied'} style={{
         width: '100%', padding: '15px 18px', borderRadius: 14, textAlign: 'left', cursor: state === 'denied' ? 'default' : 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
@@ -49,6 +51,13 @@ export function PushToggle({ tone, hideWhenOn }: { tone: 'gold' | 'mono'; hideWh
         {state !== 'denied' && <span className="push-toggle-indicator" aria-hidden="true" style={{ color: gold ? '#C9A24A' : 'rgba(235,235,245,0.6)', fontSize: 18 }}>{state === 'on' ? '✓' : '›'}</span>}
       </button>
       {error && <p role="alert" style={{ margin: '8px 4px 0', fontSize: 12, color: '#E06060' }}>{error}</p>}
+    </div>
+  )
+  if (!menu) return body
+  return (
+    <div className="v2-panel v2-glass" style={{ marginTop: 12 }}>
+      <p className="v2-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Bell size={14} />銀二郎のお知らせ</p>
+      {body}
     </div>
   )
 }

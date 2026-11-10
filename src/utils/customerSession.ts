@@ -9,7 +9,7 @@
  */
 
 import { callRpc, isMissingRpc, RpcError } from './staffSession'
-import { getStoredValue, setStoredValue } from './storage'
+import { getStoredValue, loadMemberStatus, saveMemberStatus, setStoredValue, ONBOARDING_NAME_KEY } from './storage'
 import { USER_ID_KEY } from './userId'
 
 const CUSTOMER_SESSION_KEY = 'ginjiro_customer_session'
@@ -37,8 +37,22 @@ export function hasCustomerSession(): boolean {
   return getCustomerSession() !== null
 }
 
+/** 会員ごとに端末に残すもの。端末の会員が別の人に変わったら消す（前の人の「いつもの」・お連れ様の名前・最初の案内を持ち越さない・11/7）
+ *  同じ会員のログインし直しでは消さない（案内をくり返さない） */
+export const MEMBER_LOCAL_KEYS = [
+  'otokomae_coupons', 'otokomae_gacha_date', 'otokomae_gacha_result', 'ginjiro_active_ticket', 'ginjiro_pending_contact', 'ginjiro_current_reservation',
+  'ginjiro_companion_reservations', 'ginjiro_member_issued_at', 'ginjiro_next_reservation', 'ginjiro_companion_names',
+  'ginjiro_usual_menu', 'ginjiro_usual_staff', 'ginjiro_usual_members', 'ginjiro_guide_seen_customer', 'ginjiro_first_guide', 'ginjiro_johnny_ai_count',
+]
+export function clearMemberLocal(): void {
+  for (const key of MEMBER_LOCAL_KEYS) { try { localStorage.removeItem(key) } catch { /* 保存できない端末 */ } }
+}
+
 /** サーバーが返した user_id とセッションを端末に保存する */
 export function saveCustomerSession(userId: string, session: string): void {
+  const previous = getStoredValue<string | null>(USER_ID_KEY, null)
+  // 前の会員がログインしていたときだけ（登録の途中の仮の番号から本番の番号に変わるときは消さない）
+  if (previous && previous !== userId && getCustomerSession()) clearMemberLocal()
   setStoredValue(USER_ID_KEY, userId)
   try { localStorage.setItem(CUSTOMER_SESSION_KEY, session) } catch { /* ignore */ }
   window.dispatchEvent(new Event('ginjiro:customer-session-changed'))
@@ -115,13 +129,21 @@ export async function bindWithCode(userId: string, code: string): Promise<{ ok: 
 }
 
 /** 端末の会員番号が、ログインの鍵（セッション）の会員とずれていたら、鍵の会員に合わせる（11/6：PC の古い状態で QR に別の番号が出て「ゲスト」ができた）。
- *  合わせたら true。鍵が無い・読めないときは何もしない */
+ *  合わせたら true（名前だけ入れ直したときも true＝会員証を描き直す）。鍵が無い・読めないときは何もしない */
 export async function repairUserIdFromSession(): Promise<boolean> {
   if (!hasCustomerSession()) return false
   try {
-    const r = await callCustomerRpc<{ user_id?: string } | null>('customer_get_profile')
+    const r = await callCustomerRpc<{ user_id?: string; name?: string } | null>('customer_get_profile')
     const owner = r?.user_id
-    if (!owner || getStoredValue<string | null>(USER_ID_KEY, null) === owner) return false
+    const previous = getStoredValue<string | null>(USER_ID_KEY, null)
+    // 同じ会員で、端末に名前だけ無い（古い版から使っている等）：会員証が「ゲスト様」にならんよう名前を入れる（11/9 点検）
+    if (owner && previous === owner && typeof r?.name === 'string' && r.name.trim() && !getStoredValue<string | null>(ONBOARDING_NAME_KEY, null)) {
+      setStoredValue(ONBOARDING_NAME_KEY, r.name.trim())
+      saveMemberStatus({ ...loadMemberStatus(), memberName: r.name.trim() })
+      return true // 会員証を描き直す
+    }
+    if (!owner || previous === owner) return false
+    if (previous) clearMemberLocal()
     setStoredValue(USER_ID_KEY, owner)
     window.dispatchEvent(new Event('ginjiro:customer-session-changed'))
     return true

@@ -238,7 +238,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   }
 
   if(CUSTOMER_ACCESS_ENABLED)return <main className="customer-access access-welcome">
-    <header><p className="access-brand">銀二郎</p><h1>銀二郎へようこそ</h1><p>かんたんログインを設定済みの方は、入力せずにログインできます。</p></header>
+    <header><img className="access-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" /><h1>銀二郎へようこそ</h1><p>かんたんログインを設定済みの方は、入力せずにログインできます。</p></header>
     <PasskeyLoginButton disabled={submitting||authBusy} onBusyChange={setAuthBusy} onSignedIn={()=>onDone(loadMemberStatus())}/>
     <form onSubmit={event=>{event.preventDefault();void handleFinish()}}>
       <h2>はじめての登録</h2>

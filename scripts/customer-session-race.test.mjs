@@ -14,7 +14,7 @@ function fixture() {
   const exports = {}, storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), removeItem: key => data.delete(key) }
   const modules = {
     './staffSession': { RpcError, isMissingRpc: () => false, callRpc: () => new Promise((_resolve, no) => { reject = no }) },
-    './storage': { setStoredValue: (key, value) => storage.setItem(key, JSON.stringify(value)) },
+    './storage': { setStoredValue: (key, value) => storage.setItem(key, JSON.stringify(value)), getStoredValue: (key, fallback) => { const raw = storage.getItem(key); return raw === null ? fallback : JSON.parse(raw) } },
     './userId': { USER_ID_KEY: 'fixture-user' },
   }
   vm.runInNewContext(compiled, { exports, require: name => { assert.ok(modules[name], name); return modules[name] }, localStorage: storage, window: { dispatchEvent: event => { events.push(event.type); return true } }, Event, CustomEvent })

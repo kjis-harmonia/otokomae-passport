@@ -9,6 +9,7 @@ import {checkJohnnyStoreAccess} from '../_shared/johnny-store-access.ts'
 //   ・予約の確定・キャンセル・変更はしない。ui の確認画面で「はい」が押されたら、アプリが RPC を呼ぶ
 //   ・名前・電話番号は AI に送らない。API キーは Secrets（OPENAI_API_KEY）だけ。無ければ 503（アプリは決まった規則の JOHNNY に切り替える）
 // モデルは OPENAI_MODEL（既定 gpt-6-luna）。
+import { runUsual } from './usual.ts'
 import { runAgent, type WalletTicket, type AgentContext, type AgentTools, type DayOverview, type MenuInfo, type Reservation, type StaffInfo, type Turn } from './agent.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
@@ -171,6 +172,27 @@ Deno.serve(async (req) => {
     catch { return json(502, { error: 'stt_unavailable' }) }
   }
   const session = str(body.session, 200)
+  // 登録直後の「いつものメニュー」決め（銀ちゃんと話す・11/8）。登録したての方は店頭の本人確認がまだなので、会員のログインだけ確かめる
+  //   予約はしない（メニューの候補を返すだけ）。登録はアプリが正式な名前と料金を見せて「登録する」が押されたときだけ
+  if (body.mode === 'usual') {
+    if (session.length < 32) return json(401, { error: 'customer_auth_required' })
+    const said = str(body.message, 200)
+    if (!said) return json(400, { error: 'invalid_request' })
+    try {
+      const [opts, known] = await Promise.all([
+        rpc<{ menus: MenuInfo[] }>('customer_booking_options', session),
+        // 確認済みの理容知識だけ（無ければ空。銀ちゃんは技術を説明しない）
+        rpc<{ name: string; finish: string | null; length_needed: string | null; hair_fit: string | null; check_before: string | null }[] | null>('customer_menu_knowledge', session).catch(() => null),
+      ])
+      const knowledge = (known ?? []).map(k => [`・${k.name}`, k.finish && `仕上がり：${k.finish}`, k.length_needed && `必要な今の髪の長さ：${k.length_needed}`, k.hair_fit && `向いている髪質・条件：${k.hair_fit}`, k.check_before && `施術前に確認：${k.check_before}`].filter(Boolean).join(' ／ ')).join('\n')
+      const reply = await runUsual(opts.menus, cleanHistory(body.history), said, { knowledge, visited: body.visited === true, who: str(body.who, 20) || null, visitDate: /^\d{4}-\d{2}-\d{2}$/.test(str(body.visit_date, 10)) ? str(body.visit_date, 10) : null, rejected: Array.isArray(body.rejected) ? body.rejected.filter((c): c is string => typeof c === 'string').map(c => c.slice(0, 60)).slice(0, 20) : [] }, { apiKey: OPENAI_KEY, model: MODEL })
+      return json(200, reply)
+    } catch (e) {
+      if (e instanceof RpcFailed) return json(e.code === 'customer_auth_required' ? 401 : 502, { error: e.code })
+      console.error('[johnny-agent usual]', String((e as Error)?.message ?? e).slice(0, 300))
+      return json(502, { error: 'ai_failed' })
+    }
+  }
   const denied=await checkJohnnyStoreAccess(SUPABASE_URL,ANON_KEY,session)
   if(denied)return json(denied.status,{error:denied.error})
   // JOHNNY の声：OpenAI の音声をそのまま流す（アプリは届いた分から再生する）

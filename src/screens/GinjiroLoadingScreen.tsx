@@ -25,9 +25,13 @@ export function GinjiroLoadingScreen() {
         background: `${TOP} url(${OPENING_POSTER}) center / cover no-repeat`,
       }}
     >
+      {/* 動画は動き出してから見せる。iPhone の省電力モードなどで自動再生が止められると、iPhone が勝手に再生ボタンを出す
+          （11/10 慶一郎さん「なんで再生ボタン付けた？いらねーよ」）→ 動かんときは絵のまま。ボタンは出さない */}
       {!still && (
-        <video src="/opening/opening.mp4" poster={OPENING_POSTER} autoPlay muted loop playsInline preload="auto" aria-hidden="true"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        <video src="/opening/opening.mp4" autoPlay muted loop playsInline preload="auto" aria-hidden="true" tabIndex={-1}
+          disablePictureInPicture controls={false} className="gin-opening-video"
+          onPlaying={e => { e.currentTarget.style.opacity = '1' }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0, pointerEvents: 'none' }} />
       )}
     </motion.div>
   )

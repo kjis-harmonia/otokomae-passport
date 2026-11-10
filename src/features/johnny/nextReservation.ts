@@ -10,7 +10,7 @@ const KEY = 'ginjiro_next_reservation'
 const EVENT = 'ginjiro:reservation-changed'
 const ACTIVE: CustomerReservation['status'][] = ['confirmed', 'checked_in', 'in_service', 'awaiting_payment']
 
-function isUpcoming(r: CustomerReservation, now = Date.now()): boolean {
+export function isUpcoming(r: CustomerReservation, now = Date.now()): boolean {
   return ACTIVE.includes(r.status) && new Date(r.ends_at).getTime() > now
 }
 
@@ -56,7 +56,7 @@ export function rememberCompanion(id: string, name?: string): void {
 
 /** お連れ様の予約か。DB のつながり（companion_of）を正とし、古い予約は端末の記録でも見る（11/4） */
 export function isCompanion(r: CustomerReservation): boolean {
-  return !!r.companion_of || companionIds().includes(r.id)
+  return !!r.companion_of || !!r.companion_id || !!r.companion_name || companionIds().includes(r.id)
 }
 /** お連れ様のお名前（端末に覚えた名前、無ければ予約メモの名前） */
 export function companionName(r: CustomerReservation): string | null {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { yen } from '../utils/bookingApi'
-import { callStaffRpc } from './sbRpc'
+import { callRpc, callStaffRpc, getStaffToken } from './sbRpc'
 import type { SbReservation } from './sbTypes'
 
 // AI予約でお客様が選んだ券（使う予定）と、券を引いたお支払い予定。予約の詳細の「予約時の金額」の下に出す
@@ -17,7 +17,8 @@ export function SbTicketPlan({ reservation: r }: { reservation: SbReservation })
     if (r.source !== 'app') return
     let alive = true
     void Promise.all([
-      callStaffRpc<{ ticket_ids?: string[] } | null>('staff_reservation_ticket_plan', { p_reservation_id: r.id }).catch(() => null),
+      // この関数だけ鍵の名前が p_token（p_staff で送ると毎回失敗して、選んだ券が出ていなかった・11/10 Codex 検査）
+      callRpc<{ ticket_ids?: string[] } | null>('staff_reservation_ticket_plan', { p_token: getStaffToken(), p_reservation_id: r.id }).catch(() => null),
       callStaffRpc<Context>('staff_checkout_context', { p_reservation_id: r.id, p_client_id: null }).catch(() => null),
     ]).then(([plan, ctx]) => {
       if (!alive) return

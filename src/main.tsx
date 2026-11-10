@@ -1,14 +1,16 @@
-import { StrictMode } from 'react'
+/* eslint-disable react-refresh/only-export-components -- This entry mounts the app and has no exports. */
+import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import './styles/tokens.css'
 import './styles/luxury-bg.css'
 import App from './App.tsx'
-import { CMSApp } from './cms/CMSApp.tsx'
-import { StaffPinGate } from './screens/StaffPinGate.tsx'
 import { seedInitialStyles } from './utils/styleStorage'
 import { setDataAuthMode } from './utils/dataAuthMode'
 import { openInSafariIfLine } from './utils/installGuide'
+
+const CMSApp = lazy(() => import('./cms/CMSApp.tsx').then(module => ({ default: module.CMSApp })))
+const StaffPinGate = lazy(() => import('./screens/StaffPinGate.tsx').then(module => ({ default: module.StaffPinGate })))
 
 seedInitialStyles()
 
@@ -88,10 +90,10 @@ if (!isStaff && !isCMS) openInSafariIfLine()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isStaff ? (
-      <StaffPinGate />
-    ) : isCMS ? (
-      <CMSApp onExit={exitCMS} />
+    {isStaff || isCMS ? (
+      <Suspense fallback={<p role="status">読み込み中…</p>}>
+        {isStaff ? <StaffPinGate /> : <CMSApp onExit={exitCMS} />}
+      </Suspense>
     ) : (
       <App />
     )}

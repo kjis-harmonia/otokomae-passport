@@ -9,7 +9,7 @@ export function V2Qr({ onTickets }: { onTickets: () => void }) {
     <div className="v2-page">
       <h1 className="v2-title">会員QR</h1>
       <p className="v2-note" style={{ margin: '-8px 0 14px' }}>ご来店時に、この画面をスタッフにお見せください。</p>
-      <div style={{ margin: '0 -14px' }}><PassportCard compact /></div>
+      <div style={{ margin: '0 -14px' }} data-guide="qr-card"><PassportCard compact /></div>
       <div className="v2-panel v2-glass" style={{ marginTop: 16, padding: '4px 14px' }}>
         <button type="button" className="v2-row" onClick={onTickets}>
           <Ticket size={20} /><span style={{ flex: 1 }}>すべてのチケット<small>割引券・特典・プレゼント</small></span><ChevronRight size={18} />

@@ -631,7 +631,7 @@ function MemberTicketWallet({
         <LayoutGroup id="wallet-chips">
           <div className="wallet-chips" role="toolbar" aria-label="カードの絞り込み" style={{ marginTop: 12 }}>
             {WALLET_FILTERS.map(f => (
-              <button key={f.id} type="button" className="wallet-chip" aria-label={f.label} aria-pressed={filter === f.id} onClick={() => selectFilter(f.id)}>
+              <button key={f.id} type="button" className="wallet-chip" data-guide={`wallet-${f.id}`} aria-label={f.label} aria-pressed={filter === f.id} onClick={() => selectFilter(f.id)}>
                 {filter === f.id && (
                   <motion.span
                     layoutId="wallet-chip-pill"
@@ -861,7 +861,7 @@ const CUT_SPECIAL_VISUALS = [
     imageSrc: '/images/tickets/cut-ginjiro-special.jpg',
     alt: '銀二郎Specialクーポン スキンフェードカット 顔剃り、シャンプー付き 4,000円',
     menuLabel: 'スキンフェードカット',
-    normalPrice: 4500,
+    normalPrice: 5000, // 11/9 慶一郎さん：旧料金 4,500 → 5,000（スキンフェードカットの今の料金）
     memberPrice: 4000,
     benefit: '顔剃り・シャンプー付き',
   },
@@ -898,6 +898,10 @@ function CutSpecialCouponSection({ onCallClick }: { onCallClick: (coupon: CutSpe
             onClick={() => onCallClick(item)}
           >
             <img src={item.imageSrc} alt={item.alt} loading="lazy" decoding="async" />
+          </a>
+          {/* 電話予約限定：画像の「予約する」だけでは電話がかかると分からんので、はっきりしたボタンを付ける（11/9 慶一郎さん） */}
+          <a href={SHOP_PHONE_TEL} className="wallet-cut-special__call" onClick={() => onCallClick(item)}>
+            <Phone size={16} aria-hidden="true" />お店に電話する
           </a>
         </article>
       ))}
@@ -1346,11 +1350,11 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
       >
         <p style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(138,106,47,0.9)', marginBottom: 10 }}>電話予約</p>
         <p style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: INK, lineHeight: 1.45, marginBottom: 8 }}>
-          予約済みですか？
+          お電話でご予約できましたか？
         </p>
         <p style={{ fontSize: 13, color: 'rgba(31,28,24,0.86)', lineHeight: 1.75, marginBottom: 14 }}>
-          電話予約が完了した場合のみ、<br />
-          下タブのQRへ現在の予約状況を反映します。
+          ご予約できた日を入れてください。<br />
+          その日、会員QRにこのクーポンが出ます。
         </p>
         <div style={{ borderRadius: 16, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(201,162,74,0.18)', padding: '14px 14px 13px', marginBottom: 18, textAlign: 'left' }}>
           <p style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 700, color: INK, marginBottom: 5 }}>{coupon.title}</p>
@@ -1377,7 +1381,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
             className="wallet-cta"
             style={{ minHeight: 52, borderRadius: 14, background: 'rgba(31,28,24,0.04)', border: '1px solid rgba(31,28,24,0.12)', color: 'rgba(31,28,24,0.84)', fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em', cursor: 'pointer' }}
           >
-            いいえ
+            まだです
           </button>
           <button
             type="button"
@@ -1386,7 +1390,7 @@ function CutReservationDialog({ coupon, onYes, onNo }: {
             className="wallet-cta"
             style={{ minHeight: 52, borderRadius: 14, background: 'linear-gradient(135deg, #F3D98A 0%, #C9A24A 58%, #8B691A 100%)', border: '1px solid rgba(243,217,138,0.9)', boxShadow: '0 4px 22px rgba(201,162,74,0.36)', color: '#170C03', fontFamily: SERIF, fontSize: 13, fontWeight: 800, letterSpacing: '0.10em', cursor: validDate ? 'pointer' : 'default', opacity: validDate ? 1 : 0.55 }}
           >
-            はい、QRに反映
+            予約できた
           </button>
         </div>
       </motion.div>

@@ -8,6 +8,8 @@
   transition: top .18s ease, left .18s ease, width .18s ease, height .18s ease;
 }
 .gd-ring.is-round { border-radius: 50%; }
+/* お客様アプリ：まわりの画面も見えるよう、幕は薄め */
+.gd-ring.is-light { box-shadow: 0 0 0 3px #1c1f1d, 0 0 0 100vmax rgba(20, 22, 21, 0.26); }
 .gd-ring.is-clear { box-shadow: 0 0 0 3px #1c1f1d; }
 
 .gd-finger {
@@ -20,6 +22,20 @@
 @keyframes gd-tap { 0%, 100% { margin-top: -6px; } 50% { margin-top: 2px; } }
 @keyframes gd-tap-up { 0%, 100% { margin-top: 6px; } 50% { margin-top: -2px; } }
 @media (prefers-reduced-motion: reduce) { .gd-finger { animation: none; } }
+
+/* ちび銀ちゃん（お客様アプリ）：置く位置は GuideRunner で決める（指先 横42%・縦82%、大きい枠は右上の角）。100コマ（横10×縦10）を1秒10コマでくり返す */
+.gd-chibi {
+  position: fixed; z-index: 2147483001; pointer-events: none;
+  width: 85.4px; height: 140px; /* 1コマ 183×300 */
+  background: url('/guide/chibi-squat-sprite.webp') 0 0 / 1000% 1000% no-repeat;
+  filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.75)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
+  animation: gd-chibi-x 1s steps(10) infinite, gd-chibi-y 10s steps(10) infinite;
+}
+@keyframes gd-chibi-x { from { background-position-x: 0%; } to { background-position-x: 111.111%; } }
+@keyframes gd-chibi-y { from { background-position-y: 0%; } to { background-position-y: 111.111%; } }
+@media (prefers-reduced-motion: reduce) {
+  .gd-chibi { animation: none; background: url('/guide/chibi-squat.png') center / contain no-repeat; }
+}
 
 .gd-bubble {
   position: fixed; z-index: 2147483002; left: 12px; right: 12px;

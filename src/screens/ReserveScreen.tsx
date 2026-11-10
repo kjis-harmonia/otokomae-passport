@@ -32,11 +32,11 @@ export function ReserveScreen(props:{onShowQr?:()=>void;onClose?:()=>void}){
   // スタイルの「この髪型でAI予約する」から来たとき：そのメニュー。本人確認の確かめ中（一瞬の案内）に失わないよう、ここで1回だけ受け取る
   const [intent]=useState(takeJohnnyIntent)
   if(CUSTOMER_ACCESS_ENABLED&&access.mode!=='verified')return <StoreBookingGate session={session} access={access} onShowQr={props.onShowQr} onClose={props.onClose}/>
-  return <ReservationContent key={CUSTOMER_ACCESS_ENABLED?session:'legacy'} {...props} initialMenuCode={intent?.menuCode??null} initialLabel={intent?.label||null} initialUsual={!!intent?.usual} initialGroup={!!intent?.group} initialManage={!!intent?.manage}/>
+  return <ReservationContent key={CUSTOMER_ACCESS_ENABLED?session:'legacy'} {...props} initialMenuCode={intent?.menuCode??null} initialLabel={intent?.label||null} initialUsual={!!intent?.usual} initialGroup={!!intent?.group} initialManage={!!intent?.manage} initialPerson={intent?.person??null}/>
 }
 
 function StoreBookingGate({session,access,onShowQr,onClose}:{session:string|null;access:ReturnType<typeof useStoreAccess>;onShowQr?:()=>void;onClose?:()=>void}){
-  return <section className="customer-access" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="AI予約の来店認証">
+  return <section className="customer-access" data-guide="jn-verify" style={{padding:'40px 24px 120px',maxWidth:440,margin:'auto'}} aria-label="AI予約の来店認証">
     {onClose&&<button type="button" className="v2-back" onClick={onClose}>‹ 戻る</button>}
     {/* 主な操作は1つ（QR を見せる）。Face ID は確認済みの人だけなので小さく下に */}
     <h1>はじめに、店頭で本人確認</h1>
@@ -54,7 +54,7 @@ function StoreBookingGate({session,access,onShowQr,onClose}:{session:string|null
     </details>
   </section>
 }
-function ReservationContent({ onShowQr, onClose, initialMenuCode = null, initialLabel = null, initialUsual = false, initialGroup = false, initialManage = false }: { onShowQr?: () => void; onClose?: () => void; initialMenuCode?: string | null; initialLabel?: string | null; initialUsual?: boolean; initialGroup?: boolean; initialManage?: boolean }) {
+function ReservationContent({ onShowQr, onClose, initialMenuCode = null, initialLabel = null, initialUsual = false, initialGroup = false, initialManage = false, initialPerson = null }: { onShowQr?: () => void; onClose?: () => void; initialMenuCode?: string | null; initialLabel?: string | null; initialUsual?: boolean; initialGroup?: boolean; initialManage?: boolean; initialPerson?: { id: string; name: string } | null }) {
   const [assistantOpen, setAssistantOpen] = useState(true)
   const next = useNextReservation()
   const visit = next ? formatVisit(next.starts_at) : null
@@ -119,7 +119,7 @@ function ReservationContent({ onShowQr, onClose, initialMenuCode = null, initial
       {createPortal(
         <AnimatePresence>
           {assistantOpen && (
-            <JohnnyBookingAssistant key="johnny-booking" initialMenuCode={initialMenuCode} initialLabel={initialLabel} initialUsual={initialUsual} initialGroup={initialGroup} initialManage={initialManage} onClose={() => (onClose ? onClose() : setAssistantOpen(false))} onShowQr={onShowQr} />
+            <JohnnyBookingAssistant key="johnny-booking" initialMenuCode={initialMenuCode} initialLabel={initialLabel} initialUsual={initialUsual} initialGroup={initialGroup} initialManage={initialManage} initialPerson={initialPerson} onClose={() => (onClose ? onClose() : setAssistantOpen(false))} onShowQr={onShowQr} />
           )}
         </AnimatePresence>,
         document.body,

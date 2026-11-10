@@ -282,6 +282,15 @@
     inset 0 1px 0 rgba(255, 238, 190, 0.10);
 }
 
+/* 電話予約限定クーポンの【お店に電話する】（11/9）：画像のすぐ下。目立たせすぎず、押せると分かる形 */
+.wallet-cut-special__call {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; border-radius: 14px; text-decoration: none;
+  border: 1px solid rgba(70, 55, 34, 0.22); background: rgba(255, 255, 255, 0.72);
+  color: #28231e; font-size: 15px; font-weight: 700; letter-spacing: 0.04em;
+}
+.wallet-cut-special__call:active { transform: scale(0.99); }
+
 .wallet-cut-special__image-wrap::after {
   content: '';
   position: absolute;

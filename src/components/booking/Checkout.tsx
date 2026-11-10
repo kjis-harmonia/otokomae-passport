@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { RpcError, callStaffRpc, rpcErrorMessage } from '../../utils/staffSession'
+import { RpcError, callRpc, getStaffToken, rpcErrorMessage } from '../../utils/staffSession'
 import { yen } from '../../utils/bookingApi'
 import { reservationSaleLines } from '../../utils/checkoutPricing'
 import { idempotencyKey } from '../../utils/ginpayApi'
@@ -10,9 +10,10 @@ import {
   type Catalog, type CatalogItem, type CheckoutApi, type CheckoutContext, type CheckoutTicket, type PaymentMethod, type Sale, type SaleLine,
 } from '../../utils/checkoutApi'
 import { PrimaryButton } from './ledgerUi'
+// 店舗端末の会計（quick）の合計だけ明朝（11/10 慶一郎さん「もっとゴージャスに、美しく」）
+const MINCHO = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN",serif'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
 import { playCue } from '../../audio/cue'
-import { Banknote, Wallet } from 'lucide-react'
 import { isPermOnlyCoupon } from '../../utils/welcomeCoupon'
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
@@ -132,7 +133,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   useEffect(() => {
     if (!reservationId) return
     let alive = true
-    void callStaffRpc<{ ticket_ids?: string[] } | null>('staff_reservation_ticket_plan', { p_reservation_id: reservationId })
+    // この関数だけ鍵の名前が p_token（p_staff で送ると毎回失敗して、選んだ券が最初から選ばれていなかった・11/10 Codex 検査）
+    void callRpc<{ ticket_ids?: string[] } | null>('staff_reservation_ticket_plan', { p_token: getStaffToken(), p_reservation_id: reservationId })
       .then(r => { if (alive) setPlan(Array.isArray(r?.ticket_ids) ? r.ticket_ids : []) }, () => { if (alive) setPlan([]) })
     return () => { alive = false }
   }, [reservationId])
@@ -293,7 +295,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
 
   return (
     <div data-guide="checkout" {...(quick ? { 'aria-label': 'お会計' } : { role: 'dialog', 'aria-modal': true, 'aria-label': '会計' })}
-      style={quick ? { marginTop: 16, padding: 16, borderRadius: 14, background: C.bg, color: C.text, fontFamily: SANS, textAlign: 'left', border: `1px solid ${C.line}` }
+      style={quick ? { color: C.text, fontFamily: SANS, textAlign: 'left' }
         : { position: 'fixed', inset: 0, zIndex: 950, background: C.bg, color: C.text, fontFamily: SANS, display: 'flex', flexDirection: 'column' }}>
       {!quick && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px', borderBottom: `1px solid ${C.line}` }}>
         <button type="button" disabled={busy} onClick={() => { if (!submitting.current) onClose() }} style={{ ...linkStyle, textDecoration: 'none', color: C.text, fontSize: 15 }}>‹ 戻る</button>
@@ -315,7 +317,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
           ) : !ctx ? <p style={{ fontSize: 14, color: error ? C.danger : C.sub }}>{error ?? '読み込み中…'}</p> : (
             <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
               {/* お客様・担当 */}
-              {ctx.reservation || clientInfo || anonymous ? (
+              {/* 店舗端末（quick）で予約から開いたときは、お名前は上の行に出ているので繰り返さない */}
+              {quick && (ctx.reservation || clientInfo) ? null : ctx.reservation || clientInfo || anonymous ? (
                 <div data-guide="co-client-picked" style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
                   <h1 style={{ fontSize: 22, fontWeight: 600 }}>{clientInfo?.name ?? ctx.reservation?.customer_name ?? '匿名'}</h1>
                   {!ctx.reservation && <button type="button" onClick={() => { setClient(undefined); setAnonymous(false); setTicketIds([]); setGinpayAccountId(null); setMethod(m => m === 'ginpay' ? null : m) }} style={{ ...linkStyle, minHeight: 32, marginLeft: 'auto' }}>変更</button>}
@@ -346,7 +349,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                         {lines.filter(x => x.source !== 'manual').length === 1 && <button type="button" onClick={() => setLines(ls => ls.filter(x => x.key !== l.key))} style={{ ...linkStyle, minHeight: 28, fontSize: 13 }}>変える</button>}
                       </span>
                     )}
-                    <input value={String(l.unit_price)} inputMode="numeric" aria-label={`${l.name}の金額`}
+                    <input data-guide={l.source === 'manual' ? undefined : 'co-price'} value={String(l.unit_price)} inputMode="numeric" aria-label={`${l.name}の金額`}
                       onChange={e => { const v = parseInt(e.target.value.replace(/\D/g, '') || '0', 10); update(l.key, { unit_price: v, discount: Math.min(l.discount, v * l.quantity) }) }}
                       style={{ ...inputStyle, fontSize: 20, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} />
                   </div>
@@ -400,7 +403,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 if (!mine.length) return null
                 const groups = [...mine.reduce((m, t) => m.set(t.title, { n: (m.get(t.title)?.n ?? 0) + 1, amt: (m.get(t.title)?.amt ?? 0) + t.amount }), new Map<string, { n: number; amt: number }>())]
                 return (
-                  <div role="note" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(151,115,43,0.08)', border: '1px solid rgba(151,115,43,0.35)', fontSize: 14, lineHeight: 1.6 }}>
+                  <div role="note" data-guide="co-plan" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(151,115,43,0.08)', border: '1px solid rgba(151,115,43,0.35)', fontSize: 14, lineHeight: 1.6 }}>
                     <b>お客様がAI予約で選んだ券</b><br />
                     {groups.map(([title, g]) => <span key={title} style={{ display: 'block' }}>{title} × {g.n}枚（−{yen(g.amt)}）</span>)}
                     <span style={{ fontSize: 12, color: C.sub }}>下の券の枚数に入れています。お会計は下の合計のとおりです。</span>
@@ -463,8 +466,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 const otherDiscount = totals.discount - ticketSum
                 const viaGinpay = method === 'ginpay'
                 const ready = lines.length > 0 && !!method
-                const gold = '#c9a45c'
-                const accent = viaGinpay ? '#7fc4a4' : gold
+                const accent = viaGinpay ? '#2F7D5B' : C.text
                 const title = !lines.length ? 'お会計' : !method && holdError ? '仮支払いを確かめられませんでした' : !method ? 'お支払い方法を確かめています…' : viaGinpay ? (hold ? '銀Pay 仮支払い済み' : '銀Pay で支払い') : '現金でのお支払い'
                 const note = !lines.length ? 'メニューを選ぶと金額が出ます'
                   : !method && holdError ? '通信を確かめて「もう一度確かめる」を押すか、お客様に聞いて下の支払方法を選んでください。'
@@ -473,51 +475,30 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     ? hold ? `予約のときに ${yen(hold.amount)} を仮支払いしています。現金は受け取りません。${totals.total > hold.amount ? `差額 ${yen(totals.total - hold.amount)} も銀Pay の残高から。` : ''}` : '銀Pay の残高から支払います。現金は受け取りません。'
                     : '銀Pay の仮支払いはありません。現金（PayPay などのときも）で受け取ってから確定してください。'
                 const overNote = ticketOver > 0 ? `券が料金を ${yen(ticketOver)} 上回っています（おつりは出ません）。` : ''
-                const totalLabel = !ready ? '' : viaGinpay ? '銀Payで支払う金額' : '現金でお受け取り'
-                const Icon = viaGinpay ? Wallet : Banknote
-                const row = { display: 'flex', alignItems: 'baseline', gap: 10, fontSize: 14, lineHeight: 2, fontVariantNumeric: 'tabular-nums' } as const
-                const leader = { flex: 1, borderBottom: '1px dotted rgba(255,255,255,0.22)', transform: 'translateY(-4px)' } as const
+                const totalLabel = !ready ? 'お会計' : viaGinpay ? '銀Payで支払う金額' : '現金でお受け取り'
+                // 11/10 慶一郎さん「Apple風で気持ちよく」：黒地・金のグラデーションをやめて、白地に黒の数字。色は支払い方法の小さな印だけ
+                const row = { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 15, lineHeight: 1.9, fontVariantNumeric: 'tabular-nums' } as const
                 return (
-                  <div role="status" aria-label={`${title} ${totalLabel} ${ready ? yen(Math.max(0, totals.total)) : ''}`} style={{
-                    marginTop: 16, borderRadius: 18, overflow: 'hidden', color: '#f4efe4',
-                    background: 'linear-gradient(160deg, #2b2e2c 0%, #161817 100%)', border: `1px solid ${gold}66`,
-                    boxShadow: '0 10px 30px rgba(20,22,21,0.28), inset 0 1px 0 rgba(255,255,255,0.06)',
-                  }}>
-                    {/* 上：支払い方法（いちばん大事なので色つきで） */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: `1px solid ${gold}33`,
-                      background: ready ? `linear-gradient(90deg, ${accent}26, transparent)` : 'transparent' }}>
-                      <span style={{ width: 38, height: 38, borderRadius: 19, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: ready ? `${accent}22` : 'rgba(255,255,255,0.06)', border: `1px solid ${ready ? accent : 'rgba(255,255,255,0.18)'}` }}>
-                        <Icon size={19} strokeWidth={1.8} color={ready ? accent : 'rgba(255,255,255,0.6)'} />
-                      </span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: '"Shippori Mincho","Noto Serif JP",serif', fontSize: 19, fontWeight: 700, letterSpacing: '0.06em', color: ready ? accent : '#f4efe4' }}>{title}</div>
-                        <div style={{ fontSize: 12, lineHeight: 1.6, color: 'rgba(244,239,228,0.72)' }}>{note}</div>
-                        {ready && overNote && <div style={{ fontSize: 12, lineHeight: 1.6, color: '#e2c27f', marginTop: 2 }}>{overNote}</div>}
-                      </div>
-                    </div>
-                    {!method && holdError && lines.length > 0 && (
-                      <div style={{ padding: '12px 18px 16px' }}>
-                        <button type="button" onClick={() => { setHoldError(false); setHoldRetry(n => n + 1) }}
-                          style={{ width: '100%', minHeight: 44, borderRadius: 12, border: '1px solid rgba(201,164,92,0.6)', background: 'transparent', color: '#f4efe4', fontSize: 15, cursor: 'pointer' }}>もう一度確かめる</button>
+                  <div role="status" aria-label={`${title} ${totalLabel} ${ready ? yen(Math.max(0, totals.total)) : ''}`} style={{ marginTop: 22, paddingTop: 16, borderTop: '1px solid rgba(168,130,63,0.45)' }}>
+                    {ready && totals.discount > 0 && (
+                      <div style={{ marginBottom: 6 }}>
+                        <div style={{ ...row, color: C.sub }}><span>料金</span><span>{yen(totals.subtotal)}</span></div>
+                        {chosenTickets.map(t => <div key={t.id} style={{ ...row, color: C.sub }}><span style={{ minWidth: 0 }}>{t.title}</span><span>−{yen(t.amount)}</span></div>)}
+                        {otherDiscount > 0 && <div style={{ ...row, color: C.sub }}><span>値引き</span><span>−{yen(otherDiscount)}</span></div>}
                       </div>
                     )}
-                    {ready && (
-                      <div style={{ padding: '12px 18px 18px' }}>
-                        {totals.discount > 0 && (
-                          <div style={{ marginBottom: 10 }}>
-                            <div style={row}><span>料金</span><span style={leader} /><span>{yen(totals.subtotal)}</span></div>
-                            {chosenTickets.map(t => <div key={t.id} style={{ ...row, color: gold }}><span>{t.title}</span><span style={leader} /><span>−{yen(t.amount)}</span></div>)}
-                            {otherDiscount > 0 && <div style={{ ...row, color: gold }}><span>値引き</span><span style={leader} /><span>−{yen(otherDiscount)}</span></div>}
-                          </div>
-                        )}
-                        <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${gold}, transparent)`, margin: '2px 0 12px' }} />
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-                          <span style={{ fontSize: 13, letterSpacing: '0.12em', color: 'rgba(244,239,228,0.78)', whiteSpace: 'nowrap' }}>{totalLabel}</span>
-                          <span style={{ fontFamily: '"Shippori Mincho","Noto Serif JP",serif', fontSize: 52, fontWeight: 700, lineHeight: 1.1, letterSpacing: '0.02em', fontVariantNumeric: 'tabular-nums', textAlign: 'right',
-                            background: 'linear-gradient(180deg, #fff6df 0%, #e2c27f 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>{yen(Math.max(0, totals.total))}</span>
-                        </div>
-                      </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                      <span style={{ fontSize: 13, letterSpacing: '0.08em', color: C.sub, whiteSpace: 'nowrap' }}>{totalLabel}</span>
+                      <span style={{ fontFamily: MINCHO, fontSize: 44, fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>{ready ? yen(Math.max(0, totals.total)) : ''}</span>
+                    </div>
+                    <p style={{ display: 'flex', gap: 8, alignItems: 'baseline', margin: '8px 0 0', fontSize: 13, lineHeight: 1.6, color: C.sub }}>
+                      <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, transform: 'translateY(-1px)', background: ready ? accent : C.lineStrong }} />
+                      <span>{lines.length ? <><b style={{ fontWeight: 600, color: C.text }}>{title}</b>{' '}{note}</> : note}</span>
+                    </p>
+                    {ready && overNote && <p style={{ margin: '4px 0 0 16px', fontSize: 13, lineHeight: 1.6, color: C.sub }}>{overNote}</p>}
+                    {!method && holdError && lines.length > 0 && (
+                      <button type="button" onClick={() => { setHoldError(false); setHoldRetry(n => n + 1) }}
+                        style={{ width: '100%', marginTop: 12, minHeight: 44, borderRadius: 10, border: `1px solid ${C.lineStrong}`, background: C.bg, color: C.text, fontSize: 15, fontFamily: SANS, cursor: 'pointer' }}>もう一度確かめる</button>
                     )}
                   </div>
                 )
@@ -595,7 +576,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       {(ctx || attempt) && !attemptError && (
         <div style={quick ? { marginTop: 16 } : { flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div data-guide="co-confirm" style={quick ? undefined : { maxWidth: 640, margin: '0 auto' }}>
-            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : quick && method === 'cash' ? `現金 ${yen(Math.max(0, totals.total))} を受け取って会計を確定` : quick && method === 'ginpay' ? `銀Payで会計を確定 ${yen(Math.max(0, totals.total))}` : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)} style={quick && !(busy || (attempt ? !matchesAttempt : !canConfirm)) ? { minHeight: 56, borderRadius: 14, background: '#161513', color: '#F2E6CC', fontSize: 17, letterSpacing: '0.04em' } : quick ? { minHeight: 56, borderRadius: 14 } : undefined}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : quick && method === 'cash' ? `現金 ${yen(Math.max(0, totals.total))} を受け取って会計を確定` : quick && method === 'ginpay' ? `銀Payで会計を確定 ${yen(Math.max(0, totals.total))}` : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
       )}

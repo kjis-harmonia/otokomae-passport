@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { getCustomerSession, clearCustomerSession } from './utils/customerSession'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { ChevronRight, Ticket } from 'lucide-react'
 import { OnboardingScreen, type OnboardingDonePayload } from './screens/OnboardingScreen'
 import { GinjiroLoadingScreen } from './screens/GinjiroLoadingScreen'
 import { flushPendingContact } from './utils/customerContact'
@@ -29,8 +30,12 @@ import { seedDevData } from './utils/devSeed'
 import { InstallGate, InstallGuide } from './components/InstallGuide'
 import { V2App } from './v2/V2App'
 import { needsInstallFirst } from './utils/installGuide'
-import { isStaging } from './utils/env'
+import { ginFlow, isStaging } from './utils/env'
 import { FirstGuide } from './v2/FirstGuide'
+import { LaunchClock } from './v2/LaunchClock'
+import { GinChat, type GinMode } from './v2/GinChat'
+import { fetchVisitsToConfirm } from './v2/visitConfirm'
+import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 import { refreshPushIfGranted } from './utils/webPush'
 
@@ -94,6 +99,7 @@ function consumeDevOnboardingReset(): void {
 
 consumeDevOnboardingReset()
 
+// はじめての登録のあとに1回だけ出す。今のアプリ（クリーム色）と同じ見た目で、クーポン1枚と2つのボタンだけ（11/7 慶一郎さん：始まりの画面がダサい）
 function WelcomeCouponDialog({
   name,
   onTickets,
@@ -108,147 +114,34 @@ function WelcomeCouponDialog({
   return createPortal(
     <motion.div
       key="welcome-coupon-dialog"
+      className="v2 v2-welcome"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.22 }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 99990,
-        display: 'grid',
-        placeItems: 'center',
-        padding: 'max(24px, env(safe-area-inset-top, 0px)) 24px max(24px, env(safe-area-inset-bottom, 0px))',
-        background:
-          'radial-gradient(circle at 50% 24%, rgba(78,12,18,0.34), transparent 44%), linear-gradient(180deg, rgba(5,3,3,0.94), rgba(9,4,5,0.98))',
-        backdropFilter: 'blur(14px)',
-        WebkitBackdropFilter: 'blur(14px)',
-      }}
     >
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
+        className="v2-welcome-body"
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 10 }}
+        exit={{ opacity: 0, y: 8 }}
         transition={{ duration: 0.36, ease: [0.22, 0.68, 0.34, 1] }}
         role="dialog"
         aria-modal="true"
         aria-label={`${name}さんのWelcomeクーポン`}
-        style={{
-          width: '100%',
-          maxWidth: 390,
-          padding: '0 4px',
-          textAlign: 'center',
-        }}
       >
-        <div
-          aria-hidden
-          style={{
-            width: 42,
-            height: 1,
-            margin: '0 auto 34px',
-            background: 'linear-gradient(90deg, transparent, rgba(201,162,74,0.82), transparent)',
-          }}
-        />
-        <p
-          style={{
-            margin: '0 0 18px',
-            color: 'rgba(201,162,74,0.68)',
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: '0.28em',
-            textTransform: 'uppercase',
-          }}
-        >
-          ウェルカムクーポン
-        </p>
-        <h2
-          style={{
-            margin: '0 0 18px',
-            color: '#F2E6C8',
-            fontFamily: SERIF,
-            fontSize: 'clamp(25px, 7vw, 31px)',
-            lineHeight: 1.55,
-            letterSpacing: '0.08em',
-            fontWeight: 700,
-          }}
-        >
-          ようこそ、<br />
-          二代目銀二郎へ
-        </h2>
-        <p
-          style={{
-            margin: '0 auto 24px',
-            color: 'rgba(242,230,200,0.62)',
-            fontFamily: SERIF,
-            fontSize: 14,
-            lineHeight: 1.9,
-            letterSpacing: '0.08em',
-          }}
-        >
-          Welcomeクーポンをお届けしました
-        </p>
-        <div
-          style={{
-            width: '100%',
-            padding: '18px 0',
-            margin: '0 auto 28px',
-            borderTop: '1px solid rgba(201,162,74,0.22)',
-            borderBottom: '1px solid rgba(201,162,74,0.22)',
-          }}
-        >
-          <p
-            style={{
-              margin: 0,
-              color: '#F2E6C8',
-              fontFamily: SERIF,
-              fontSize: 'clamp(19px, 5.4vw, 23px)',
-              lineHeight: 1.45,
-              letterSpacing: '0.08em',
-              fontWeight: 700,
-            }}
-          >
-            パーマ<br />
-            <span style={{ color: '#D9B763', letterSpacing: '0.04em' }}>¥2,000 OFF</span>
-          </p>
+        <img className="v2-welcome-logo" src="/images/logo-ginjiro.png" alt="二代目 銀二郎" />
+        <p className="v2-welcome-eyebrow">WELCOME COUPON</p>
+        <h2 className="v2-welcome-title">ようこそ、<br />二代目銀二郎へ</h2>
+        <p className="v2-welcome-lead">初回限定のクーポンをお届けしました</p>
+        <div className="v2-welcome-coupon">
+          <p className="v2-welcome-menu">パーマ</p>
+          <p className="v2-welcome-price">2,000<small>円</small> OFF</p>
+          <p className="v2-welcome-note">平日のご来店でお使いいただけます</p>
         </div>
-        <div style={{ display: 'grid', gap: 16 }}>
-          <button
-            type="button"
-            onClick={onTickets}
-            style={{
-              minHeight: 52,
-              borderRadius: 14,
-              border: '1px solid rgba(201,162,74,0.58)',
-              background:
-                'linear-gradient(160deg, rgba(76,14,18,0.96) 0%, rgba(111,18,28,0.96) 56%, rgba(55,8,12,0.98) 100%)',
-              boxShadow: '0 12px 34px rgba(54,8,12,0.48), inset 0 1px 0 rgba(242,230,200,0.08)',
-              color: '#F2E6C8',
-              fontFamily: SERIF,
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: '0.18em',
-              cursor: 'pointer',
-            }}
-          >
-            クーポンを見る
-          </button>
-          <button
-            type="button"
-            onClick={onHome}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: 'rgba(242,230,200,0.46)',
-              fontFamily: SERIF,
-              fontSize: 12,
-              lineHeight: 1.7,
-              letterSpacing: '0.14em',
-              cursor: 'pointer',
-              padding: '2px 0',
-            }}
-          >
-            ホームへ
-          </button>
+        <div className="v2-welcome-actions">
+          <button type="button" className="v2-btn v2-btn-gold" onClick={onTickets}><Ticket size={20} />クーポンを見る</button>
+          <button type="button" className="v2-btn v2-btn-quiet v2-welcome-home" onClick={onHome}>ホームへ<ChevronRight size={16} /></button>
         </div>
       </motion.div>
     </motion.div>,
@@ -280,30 +173,9 @@ function App() {
   useEffect(() => { void flushPendingContact() }, [])
 
   // ── Loading state: min time + critical image preload ──────────────────────────
-  const quickBooking=CUSTOMER_ACCESS_ENABLED && new URLSearchParams(location.search).get('tab')==='reserve'
+  const [quickBooking] = useState(() => CUSTOMER_ACCESS_ENABLED && new URLSearchParams(location.search).get('tab') === 'reserve')
   const [minTimeDone, setMinTimeDone] = useState(quickBooking)
   const [imgReady,    setImgReady]    = useState(quickBooking)
-  const appLoading = !minTimeDone || !imgReady
-
-  useEffect(() => {
-    const t = setTimeout(() => setMinTimeDone(true), 1300)
-    return () => clearTimeout(t)
-  }, [])
-
-  useEffect(() => {
-    // 初回登録の背景に使う絵だけ先に読む。待つのは最大2.5秒：回線が遅くてもロゴのまま止めない（10/30 監査 R5）
-    const urls = ['/images/ginjiro-splash.png']
-    let remaining = urls.length
-    const onSettled = () => { if (--remaining <= 0) setImgReady(true) }
-    urls.forEach(src => {
-      const img = new Image()
-      img.onload  = onSettled
-      img.onerror = onSettled
-      img.src = src
-    })
-    const cap = setTimeout(() => setImgReady(true), 2500)
-    return () => clearTimeout(cap)
-  }, [])
 
   // ── Phase ─────────────────────────────────────────────────────────────────────
   // スマホでは、ホーム画面に追加してアイコンから開いたときだけ登録できる（iPhone は Safari とアプリで保存場所が別なので、二重登録を防ぐ）
@@ -313,6 +185,27 @@ function App() {
     const done = getStoredValue<boolean>(ONBOARDING_DONE_KEY, false)
     return done ? 'app' : 'onboarding'
   })
+  const needsOnboardingImage = phase === 'onboarding' && !installFirst && !CUSTOMER_ACCESS_ENABLED
+  const appLoading = !minTimeDone || (needsOnboardingImage && !imgReady)
+
+  useEffect(() => {
+    if (quickBooking) return
+    const t = setTimeout(() => setMinTimeDone(true), 1300)
+    return () => clearTimeout(t)
+  }, [quickBooking])
+
+  useEffect(() => {
+    if (!needsOnboardingImage) return
+    // 写真付きの登録画面だけ背景を待つ。画像が取れなくても2.5秒で案内を表示する。
+    const image = new Image()
+    image.onload = image.onerror = () => setImgReady(true)
+    image.src = '/images/ginjiro-splash.png'
+    const cap = setTimeout(() => setImgReady(true), 2500)
+    return () => {
+      image.onload = image.onerror = null
+      clearTimeout(cap)
+    }
+  }, [needsOnboardingImage])
   const [activeTab, setActiveTabState] = useState<NavTab>(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
     const requestedTab = tab
@@ -445,9 +338,12 @@ function App() {
     saveMemberStatus(nextStatus)
     setMemberStatus(nextStatus)
     setPhase('app')
-    const guide = { visited: !!payload?.hasVisitedBefore }
-    setStoredValue(FIRST_GUIDE_KEY, guide)
-    setFirstGuide(guide)
+    // 登録のあとはそのままホームへ（11/8 慶一郎さん：いつものは店頭の QR のあと、銀ちゃんが聞く）。Staging から。本番は承認のあと
+    if (!ginFlow()) {
+      const guide = { visited: !!payload?.hasVisitedBefore }
+      setStoredValue(FIRST_GUIDE_KEY, guide)
+      setFirstGuide(guide)
+    }
     // Face ID の案内はクーポンのあと、ホームで1回だけ出る（上の useEffect）。店頭確認のあとにも、未設定ならもう一度出る
     if (payload?.welcomeCouponIssued && payload.ticket) {
       setWelcomeCouponDialog({ name: nextStatus.memberName, ticket: payload.ticket })
@@ -456,6 +352,53 @@ function App() {
 
   // JOHNNY のお知らせ：許可済みなら受け取り先をサーバーに入れ直す（変わることがある）
   useEffect(() => { if (phase === 'app') void refreshPushIfGranted() }, [phase])
+  // 店頭で QR を読んだあと、次にアプリを開いたら銀ちゃんが接客する（11/8。Staging から・本番は承認のあと）
+  //   「あとで」で閉じたら、このアプリを開いている間はもう出さない（次に開いたときにまた聞く）
+  const [ginChat, setGinChat] = useState<GinMode | null>(null)
+  useEffect(() => {
+    if (phase !== 'app' || !ginFlow()) return
+    const onBook = (e: Event) => {
+      // The style catalog remains available when signed out, but a booking
+      // request must first take the customer to the existing sign-in screen.
+      if (!getCustomerSession()) {
+        setActiveTab('mypage')
+        return
+      }
+      const d = (e as CustomEvent<{ menuCode?: string | null; label?: string; group?: boolean } | null>).detail
+      setGinChat({ kind: 'book', menuCode: d?.menuCode ?? null, label: d?.label ?? '', group: !!d?.group })
+    }
+    // キャンセル待ちのお知らせ（?hold=…）：押さえた枠を銀ちゃんが聞く（11/9）
+    const onOffer = (e: Event) => {
+      if (!getCustomerSession()) { setActiveTab('mypage'); return }
+      const holdId = (e as CustomEvent<{ holdId?: string } | null>).detail?.holdId
+      if (holdId) setGinChat({ kind: 'offer', holdId })
+    }
+    window.addEventListener('ginjiro:gin-book', onBook)
+    window.addEventListener('ginjiro:gin-offer', onOffer)
+    return () => { window.removeEventListener('ginjiro:gin-book', onBook); window.removeEventListener('ginjiro:gin-offer', onOffer) }
+  }, [phase, setActiveTab])
+  useEffect(() => {
+    if (phase !== 'app' || !customerAccessSession || !ginFlow()) return
+    let alive = true
+    const check = () => {
+      try { if (sessionStorage.getItem('ginjiro_ginchat_later')) return } catch { /* 読めない端末は毎回確かめる */ }
+      void fetchVisitsToConfirm().then(p => { if (alive && p) setGinChat(c => c ?? { kind: 'welcome', pending: p }) })
+    }
+    check()
+    const onVisible = () => { if (document.visibilityState === 'visible') check() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { alive = false; document.removeEventListener('visibilitychange', onVisible) }
+  }, [phase, customerAccessSession])
+  useEffect(() => {
+    if (phase !== 'app') return
+    const onChange = (event: Event) => {
+      const reservationId = (event as CustomEvent<{ reservationId?: string }>).detail?.reservationId
+      setGinChat({ kind: 'change', reservationId })
+    }
+    window.addEventListener('ginjiro:gin-change', onChange)
+    return () => window.removeEventListener('ginjiro:gin-change', onChange)
+  }, [phase])
+  const closeGinChat = () => { try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
 
   return (
     <>
@@ -474,12 +417,20 @@ function App() {
         /* App shell: mounted only after onboarding completes */
         <>
           {/* V2.0：上に正式ロゴと ☰、下にタブ3つ（ホーム｜会員QR｜次回予約）。チケット・ログインは ☰、AI予約は全画面 */}
-          <V2App activeTab={activeTab} setActiveTab={setActiveTab} ticketFilter={ticketInitialFilter} ticketKey={ticketRefreshKey} onModalChange={handleModalChange} />
+          <V2App activeTab={activeTab} setActiveTab={setActiveTab} ticketFilter={ticketInitialFilter} ticketKey={ticketRefreshKey}
+            onModalChange={handleModalChange} showCampaign={!welcomeCouponDialog && !firstGuide} />
 
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。クーポンのあと） */}
           <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
 
           {firstGuide && !welcomeCouponDialog && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
+          {ginChat && !firstGuide && !welcomeCouponDialog && <GinChat key={ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
+
+          {/* 使い方ガイド：最初の案内・Welcome クーポン・Face ID の案内が出ている間は出さない */}
+          {/* 新しい銀二郎の公開（11/11 12:00）：60秒前からの全画面の時計・00:00 の切り替え */}
+          <LaunchClock />
+
+          <CustomerGuide paused={!!firstGuide || ginChat?.kind === 'welcome' || !!welcomeCouponDialog || passkeyOffer || appLoading} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (

@@ -20,6 +20,8 @@ import { StgBadge } from '../components/StgBadge'
 import { isReservationForDate } from '../utils/currentReservation'
 import type { VisitInfo } from '../components/VisitMenuPicker'
 import { MemberCheckout } from '../components/MemberCheckout'
+import { PartyCheckIn } from '../components/PartyCheckIn'
+import { fetchTodayParty, partyNeedsAsk, type PartyEntry } from '../utils/partyCheckIn'
 import { resolveMemberQr } from '../utils/memberQrIdentity'
 import {
   canUseDiscountType, playSuccessSound, playWarningSound, checkInVisit,
@@ -30,6 +32,27 @@ import {
 } from '../utils/staffScanner'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
+// QR のあとの画面（お会計）：白・黒・細い線だけで（11/10 慶一郎さん「Apple風で気持ちよく、カッコよく、美しく」）
+const UI = '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif'
+const INK = '#1B1B1A'
+const SUB = '#6B6B66'
+const MUTE = '#A1A19B'
+const LINE = '#D9D9D4'
+const HAIR = '#ECECE8'
+const OK = '#2F7D5B'
+const GROUP: React.CSSProperties = { background: '#FFFFFF', borderRadius: 20, boxShadow: '0 0 0 1px rgba(28,24,18,0.04), 0 1px 2px rgba(28,24,18,0.04), 0 14px 36px rgba(28,24,18,0.07)' }
+
+/** 畳んだ行（押すと開く）。iOS の設定画面の行と同じ形 */
+function DisclosureRow({ label, value, open, onClick }: { label: string; value?: string; open: boolean; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-expanded={open}
+      style={{ width: '100%', minHeight: 52, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', background: 'transparent', border: 'none', fontFamily: UI, fontSize: 16, color: INK, cursor: 'pointer', textAlign: 'left' }}>
+      <span style={{ flex: 1 }}>{label}</span>
+      {value && <span style={{ fontSize: 15, color: SUB, fontVariantNumeric: 'tabular-nums' }}>{value}</span>}
+      <span aria-hidden="true" style={{ color: MUTE, fontSize: 18, lineHeight: 1, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.18s' }}>›</span>
+    </button>
+  )
+}
 const STAFF_NAME_KEY        = 'ginjiro_staff_name'
 const STAFF_NAMES  = TERMINAL_OPERATORS
 const MAX_QTY      = 300 // 10/28 慶一郎さん：漢トク券をたくさん持っている人がいるので、一度に300枚まで
@@ -66,11 +89,6 @@ function daysSince(dateStr: string): number {
   return Math.floor((today.getTime() - base.getTime()) / 86_400_000)
 }
 
-/** YYYY-MM-DD → YYYY / MM / DD */
-function fmtVisitDate(iso: string): string {
-  const p = iso.split('-')
-  return p.length === 3 ? `${p[0]} / ${p[1]} / ${p[2]}` : iso
-}
 
 function fmtCreatedAt(iso: string): string {
   const d = new Date(iso)
@@ -279,6 +297,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   // Checkin
   const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+  // 今日のご予約が2名以上・お連れ様のご予約があるとき：来た方だけ受付（11/8）
+  const [partyAsk, setPartyAsk] = useState<{ userId: string; party: PartyEntry[] } | null>(null)
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
   const [, setVisitInfo]         = useState<VisitInfo | null>(null)
 
@@ -286,6 +306,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [bindCode, setBindCode]             = useState<{ code: string; expiresAt: string } | null>(null)
   const [bindCodeLoading, setBindCodeLoading] = useState(false)
   const [bindCodeError, setBindCodeError]   = useState<string | null>(null)
+  // QR のあとの画面：お会計を主役にして、ほかは畳む（11/10 慶一郎さん「下までスクロールせんと見れん」）
+  const [openSection, setOpenSection] = useState<null | 'tickets' | 'issue' | 'bind'>(null)
 
   // ── 表示モード（店舗端末メニューから issue / recovery のどちらかで開く） ────────
   const [mainTab] = useState<AdminMainTab>(mode)
@@ -326,6 +348,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
   function handleReset() {
     setPhase('scan')
+    setOpenSection(null)
     setVisitInfo(null)
     setScannedData(null)
     setPrevLastVisitDate(undefined)
@@ -394,6 +417,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           // チケットの QR でも会員QR と同じく来店チェックインまで済ませ、お会計を出す（10/28：チェックインを押さないとお会計が出なかった）
           setCheckInStatus('loading')
           setCheckInDate(null)
+          void fetchTodayParty(tuData.userId).then(p => { if (partyNeedsAsk(p)) setPartyAsk({ userId: tuData.userId, party: p }) })
           try {
             const visit = await checkInVisit(tuData.userId)
             setCheckInDate(visit.date)
@@ -481,7 +505,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       setSelectedTicketIds(ctx.tickets.filter(t => passportData.ticketIds!.includes(t.id) && !t.used && !t.pending_transfer
         && (!t.expires_at || new Date(t.expires_at) > now) && canUseDiscountType(ctx.today_used_type, t.type) && !isWelcomeCouponBlockedToday(t)).map(t => t.id))
     }
-    // 会員QRの読み取り＝来店登録（14日サイクルを本日からリセット）
+    // 会員QRの読み取り＝来店の記録（14日は対象メニューの会計の完了から・11/8）。今日のご予約が2名以上・お連れ様なら、来た方を聞いて受付
+    void fetchTodayParty(passportData.userId).then(p => { if (partyNeedsAsk(p)) setPartyAsk({ userId: passportData.userId, party: p }) })
     setCheckInStatus('loading')
     try {
       const visit = await checkInVisit(passportData.userId)
@@ -914,207 +939,78 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         {/* ===== RESULT ===== */}
         {mainTab === 'issue' && phase === 'result' && scannedData && (
           <div data-guide="member-result">
-            {/* ── Customer card ── */}
-            <div style={{ position: 'relative', marginBottom: 16 }}>
-              <div
-                key={`burst-${scannedData.userId}`}
-                style={{
-                  position: 'absolute', inset: 0, borderRadius: 22, zIndex: 1, pointerEvents: 'none',
-                  background: 'radial-gradient(circle at 50% 38%, rgba(151,115,43,0.32) 0%, rgba(28,31,29,0.12) 45%, transparent 72%)',
-                  animation: 'gj-burst 0.9s ease-out both',
-                }}
-              />
-              <div
-                key={scannedData.userId}
-                style={{
-                  borderRadius: 20, overflow: 'hidden', position: 'relative', zIndex: 2,
-                  border: '1px solid rgba(151,115,43,0.45)',
-                  background: 'linear-gradient(160deg, #ffffff 0%, #ffffff 100%)',
-                  boxShadow: '0 0 25px rgba(151,115,43,0.22), 0 14px 44px rgba(28,31,29,0.4)',
-                  animation: 'gj-slot-in 0.52s cubic-bezier(0.34,1.56,0.64,1) both',
-                }}
-              >
-                <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 25%, #97732b 50%, rgba(151,115,43,0.45) 75%, transparent)' }} />
-                <div style={{ padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 8, letterSpacing: '0.28em', color: '#1c1f1d', marginBottom: 4 }}>お客様</p>
-                      <h2 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.06em', marginBottom: 3, lineHeight: 1.1 }}>
-                        {scannedData.name}
-                        <span style={{ fontSize: 14, marginLeft: 4, color: '#1c1f1d' }}>様</span>
-                      </h2>
-                      <p style={{ fontSize: 9, color: '#1c1f1d', letterSpacing: '0.06em', marginBottom: 2 }}>
-                        ID: {scannedData.userId.slice(0, 22)}…
-                      </p>
-                      {prevLastVisitDate && (
-                        <p style={{ fontSize: 10, color: '#1c1f1d', letterSpacing: '0.04em' }}>
-                          最終来店 {fmtVisitDate(prevLastVisitDate)}
-                        </p>
-                      )}
-                    </div>
-                    <div style={{
-                      flexShrink: 0, padding: '10px 14px', borderRadius: 14, textAlign: 'center', minWidth: 72,
-                      background: isFirstVisit ? 'rgba(38,98,139,0.1)' : isEligible ? 'rgba(36,107,82,0.1)' : 'rgba(178,58,58,0.1)',
-                      border: `1px solid ${isFirstVisit ? 'rgba(38,98,139,0.28)' : isEligible ? 'rgba(36,107,82,0.32)' : 'rgba(178,58,58,0.28)'}`,
-                    }}>
-                      <p style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, lineHeight: 1.1, marginBottom: 3, color: isFirstVisit ? '#26628b' : isEligible ? '#246b52' : '#b23a3a' }}>
-                        {isFirstVisit ? '初回' : `${elapsedDays}日`}
-                      </p>
-                      <p style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: isFirstVisit ? '#26628b' : isEligible ? '#246b52' : 'rgba(178,58,58,1)' }}>
-                        {isFirstVisit ? '初回来店' : isEligible ? '対象◎' : '対象外'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* ── お客様（1〜2行）。お会計をすぐ下に出す（11/10 慶一郎さん「下までスクロールせんと見れん」「Apple風で」） ── */}
+            <section aria-label="お客様" style={{ padding: '2px 4px 16px', fontFamily: UI }}>
+              <h2 style={{ margin: 0, fontFamily: SERIF, fontSize: 30, fontWeight: 700, letterSpacing: '0.04em', lineHeight: 1.25, color: INK }}>
+                {scannedData.name}<span style={{ fontSize: 16, fontWeight: 500, marginLeft: 6 }}>様</span>
+              </h2>
+              <p style={{ margin: '6px 0 0', fontSize: 14, lineHeight: 1.6, color: SUB }}>
+                {checkInStatus === 'done' && checkInDate
+                  ? <span data-guide="checkin-done"><span aria-hidden="true" style={{ color: OK, fontWeight: 700 }}>✓ </span>来店記録 {Number(checkInDate.slice(5, 7))}/{Number(checkInDate.slice(8, 10))}</span>
+                  : '来店はまだ記録していません'}
+                {isFirstVisit ? '・初めてのご来店' : elapsedDays !== null ? `・前回から${elapsedDays}日` : ''}
+                {isEligible ? '・メンテナンス対象' : ''}
+              </p>
+            </section>
 
             {/* Special予約：予約日当日だけ予約割引を表示（価格は店舗側マスタ。QR内の価格は使わない） */}
             {scannedData.reservation && isReservationForDate(scannedData.reservation) && (
-              <div style={{
-                marginBottom: 14,
-                borderRadius: 18,
-                overflow: 'hidden',
-                background: 'linear-gradient(155deg, #ffffff 0%, #ffffff 100%)',
-                border: '1px solid rgba(151,115,43,0.34)',
-                boxShadow: '0 10px 34px rgba(20,28,24,0.08), inset 0 1px 0 rgba(151,115,43,0.06)',
-              }}>
-                <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.75), transparent)' }} />
-                <div style={{ padding: '15px 18px' }}>
-                  <p style={{ fontSize: 8, letterSpacing: '0.28em', color: 'rgba(151,115,43,0.86)', marginBottom: 8 }}>
-                    CURRENT RESERVATION · 本日のご予約
-                  </p>
-                  <p style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#1c1f1d', lineHeight: 1.35, marginBottom: 4 }}>
-                    {scannedData.reservation.title}
-                  </p>
-                  <p style={{ fontSize: 12, color: '#6b716d', lineHeight: 1.55, marginBottom: 10 }}>
-                    {scannedData.reservation.menuLabel}
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 8 }}>
+              <section aria-label="本日のご予約" style={{ ...GROUP, padding: '14px 18px', marginBottom: 12 }}>
+                <p style={{ margin: 0, fontSize: 12, color: SUB }}>本日のご予約・電話予約済み</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginTop: 4 }}>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: INK, minWidth: 0 }}>{scannedData.reservation.title}</span>
+                  <span style={{ fontSize: 20, fontWeight: 700, color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                     {typeof scannedData.reservation.normalPrice === 'number' && (
-                      <span style={{ fontSize: 13, color: '#9aa09c', textDecoration: 'line-through' }}>
-                        ¥{scannedData.reservation.normalPrice.toLocaleString()}
-                      </span>
+                      <s style={{ fontSize: 13, fontWeight: 400, color: MUTE, marginRight: 8 }}>¥{scannedData.reservation.normalPrice.toLocaleString()}</s>
                     )}
-                    <span style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: '#97732b', lineHeight: 1 }}>
-                      ¥{scannedData.reservation.memberPrice.toLocaleString()}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 11, color: '#6b716d', lineHeight: 1.55 }}>
-                    {scannedData.reservation.benefit} / 電話予約済み
-                  </p>
+                    ¥{scannedData.reservation.memberPrice.toLocaleString()}
+                  </span>
                 </div>
-              </div>
+                <p style={{ margin: '4px 0 0', fontSize: 13, color: SUB, lineHeight: 1.55 }}>{scannedData.reservation.menuLabel}・{scannedData.reservation.benefit}</p>
+              </section>
             )}
             {scannedData.reservation && !isReservationForDate(scannedData.reservation) && (
-              <p style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 12, background: '#ffffff', border: '1px solid #e6e3dd', fontSize: 12, color: '#6b716d', lineHeight: 1.6 }}>
+              <p style={{ margin: '0 4px 12px', fontSize: 13, color: SUB, lineHeight: 1.6 }}>
                 {scannedData.reservation.title}：ご予約日 {scannedData.reservation.visitDate.replace(/-/g, '/')}（本日は対象外のため予約割引なし）
               </p>
             )}
 
-            {/* ── アプリ紐付けコード（既存会員の移行・端末のセッション再発行） ── */}
-            <div style={{ display: scannedData.storeRequestId ? 'none' : undefined, marginBottom: 14, borderRadius: 16, padding: '14px 16px', background: 'rgba(151,115,43,0.05)', border: '1px solid rgba(151,115,43,0.22)' }}>
-              {bindCode ? (
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: 13, color: '#1c1f1d', marginBottom: 6 }}>お客様のアプリに入力してもらってください</p>
-                  <p style={{ fontFamily: 'ui-monospace, monospace', fontSize: 40, fontWeight: 800, letterSpacing: '0.24em', color: '#1c1f1d', paddingLeft: '0.24em' }}>
-                    {bindCode.code}
-                  </p>
-                  <p style={{ fontSize: 12, color: '#97732b', marginTop: 4 }}>
-                    {new Date(bindCode.expiresAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} まで有効・1回限り
-                  </p>
-                </div>
+            {scannedData.storeRequestId&&<StaffStoreApproval key={scannedData.storeRequestId} requestId={scannedData.storeRequestId} userId={scannedData.userId} memberName={scannedData.name} staffName={staffId}/>}
+            {useError && <p role="alert" style={{ color: '#b23a3a', marginBottom: 14 }}>{useError}</p>}
+
+            {/* ── お会計（画面の主役） ── */}
+            <section aria-label="お会計" style={{ ...GROUP, padding: '20px 20px 22px', marginBottom: 20 }}>
+              {checkInStatus === 'done' && checkInDate ? (
+                /* メニューはお会計の中で選ぶ。券は会計確定と同時に使用済みにする */
+                <MemberCheckout
+                  key={scannedData.userId}
+                  userId={scannedData.userId}
+                  staffName={staffId}
+                  ticketIds={selectedTicketIds}
+                  onPaid={() => {
+                    setSelectedTicketIds([])
+                    playSuccessSound()
+                    getTicketsForStaff(scannedData.userId).then(setUserTickets).catch(() => {})
+                  }}
+                />
               ) : (
                 <button
                   type="button"
-                  onClick={() => { void handleIssueBindCode() }}
-                  disabled={bindCodeLoading}
-                  style={{ width: '100%', minHeight: 48, borderRadius: 12, background: 'transparent', border: '1px solid rgba(151,115,43,0.4)', color: '#1c1f1d', fontFamily: SERIF, fontSize: 15, fontWeight: 700, letterSpacing: '0.1em', cursor: bindCodeLoading ? 'default' : 'pointer' }}
-                >
-                  {bindCodeLoading ? '発行中…' : '引き継ぎコードを発行'}
-                  <span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: '#1c1f1d', marginTop: 3, letterSpacing: '0.04em' }}>
-                    ご本人確認のうえ発行（アプリで「以前のチケットを引き継ぐ」を選んだお客様）
-                  </span>
-                </button>
-              )}
-              {bindCodeError && <p style={{ fontSize: 13, color: '#b23a3a', marginTop: 8 }}>{bindCodeError}</p>}
-            </div>
-
-            {scannedData.storeRequestId&&<StaffStoreApproval key={scannedData.storeRequestId} requestId={scannedData.storeRequestId} userId={scannedData.userId} memberName={scannedData.name} staffName={staffId}/>}
-            {useError && <p role="alert" style={{ color: '#b23a3a', marginBottom: 14 }}>{useError}</p>}
-            {/* ── 来店チェックイン ── */}
-            <div style={{ marginBottom: 14 }}>
-              {checkInStatus === 'done' && checkInDate ? (
-                <div style={{
-                  borderRadius: 16, padding: '20px',
-                  background: 'linear-gradient(135deg, rgba(36,107,82,0.08) 0%, rgba(36,107,82,0.08) 100%)',
-                  border: '1px solid rgba(36,107,82,0.38)',
-                  boxShadow: '0 4px 24px rgba(36,107,82,0.18)',
-                  textAlign: 'center',
-                }}>
-                  <div style={{
-                    width: 44, height: 44, borderRadius: '50%', margin: '0 auto 12px',
-                    background: 'rgba(36,107,82,0.15)',
-                    border: '1.5px solid rgba(36,107,82,0.5)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 20, color: '#246b52',
-                  }}>✓</div>
-                  <p style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: '#246b52', letterSpacing: '0.1em', marginBottom: 10 }}>
-                    来店チェックイン完了
-                  </p>
-                  <p style={{ fontFamily: SERIF, fontSize: 13, color: '#1c1f1d', lineHeight: 1.8, letterSpacing: '0.04em' }}>
-                    QR読み取りと同時に<br />
-                    {scannedData.name}様の来店日を<br />
-                    <span style={{ fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.12em' }}>{fmtVisitDate(checkInDate)}</span><br />
-                    として記録しました。
-                  </p>
-                  {/* メニューはお会計の中で選ぶ（予約のメニューも「変える」で変えられ、今日のメニューに記録される）。上に別の選ぶ欄・古いお会計の枠は出さない（10/28 慶一郎さん） */}
-                  {/* 券は会計確定と同時に使用済みにする。 */}
-                  <MemberCheckout
-                    key={scannedData.userId}
-                    userId={scannedData.userId}
-                    staffName={staffId}
-                    ticketIds={selectedTicketIds}
-                    onPaid={() => {
-                      setSelectedTicketIds([])
-                      playSuccessSound()
-                      getTicketsForStaff(scannedData.userId).then(setUserTickets).catch(() => {})
-                    }}
-                  />
-                  {/* 「次にやること」と「来店完了」は出さない：来店の記録は QR を読んだときに済み、次のお客様へは下の「次のお客様」で進む（10/28 慶一郎さん：ややこしい） */}
-                </div>
-              ) : (
-                <button
                   onClick={() => { void handleCheckIn() }}
                   disabled={checkInStatus === 'loading'}
-                  style={{
-                    width: '100%', padding: '18px 0', borderRadius: 16,
-                    background: checkInStatus === 'loading'
-                      ? 'rgba(36,107,82,0.08)'
-                      : 'linear-gradient(135deg, rgba(36,107,82,0.08) 0%, rgba(36,107,82,0.08) 100%)',
-                    border: '1px solid rgba(36,107,82,0.35)',
-                    boxShadow: checkInStatus === 'loading' ? 'none' : '0 4px 22px rgba(36,107,82,0.08)',
-                    fontFamily: SERIF, fontSize: 17, fontWeight: 700,
-                    letterSpacing: '0.14em', color: checkInStatus === 'loading' ? '#6b716d' : '#246b52',
-                    cursor: checkInStatus === 'loading' ? 'default' : 'pointer',
-                    transition: 'all 0.15s',
-                  }}
+                  style={{ width: '100%', minHeight: 52, borderRadius: 12, border: 'none', background: INK, color: '#fff', fontFamily: UI, fontSize: 17, fontWeight: 600, cursor: checkInStatus === 'loading' ? 'default' : 'pointer', opacity: checkInStatus === 'loading' ? 0.6 : 1 }}
                 >
-                  {checkInStatus === 'loading' ? '記録中…' : '来店チェックイン'}
-                  {checkInStatus !== 'loading' && (
-                    <span style={{ display: 'block', fontSize: 10, fontWeight: 400, color: '#246b52', letterSpacing: '0.08em', marginTop: 4 }}>
-                      本日の来店日を記録します
-                    </span>
-                  )}
+                  {checkInStatus === 'loading' ? '記録しています…' : '来店を記録してお会計へ'}
                 </button>
               )}
-            </div>
+            </section>
 
+            {/* ── ここから下は畳んでおく（押すと開く）：保有チケット・チケット発行・引き継ぎコード ── */}
+            <div style={{ ...GROUP, overflow: 'hidden', marginBottom: 14 }}>
             {/* ── 使用可能チケット一覧 ── */}
-            <div style={{ marginBottom: 14 }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.24em', color: '#1c1f1d', marginBottom: 10, fontFamily: SERIF }}>
-                保有チケット（未使用 {ticketsLoading ? '—' : `${activeTickets.length}枚`}）
-              </p>
+            <div>
+              <DisclosureRow label="保有チケット" value={ticketsLoading ? '—' : `${activeTickets.length}枚`} open={openSection === 'tickets'} onClick={() => setOpenSection(s => s === 'tickets' ? null : 'tickets')} />
+              {openSection === 'tickets' && <div style={{ padding: '0 16px 16px' }}>
               {/* 券の使い方の案内は出さない：QR を読めば自動でチェックインしてお会計が出る（10/28 慶一郎さん） */}
               {ticketsLoading ? (
                 <div style={{ padding: '16px', textAlign: 'center', borderRadius: 14, background: '#ffffff', border: '1px solid #f3f1ed' }}>
@@ -1211,10 +1107,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   )}
                 </div>
               )}
+              </div>}
             </div>
 
             {/* ── チケット発行フォーム ── */}
-            <div style={{ borderRadius: 18, marginBottom: 14, border: '1px solid rgba(151,115,43,0.18)', background: 'linear-gradient(160deg, #ffffff 0%, #ffffff 100%)', padding: '18px' }}>
+            <div style={{ borderTop: `1px solid ${HAIR}` }}>
+              <DisclosureRow label="チケットを発行する" open={openSection === 'issue'} onClick={() => setOpenSection(s => s === 'issue' ? null : 'issue')} />
+              {openSection === 'issue' && <div style={{ padding: '4px 16px 18px' }}>
 
               {/* Tab selector */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -1360,6 +1259,37 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               )}
 
               {issueError && <p style={{ fontSize: 12, color: '#b23a3a', marginTop: 10, lineHeight: 1.5 }}>{issueError}</p>}
+              </div>}
+            </div>
+
+            {/* ── アプリ紐付けコード（既存会員の移行・端末のセッション再発行）。ほぼ使わないので畳む ── */}
+            {!scannedData.storeRequestId && (
+              <div style={{ borderTop: `1px solid ${HAIR}` }}>
+                <DisclosureRow label="引き継ぎコード" open={openSection === 'bind'} onClick={() => setOpenSection(s => s === 'bind' ? null : 'bind')} />
+                {openSection === 'bind' && (
+                  <div style={{ padding: '0 16px 16px', fontFamily: UI }}>
+                    {bindCode ? (
+                      <div style={{ textAlign: 'center' }}>
+                        <p style={{ fontSize: 13, color: SUB, margin: '0 0 6px' }}>お客様のアプリに入力してもらってください</p>
+                        <p style={{ fontFamily: 'ui-monospace, monospace', fontSize: 40, fontWeight: 700, letterSpacing: '0.24em', color: INK, paddingLeft: '0.24em', margin: 0 }}>{bindCode.code}</p>
+                        <p style={{ fontSize: 13, color: SUB, margin: '4px 0 0' }}>
+                          {new Date(bindCode.expiresAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} まで有効・1回限り
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <p style={{ fontSize: 13, color: SUB, lineHeight: 1.6, margin: '0 0 10px' }}>アプリで「以前のチケットを引き継ぐ」を選んだお客様に、ご本人確認のうえ発行します。</p>
+                        <button type="button" onClick={() => { void handleIssueBindCode() }} disabled={bindCodeLoading}
+                          style={{ width: '100%', minHeight: 46, borderRadius: 10, background: '#fff', border: `1px solid ${LINE}`, color: INK, fontFamily: UI, fontSize: 15, fontWeight: 600, cursor: bindCodeLoading ? 'default' : 'pointer' }}>
+                          {bindCodeLoading ? '発行中…' : '引き継ぎコードを発行'}
+                        </button>
+                      </>
+                    )}
+                    {bindCodeError && <p style={{ fontSize: 13, color: '#b23a3a', marginTop: 8 }}>{bindCodeError}</p>}
+                  </div>
+                )}
+              </div>
+            )}
             </div>
 
           </div>
@@ -1787,50 +1717,33 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
       </main>
 
-      {/* ── Fixed bottom: 次のお客様 / 発行する ── */}
+      {/* ── 下に固定：次のお客様（控えめ）。発行するは「チケットを発行する」を開いているときだけ（11/10） ── */}
       {mainTab === 'issue' && phase === 'result' && scannedData && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-          background: 'linear-gradient(0deg, rgba(246,245,242,0.98) 0%, rgba(246,245,242,0.92) 70%, transparent 100%)',
-          padding: '14px 20px calc(14px + env(safe-area-inset-bottom, 0px))',
+          background: 'rgba(246,246,244,0.86)', backdropFilter: 'saturate(180%) blur(20px)', WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+          borderTop: '1px solid ' + HAIR,
+          padding: '10px 16px calc(10px + env(safe-area-inset-bottom, 0px))',
         }}>
           <div style={{ display: 'flex', gap: 10, maxWidth: 480, margin: '0 auto' }}>
             <button
               type="button"
               data-guide="next-customer"
               onClick={handleReset}
-              style={{
-                flex: '0 0 34%', height: 66, borderRadius: 18,
-                background: '#ffffff',
-                border: '1.5px solid #e6e3dd',
-                color: '#1c1f1d',
-                fontFamily: SERIF, fontSize: 13, fontWeight: 700, letterSpacing: '0.12em',
-                cursor: 'pointer',
-              }}
+              style={{ flex: 1, height: 50, borderRadius: 12, background: '#FFFFFF', border: '1px solid ' + LINE, color: INK, fontFamily: UI, fontSize: 16, fontWeight: 600, cursor: 'pointer' }}
             >
               次のお客様
             </button>
-            <button
-              onClick={handleIssueClick}
-              disabled={!canIssue}
-              style={{
-                flex: 1, height: 66, borderRadius: 18,
-                background: canIssue
-                  ? 'linear-gradient(160deg, #3a3e3b 0%, #1c1f1d 100%)'
-                  : '#ece9e3',
-                border: `2px solid ${canIssue ? '#97732b' : '#e6e3dd'}`,
-                boxShadow: canIssue
-                  ? ['0 0 32px rgba(28,31,29,0.14)', '0 0 64px rgba(28,31,29,0.14)', 'inset 0 1px 0 rgba(151,115,43,0.28)', 'inset 0 -1px 0 rgba(151,115,43,0.1)', '0 6px 32px rgba(28,31,29,0.4)'].join(', ')
-                  : 'none',
-                color: canIssue ? '#ffffff' : '#6b716d',
-                fontFamily: SERIF, fontSize: 21, fontWeight: 700, letterSpacing: '0.22em',
-                cursor: canIssue ? 'pointer' : 'default',
-                animation: canIssue ? 'gj-pulse-red 2.8s ease-in-out infinite' : 'none',
-                transition: 'background 0.2s, border-color 0.2s',
-              }}
-            >
-              {issueLoading ? '発行中…' : '発行する'}
-            </button>
+            {openSection === 'issue' && (
+              <button
+                type="button"
+                onClick={handleIssueClick}
+                disabled={!canIssue}
+                style={{ flex: 1.4, height: 50, borderRadius: 12, border: 'none', background: canIssue ? INK : '#E4E4E0', color: canIssue ? '#FFFFFF' : MUTE, fontFamily: UI, fontSize: 16, fontWeight: 600, cursor: canIssue ? 'pointer' : 'default' }}
+              >
+                {issueLoading ? '発行中…' : '発行する'}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1928,6 +1841,10 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       )}
 
       {/* ── Confirmation modal ── */}
+      {partyAsk && (
+        <PartyCheckIn userId={partyAsk.userId} party={partyAsk.party} staffName={staffId} onDone={() => setPartyAsk(null)} />
+      )}
+
       {showConfirm && scannedData && (
         <div
           onClick={() => setShowConfirm(false)}

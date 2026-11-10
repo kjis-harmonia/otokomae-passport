@@ -116,3 +116,7 @@ body {
   overflow-x: hidden;
   overscroll-behavior-x: none;
 }
+
+/* 自動再生の動画に iPhone が勝手に出す再生ボタンを出さない（省電力モードなど・11/10）。動画は飾りなので、止まっていても絵が見えれば良い */
+video::-webkit-media-controls-start-playback-button { display: none !important; -webkit-appearance: none; }
+video::-webkit-media-controls { display: none !important; }

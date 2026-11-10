@@ -105,7 +105,7 @@ export function HqGinpayScreen() {
                   <span>{r.client_name ?? r.client_id}</span>
                   <span>{GINPAY_TYPE_LABEL[r.type]}</span>
                   <span style={{ fontFamily: HQ_MONO, color: r.amount < 0 ? HQ_COLORS.textPrimary : HQ_COLORS.textSecondary }}>
-                    {r.amount > 0 ? '+' : ''}{yen(r.amount)}
+                    {r.amount > 0 ? '+' : r.amount < 0 ? '−' : ''}{yen(Math.abs(r.amount))}
                     {!!r.bonus_amount && <small style={{ display: 'block', fontSize: 11, color: HQ_COLORS.textSecondary }}>うち特典 {yen(Math.abs(r.bonus_amount))}</small>}
                   </span>
                   <span>{r.operator_name ?? r.operator_type}</span>

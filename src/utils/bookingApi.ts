@@ -106,7 +106,8 @@ export const BLOCK_LABEL: Record<string, string> = {
 }
 
 export const BOOKING_ERROR_MESSAGE: Record<string, string> = {
-  slot_taken: 'その時間は埋まっています。別の時間を選んでください。',
+  // 同じお客様（同じ顧客カード）の施術時間が重なるときも slot_taken になる（11/9 重なり防止）
+  slot_taken: 'その時間は埋まっているか、同じお客様の予約と重なっています。別の時間を選ぶか、別の方ならお客様を選ばずに入れてください。',
   too_late: 'その時間は受付を締め切りました。',
   date_not_open: 'その日は予約を受け付けていません（店休日または受付期間外）。',
   menu_not_available: 'この担当者ではそのメニューを受けられません。',

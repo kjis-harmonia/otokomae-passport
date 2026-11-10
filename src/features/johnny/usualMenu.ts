@@ -19,7 +19,8 @@ const USUAL_FIRST = ['cut-regular', 'cut-skin-fade', 'perm-iper', 'perm-punch', 
 
 /** いつものメニューにならないもの：メンテナンス・顔そり・オプション（眉・シャンプーなど）・前髪だけ */
 export function canBeUsual(code: string): boolean {
-  return !/^(maintenance|shave-|opt-)/.test(code) && code !== 'cut-bangs'
+  // オプション（ライン・前髪など）とメンテナンスカットはいつものにしない。シェービングはいつものにできる（11/8 お母さん＝レディースシェービング）
+  return !/^(maintenance|opt-)/.test(code) && code !== 'cut-bangs'
 }
 
 /** いつものメニューを選ぶ一覧：なれないものを除いて、選ばれやすい順 */
@@ -38,12 +39,18 @@ export function setUsualMenu(menu: UsualMenu): boolean {
 
 /** 会員の記録のいつものメニュー（お店で登録したもの・ほかの端末で登録したもの）。読めなければ null */
 export async function fetchServerUsualMenu(): Promise<UsualMenu | null> {
+  const v = await fetchServerUsualMenuState()
+  return v === 'none' || v === 'unknown' ? null : v
+}
+
+/** 'none'＝会員の記録に無いと分かった・'unknown'＝読めなかった（ログイン前・通信など） */
+export async function fetchServerUsualMenuState(): Promise<UsualMenu | 'none' | 'unknown'> {
   try {
     const { callCustomerRpc, hasCustomerSession } = await import('../../utils/customerSession')
-    if (!hasCustomerSession()) return null
+    if (!hasCustomerSession()) return 'unknown'
     const v = await callCustomerRpc<{ code?: string; name?: string } | null>('customer_usual_menu')
-    return v && typeof v.code === 'string' && typeof v.name === 'string' ? { code: v.code, name: v.name } : null
-  } catch { return null }
+    return v && typeof v.code === 'string' && typeof v.name === 'string' ? { code: v.code, name: v.name } : 'none'
+  } catch { return 'unknown' }
 }
 
 /** いつもの担当の id（登録していなければ null＝どちらでもいい・毎回聞く） */
