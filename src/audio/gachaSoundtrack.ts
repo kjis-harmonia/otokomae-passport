@@ -3,7 +3,8 @@ export const GACHA_AUDIO_FILES = {
   intro: '/gacha/gacha-intro-audio.m4a?v=deep2',
   wait: '/gacha/gacha-wait-audio.wav?v=deep2',
   open: '/gacha/gacha-open-audio.m4a?v=deep-pace1',
-  result: '/gacha/gacha-result-audio.m4a?v=deep3',
+  // 結果の決定音（0.1秒）は鳴らさない：開く音が消えた後の静かな所で鳴るので「プツッ」に聞こえた（11/12 慶一郎さん）。
+  // 戻すなら result: '/gacha/gacha-result-audio.m4a?v=deep3' を足す（仕組みは残してある）
 } as const
 export type GachaAudioFiles = Record<'intro' | 'wait' | 'open', string> & { result?: string }
 export type GachaAudioBuffers = Record<'intro' | 'wait' | 'open', AudioBuffer> & { result?: AudioBuffer }
