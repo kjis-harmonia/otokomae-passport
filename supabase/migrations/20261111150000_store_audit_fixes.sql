@@ -1,6 +1,6 @@
 -- 11/11 店舗端末の点検（富士通・5人）の「今日中」のうち DB の分
 --   1 SB：アプリでの予約の変更（元の予約の取消）も SB に届ける（staff_push_pending_for_sender・staff_new_unacked）
---   2 安全：未登録の端末で PIN を間違えただけでは全体をロックしない（staff_device_alert。staff_login・hq_login はこれを呼ぶ）。staff_lockdown_status はログインしていないと答えない
+--   2 安全：staff_lockdown_status はログインしていないと答えない（未登録の端末の PIN は、間違いでも正しくても今まで通り全体をロック・11/11 慶一郎さん）
 --   5 会計：予約のない方の会計（not_owner）は会員ご本人の来店・施術の記録に入れない・Welcome 券を使わない（finalize_sale）
 --   6 お客様ごとの料金：お連れ様の予約・予約のない方の会計を除く（client_menu_price・client_menu_prices）
 -- 元にした定義は Staging＝本番で同じ（md5 確認済み）。戻し方：supabase/rollback/20261111_store_audit_off.sql
@@ -106,27 +106,6 @@ begin
       and exists (select 1 from app_private.staff_push_sent s where s.reservation_id = r.id and s.acked_at is not null)
       and not exists (select 1 from app_private.staff_push_cancel c where c.reservation_id = r.id)
   ) x);
-end;
-$function$;
-
-CREATE OR REPLACE FUNCTION app_private.staff_device_alert(p_reason text, p_app text, p_hint text, p_device_hash text)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-begin
-  -- 11/11 店舗端末点検：PIN の打ち間違い（pin_fail）だけでは全体をロックしない（知らせは残す）。ロックは未登録の端末で正しい PIN（pin_ok）のとき
-  if p_reason = 'pin_ok' then
-    update app_private.staff_device_policy set locked_at = coalesce(locked_at, now()) where id = 1;
-  end if;
-  if exists (select 1 from app_private.staff_device_alerts a
-             where a.acked_at is null and a.created_at > now() - interval '10 minutes'
-               and (a.device_hash = p_device_hash or (p_device_hash is null and a.device_hash is null and a.reason = p_reason))) then
-    return;
-  end if;
-  insert into app_private.staff_device_alerts (reason, app, hint, device_hash, ip, user_agent)
-  values (p_reason, p_app, p_hint, p_device_hash, app_private.request_ip(), app_private.request_user_agent());
 end;
 $function$;
 

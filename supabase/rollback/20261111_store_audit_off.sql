@@ -104,24 +104,6 @@ begin
 end;
 $function$;
 
-CREATE OR REPLACE FUNCTION app_private.staff_device_alert(p_reason text, p_app text, p_hint text, p_device_hash text)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-begin
-  update app_private.staff_device_policy set locked_at = coalesce(locked_at, now()) where id = 1;
-  if exists (select 1 from app_private.staff_device_alerts a
-             where a.acked_at is null and a.created_at > now() - interval '10 minutes'
-               and (a.device_hash = p_device_hash or (p_device_hash is null and a.device_hash is null and a.reason = p_reason))) then
-    return;
-  end if;
-  insert into app_private.staff_device_alerts (reason, app, hint, device_hash, ip, user_agent)
-  values (p_reason, p_app, p_hint, p_device_hash, app_private.request_ip(), app_private.request_user_agent());
-end;
-$function$;
-
 CREATE OR REPLACE FUNCTION public.staff_lockdown_status()
  RETURNS json
  LANGUAGE sql
