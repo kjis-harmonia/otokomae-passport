@@ -11,6 +11,7 @@ import { canBeUsual, setUsualMenu, usualMenuOrder } from '../features/johnny/usu
 import { callCustomerRpc } from '../utils/customerSession'
 import { fetchPeople, MAX_COMPANIONS, removeCompanion, saveCompanion, type People, type Person } from '../features/johnny/usualMembers'
 import { RpcError } from '../utils/staffSession'
+import { loadUsual } from './usualPicks'
 
 type Menu = { code: string; name: string; duration_min: number; price: number | null }
 // 最初に出すメニュー（最初の案内と同じ順）。ほかは「ほかのメニューを見る」で
@@ -36,12 +37,15 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook, manage = false
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [armed, setArmed] = useState<string | null>(null)
+  const [lastMenu, setLastMenu] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
     let live = true
     setMode(manage ? 'edit' : 'pick'); setError(null); setArmed(null); setFailed(false) // eslint-disable-line react-hooks/set-state-in-effect -- 開くたびに最初から
     void fetchPeople().then(p => { if (live) setPeople(p) }, () => { if (live) setFailed(true) })
+    // ホーム・銀ちゃんと同じ「いつもの」（登録が無ければ前回のご来店）。ここだけ「まだ決まっていません」と食い違わないように（11/10 夜の点検）
+    void loadUsual().then(u => { if (live) setLastMenu(u?.menu?.name ?? null) }, () => { if (live) setLastMenu(null) })
     return () => { live = false }
   }, [open, manage])
   useEffect(() => {
@@ -155,7 +159,7 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook, manage = false
                   <p className="v2-people-label">ご本人</p>
                   <div className="v2-panel v2-glass" style={{ padding: '4px 14px' }} data-guide="people-owner">
                     <div className="v2-row">
-                      <span style={{ flex: 1 }}>{owner?.name ?? 'ご本人'}<small>{owner?.menu_name ? `いつもの：${owner.menu_name}` : 'いつものは、まだ決まっていません'}</small></span>
+                      <span style={{ flex: 1 }}>{owner?.name ?? 'ご本人'}<small>{owner?.menu_name ? `いつもの：${owner.menu_name}` : lastMenu ? `いつもの：${lastMenu}` : 'いつものは、まだ決まっていません'}</small></span>
                       <button type="button" className="v2-text-btn" data-guide="people-owner-edit" disabled={busy || !people} onClick={() => { setForm({ id: 'me', name: owner?.name ?? '', menu: owner?.menu_code ?? null }); setError(null); setMode('form') }}>変更</button>
                     </div>
                   </div>

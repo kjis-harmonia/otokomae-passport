@@ -124,6 +124,16 @@ export const GINPAY_TYPE_LABEL: Record<GinpayTransactionType, string> = {
   void: '取消',
 }
 
+/** お客様の利用履歴に出す名前（スタッフ向けの「Stripe」「取消」などの言葉は出さない・11/10 夜の点検） */
+export const GINPAY_CUSTOMER_LABEL: Record<GinpayTransactionType, string> = {
+  charge_store: 'チャージ（店頭）',
+  charge_stripe: 'チャージ（カード）',
+  payment: 'お支払い',
+  refund: '返金',
+  adjustment: '残高の調整',
+  void: 'お取り消し',
+}
+
 export function ginpayErrorMessage(code: string): string {
   return GINPAY_ERROR_MESSAGE[code] ?? 'GINPayの処理に失敗しました。通信環境を確認してください。'
 }

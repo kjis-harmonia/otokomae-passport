@@ -16,7 +16,7 @@ export function GaugeMonth({ state }: { state: GachaState }) {
   const cap = Number(g.month.cap) || 1
   const now = Math.min(Number(g.month.draw_pt) || 0, cap)
   return (
-    <div className="v2-gauge-month">
+    <div className="v2-gauge-month" data-guide="gauge-month">
       {/* 正式の決まり（11/6）：ガチャ1回 0.1pt・月 1pt まで。その月にご来店があると景品のポイントに入る。
           「仮ポイント」「付与上限に到達」はお客様に分かりにくい（11/9 慶一郎さん）→ 中身をそのまま言う */}
       <div className="v2-gauge-row"><b>今月のガチャでたまった分</b><b>{now.toFixed(1)} / {cap.toFixed(1)}pt</b></div>
@@ -50,12 +50,14 @@ export function GachaGauge({ state, onChange }: { state: GachaState; onChange: (
     void run(claimGauge).then(ok => { if (ok) setConfirm(false) })
   }
   const choosing = !goal || picking
+  // ポイントのため方を一言（11/10 夜の点検：初めての方は「50pt」だけ見ても、どうためるか分からなかった）
+  const howTo = 'ガチャ券を使ってご来店すると、メニュー 5,000円以上で 1pt・3,000円以上で 0.5pt たまります。'
 
   return (
-    <section className="v2-gauge" aria-label="狙っている景品">
+    <section className="v2-gauge" data-guide="gauge" aria-label="狙っている景品">
       <div className="v2-gauge-head">
         <span>{choosing ? '狙う景品を選ぶ' : '狙っている景品'}</span>
-        {goal && !picking && <button type="button" onClick={() => setPicking(true)}>変える<ChevronRight size={16} strokeWidth={2} aria-hidden /></button>}
+        {goal && !picking && <button type="button" data-guide="gauge-change" onClick={() => setPicking(true)}>変える<ChevronRight size={16} strokeWidth={2} aria-hidden /></button>}
         {goal && picking && <button type="button" onClick={() => setPicking(false)}>やめる</button>}
       </div>
       {!choosing && goal && (
@@ -72,12 +74,14 @@ export function GachaGauge({ state, onChange }: { state: GachaState; onChange: (
             </>
           )}
           {full && held?.reserved && <small>ご予約のガチャ券を使ったあとに受け取れます。</small>}
-          {!full && <small>ガチャ券のご利用で、景品に向けてポイントがたまります。</small>}
+          {!full && <small>{howTo}</small>}
         </>
       )}
+      {choosing && <small>{howTo}</small>}
       {choosing && (
-        <div className="v2-gauge-goals" role="radiogroup" aria-label="狙う景品">
-          {gauge.goals.map(g => (
+        <div className="v2-gauge-goals" data-guide="gauge-goals" role="radiogroup" aria-label="狙う景品">
+          {/* 高い景品から（11/11 慶一郎さん：安い順だったのを逆に） */}
+          {[...gauge.goals].sort((a, b) => b.points - a.points).map(g => (
             <button key={g.code} type="button" role="radio" aria-checked={g.code === gauge.target} disabled={busy} onClick={() => pick(g.code)}>
               <span>{g.title}</span><small>{pt(g.points)}pt</small>
             </button>

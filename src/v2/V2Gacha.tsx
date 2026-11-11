@@ -21,7 +21,7 @@ import { GachaGauge, GaugeMonth } from './GachaGauge'
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
 type Theme = { short: string; id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean }
 const THEMES: Theme[] = [
-  { id: 'deep', short: '深海編', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4?v=deep3', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4?v=deep2', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
+  { id: 'deep', short: '深海編', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4?v=deep3', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4?v=deep-pace1', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
   // 銀河の音は1部の終わりがそのまま待ちの頭へ続く曲なので、重ねるのは短く。開放は 7.9 秒で真っ白になりきる。そこからチケットを飛ばす
   { id: 'galaxy', short: '銀河編', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
     audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg', hold: true }, // 保留中（11/1「宇宙編微妙やな」）。ランダムには出さない
@@ -105,7 +105,8 @@ const rewind = (v: HTMLVideoElement) => { v.pause(); v.currentTime = 0 }
 // サーバーも app_private.gacha_settings.opens_on より前は抽選しない（customer_gacha_draw → not_open）
 const GACHA_OPENS = '2026-11-11'
 // 11/11：新しい銀二郎と同時に 12:00（launched＝サーバー時刻）で解禁。Staging も同じ（?launch=分 で確かめる）
-const gachaOpen = () => launched() && (isStaging() || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS)
+// Staging はいつでも回せる（試すため）。本番は 12:00（launched）まで閉じたまま（11/11 慶一郎さん）
+const gachaOpen = () => isStaging() || (launched() && new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS)
 const sameDay = () => new Date(launchAt() + 9 * 3600e3).toISOString().slice(0, 10) === new Date(serverNow() + 9 * 3600e3).toISOString().slice(0, 10)
 
 // 今月のラインナップも解禁日まで見せない（11/6 慶一郎さん「今月のラインナップも見れないようにして」）
@@ -482,25 +483,30 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
     )
   }
   if (choice === null && held) {
+    // 同じ券どうし（例：昨日も今日も 100円引き）は違いが期限だけ。迷わないよう、期限の長い新しい券を先に選んでおく（11/10 夜の点検）
+    const same = held.title === prize.title && gachaDays(held) === gachaDays(prize)
+    const chosen = pick ?? (same ? 'new' : null)
     return (
       <>
         <Head prize={prize} />
-        <span>ガチャ券は1枚だけお持ちいただけます。<br />どちらを残しますか？</span>
+        {same
+          ? <span>お持ちの券と同じ券です。<br />新しい券にすると、期限が30日後までのびます。</span>
+          : <span>ガチャ券は1枚だけお持ちいただけます。<br />どちらを残しますか？</span>}
         <div className="v2-gacha-pick">
-          <button type="button" aria-pressed={pick === 'new'} disabled={keeping} onClick={() => setPick('new')}>
+          <button type="button" aria-pressed={chosen === 'new'} disabled={keeping} onClick={() => setPick('new')}>
             <small className="v2-pick-label"><Sparkles size={14} aria-hidden />新しいガチャ券</small>
             <strong>{prize.title}</strong>
             <small>{gachaDays(prize)}<br />30日間有効</small>
             <em>この券に交換</em>
           </button>
-          <button type="button" aria-pressed={pick === 'old'} disabled={keeping} onClick={() => setPick('old')}>
+          <button type="button" aria-pressed={chosen === 'old'} disabled={keeping} onClick={() => setPick('old')}>
             <small className="v2-pick-label">現在お持ちのガチャ券</small>
             <strong>{held.title}</strong>
             <small>{gachaDays(held)}<br />{gachaUntil(held.expires_at)}</small>
             <em>この券を残す</em>
           </button>
         </div>
-        <button type="button" className="v2-gold-btn" disabled={!pick || keeping} onClick={() => pick && onChoose(pick)}>{keeping ? '保存しています…' : '決定する'}</button>
+        <button type="button" className="v2-gold-btn" disabled={!chosen || keeping} onClick={() => chosen && onChoose(chosen)}>{keeping ? '保存しています…' : '決定する'}</button>
         <small className="v2-gacha-fine">どちらもAI予約でご利用いただけます。<br />閉じても、あとから選べます。</small>
       </>
     )

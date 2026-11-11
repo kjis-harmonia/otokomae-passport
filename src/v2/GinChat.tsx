@@ -2,8 +2,8 @@
 //   左に銀ちゃん（丸い顔のアイコン・白い吹き出し）、右にお客様（黒い吹き出し）。下に銀ちゃんが先回りして出すボタンと、入力欄（マイク・文字）
 //   ボタン・声・文字は、ぜんぶ同じ会話につながる（「はい/いいえ」は「うん」「ちがう」でも進む）
 //   welcome：店頭で QR を読んだあと。「〇月〇日は〇〇でしたね！いつものに登録してもよろしいですか？」→ メンテナンス → お連れ様 → お得な案内
-//   book：「いつものでAI予約する」。どなたの予約か → メニュー → 「ご来店は、いつ頃がええですか？」【最短で】【土日希望】【日付を選ぶ】→ 時間 → 確認 → 予約
-//   話し方：丁寧で親しみやすい広島弁（です・ます＋〜けぇ・〜とります。タメ口・命令口調は使わない・11/8 慶一郎さん）
+//   book：「いつものでAI予約する」。どなたの予約か → メニュー → 「ご来店は、いつ頃がよろしいですか？」【最短で】【土日希望】【日付を選ぶ】→ 時間 → 確認 → 予約
+//   話し方：ていねい語（です・ます）。広島弁は使わない（11/10 慶一郎さん「口調が馴れ馴れしい」で 11/8 の広島弁をやめた）。タメ口・命令口調も使わない。AI の返事に方言が混ざったら politeText.ts で直す
 //   メニュー・料金・空きは、店の一覧と今の予約エンジンだけ。登録・予約は、お客様が確かめてから
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -14,6 +14,7 @@ import { ReservationMutationClient, reservationMenuCodes, type Confirmation, typ
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
 import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
+import { loadUsual } from './usualPicks'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
 import { askUsualAi } from '../features/johnny/usualAi'
 import { askAgentVoice, type AgentTurn } from '../features/johnny/agentClient'
@@ -149,6 +150,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const reduce = useReducedMotion()
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [chips, setChips] = useState<Chip[]>([])
+  /** 「どなたのご予約ですか？」の人ごとのトグル。sel は選んでいる人の key（ご本人は 'me'） */
+  const [whoPick, setWhoPick] = useState<{ list: { key: string; label: string; booked: boolean }[]; sel: string[] } | null>(null)
+  const whoChosen = useRef<string[] | null>(null)
+  /** 押した選択肢：金色に光らせてから進む（11/11 慶一郎さん「選択式は全部合わせて」） */
+  const [pressed, setPressed] = useState<string | null>(null)
   const [typing, setTyping] = useState(false)
   const [waiting, setWaiting] = useState(false)
   const [text, setText] = useState('')
@@ -225,7 +231,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const w = waitRef.current
     if (!w || !t.trim()) return
     waitRef.current = null
-    setChips([]); setWaiting(false)
+    setChips([]); setWhoPick(null); setWaiting(false)
     push('you', t.trim())
     w(t.trim())
   }, [])
@@ -501,7 +507,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const d: Draft = { who: everyone.length > 1 ? null : everyone, menus: {}, when: null, at: null, plan: null, recheck: null }
     /** 空きを探す担当：1人の予約で担当を選んだときだけ（2人以上は同じ時間に別々の担当が要るので、今までどおり自動） */
     const staffOf = () => (d.who?.length === 1 ? d.staff ?? null : null)
-    let usualStaffTried = false
+    /** 「いつもの〇〇でよろしいですか？」に「いいえ」と打たれたら、次は担当の一覧で聞く */
+    let usualStaffDeclined = false
     const staffName = (id: string | null | undefined) => staffList.find(s => s.id === id)?.name ?? ''
     /** 文の中の担当（「銀二郎で」）。どちらでも・おまかせ は null、無ければ undefined */
     const staffIn = (t: string): string | null | undefined => {
@@ -589,7 +596,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
     /** その人のメニュー（いつもの・メンテナンス・ほか） */
     const askMenuFor = async (p: BookPerson): Promise<Menu | null | 'changed'> => {
-      const usual = p.person?.menu_code ? all.find(m => m.code === p.person!.menu_code) ?? null : null
+      // ご本人で「いつもの」を登録していないときは、ホームの「いつものでAI予約する」と同じ探し方（端末の記録・前回のご来店）にそろえる
+      //   （11/10 夜の点検：ホームは「いつもの アイパー」なのに、押すと「メニューは、何にされますか？」と聞き直していた）
+      let homeCode: string | null = null
+      if (!p.person?.menu_code && p.key === 'me') { setTyping(true); homeCode = (await loadUsual().catch(() => null))?.menu?.code ?? null; setTyping(false) }
+      const usualCode = p.person?.menu_code ?? homeCode
+      const usual = usualCode ? all.find(m => m.code === usualCode) ?? null : null
       const maint = p.person?.maintenance_ok ? maintMenu : undefined
       const whoText = d.who && (d.who.length > 1 || p.key !== 'me') ? `${p.label}は` : ''
       if (!usual) {
@@ -680,8 +692,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (await change(a)) return true
       d.staff = null; return true
     }
-    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}`).join('\n')
-      + (staffOf() ? `\n担当：${staffName(staffOf())}` : '')
+    // 担当は「どちらでも」・2人以上でも、空きを探して決まった担当を出す（11/11：確認に担当が無く、予約後に初めて分かった）
+    const planned = (p: BookPerson) => staffName(d.plan?.[p.key] ?? null)
+    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}${d.who!.length > 1 && planned(p) ? `（担当：${planned(p)}）` : ''}`).join('\n')
+      + (staffOf() ? `\n担当：${staffName(staffOf())}` : d.who!.length === 1 && staffList.length > 1 ? '\n担当：どちらでも' : '')
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
     let hasOther = false
@@ -746,9 +760,18 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           ...(everyone.length === 3 ? [['3人とも', everyone.slice(0, 3)] as [string, BookPerson[]]] : []),
           ...mates.map(p => [`${p.label}だけ`, [p]] as [string, BookPerson[]]),
         ])
-        const chips: Chip[] = [...byChip.keys()].map((label, i) => ({ label, strong: i === 0 }))
-        const a = await ask('どなたのご予約ですか？\nご一緒の方の分も、まとめてお取りできますよ。', chips)
-        const w = (fromChip.current ? byChip.get(a) : undefined) ?? whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
+        // 人ごとのトグル（ご本人・〇〇さん）＋【次へ（N名）】（11/11 慶一郎さん）。予約済みの人は灰色で押せない。
+        //   声・文字の答え（「ご本人と〇〇さん」「3人とも」「〇〇さんだけ」）は今まで通り whoIn で読む
+        const pickList = [owner, ...allMates].map(p => ({ key: p.key, label: p.label, booked: booked.has(p.key) }))
+        await say('どなたのご予約ですか？\nご一緒の方の分も、まとめてお取りできますよ。')
+        const a = await new Promise<string>(res => {
+          whoChosen.current = null
+          setWhoPick({ list: pickList, sel: [ownerFree ? 'me' : everyone[0].key] })
+          setWaiting(true)
+          waitRef.current = res
+        })
+        const chosenKeys = fromChip.current ? whoChosen.current : null
+        const w = (chosenKeys ? everyone.filter(p => chosenKeys.includes(p.key)) : null) ?? (fromChip.current ? byChip.get(a) : undefined) ?? whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
         if (w) { d.who = w; continue }
         if (await change(a)) continue
         d.who = ownerFree ? [owner] : [mates[0]]; continue
@@ -780,35 +803,48 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       // 担当（1人の予約・ご来店を聞く前）：選んだ担当の空きで日時を決める（11/10 慶一郎さん）
       if (d.who.length === 1 && staffList.length > 1 && d.staff === undefined) {
-        // いつもの担当を登録している方は聞かずにその担当で（最初の1回だけ。【担当を変える】のあとは聞く）
+        // いつもの担当を登録している方にも毎回聞く：「担当はいつもの〇〇でよろしいですか？」【はい】【ほかの担当】【どちらでも】
+        //   （11/10 夜 慶一郎さん「AI が聞いてくれんと言われたらむかつく」）
         const pk = d.who[0].key
-        const usualSt = usualStaffOf(pk)
-        if (!usualStaffTried && usualSt && staffList.some(s => s.id === usualSt)) {
-          usualStaffTried = true
-          d.staff = usualSt
-          await say(`担当は、いつもの${staffName(usualSt)}で探しますね。`)
-          continue
+        const known = usualStaffOf(pk)
+        const usualSt = !usualStaffDeclined && known && staffList.some(s => s.id === known) ? known : null
+        const ANY = 'どちらでも', YES = 'はい'
+        const a = usualSt
+          ? await ask(`担当はいつもの${staffName(usualSt)}でよろしいですか？`, [{ label: YES, strong: true }, ...staffList.filter(s => s.id !== usualSt).map(s => ({ label: s.name })), { label: ANY }])
+          : await ask('ご担当のご希望はありますか？', [...staffList.map(s => ({ label: s.name })), { label: ANY }])
+        let st = fromChip.current
+          ? (a === ANY ? null : a === YES ? usualSt : staffList.find(s => s.name === a)?.id)
+          : usualSt && intent(a) === 'yes' ? usualSt : staffIn(a)
+        if (usualSt && !fromChip.current && st === undefined) {
+          // 断り・「ほかの人」は一覧で聞き直す（「ほかの人でお願いします」を「いつもの」と取らない・11/11 2回目の点検）
+          if (intent(a) === 'no' || /ほか|他の|別|以外|じゃな|ではな|違|ちが|変え|かえ/.test(a)) { usualStaffDeclined = true; continue }
+          // 日にちなどの希望（「土曜でお願いします」）は、そちらとして受ける
+          if (whenIn(a) && await change(a)) continue
+          // 「ええわ」「いいわ」だけは賛成か断りか分からないので聞き直す（ほかの確認と同じ）
+          if (intent(a) === 'ambiguous' && !/よ$/.test(a.normalize('NFKC').replace(/[\s。！!]+$/g, ''))) {
+            await say(`「${a}」は、いつもの${staffName(usualSt)}でよろしいということですか？ボタンで教えてくださいね。`); continue
+          }
+          // 「大丈夫です」「いつもので」「ええよ」なども、いつもの担当で（黙って「どちらでも」にしない・11/11 点検）
+          if (intent(a) === 'ambiguous' || /いつも|大丈夫|だいじょうぶ|お願い|おねがい|それで|そのまま/.test(a)) st = usualSt
         }
-        usualStaffTried = true
-        const ANY = 'どちらでも'
-        const a = await ask('ご担当のご希望はありますか？', [...staffList.map(s => ({ label: s.name })), { label: ANY }])
-        const st = fromChip.current ? (a === ANY ? null : staffList.find(s => s.name === a)?.id) : staffIn(a)
         if (st !== undefined) {
           d.staff = st
           if (d.recheck && !d.recheck.note) d.recheck.note = st ? `担当を${staffName(st)}に変更しました。` : '担当は、どちらでも に変更しました。'
-          // 次回から選ばなくていいように、登録するか聞く（11/10 慶一郎さん）
-          if (st && st !== usualSt) {
-            const r = await askYN(`次回からも${staffName(st)}で、いつもの担当に登録しておきましょうか？\n登録すると、次からは担当を聞かずにお探しします。`, '登録する', '毎回選ぶ')
+          // 次回から選ばなくていいように、登録するか聞く（11/10 慶一郎さん）。もういつもの担当なら聞かない
+          if (st && st !== known) {
+            const r = await askYN(`次回からも${staffName(st)}で、いつもの担当に登録しておきましょうか？\n登録すると、次からは【はい】を押すだけで選べます。`, '登録する', '毎回選ぶ')
             if (r === 'yes') { setUsualStaffOf(pk, st); await say(`かしこまりました。いつもの担当を${staffName(st)}で登録しました。`) }
           }
           continue
         }
         if (await change(a)) continue
+        // いつもの担当を聞いているときは、分からない返事で勝手に「どちらでも」にしない
+        if (usualSt) { await say('担当は、下のボタンで教えてくださいね。'); continue }
         d.staff = null; continue
       }
       // いつ？
       if (!d.when) {
-        const a = await ask('ご来店は、いつ頃がよろしいですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
+        const a = await ask('ご来店は、\nいつ頃がよろしいですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
         const wh = whenIn(a)
         if (wh) { d.when = wh; continue }
         if (await change(a)) continue
@@ -934,7 +970,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         // 同じ券（名前・金額が同じ）は1つのボタンにまとめる
         const groups = [...new Map(usable.map(t => [`${t.title}|${t.amount}`, t])).values()]
         const label = (t: TicketRow) => groups.filter(x => x.title === t.title).length > 1 ? `${t.title}（${yen(t.amount)}）` : t.title
-        const a = await ask(`お持ちの券を、このご予約で使いますか？\nご来店のときのお会計で差し引きます。`,
+        // 2人以上のときは、券が付くのはご本人の予約だけと分かるように（11/10 夜の点検）
+        const a = await ask(`お持ちの券を、${d.who.length > 1 ? 'ご本人の' : 'この'}ご予約で使いますか？\nご来店のときのお会計で差し引きます。`,
           [...groups.map(t => ({ label: label(t), sub: `−${yen(t.amount)}`, strong: groups.length === 1 })), { label: NO_TICKET }])
         if (fromChip.current) { picked = groups.find(t => label(t) === a) ?? null; continue }
         if (await change(a)) continue
@@ -954,8 +991,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const tapped = fromChip.current
       if (tapped && a === '券を変える') { picked = undefined; continue }
       // 担当を変える：時間はその担当の空きで選び直し（前の時間で入れるかは確かめ直す）
-      if (tapped && a === '担当を変える') { d.recheck = { at: d.at, note: '', why: '担当が変わって' }; d.staff = undefined; d.at = null; d.plan = null; continue }
-      if (tapped && a === '人を変える') { d.who = null; d.staff = undefined; d.at = null; d.plan = null; continue }
+      if (tapped && a === '担当を変える') { usualStaffDeclined = true; d.recheck = { at: d.at, note: '', why: '担当が変わって' }; d.staff = undefined; d.at = null; d.plan = null; continue }
+      if (tapped && a === '人を変える') { usualStaffDeclined = false; d.who = null; d.staff = undefined; d.at = null; d.plan = null; continue }
       if (tapped && a === 'メニューを変える') {
         const pickWho = d.who.length === 1 ? '' : await ask('どなたのメニューを変えますか？', d.who.map(x => ({ label: x.label })))
         const target = d.who.length === 1 ? d.who[0] : d.who.find(p => p.label === pickWho) ?? longestIn(pickWho, d.who, p => p.name) ?? d.who[0]
@@ -1169,7 +1206,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       forgetReservation(request.reservation_id)
       if (request.kind === 'cancel') {
         const released = result.ginpay_released ?? 0
-        await say(`キャンセルしました。${released > 0 ? `\n銀Payの先払い ${yen(released)} は残高に戻しました。` : ''}`)
+        await say(`ご予約をキャンセルしました。${released > 0 ? `\n銀Payの先払い ${yen(released)} は残高に戻しました。` : ''}\nまたのご来店をお待ちしております。`)
       } else {
         rememberReservation(result)
         await say(`ご予約を変更しました！\n${slotLabel(result.starts_at)} ${result.items.map(i => i.name).join('・')}${result.ai_paused_until ? `\n※AI予約は ${md(result.ai_paused_until)} から、また使えます。` : ''}`)
@@ -1228,9 +1265,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     }
     let r = requested ?? list[0]
     if (!requested && list.length > 1) {
-      const choices = list.map((x, i) => ({ label: `${i + 1}. ${label(x)}` }))
+      // ボタンは「どなた」を大きく、日時・メニューは下の小さい字に（11/10 夜の点検：番号つきの長い1行が折り返して読みにくかった）
+      const choices = list.map(x => ({ label: `${x.companion_name ? honor(x.companion_name) : 'ご本人'}：${slotLabel(x.starts_at)}`, sub: x.items.map(i => i.name).join('・') }))
       for (;;) {
-        const a = await ask('ご予約の変更ですね！どのご予約にしますか？', choices)
+        const a = await ask('ご予約の変更・キャンセルですね。\nどのご予約にしますか？', choices)
         const index = choices.findIndex(x => x.label === a)
         if (fromChip.current && index >= 0) { r = list[index]; break }
       }
@@ -1271,7 +1309,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (!results.every(Array.isArray)) return null
       return results.flat().filter(d => typeof d === 'string' && d < addDays(from, days))
     }
-    let action = await ask(`ご予約の変更ですね！\n${label(r)}\nどちらを変更されますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(staffNames.length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
+    // 「変更・キャンセル」から入るので、キャンセルしたい方にも合う言い方（11/10 夜の点検）
+    let action = await ask(`ご予約の変更・キャンセルですね。\n${label(r)}\nどうされますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(staffNames.length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
     let dayOnly: string | null = null
     for (let guard = 0; guard < 24; guard++) {
       // キャンセル
@@ -1285,7 +1324,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         }
         const late = pv.cancel_late
         const gp = pv.ginpay_before
-        const a = await ask(`${who(r)}${reviewedLabel(pv.confirmation)}\nのご予約をキャンセルしますか？${late ? '\n※開始2時間前を過ぎているので、キャンセルすると AI予約がしばらく使えなくなります。' : ''}${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻ります。` : ''}\nキャンセルする場合は、下の【キャンセルする】を押してください。`,
+        const a = await ask(`${r.companion_name ? honor(r.companion_name) + '：' : ''}${reviewedLabel(pv.confirmation)}\nこのご予約をキャンセルしますか？${late ? '\n※開始2時間前を過ぎているので、キャンセルすると AI予約がしばらく使えなくなります。' : ''}${gp > 0 ? `\n銀Payの先払い ${yen(gp)} は残高に戻ります。` : ''}\nキャンセルする場合は、下の【キャンセルする】を押してください。`,
           [{ label: 'キャンセルする', strong: true }, { label: 'やめておく' }])
         if (!(a === 'キャンセルする' && fromChip.current)) {
           // 「キャンセルして」「キャンセルお願い」はキャンセルしたいという意味（確定はボタンだけ）
@@ -1338,7 +1377,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         let days: string[]
         if (dayOnly) { days = [dayOnly]; dayOnly = null }
         else {
-          const w = /土|日曜|週末/.test(action) && !/日時|日付/.test(action) ? action : await ask('ご来店は、いつ頃がよろしいですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
+          const w = /土|日曜|週末/.test(action) && !/日時|日付/.test(action) ? action : await ask('ご来店は、\nいつ頃がよろしいですか？', [{ label: '最短で', strong: true }, { label: '土日希望' }, { label: '日付を選ぶ' }])
           if (/日付|カレンダー|選ぶ/.test(w)) {
             setTyping(true); const open = await changeDays(63, false); setTyping(false)
             if (!open) return endWithoutAvailability()
@@ -1493,14 +1532,20 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const askKind = finished && chips.some(c => c.label === 'ホームへ') ? (bookingComplete ? 'done' : 'ended')
     : chips.some(c => c.label === '会員QRを表示') ? 'verify'
     : chips.some(c => c.label === 'この内容で予約する') ? 'confirm'
+    // お持ちの券を使うか（11/11 案内の点検：この段階が無く、案内が消えていた）
+    : chips.some(c => c.label === '券を使わない') ? 'ticket'
     : chips.some(c => c.label === '最短で') ? 'when'
-    : chips.some(c => c.label === 'ご本人だけ') ? 'who'
+    : whoPick || chips.some(c => c.label === 'ご本人だけ') ? 'who'
+    // 担当（11/11 案内の点検：担当の段階が無く、案内が消えていた）
+    : chips.some(c => c.label === 'どちらでも') ? 'staff'
     : chips.some(c => /\d\d:\d\d$/.test(c.label)) ? 'time'
+    // いつもののメニューの確認（はい／ほかのメニュー）は yesno：案内の「このメニューでよろしければ…」が出るように（11/11）
+    : chips.some(c => c.label === 'はい') && chips.some(c => c.label === 'ほかのメニュー') ? 'yesno'
     : chips.some(c => c.label === '一覧から選ぶ' || c.label === 'ほかのメニュー') ? 'menu'
     : chips.length === 2 ? 'yesno' : chips.length ? 'choice' : waiting ? 'free' : 'wait'
   const send = () => { const t = text.trim(); if (!t || !waiting) return; setText(''); fromChip.current = false; answer(t) }
   const shown = sheet ? (showAll ? sheet : sheet.slice(0, 7)) : null
-  const dockGuide = !sheet && ['who', 'menu', 'when', 'time', 'confirm'].includes(askKind)
+  const dockGuide = !sheet && ['who', 'menu', 'yesno', 'staff', 'when', 'time', 'ticket', 'confirm'].includes(askKind)
 
   return (
     <div ref={chatRef} role="dialog" aria-modal="true" aria-label="銀ちゃん" className="v2 gc lc" data-guide="lc" data-ask={askKind}>
@@ -1525,12 +1570,41 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         {typing && <div className="lc-row"><span className="lc-avatar-gap" /><p className="gc-msg gc-gin gc-typing" aria-label="銀ちゃんが考えています"><i /><i /><i /></p></div>}
       </div>
       <div className="lc-dock">
+        {/* どなたのご予約か：人ごとのトグル＋【次へ（N名）】（11/11）。選んだ人は金の縁とやわらかい光・✓ */}
+        {whoPick && (
+          <motion.div className="lc-who" data-guide="lc-chips" data-ask={askKind} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduce ? 0 : 0.22 }}>
+            <div className="lc-who-list" role="group" aria-label="ご予約の方">
+              {whoPick.list.map(p => {
+                const on = whoPick.sel.includes(p.key)
+                return (
+                  <button key={p.key} type="button" className={`lc-who-btn${on ? ' on' : ''}`} aria-pressed={on} disabled={p.booked}
+                    onClick={() => setWhoPick(w => w && ({ ...w, sel: on ? w.sel.filter(k => k !== p.key) : [...w.sel, p.key] }))}>
+                    <span>{p.label}</span>
+                    {p.booked ? <small>ご予約済み</small> : <i aria-hidden="true">{on ? '✓' : ''}</i>}
+                  </button>
+                )
+              })}
+            </div>
+            <button type="button" className="gc-chip gc-chip-strong lc-who-next" disabled={!whoPick.sel.length} onClick={() => {
+              const keys = whoPick.list.filter(p => whoPick.sel.includes(p.key)).map(p => p.key)
+              const names = whoPick.list.filter(p => keys.includes(p.key)).map(p => p.label)
+              whoChosen.current = keys
+              fromChip.current = true
+              answer(names.length === 1 ? `${names[0]}だけ` : names.join('と'))
+            }}>次へ（{whoPick.sel.length}名）</button>
+          </motion.div>
+        )}
         {/* ボタンの列の上には指さしの子を出さない：真ん中に立つと、たまたま真ん中のボタンを指して見える（11/9 慶一郎さん）。
             カレンダー・メニュー一覧の上（面全体）には出す */}
         {chips.length > 0 && (
           <motion.div className={dockGuide ? 'gc-chips lc-chips lc-guided-chips' : 'gc-chips lc-chips'} data-guide="lc-chips" data-ask={askKind} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduce ? 0 : 0.22 }}>
             {chips.map(c => (
-              <button key={c.label} type="button" className={c.strong ? 'gc-chip gc-chip-strong' : 'gc-chip'} data-guide={c.label === 'この内容で予約する' ? 'lc-book' : undefined} onClick={() => { fromChip.current = true; answer(c.label) }}>
+              <button key={c.label} type="button" className={`gc-chip${c.strong ? ' gc-chip-strong' : ''}${pressed === c.label ? ' gc-chip-on' : ''}`} disabled={pressed !== null && pressed !== c.label} data-guide={c.label === 'この内容で予約する' ? 'lc-book' : undefined}
+                onClick={() => {
+                  if (pressed) return
+                  setPressed(c.label)
+                  window.setTimeout(() => { fromChip.current = true; answer(c.label); setPressed(null) }, reduce ? 0 : 240)
+                }}>
                 {c.label}{c.sub && <small>{c.sub}</small>}
               </button>
             ))}
@@ -1584,6 +1658,9 @@ function GinNavigationMark({ step }: { step: string }) {
 /** 会話の中のカレンダー：年月・曜日は暦どおり計算。空きのある日だけ押せる */
 function LcCalendar({ open, first, last, onPick }: { open: string[]; first: string; last: string; onPick: (d: string | null) => void }) {
   const reduce = useReducedMotion()
+  const [picked, setPicked] = useState<string | null>(null)
+  // ほかの選択肢と同じ：押した日が金色に光ってから進む（11/11）
+  const choose = (d: string) => { if (picked) return; setPicked(d); window.setTimeout(() => onPick(d), reduce ? 0 : 240) }
   const [month, setMonth] = useState(first.slice(0, 7))
   const set = new Set(open)
   const y = +month.slice(0, 4), m = +month.slice(5, 7)
@@ -1603,7 +1680,7 @@ function LcCalendar({ open, first, last, onPick }: { open: string[]; first: stri
       <div className="lc-cal-grid">
         {WEEK.split('').map((w, i) => <span key={w} className={i === 0 ? 'lc-sun' : i === 6 ? 'lc-sat' : undefined}>{w}</span>)}
         {cells.map((d, i) => d
-          ? <button key={d} type="button" disabled={!set.has(d)} onClick={() => onPick(d)} aria-label={`${md(d)}（${dow(d)}）`}>{Number(d.slice(8, 10))}</button>
+          ? <button key={d} type="button" className={picked === d ? 'lc-day-on' : undefined} disabled={!set.has(d) || (picked !== null && picked !== d)} onClick={() => choose(d)} aria-label={`${md(d)}（${dow(d)}）`}>{Number(d.slice(8, 10))}</button>
           : <span key={`e${i}`} />)}
       </div>
     </motion.div>

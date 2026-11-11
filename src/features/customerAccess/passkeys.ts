@@ -84,5 +84,6 @@ export async function revokePasskeys(){
 }
 export function passkeyMessage(error:unknown){
   if(error instanceof Error&&['NotAllowedError','AbortError','WebAuthnError'].includes(error.name))return '本人確認を中止しました。準備ができたら、もう一度お試しください。'
-  return error instanceof Error?error.message:'通信できませんでした。もう一度お試しください。'
+  // ブラウザの英語のエラー（「Failed to fetch」「Load failed」など）はお客様に出さない（11/10 夜の点検）
+  return error instanceof Error&&/[ぁ-んァ-ヶ一-龠]/.test(error.message)?error.message:'通信できませんでした。電波の良いところで、もう一度お試しください。'
 }

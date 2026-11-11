@@ -1,6 +1,7 @@
 // アプリを開いたときのキャンペーン（10/30 慶一郎さん：APACHI を季節限定に）。ホームの上に写真を1枚大きく出し、「この髪型でAI予約する」か「閉じる」。
 // アプリを開くたびに1回出す（タブを行き来しても出し直さない）。「次回から表示しない」にチェックして閉じたら、その端末ではもう出さない（10/30 慶一郎さん）。
 // 次のキャンペーンは CAMPAIGN を書き換える（id を変えれば、前のを止めた人にも出る）。終わりの日は決めない（ホットペッパーからアパッチが消えたら CAMPAIGN を外す・10/30 慶一郎さん）
+import { isStaging } from '../utils/env'
 import { launched, launchHm } from '../utils/launch'
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -10,6 +11,13 @@ import { ginFlow } from '../utils/env'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { GachaShowcase } from './GachaShowcase'
 import { useThemeColor } from '../utils/themeColor'
+import { MEMBER_ISSUED_AT_KEY } from '../utils/userId'
+
+/** 登録したばかり（6時間以内）：Welcome クーポン・使い方の案内と重ならないよう、お知らせは次に開いたときに（11/10 夜の点検） */
+function justRegistered(): boolean {
+  const at = Date.parse(getStoredValue<string | null>(MEMBER_ISSUED_AT_KEY, null) ?? '')
+  return Number.isFinite(at) && Date.now() - at < 6 * 3600_000
+}
 
 type Campaign = {
   id: string; image: string; wide?: boolean; kaikin?: boolean; alt: string; label: string; kicker: string; title: string; lead?: string; detail: string[]
@@ -46,7 +54,7 @@ const GACHA_OPEN: Campaign = {
 function pickCampaign(): Campaign {
   const d = jstToday()
   // 当日も 12:00（launched）までは予告のまま。タイトルは「本日 12:00 ガチャ解禁」・ボタンなし（11/11）
-  if (d === GACHA_OPENS && !launched()) return { ...GACHA_SOON, id: 'gacha-2026-11-today', title: `本日 ${launchHm()} ガチャ解禁` }
+  if (d === GACHA_OPENS && !launched() && !isStaging()) return { ...GACHA_SOON, id: 'gacha-2026-11-today', title: `本日 ${launchHm()} ガチャ解禁` }
   if (d < GACHA_OPENS) return GACHA_SOON
   if (d <= GACHA_NEWS_UNTIL) return GACHA_OPEN
   return APACHI
@@ -89,7 +97,7 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
     // 新しい銀二郎の公開の直後（解禁→銀ちゃんの案内）は、この起動ではキャンペーンを重ねない（11/11）
     let guided = false
     try { guided = !!sessionStorage.getItem('ginjiro_launch_guided') } catch { /* なし */ }
-    if (shownThisLaunch || guided || getStoredValue<string>(HIDE_KEY, '') === CAMPAIGN.id) return
+    if (shownThisLaunch || guided || getStoredValue<string>(HIDE_KEY, '') === CAMPAIGN.id || justRegistered()) return
     const img = new Image()
     img.src = CAMPAIGN.image
     if (CAMPAIGN.kaikin) new Image().src = '/gacha/kaikin-brush.png'

@@ -868,7 +868,7 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .lc-head-name { margin: 0; font: 600 15px/1 var(--v2-sans); letter-spacing: .06em; color: var(--v2-ink); }
 .lc-close { top: 2px; }
 .lc-hero { display: flex; justify-content: center; margin: 4px 0 2px; }
-.lc-row { display: flex; align-items: flex-start; gap: 8px; max-width: 96%; } /* 88% だと「ご来店は、いつ頃がええですか？」程度でも折り返した（11/9 磨き） */
+.lc-row { display: flex; align-items: flex-start; gap: 8px; max-width: 96%; } /* 88% だと「ご来店は、いつ頃がよろしいですか？」程度でも折り返した（11/9 磨き） */
 .lc-row-head { margin-top: 6px; }
 .lc-col { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
 /* 銀ちゃんのアイコン（金の縁は絵に入っているので、こちらでは縁を足さない・11/8 慶一郎さんの絵） */
@@ -937,3 +937,36 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .launch-notice-main { width: 100%; min-height: 50px; border: 0; border-radius: 12px; background: #28231e; color: #f8f6f1; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
 .launch-notice-sub { width: 100%; min-height: 44px; margin-top: 6px; border: 0; background: transparent; color: #62594e; font: inherit; font-size: 15px; cursor: pointer; }
 .launch-layer.is-zero .launch-ring-arc { transition: stroke-dashoffset 0.25s ease-out, stroke 0.6s; }
+/* ログインと引き継ぎ：カードの中では、かんたんログインの上の線と余白はいらない（11/10 夜の点検） */
+.v2-account .access-settings { border-top: 0; padding-top: 0; }
+
+/* ログインと引き継ぎ：カードの中の余白を上下そろえる（11/11） */
+.v2-account .access-settings { padding-bottom: 0; }
+
+/* どなたのご予約か：人ごとのトグル（11/11）。選んだ人は金の縁・やわらかい光・✓。押すと少し沈んで光がふわっと広がる */
+.lc-who { display: flex; flex-direction: column; gap: 10px; padding: 0 2px 10px; }
+.lc-who-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.lc-who-btn { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 18px; border: 1px solid rgba(40, 35, 30, 0.12); border-radius: 999px; background: #fff; color: #28231e; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform 0.14s ease, border-color 0.2s, box-shadow 0.3s; -webkit-tap-highlight-color: transparent; }
+.lc-who-btn i { display: inline-block; width: 14px; font-style: normal; font-weight: 700; color: #b48a2c; }
+.lc-who-btn small { font-size: 11px; font-weight: 400; color: #8b847a; }
+.lc-who-btn:active:not(:disabled) { transform: scale(0.95); }
+.lc-who-btn.on { border-color: #c9a24a; background: linear-gradient(180deg, #fffaf0, #fff4de); box-shadow: 0 0 0 1px rgba(201, 162, 74, 0.55), 0 4px 16px rgba(201, 162, 74, 0.28); }
+.lc-who-btn.on::after { content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; animation: lc-who-glow 0.55s ease-out; }
+@keyframes lc-who-glow { from { box-shadow: 0 0 0 0 rgba(214, 176, 92, 0.55); } to { box-shadow: 0 0 0 14px rgba(214, 176, 92, 0); } }
+.lc-who-btn:disabled { background: #f1efeb; color: #a8a29a; border-color: rgba(40, 35, 30, 0.06); cursor: default; }
+.lc-who-next { align-self: center; min-width: 200px; }
+.lc-who-next:disabled { opacity: 0.4; }
+@media (prefers-reduced-motion: reduce) { .lc-who-btn.on::after { animation: none; } .lc-who-btn { transition: none; } }
+
+/* 選択肢はすべて同じ手ざわり（11/11 慶一郎さん「選択式は全部合わせて」）：押すと少し沈み、選んだものが金の縁とやわらかい光でふわっと光ってから進む */
+.lc .gc-chip { transition: transform .14s cubic-bezier(.22,1,.36,1), box-shadow .3s ease, border-color .2s, background .2s; }
+.lc .gc-chip:active:not(:disabled) { transform: scale(.95); }
+.lc .gc-chip.gc-chip-on { position: relative; color: #28231e; border-color: #c9a24a; background: linear-gradient(180deg, #fffaf0, #fff4de); box-shadow: 0 0 0 1px rgba(201,162,74,.55), 0 4px 16px rgba(201,162,74,.3); }
+.lc .gc-chip.gc-chip-on small { color: #8a6a22; }
+.lc .gc-chip.gc-chip-on::after { content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; animation: lc-who-glow .55s ease-out; }
+.lc .gc-chip:disabled:not(.gc-chip-on) { opacity: .45; }
+.lc-cal-grid button.lc-day-on { position: relative; color: #28231e; background: linear-gradient(180deg, #fffaf0, #fff4de); box-shadow: 0 0 0 1.5px #c9a24a, 0 4px 14px rgba(201,162,74,.32); }
+.lc-cal-grid button.lc-day-on::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: lc-who-glow .55s ease-out; }
+.lc-cal-grid button:active:not(:disabled) { transform: scale(.92); }
+@media (prefers-reduced-motion: reduce) { .lc .gc-chip.gc-chip-on::after, .lc-cal-grid button.lc-day-on::after { animation: none; } }
+.lc-cal-grid button:not(:disabled):active { background: #fff4de; color: #28231e; }
