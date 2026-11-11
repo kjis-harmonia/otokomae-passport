@@ -61,9 +61,6 @@ const curve = (fadeIn: boolean) => Float32Array.from({ length: 129 }, (_, i) => 
 
 /** 開く音の中で耳ざわりな区間（秒・開く音の頭から）。そこだけ高い音を削って小さくする（11/12 恐竜編の白い霧のザーッという雑音） */
 export interface OpenTame { from: number; to: number; cutoff?: number; level?: number }
-/** 開く音が無音になった後（秒・開く音の頭から）に、待ちの音を小さく重ねて、終わりでゆっくり消す。
- *  深海編は開く音を 9 秒台で切ってあり（終わりの雑音を消すため）、銀ちゃんが券を見せる所で音が一気に消えていた（11/12 慶一郎さん） */
-export interface OpenBed { from: number; to: number; level?: number; fadeIn?: number; fadeOut?: number }
 
 export class GachaSoundtrack {
   private readonly ctx: BaseAudioContext
@@ -73,17 +70,15 @@ export class GachaSoundtrack {
   private waiting: Voice | null = null
   private readonly introFade: number
   private readonly openTame: OpenTame | null
-  private readonly openBed: OpenBed | null
   private resultPlayed = false
   private restoreSession: (() => void) | null = null
 
   // introFade: a theme whose intro already runs into the first bar of the wait loop needs only a short overlap.
-  constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE, openTame: OpenTame | null = null, openBed: OpenBed | null = null) {
+  constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE, openTame: OpenTame | null = null) {
     this.ctx = ctx
     this.buffers = buffers
     this.introFade = introFade
     this.openTame = openTame
-    this.openBed = openBed
     this.master = ctx.createGain()
     this.master.gain.value = 0.8 // Headroom for two equal-power voices and AAC reconstruction peaks.
     this.master.connect(ctx.destination)
@@ -182,24 +177,6 @@ export class GachaSoundtrack {
     const open = this.voice(this.buffers.open, at, offset, false, 0)
     this.fade(open, curve(true), at, fade)
     this.tame(open, at, offset)
-    this.bed(at, offset)
-  }
-
-  private bed(at: number, offset: number): void {
-    const b = this.openBed
-    if (!b || offset >= b.to - 0.05) return
-    const level = b.level ?? 0.35, fadeIn = b.fadeIn ?? 0.8, fadeOut = b.fadeOut ?? 1.5
-    const from = Math.max(offset, b.from)
-    const start = at + (from - offset), duration = b.to - from
-    // 入り・保つ・消えるを1つの形にする（途中で閉じても、今の大きさからやわらかく消せるように）
-    const values = Float32Array.from({ length: 257 }, (_, i) => {
-      const t = from + duration * i / 256
-      const up = Math.min(1, Math.max(0, (t - b.from) / fadeIn)), down = Math.min(1, Math.max(0, (b.to - t) / fadeOut))
-      return level * Math.sin(up * Math.PI / 2) * Math.sin(down * Math.PI / 2)
-    })
-    const bed = this.voice(this.buffers.wait, start, (from - b.from) % this.buffers.wait.duration, true, 0)
-    this.fade(bed, values, start, duration)
-    bed.source.stop(start + duration + 0.01)
   }
 
   private tame(voice: Voice, at: number, offset: number): void {
