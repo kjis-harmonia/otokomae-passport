@@ -1373,7 +1373,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       return end()
     }
     let r = requested ?? list[0]
+    /** 「どのご予約？」を先に聞いたか（聞いたら次の文で「ご予約の変更・キャンセルですね。」を繰り返さない 11/12） */
+    let picked = false
     if (!requested && list.length > 1) {
+      picked = true
       // ボタンは「どなた」を大きく、日時・メニューは下の小さい字に（11/10 夜の点検：番号つきの長い1行が折り返して読みにくかった）
       const choices = list.map(x => ({ label: `${x.companion_name ? honor(x.companion_name) : 'ご本人'}：${slotLabel(x.starts_at)}`, sub: x.items.map(i => i.name).join('・') }))
       for (;;) {
@@ -1426,7 +1429,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       return results.flat().filter(d => typeof d === 'string' && d < addDays(from, days))
     }
     // 「変更・キャンセル」から入るので、キャンセルしたい方にも合う言い方（11/10 夜の点検）
-    let action = await ask(`ご予約の変更・キャンセルですね。\n${label(r)}\nどうされますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(changeStaff().length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
+    let action = await ask(`${picked ? '' : 'ご予約の変更・キャンセルですね。\n'}${label(r)}\nどうされますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(changeStaff().length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
     let dayOnly: string | null = null
     for (let guard = 0; guard < 24; guard++) {
       // キャンセル
