@@ -878,6 +878,8 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .lc .gc-gin { max-width: none; padding-left: 14px; padding-right: 14px; border-radius: 4px 20px 20px 20px; }
 /* 「ね。」だけが次の行に残らないように、文節で折り返し、最後の行が1〜2文字にならんようにする（効かんブラウザは今までどおり） */
 .lc .gc-msg { word-break: auto-phrase; text-wrap: pretty; }
+/* 文節のまとまり（phrases.ts）。iPhone でも語の途中で折り返さない。1つで1行を超える長さのときだけ中で折り返す */
+.gc-ph { display: inline-block; max-width: 100%; overflow-wrap: anywhere; white-space: pre-wrap; }
 .lc .lc-row + .lc-row .gc-gin, .lc .lc-row:not(.lc-row-head) .gc-gin { border-radius: 20px; }
 .lc .gc-you { max-width: 78%; border-radius: 20px 4px 20px 20px; }
 .lc .gc-gin[data-name]::before { display: none; }

@@ -209,7 +209,7 @@ export function V2PeopleSheet({ open, onClose, ownerMenu, onBook, manage = false
               <p className="v2-people-note">メニューを押すと保存します。</p>
             </>}
 
-            <button type="button" className="v2-btn v2-btn-quiet" style={{ marginTop: 8, background: 'none' }} onClick={onClose}>閉じる</button>
+            <button type="button" className="v2-btn v2-btn-quiet" style={{ marginTop: 8, background: 'none' }} onClick={onClose} data-guide="people-close">閉じる</button>
           </motion.div>
         </>
       )}

@@ -25,6 +25,8 @@ export type GuideStep = {
   stopHere?: boolean
   /** 「次へ」の言葉を変える */
   nextLabel?: string
+  /** next と一緒に：もう1つのボタン（「あとで」など）。押すとこの作業を飛ばして終える（then があればそちらへ） */
+  skipLabel?: string
   /** next と一緒に：囲んだ所を押しても次へ進む（髪型の種類など） */
   tap?: boolean
   /** 囲んだ所の中のこの要素の文字を、text の {label} に入れる（ボタンの文字が変わるとき） */
@@ -43,6 +45,8 @@ export type GuideTask = {
   available?: () => boolean
   /** この上に重なっていても休まない（pauseWhen のうち、この作業が中を案内するもの：銀ちゃんの会話 など） */
   inside?: string
+  /** 終わったら（飛ばしたときも）続けてこの作業を始める。「これで終わりです」は出さない */
+  then?: string
 }
 
 const g = (name: string) => `[data-guide="${name}"]`
