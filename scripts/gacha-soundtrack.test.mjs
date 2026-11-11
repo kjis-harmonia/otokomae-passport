@@ -105,14 +105,27 @@ function frameFixture(native = true) {
   const frames = new Map()
   const paints = new Map()
   const cancelled = []
-  const video = native ? {
+  const mediaEvents = new Map()
+  const listeners = new Set()
+  mediaEvents.set('timeupdate', listeners)
+  const video = {
+    currentTime: 0, paused: false, seeking: false, readyState: 2, HAVE_CURRENT_DATA: 2,
+    addEventListener(type, listener) {
+      if (!mediaEvents.has(type)) mediaEvents.set(type, new Set())
+      mediaEvents.get(type).add(listener)
+    },
+    removeEventListener(type, listener) { mediaEvents.get(type)?.delete(listener) },
+  }
+  if (native) Object.assign(video, {
     requestVideoFrameCallback(fn) { const id = next++; frames.set(id, fn); return id },
     cancelVideoFrameCallback(id) { cancelled.push(id); frames.delete(id) },
-  } : {}
+  })
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText,
     { exports: module.exports, requestAnimationFrame(fn) { const id = next++; paints.set(id, fn); return id }, cancelAnimationFrame(id) { cancelled.push(id); paints.delete(id) } })
   const paint = () => { const batch = [...paints.values()]; paints.clear(); batch.forEach(fn => fn()) }
-  return { after: module.exports.afterPresentedFrame, video, frames, paints, paint, cancelled }
+  const emit = type => mediaEvents.get(type)?.forEach(listener => listener())
+  const progress = time => { video.currentTime = time; emit('timeupdate') }
+  return { after: module.exports.afterPresentedFrame, video, frames, paints, paint, cancelled, progress, listeners, emit }
 }
 
 test('next video stays hidden until an actual decoder frame is presented', () => {
@@ -137,6 +150,61 @@ test('closing cancels a pending reveal and a late callback cannot reopen it', ()
   assert.equal(cancelled.length, 1)
   late()
   assert.equal(shown, 0)
+})
+
+test('a missing frame notification falls back only after a playing video advances', () => {
+  const { after, video, frames, progress, listeners } = frameFixture()
+  let shown = 0
+  progress(2)
+  after(video, () => shown++)
+  const late = [...frames.values()][0]
+  progress(2.1)
+  video.paused = true
+  progress(2.2)
+  video.paused = false
+  video.seeking = true
+  progress(2.3)
+  video.seeking = false
+  video.readyState = 1
+  progress(2.4)
+  assert.equal(shown, 0)
+  video.readyState = 2
+  progress(2.5)
+  late()
+  assert.equal(shown, 1)
+  assert.equal(frames.size, 0)
+  assert.equal(listeners.size, 0)
+})
+
+test('closing also removes the media-clock fallback', () => {
+  const { after, video, progress, listeners } = frameFixture()
+  let shown = 0
+  const cancel = after(video, () => shown++)
+  cancel()
+  progress(0.3)
+  assert.equal(shown, 0)
+  assert.equal(listeners.size, 0)
+})
+
+test('late frame and paint callbacks do not reveal a paused or seeking video', () => {
+  for (const native of [true, false]) {
+    const { after, video, frames, paint, progress, emit } = frameFixture(native)
+    let shown = 0
+    after(video, () => shown++)
+    video.paused = true
+    if (native) [...frames.values()][0]()
+    else { paint(); paint() }
+    assert.equal(shown, 0)
+    video.paused = false
+    emit('seeking')
+    progress(8)
+    assert.equal(shown, 0)
+    emit('seeked')
+    progress(8.1)
+    assert.equal(shown, 0)
+    progress(8.2)
+    assert.equal(shown, 1)
+  }
 })
 
 test('older WebKit keeps the outgoing picture for two paint opportunities', () => {
@@ -248,6 +316,18 @@ test('permission resolved after intro ends starts the waiting loop, not stale in
   assert.equal(f.nodes.length, 1)
   assert.equal(f.nodes[0].loop, true)
   assert.equal(f.nodes[0].starts[1], 2)
+  f.playback.dispose()
+})
+test('late audio permission waits for the waiting video to be ready', async () => {
+  const f = playbackFixture()
+  f.setPosition({ phase: 'tap', offset: 0, presented: false })
+  await f.playback.unlock()
+  assert.equal(f.nodes.length, 0)
+  f.setPosition({ phase: 'tap', offset: 0.2, presented: true })
+  f.playback.sync()
+  assert.equal(f.nodes.length, 1)
+  assert.equal(f.nodes[0].loop, true)
+  assert.equal(f.nodes[0].starts[1], 0.2)
   f.playback.dispose()
 })
 test('normal intro to waiting does not create another waiting loop', async () => {
