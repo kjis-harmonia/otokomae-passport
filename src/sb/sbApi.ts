@@ -1,4 +1,5 @@
 import { callStaffRpc, expectRpcResult, RpcError } from './sbRpc'
+import { companionOf, personName } from './sbParty'
 import { bookingErrorMessage, jstDateLabel, jstTime, yen } from '../utils/bookingApi'
 import type { SbCommand, SbInput, SbLedger, SbOptions, SbPending, SbPreview, SbReservation } from './sbTypes'
 
@@ -79,7 +80,7 @@ export function sbError(err: unknown): string {
 export function salonBoardCopy(r: SbReservation): string {
   const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date(r.starts_at))
   return [r.status === 'cancelled' ? 'Salon Board転記用【キャンセル】' : 'Salon Board転記用',
-    `氏名：${r.customer_name}`, `電話：${r.customer_phone || '未登録'}`, `日時：${jstDateLabel(date)} ${jstTime(r.starts_at)}`,
+    `氏名：${companionOf(r) ? `${personName(r)}（${r.customer_name}様のお連れ様）` : r.customer_name}`, `電話：${r.customer_phone || '未登録'}`, `日時：${jstDateLabel(date)} ${jstTime(r.starts_at)}`,
     `担当：${r.staff_name}${r.nominated ? '（指名）' : '（指名なし）'}`, `メニュー：${r.items.map(i => i.name).join(' / ')}`,
     `予約時の金額：${yen(r.total_price)}`, `施術時間：${Math.round((Date.parse(r.ends_at) - Date.parse(r.starts_at)) / 60000)}分`,
     r.external_ref ? `予約番号：${r.external_ref}` : null, r.note ? `メモ：${r.note}` : null].filter(Boolean).join('\n')

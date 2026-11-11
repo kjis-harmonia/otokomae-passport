@@ -98,6 +98,18 @@ export function createSbPendingStore(storage: () => Storage, locks: () => LockMa
       if (!pending || pending.id !== id) return fail('pending_exists')
       return send(pending, rpc)
     }),
+    /** 結果を確かめられない送信待ちを、この端末から消す（11/11 監査：何度確かめても同じ結果になり、SB が止まったままになる経路があった）。
+     *  サーバーの予約は触らない。消したあとは予約表で入っているか確かめてもらう */
+    discard: (id: string) => locked(async () => {
+      const pending = read().pending
+      if (!pending || pending.id !== id) return { ok: true as const }
+      try {
+        storage().removeItem(SB_PENDING_KEY)
+        if (storage().getItem(SB_PENDING_KEY) !== null) return fail('storage_error')
+      } catch { return fail('storage_error') }
+      notify()
+      return { ok: true as const }
+    }),
   }
 }
 

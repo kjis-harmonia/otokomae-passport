@@ -221,6 +221,16 @@ export function SbScreen() {
     catch (err) { setEditor(null); setSelectedId(null); setMoving(null); setNotice(errorText(err)) }
     finally { sending.current = false; setBusy(false) }
   }
+  // 送信待ちを消す（結果を何度確かめても進めないとき）。サーバーの予約は触らない。消したら予約表を読み直して確かめてもらう
+  async function discardPending() {
+    const current = sbPending.read()
+    if (sending.current || current.error || !current.pending) return
+    if (!window.confirm('この端末の「送信待ち」を消します。\n送った予約が入っているかは、このあと予約表で必ず確かめてください。')) return
+    sending.current = true; setBusy(true); setNotice(null)
+    try { await sbPending.discard(current.pending.id); setNotice('送信待ちを消しました。予約表で、送った予約が入っているか確かめてください。'); await refresh(date) }
+    catch (err) { setNotice(errorText(err)) }
+    finally { sending.current = false; setBusy(false) }
+  }
   async function retry() {
     const current = sbPending.read()
     if (sending.current || current.error || !current.pending) return
@@ -259,6 +269,7 @@ export function SbScreen() {
     {(pending.error || pending.pending || !online || error) && <div className="sb-alert" role="alert">
       <span>{pending.error ? sbError('storage_error') : pending.pending ? '送信済み予約の結果確認が必要です。新しい予約の送信は停止中です。' : !online ? 'オフラインです。予約の登録・変更はできません。' : error}</span>
       {pending.pending && !pending.error && <button className="sb-secondary" disabled={busy || !online} onClick={() => void retry()}>{busy ? '確認中…' : '同じ内容で結果を確認'}</button>}
+      {pending.pending && !pending.error && <button className="sb-text-danger" disabled={busy} onClick={() => void discardPending()}>送信待ちを消す</button>}
       {!pending.pending && !pending.error && online && <button className="sb-icon" aria-label="再読み込み" onClick={() => { void refresh(date); void loadOptions() }}><RefreshCw size={18} /></button>}
     </div>}
     {/* この端末が通知を受け取れないときは、ずっと出しておく（SB を閉じていると予約のお知らせが届かないため・10/28 慶一郎さん） */}
@@ -409,7 +420,8 @@ function AiPause({ reservationId, actor, blocked }: { reservationId: string; act
 function CopyRows({ r }: { r: SbReservation }) {
   const [done, setDone] = useState<string | null>(null)
   const rows: [string, string][] = ([
-    ['お名前', r.customer_name],
+    // お連れ様の枠は、来られる方のお名前（予約した方を添える）。サロンボードにご本人名で2件入れないように（11/11 監査）
+    ['お名前', companionOf(r) ? `${personName(r)}（${r.customer_name}様のお連れ様）` : r.customer_name],
     ['電話番号', (r.customer_phone ?? '').replace(/[^0-9]/g, '')],
     ['日付', getJapanDateString(new Date(r.starts_at)).replace(/-/g, '/')],
     ['時刻', `${jstTime(r.starts_at)}〜${jstTime(r.ends_at)}`],
