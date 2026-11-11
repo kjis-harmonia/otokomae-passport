@@ -615,3 +615,17 @@
   .sb-compact .sb-date-label span { font-size: 15px; }
   .sb-date-label { min-width: 0; }
 }
+
+/* サロンボードでやること（11/12）：見出しにやること、押すボタンは1つ */
+.sb-board-task { gap: 8px; }
+.sb-board-task h3 { font-size: 16px; color: var(--sb-gold); }
+.sb-board-hint { margin: 0; font-size: 14px; line-height: 1.6; }
+.sb-board-diff { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; }
+.sb-board-diff dt { color: var(--sb-muted); }
+.sb-board-diff dd { margin: 0; }
+.sb-board-ref { margin: 0; font-size: 14px; color: var(--sb-muted); }
+.sb-board-ref strong { color: var(--sb-ink); letter-spacing: 0.04em; }
+.sb-board-done h3 span { display: inline-flex; align-items: center; gap: 4px; }
+.sb-text-link { align-self: flex-start; padding: 6px 0; border: 0; background: none; color: var(--sb-muted); font-size: 13px; text-decoration: underline; cursor: pointer; }
+.sb-board-note { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--sb-gold); background: var(--sb-gold-tint); font-size: 14px; line-height: 1.6; }
+.sb-board-tag { flex: none; font-style: normal; font-size: 12px; font-weight: 600; color: var(--sb-gold); white-space: nowrap; }
