@@ -872,7 +872,6 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             ? (a === ANY ? null : a === YES ? usualSt : staffList.find(s => s.name === a)?.id)
             : usualSt && intent(a) === 'yes' ? usualSt : staffIn(a)
           if (st === undefined && !fromChip.current) {
-            if (whenIn(a) && await change(a)) continue
             if (await change(a)) continue
             if (usualSt && /いつも|大丈夫|だいじょうぶ|お願い|おねがい|それで|そのまま/.test(a)) st = usualSt
           }
@@ -901,6 +900,15 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (!lists) { if (await retryAfterNetwork()) continue; break }
         const open = lists.reduce((a, b) => a.filter(x => b.includes(x)))
         if (!open.length && staffOf()) { if (await offerAnyStaff('しばらく')) continue; break }
+        // 2人以上で担当を決めた方がいて、全員そろう日が無い：その方を「どちらでも」にして探す提案（先回り）
+        const fixedPick = d.who.length > 1 ? d.who.filter(p => d.staffs?.[p.key]) : []
+        if (!open.length && fixedPick.length) {
+          const ANY = 'どちらの担当でも'
+          const a = await ask(`すみません、${fixedPick.map(p => `${p.label}（${staffName(d.staffs![p.key])}）`).join('と')}は、しばらく全員そろって入れる日が無いんです。\n担当をどちらでもよければ、お探ししますよ。`, [{ label: ANY, strong: true }, { label: 'やめておく' }])
+          if (fromChip.current && a === ANY) { for (const p of fixedPick) d.staffs![p.key] = null; continue }
+          if (!fromChip.current && await change(a)) continue
+          await say('また決まりましたら、いつでも声をかけてくださいね。'); break
+        }
         if (!open.length) { await say('すみません、しばらく全員そろって入れる日が無いんです。お店にお電話いただけますか？'); d.when = null; continue }
         // 満席の日はカレンダーで押せない → ご本人1人なら、日付を送ればその日のキャンセル待ちに入れる（11/10 Codex 再検査 中）
         const soloMe = d.who.length === 1 && d.who[0].key === 'me'
@@ -984,6 +992,15 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             d.when = null; continue
           }
           if (staffOf() && d.when.kind !== 'day') { if (await offerAnyStaff('近いところに')) continue; break }
+          // 2人以上で日付を決めた：担当を決めた方がいれば「どちらでも」で同じ日を探す提案（先回り）
+          const fixedDay = d.who.length > 1 && d.when.kind === 'day' ? d.who.filter(p => d.staffs?.[p.key]) : []
+          if (fixedDay.length && d.when.kind === 'day') {
+            const ANY = 'どちらの担当でも'
+            const a = await ask(`すみません、${mdw(d.when.day)}は${fixedDay.map(p => `${p.label}（${staffName(d.staffs![p.key])}）`).join('と')}で全員そろって入れる時間が無かったんです。\n担当をどちらでもよければ、同じ日でお探しします。`, [{ label: ANY, strong: true }, { label: 'ほかの日にする' }])
+            if (fromChip.current && a === ANY) { for (const p of fixedDay) d.staffs![p.key] = null; continue }
+            if (!fromChip.current && await change(a)) continue
+            d.when = null; continue
+          }
           await say(d.when.kind === 'day' ? `すみません、${mdw(d.when.day)}は${d.who.length > 1 ? '全員そろって' : ''}入れる時間が無かったんです。` : d.who.length === 1 && d.who[0].key === 'me'
             ? 'すみません、近いところに空きが無かったんです。\nご希望の日を「11月20日」のように送ってもらえたら、その日のキャンセル待ちにも入れますよ。'
             : 'すみません、近いところに空きが無かったんです。ほかの日を選んでくださいね。')
@@ -1150,7 +1167,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       setTyping(false)
       const okAll = done.every(x => x.r)
       if (!done.some(x => x.r)) { await say('すみません、その時間はちょうど埋まってしまいました。時間を選び直しましょう。'); d.at = null; d.plan = null; continue }
-      await say(okAll ? `ご予約を承りました！\n${slotLabel(d.at)}、お待ちしております。` : `${done.filter(x => x.r).map(x => x.p.label).join('と')}のご予約は取れました（${slotLabel(d.at)}）。\n${done.filter(x => !x.r).map(x => x.p.label).join('と')}はちょうど埋まってしまいました。お店にお電話いただけますか？`)
+      // 続けての方がいるときは、人ごとの開始も添える（「ご本人 10:00〜・田中さん 10:50〜」）
+      const each = staggered() ? `\n${done.filter(x => x.r).map(x => `${x.p.label} ${hm(startOf(x.p))}〜`).join('・')}` : ''
+      await say(okAll ? `ご予約を承りました！\n${slotLabel(d.at)}、お待ちしております。${each}` : `${done.filter(x => x.r).map(x => x.p.label).join('と')}のご予約は取れました（${slotLabel(d.at)}）。${each}\n${done.filter(x => !x.r).map(x => x.p.label).join('と')}はちょうど埋まってしまいました。お店にお電話いただけますか？`)
       // 予約が取れたことを先に、券が付かなかった案内はそのあと（11/10 確認）
       if (ticketFailed) await say(`ただ、選んだ券（${picked!.title}）を、通信の具合でご予約に付けられませんでした。ご来店のときに、お会計で券をお見せください。`)
       if (gachaFailed) await say('ガチャ券も、このご予約に付けられませんでした。券はお手元に残っていますので、ご来店のときにお会計でお見せください。'.replace(/^ガチャ券も/, ticketFailed ? 'ガチャ券も' : 'ただ、ガチャ券は'))
