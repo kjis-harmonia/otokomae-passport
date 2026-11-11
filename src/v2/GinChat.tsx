@@ -5,7 +5,15 @@
 //   book：「いつものでAI予約する」。どなたの予約か → メニュー → 「ご来店は、いつ頃がよろしいですか？」【最短で】【土日希望】【日付を選ぶ】→ 時間 → 確認 → 予約
 //   話し方：ていねい語（です・ます）。広島弁は使わない（11/10 慶一郎さん「口調が馴れ馴れしい」で 11/8 の広島弁をやめた）。タメ口・命令口調も使わない。AI の返事に方言が混ざったら politeText.ts で直す
 //   メニュー・料金・空きは、店の一覧と今の予約エンジンだけ。登録・予約は、お客様が確かめてから
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { phrasesOf } from './phrases'
+
+/** 銀ちゃんの吹き出しの文：行ごとに、文節のまとまりで折り返す（iPhone で「よろ／しい」と割れないように・11/11） */
+function GinText({ text }: { text: string }) {
+  return <>{text.split('\n').map((line, i) => (
+    <Fragment key={i}>{i > 0 && <br />}{phrasesOf(line).map((p, j) => <span key={j} className="gc-ph">{p}</span>)}</Fragment>
+  ))}</>
+}
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowUp, ChevronLeft, ChevronRight, Mic, X } from 'lucide-react'
 import { bookingAssistantApi, hasPendingBookingConfirmation, isBookingRejection, linkCompanion, recoverBookingConfirmation, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
@@ -1635,7 +1643,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
             <motion.div key={m.id} className={head ? 'lc-row lc-row-head' : 'lc-row'}
               initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}>
               {head ? <img className="lc-avatar" src="/guide/gin-avatar.png" alt="" /> : <span className="lc-avatar-gap" />}
-              <div className="lc-col">{head && <p className="lc-name">銀ちゃん</p>}<p className="gc-msg gc-gin">{m.text}</p></div>
+              <div className="lc-col">{head && <p className="lc-name">銀ちゃん</p>}<p className="gc-msg gc-gin"><GinText text={m.text} /></p></div>
             </motion.div>
           ) : (
             <motion.p key={m.id} className="gc-msg gc-you" initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24 }}>{m.text}</motion.p>
