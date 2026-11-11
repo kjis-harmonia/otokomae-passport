@@ -301,7 +301,8 @@ function App() {
       setTransferPhase('done')
       clearPendingClaim()
     } catch (e) {
-      setTransferError(e instanceof Error ? e.message : '受け取りに失敗しました')
+      // 日本語の理由だけそのまま出す（Failed to fetch などの英語はお客様に出さない・11/11 点検）
+      setTransferError(e instanceof Error && /[ぁ-んァ-ヶ一-龠]/.test(e.message) ? e.message : '受け取れませんでした。電波の良いところで、もう一度お試しください。')
       setTransferPhase('error')
     }
   }
