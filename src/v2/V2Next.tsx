@@ -33,7 +33,7 @@ function ReservationRetry({ onRetry }: { onRetry: () => void }) {
 }
 
 export function V2Next({ onJohnny }: { onJohnny: () => void }) {
-  const { next, companions, status, reload } = useNextVisit()
+  const { next, companions, later, status, reload } = useNextVisit()
   const holds = useGinpayHolds()
   const prepaid = heldFor(holds, next?.id)
   const visit = next ? formatVisit(next.starts_at) : null
@@ -69,6 +69,13 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
               </div>
             )
           })}
+          {/* 別の日のご予約（お連れ様だけ別の日 など・11/11 点検） */}
+          {later.length > 0 && <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--v2-line)', display: 'grid', gap: 8, fontSize: 15 }}>
+            <span className="v2-label" style={{ margin: 0 }}>ほかのご予約</span>
+            {later.map(c => { const v = formatVisit(c.starts_at); return (
+              <span key={c.id} style={{ display: 'grid', gap: 2 }}><span>{companionName(c) ? `お連れ様（${companionName(c)}様）` : 'ご本人'}</span><span><b style={{ color: 'var(--v2-gold-deep)' }}>{v.date} {v.time}〜</b>{' '}{c.items.map(i => i.name).join('・')}</span></span>
+            ) })}
+          </div>}
           {/* AI予約は受けた時点で確定。サロンボードへの転記はお店の仕事。重なったときだけお店から電話する（そのことを1行だけ） */}
           {next.status === 'confirmed' && <p className="v2-note" style={{ margin: '10px 0 0', fontSize: 12 }}><span style={{ display: 'inline-block' }}>万一お時間の調整が必要なときは、</span><span style={{ display: 'inline-block' }}>お店からお電話します。</span></p>}
           <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>

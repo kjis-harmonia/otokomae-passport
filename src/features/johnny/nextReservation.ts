@@ -80,12 +80,13 @@ export function useNextReservation(): CustomerReservation | null {
 
 /** 予約一覧の読み込み状態。'failed' のときは「予約はありません」と言い切らない（10/30 監査 R3） */
 export type VisitStatus = 'loading' | 'ok' | 'failed'
-type Visit = { next: CustomerReservation | null; companions: CustomerReservation[]; status: VisitStatus; reload: () => void }
+/** later：別の日のこれからのご予約（お連れ様だけ別の日に取った など・11/11 点検：次回予約に出ていなかった） */
+type Visit = { next: CustomerReservation | null; companions: CustomerReservation[]; later: CustomerReservation[]; status: VisitStatus; reload: () => void }
 
 /** 次の来店：自分の予約と、同じ日のお連れ様の予約（10/30 慶一郎さん「お連れ様追加の情報がのってない」）。
  *  予約はおひとり1つまでなので、同じ日のほかの予約はお連れ様の分。自分の分は、お連れ様として覚えた予約を除いたいちばん早いもの */
 export function useNextVisit(): Visit {
-  const [visit, setVisit] = useState<Omit<Visit, 'reload'>>(() => ({ next: readCached(), companions: [], status: hasCustomerSession() ? 'loading' : 'ok' }))
+  const [visit, setVisit] = useState<Omit<Visit, 'reload'>>(() => ({ next: readCached(), companions: [], later: [], status: hasCustomerSession() ? 'loading' : 'ok' }))
   const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
     let alive = true
@@ -95,14 +96,15 @@ export function useNextVisit(): Visit {
       const my = ++gen
       const owner = currentOwner()
       const cached = readCached()
-      if (!hasCustomerSession()) { setVisit({ next: cached, companions: [], status: 'ok' }); return }
-      setVisit(v => ({ next: cached, companions: cached && v.next?.id === cached.id ? v.companions : [], status: v.status === 'ok' && v.next?.id === cached?.id ? 'ok' : 'loading' }))
+      if (!hasCustomerSession()) { setVisit({ next: cached, companions: [], later: [], status: 'ok' }); return }
+      setVisit(v => ({ next: cached, companions: cached && v.next?.id === cached.id ? v.companions : [], later: cached && v.next?.id === cached.id ? v.later : [], status: v.status === 'ok' && v.next?.id === cached?.id ? 'ok' : 'loading' }))
       bookingAssistantApi().reservations()
         .then(list => {
           if (!alive || my !== gen || owner !== currentOwner()) return
           const n = pickNext(list.filter(r => !isCompanion(r))) ?? pickNext(list)
           const companions = n ? list.filter(r => r.id !== n.id && isUpcoming(r) && sameDay(r.starts_at, n.starts_at)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
-          setVisit({ next: n, companions, status: 'ok' })
+          const later = n ? list.filter(r => r.id !== n.id && isUpcoming(r) && !sameDay(r.starts_at, n.starts_at)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
+          setVisit({ next: n, companions, later, status: 'ok' })
           writeCached(n, owner)
         })
         .catch(() => { if (alive && my === gen) setVisit(v => ({ ...v, status: 'failed' })) }) // 覚えている予約はそのまま見せる
