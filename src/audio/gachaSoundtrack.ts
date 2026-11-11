@@ -61,6 +61,9 @@ const curve = (fadeIn: boolean) => Float32Array.from({ length: 129 }, (_, i) => 
 
 /** 開く音の中で耳ざわりな区間（秒・開く音の頭から）。そこだけ高い音を削って小さくする（11/12 恐竜編の白い霧のザーッという雑音） */
 export interface OpenTame { from: number; to: number; cutoff?: number; level?: number }
+/** 開く音を、この区間（秒・開く音の頭から）でゆっくり消す。深海編は開く音が 9.5 秒で急に切れていた（終わりの雑音を消すため）。
+ *  銀ちゃんが出てくる所で音が一気に消えないように、その前にきれいに消す（11/12 慶一郎さん） */
+export interface OpenFadeOut { from: number; to: number }
 
 export class GachaSoundtrack {
   private readonly ctx: BaseAudioContext
@@ -70,15 +73,17 @@ export class GachaSoundtrack {
   private waiting: Voice | null = null
   private readonly introFade: number
   private readonly openTame: OpenTame | null
+  private readonly openFadeOut: OpenFadeOut | null
   private resultPlayed = false
   private restoreSession: (() => void) | null = null
 
   // introFade: a theme whose intro already runs into the first bar of the wait loop needs only a short overlap.
-  constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE, openTame: OpenTame | null = null) {
+  constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE, openTame: OpenTame | null = null, openFadeOut: OpenFadeOut | null = null) {
     this.ctx = ctx
     this.buffers = buffers
     this.introFade = introFade
     this.openTame = openTame
+    this.openFadeOut = openFadeOut
     this.master = ctx.createGain()
     this.master.gain.value = 0.8 // Headroom for two equal-power voices and AAC reconstruction peaks.
     this.master.connect(ctx.destination)
@@ -177,6 +182,27 @@ export class GachaSoundtrack {
     const open = this.voice(this.buffers.open, at, offset, false, 0)
     this.fade(open, curve(true), at, fade)
     this.tame(open, at, offset)
+    this.fadeOutOpen(open, at, offset)
+  }
+
+  // 開く音の終わりを、別の音量のつまみでゆっくり下げる（入りの重ね・閉じるときの消し方はそのまま使える）
+  private fadeOutOpen(voice: Voice, at: number, offset: number): void {
+    const f = this.openFadeOut
+    if (!f) return
+    const tail = this.ctx.createGain()
+    voice.gain.disconnect()
+    voice.gain.connect(tail)
+    tail.connect(this.master)
+    const from = Math.max(offset, f.from), start = at + (from - offset), end = at + (f.to - offset)
+    // 途中から始めたときは、その時点の大きさから
+    const level = (t: number) => t <= f.from ? 1 : t >= f.to ? 0 : Math.cos((t - f.from) / (f.to - f.from) * Math.PI / 2) ** 2
+    tail.gain.setValueAtTime(level(from), this.ctx.currentTime)
+    if (end > start) {
+      tail.gain.setValueAtTime(level(from), start)
+      for (let i = 1; i <= 64; i++) { const t = from + (f.to - from) * i / 64; tail.gain.linearRampToValueAtTime(level(t), at + (t - offset)) }
+    }
+    const ended = voice.source.onended
+    voice.source.onended = e => { tail.disconnect(); ended?.call(voice.source, e) }
   }
 
   private tame(voice: Voice, at: number, offset: number): void {
