@@ -47,19 +47,19 @@ const GACHA_SOON: Campaign = {
   detail: ['毎日1回無料', 'ハズレなし', 'AI予約で使える'],
   // 解禁日までは中身（ラインナップ）を見せない。ボタンは出さず「閉じる」だけ（11/6 慶一郎さん）
 }
-const GACHA_OPEN: Campaign = {
-  ...GACHA_SOON, id: 'gacha-2026-11-open', kicker: 'NEW', title: 'ガチャ、はじまりました',
-  action: { text: 'ガチャを回す', kind: 'gacha' },
-}
-function pickCampaign(): Campaign {
+function pickCampaign(): Campaign | null {
   const d = jstToday()
   // 当日も 12:00（launched）までは予告のまま。タイトルは「本日 12:00 ガチャ解禁」・ボタンなし（11/11）
   if (d === GACHA_OPENS && !launched() && !isStaging()) return { ...GACHA_SOON, id: 'gacha-2026-11-today', title: `本日 ${launchHm()} ガチャ解禁` }
   if (d < GACHA_OPENS) return GACHA_SOON
-  if (d <= GACHA_NEWS_UNTIL) return GACHA_OPEN
+  // 「ガチャ、はじまりました」の告知は 11/12 で終わり（慶一郎さん「告知ポップ消していいよ」）。11/30 までは何も出さない
+  if (d <= GACHA_NEWS_UNTIL) return null
   return APACHI
 }
-const CAMPAIGN = pickCampaign()
+const PICKED = pickCampaign()
+/** 今出すお知らせがあるか（無ければホームに何も重ねない） */
+export const hasCampaign = PICKED !== null
+const CAMPAIGN = PICKED ?? APACHI
 // 解禁までの日数（JST の日付どうし）
 const daysLeft = () => Math.round((Date.parse(GACHA_OPENS) - Date.parse(jstToday())) / 86400e3)
 
