@@ -219,9 +219,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const k = intent(a)
       if (k === 'yes' || k === 'no') return k
       if (k === null) return a
-      ys = yesLabel === '予約する' ? 'これでOK！' : yesLabel
-      ns = noLabel === 'やめとく' ? '今回はやめとく' : noLabel
-      line = `「${a}」は、${yesLabel === '予約する' ? 'これでOK' : `「${yesLabel}」`}ということですか？それとも${noLabel === 'やめとく' ? '今回はやめておきますか' : `「${noLabel}」ですか`}？`
+      ys = yesLabel === '予約する' ? 'この内容で進める' : yesLabel
+      ns = noLabel === 'やめとく' ? '今回はやめておく' : noLabel
+      line = `「${a}」は、${yesLabel === '予約する' ? 'この内容で進める' : `「${yesLabel}」`}ということですか？それとも${noLabel === 'やめとく' ? '今回はやめておきますか' : `「${noLabel}」ですか`}？`
     }
     return 'no'
   }
@@ -401,9 +401,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
     }
     await tips(people?.owner)
-    const next = await askYN('準備ができました！このまま次のご予約もできますよ。', '予約する', 'ホームへ')
-    if (next === 'yes' || (next !== 'no' && /予約/.test(next))) await runBook(people)
-    else onClose()
+    // お店で確認したばかり（ご来店中）なので、次のご予約はお会計のあとに（11/11 慶一郎さん）
+    await say('準備ができました！次のご予約は、お会計のあとに銀ちゃんからどうぞ。')
+    void people
+    return endChange()
   }
 
   const checkBookingAccess = async (session: string | null) => {
@@ -455,6 +456,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const session = getCustomerSession()
     if (await checkBookingAccess(session) === 'closed') return
     if (hasPendingBookingConfirmation()) return checkPreviousBooking()
+    // AI予約がお休み中（当日キャンセル・無断キャンセルのあと）は、日時まで決めてから断られないよう、先に伝える（11/11 点検）
+    const paused = await api.aiStatus?.().catch(() => null)
+    if (paused?.paused) {
+      await say(`${paused.resume_on ? `${md(paused.resume_on)}から、` : 'しばらくの間、'}銀ちゃんでのご予約はお休みです。それまでは、お電話でご予約をお願いします。今のご予約の確認・キャンセルは「次回予約」からできます。`)
+      return endChange()
+    }
     // もうご予約があるのに、何も言わずに新しい予約を始めていた（11/10 慶一郎さん「予約確定してもう一度AI予約したら、いつもの文章」）
     //   → 先に今のご予約を伝えて、もう1件か・変更かを選んでもらう
     // 予約は「1人につき1件まで」（11/10 慶一郎さん「原則、1名につき一回の予約まで」）。
@@ -465,6 +472,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const mineNow = await api.reservations().catch(() => null)
     // 今のご予約が読めないときは、1人1件を確かめられないので進めない（11/10 Codex 検査）
     if (!Array.isArray(mineNow)) { await say('今のご予約を確認できませんでした。電波の良いところで、もう一度開いてくださいね。'); return endChange() }
+    // 来店中（受付済み〜お会計の前）は、次のご予約を取らない。お会計のあとに（11/11 慶一郎さん。サーバーの1人1件でも断られて行き止まりになっていた）
+    if (mineNow.some(r => r.status === 'checked_in' || r.status === 'in_service' || r.status === 'awaiting_payment')) {
+      await say('ただいまご来店中ですね。次のご予約は、お会計のあとにどうぞ。')
+      return endChange()
+    }
     const upcoming = Array.isArray(mineNow) ? mineNow.filter(r => r.status === 'confirmed' && isUpcoming(r)).sort((a, b) => a.starts_at.localeCompare(b.starts_at)) : []
     /** もう予約がある人（ご本人は 'me'、お連れ様はその id） */
     const booked = new Set(upcoming.flatMap(r => (r.companion_id ? [r.companion_id] : !r.companion_of && !r.companion_name ? ['me'] : [])))

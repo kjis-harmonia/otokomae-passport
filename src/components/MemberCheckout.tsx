@@ -6,7 +6,7 @@ import { Checkout } from './booking/Checkout'
 import { createStaffCheckoutApi, PAYMENT_LABEL, type Sale } from '../utils/checkoutApi'
 import { createStaffCustomerApi } from '../utils/customerApi'
 import { yen } from '../utils/bookingApi'
-import { callStaffRpc, rpcErrorMessage } from '../utils/staffSession'
+import { callRpc, callStaffRpc, getStaffToken, rpcErrorMessage } from '../utils/staffSession'
 import { getStoredValue } from '../utils/storage'
 import { readCheckoutAttempt, startNextCheckout } from '../utils/checkoutAttempt'
 import { fetchTodayPartyOrNull, type PartyEntry } from '../utils/partyCheckIn'
@@ -120,7 +120,10 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   }
 
   if (target) {
-    return (
+    // お連れ様のお会計は、誰の分かを一番上に出す（11/11 点検：上の名前はご本人のままで分からなかった）
+    const mate = target.who && !target.who.is_owner ? target.who.name : null
+    return (<>
+      {mate && <p data-guide="co-mate" style={{ margin: '0 0 10px', padding: '10px 14px', borderRadius: 12, background: '#f8f6f1', border: '1px solid rgba(151,115,43,0.32)', fontSize: 15, fontWeight: 700, color: '#1c1f1d' }}>{mate}様（お連れ様）のお会計</p>}
       <Checkout
         quick
         api={api}
@@ -134,7 +137,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         // お会計で選んだメニューを今日のメニューとして記録する（いつものメニュー・来店の記録に使う。失敗しても会計は続ける）
         onMenuPicked={code => { setPickedMenu(code); if (target.who && !target.who.is_owner) return; void callStaffRpc('staff_set_visit_menu', { p_user_id: userId, p_menu_code: code, p_staff_name: staffName || null }).catch(() => {}) }}
       />
-    )
+    </>)
   }
 
   return (
@@ -174,7 +177,7 @@ function UsualMenuRow({ userId, staffName, picked, pickedName, loadMenus }: { us
     if (!code || state === 'saving') return
     setState('saving')
     try {
-      const r = await callStaffRpc<{ ok?: boolean; error?: string }>('staff_set_usual_menu', { p_user_id: userId, p_code: code, p_staff_name: staffName || null })
+      const r = await callRpc<{ ok?: boolean; error?: string }>('staff_set_usual_menu', { p_token: getStaffToken(), p_user_id: userId, p_code: code, p_staff_name: staffName || null })
       setState(r.ok ? 'saved' : 'error')
     } catch { setState('error') }
   }

@@ -52,7 +52,7 @@ function onboardingErrorMessage(err: unknown): string {
     text.includes('could not find the function') ||
     (text.includes('function') && text.includes('does not exist'))
   ) {
-    return '初回登録用のDB更新がまだ反映されていません。管理者に確認してください。'
+    return 'ただいま登録できません。お手数ですが、お店にお声がけください。'
   }
 
   return '登録に失敗しました。通信状態を確認して、もう一度お試しください。'

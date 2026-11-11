@@ -424,7 +424,7 @@ function App() {
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。クーポンのあと） */}
           <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
 
-          {firstGuide && !welcomeCouponDialog && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
+          {firstGuide && !welcomeCouponDialog && !ginFlow() && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
           {ginChat && !firstGuide && !welcomeCouponDialog && <GinChat key={ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
 
           {/* 使い方ガイド：最初の案内・Welcome クーポン・Face ID の案内が出ている間は出さない */}
