@@ -311,7 +311,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   }, [thenTask, tasks, ns])
 
   // 一覧も、ほかの案内（最初の案内・お知らせなど）が出ている間は休ませる。消えたらまた出す
-  if (choosing) return hold ? null : createPortal(<Chooser tasks={tasks.filter(t => !t.hidden && (!t.available || t.available()))} words={words} onPick={start} onClose={() => setChoosing(false)} />, document.body)
+  if (choosing) return hold ? null : createPortal(<Chooser glass={!!chibi} tasks={tasks.filter(t => !t.hidden && (!t.available || t.available()))} words={words} onPick={start} onClose={() => setChoosing(false)} />, document.body)
   if (!task || !run || hold) return null
   const conversation = chibi && findVisible('[data-guide="lc"]')
   const bottomNav = chibi && !conversation ? findVisible('.v2-nav') : null
@@ -424,10 +424,10 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   )
 }
 
-function Chooser({ tasks, words, onPick, onClose }: { tasks: GuideTask[]; words: GuideWords; onPick: (t: GuideTask) => void; onClose: () => void }) {
+function Chooser({ tasks, words, onPick, onClose, glass = false }: { tasks: GuideTask[]; words: GuideWords; onPick: (t: GuideTask) => void; onClose: () => void; glass?: boolean }) {
   return (
     <div className="gd-sheet-back" onClick={onClose}>
-      <div className="gd-sheet" role="dialog" aria-modal="true" aria-labelledby="gd-sheet-title" onClick={e => e.stopPropagation()}>
+      <div className={`gd-sheet${glass ? ' gd-glass-sheet' : ''}`} role="dialog" aria-modal="true" aria-labelledby="gd-sheet-title" onClick={e => e.stopPropagation()}>
         <p className="gd-sheet-kicker">{words.kicker}</p>
         <h2 id="gd-sheet-title">{words.title}</h2>
         <p className="gd-sheet-lead">{words.lead}</p>
