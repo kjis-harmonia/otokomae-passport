@@ -3,6 +3,7 @@ import { RpcError, callRpc, getStaffToken, rpcErrorMessage } from '../../utils/s
 import { yen } from '../../utils/bookingApi'
 import { reservationSaleLines } from '../../utils/checkoutPricing'
 import { idempotencyKey } from '../../utils/ginpayApi'
+import { companionNameOf } from '../../utils/companionName'
 import { checkoutAttemptSnapshot, subscribeCheckoutAttempt, readCheckoutAttempt, sameCheckout, settleCheckout, startNextCheckout, withCheckoutLock, type CheckoutAttempt } from '../../utils/checkoutAttempt'
 import type { ClientCandidate, CustomerApi } from '../../utils/customerApi'
 import {
@@ -26,7 +27,7 @@ const METHODS: { id: PaymentMethod; label: string }[] = [
 type Line = SaleLine & { key: number }
 let keySeq = 0
 
-export function Checkout({ api, customers, reservationId, clientId = null, initialTicketIds, ensureActor, onClose, onDone, quick = false, onMenuPicked }: {
+export function Checkout({ api, customers, reservationId, clientId = null, initialTicketIds, ensureActor, onClose, onDone, quick = false, onMenuPicked, notOwner = false }: {
   api: CheckoutApi
   /** 予約なしの会計で顧客を探す */
   customers?: CustomerApi
@@ -44,6 +45,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   quick?: boolean
   /** 短い会計でメニューを選んだとき（店舗端末は今日のメニューとして記録する） */
   onMenuPicked?: (code: string) => void
+  /** 予約のない方の会計（「もう1件お会計する」のお子様・お連れ様など）。会員ご本人の施術として記録しない・ご本人の料金・Welcome 券を使わない（11/11 店舗端末点検） */
+  notOwner?: boolean
 }) {
   const [detail, setDetail] = useState(!quick)
   const [personal, setPersonal] = useState<ReadonlyMap<string, number>>(() => new Map())
@@ -103,7 +106,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     api.context(resume?.input.reservation_id ?? reservationId, resume ? resume.input.client_id ?? null : reservationId ? null : clientId).then(async c => {
       const codes = c.reservation?.items.flatMap(item => item.menu_code ? [item.menu_code] : []) ?? []
       // お客様ごとの「いつもの」料金（店で最後に払った金額）。払ったことのあるメニューはその金額で始める
-      const mine = c.client && api.clientMenuPrices ? await api.clientMenuPrices(c.client.id).catch(() => []) : []
+      //   お連れ様の予約・予約のない方の会計には、ご本人の料金を当てない（11/11 店舗端末点検）
+      const mine = c.client && api.clientMenuPrices && !notOwner && !companionNameOf(c.reservation) ? await api.clientMenuPrices(c.client.id).catch(() => []) : []
       const personalOf = new Map(mine.map(p => [p.menu_code, p.price]))
       const quoted = c.reservation && !resume
         ? reservationSaleLines(c.reservation.items, codes.length ? await api.quote(codes, c.reservation.starts_at) : null)
@@ -123,7 +127,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     }).catch(err => { if (alive) setError(rpcErrorMessage(err, '会計の準備ができませんでした。')) })
     return () => { alive = false }
     // 開いたときの顧客だけを使う（券は latestInitial と下の同期で入れる）
-  }, [api, reservationId, clientId, reload])
+  }, [api, reservationId, clientId, reload, notOwner])
 
   // 開いたあとに選び直した券（読み込み前なら、読み込んだときに上で入れる）
   const ctxTickets = ctx?.tickets
@@ -251,7 +255,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const hasPerm = lines.some(l => !!l.ref_id && /^(perm|set)-/.test(l.ref_id))
   // 再来店パーマクーポン（10/29）も同じ
   const welcomeIds = tickets.filter(t => isPermOnlyCoupon({ title: t.title, amount: t.amount, issued_by: '' })).map(t => t.id)
-  const welcomeKey = hasPerm ? '' : welcomeIds.filter(id => ticketIds.includes(id)).join(',')
+  // Welcome・再来店パーマクーポンは、発行された会員ご本人の施術だけ（お連れ様の予約・予約のない方の会計では選べない・11/11 店舗端末点検）
+  const ownerOnlyOff = notOwner || !!companionNameOf(ctx?.reservation ?? null)
+  const welcomeKey = hasPerm && !ownerOnlyOff ? '' : welcomeIds.filter(id => ticketIds.includes(id)).join(',')
   useEffect(() => {
     if (!welcomeKey) return
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -272,6 +278,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
         manual_discount: manualAmount > 0 ? { amount: manualAmount, label: manual!.label.trim() } : undefined,
         payment_method: method!, expected_total: Math.max(0, totals.total), idempotency_key: saleKey,
         ginpay_account_id: method === 'ginpay' ? ginpayAccount?.id : undefined,
+        not_owner: notOwner && !ctx?.reservation ? true : undefined,
       } }
       const res = await withCheckoutLock(() => settleCheckout(api, proposed))
       if (!mounted.current) return
@@ -316,6 +323,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
             </section>
           ) : !ctx ? <p style={{ fontSize: 14, color: error ? C.danger : C.sub }}>{error ?? '読み込み中…'}</p> : (
             <fieldset disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
+              {/* どなたのお会計か（11/11 店舗端末点検：お連れ様の会計なのにご本人の名前しか出ていなかった） */}
+              {companionNameOf(ctx.reservation) ? <p data-guide="co-who" style={{ margin: '0 0 10px', padding: '10px 12px', borderRadius: 10, background: 'rgba(52,80,154,0.08)', color: '#34509a', fontSize: 17, fontWeight: 700 }}>{companionNameOf(ctx.reservation)}様（お連れ様）のお会計</p>
+                : notOwner && !ctx.reservation ? <p data-guide="co-who" style={{ margin: '0 0 10px', padding: '10px 12px', borderRadius: 10, background: 'rgba(0,0,0,0.05)', color: C.text, fontSize: 15, fontWeight: 600, lineHeight: 1.5 }}>予約のない方のお会計<span style={{ display: 'block', fontSize: 12, fontWeight: 400, color: C.sub }}>会員ご本人の来店・いつものメニューには入りません</span></p> : null}
               {/* お客様・担当 */}
               {/* 店舗端末（quick）で予約から開いたときは、お名前は上の行に出ているので繰り返さない */}
               {quick && (ctx.reservation || clientInfo) ? null : ctx.reservation || clientInfo || anonymous ? (
@@ -413,17 +423,17 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               {listed.length > 0 && (
                 <div data-guide="co-tickets" style={{ marginTop: 8 }}>
                   {/* 同じ券（名前・金額・使える状態が同じ）は1行にまとめて − 枚数 ＋（11/6 慶一郎さん：予約の画面と同じに）。ガチャ券は1枚なので ✓ のまま */}
-                  {ticketGroups(listed.filter(t => t.id !== 'gacha'), t => (!hasPerm && welcomeIds.includes(t.id)) || !!t.blocked).map(g => {
+                  {ticketGroups(listed.filter(t => t.id !== 'gacha'), t => ((!hasPerm || ownerOnlyOff) && welcomeIds.includes(t.id)) || !!t.blocked).map(g => {
                     const first = g.items[0]
                     const on = g.items.filter(t => ticketIds.includes(t.id))
-                    const permOnly = !hasPerm && welcomeIds.includes(first.id)
+                    const permOnly = (!hasPerm || ownerOnlyOff) && welcomeIds.includes(first.id)
                     const off = !!first.blocked || permOnly
                     const btn = (dis: boolean): CSSProperties => ({ width: 40, height: 40, borderRadius: 20, border: `1px solid ${C.lineStrong}`, background: 'transparent', color: dis ? C.mute : C.text, fontSize: 20, lineHeight: 1, cursor: dis ? 'default' : 'pointer' })
                     return (
                       <div key={g.key} style={{ ...lineBtn, cursor: 'default', opacity: off ? 0.55 : 1 }}>
                         <span style={{ minWidth: 0 }}>
                           <span style={{ display: 'block', fontSize: 14 }}>{first.title}</span>
-                          <span style={{ display: 'block', fontSize: 12, color: C.mute }}>{first.blocked ? TICKET_BLOCK_LABEL[first.blocked] : permOnly ? 'パーマのときだけ使えます' : `1枚 −${yen(first.amount)}・お持ち ${g.items.length}枚`}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: C.mute }}>{first.blocked ? TICKET_BLOCK_LABEL[first.blocked] : permOnly ? (ownerOnlyOff ? '会員ご本人の施術だけ使えます' : 'パーマのときだけ使えます') : `1枚 −${yen(first.amount)}・お持ち ${g.items.length}枚`}</span>
                         </span>
                         {!off && (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -437,13 +447,13 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   })}
                   {listed.filter(t => t.id === 'gacha').map(t => {
                     const on = t.id === 'gacha' ? gachaOn : ticketIds.includes(t.id)
-                    const permOnly = !hasPerm && welcomeIds.includes(t.id)
+                    const permOnly = (!hasPerm || ownerOnlyOff) && welcomeIds.includes(t.id)
                     const off = !!t.blocked || permOnly
                     return (
                       <button key={t.id} type="button" disabled={off} onClick={() => toggleTicket(t.id, t.type)} aria-pressed={on} style={{ ...lineBtn, opacity: off ? 0.55 : 1, cursor: off ? 'default' : 'pointer' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                           <span aria-hidden="true" style={{ width: 18, height: 18, flexShrink: 0, boxSizing: 'border-box', borderRadius: 4, border: `1.5px solid ${on ? C.text : C.lineStrong}`, background: on ? C.text : 'transparent', color: C.bg, fontSize: 13, lineHeight: '15px', textAlign: 'center', fontWeight: 700 }}>{on ? '✓' : ''}</span>
-                          <span style={{ fontSize: 14 }}>{t.title}{t.blocked ? <span style={{ fontSize: 12, color: C.mute }}>{` ${TICKET_BLOCK_LABEL[t.blocked]}`}</span> : permOnly && <span style={{ fontSize: 12, color: C.mute }}> パーマのときだけ使えます</span>}</span>
+                          <span style={{ fontSize: 14 }}>{t.title}{t.blocked ? <span style={{ fontSize: 12, color: C.mute }}>{` ${TICKET_BLOCK_LABEL[t.blocked]}`}</span> : permOnly && <span style={{ fontSize: 12, color: C.mute }}>{ownerOnlyOff ? ' 会員ご本人の施術だけ使えます' : ' パーマのときだけ使えます'}</span>}</span>
                         </span>
                         <span style={{ fontSize: 14, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{t.amount ? `−${yen(t.amount)}` : ''}</span>
                       </button>

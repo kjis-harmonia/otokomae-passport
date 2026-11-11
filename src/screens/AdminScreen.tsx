@@ -1933,7 +1933,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         </div>
       )}
 
-      {/* ── Staff Picker Modal ── */}
+      {/* ── Staff Picker Modal（11/11 点検：白地に） ── */}
       {showStaffPicker && (
         <div onClick={() => setShowStaffPicker(false)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(28,31,29,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 500, background: '#ffffff', border: '1px solid rgba(151,115,43,0.32)', borderRadius: 22, boxShadow: '0 32px 80px rgba(28,31,29,0.42)', overflow: 'hidden' }}>

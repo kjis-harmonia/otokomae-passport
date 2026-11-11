@@ -9,10 +9,12 @@ import { useServerSecond } from './launchTime'
 import { launchAt, launched, launchHm, serverNow } from '../utils/launch'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronRight, Pointer, Sparkles, Volume2, X } from 'lucide-react'
-import { canUseGacha, drawGacha, gachaDays, gachaReservedLabel, gachaUntil, keepGacha, loadGacha, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
+import { canUseGacha, drawGacha, gachaDays, gachaReservedLabel, gachaUntil, keepGacha, loadGacha, peekGacha, type GachaKeepResult, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
 import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
 import { GachaAudioPlayback } from '../audio/gachaAudioPlayback'
 import { isStaging } from '../utils/env'
+import { CUSTOMER_AUTH_REQUIRED_EVENT, getCustomerSession } from '../utils/customerSession'
+import { RpcBusinessError } from '../utils/staffSession'
 import { afterPresentedFrame } from '../features/gacha/presentedFrame'
 import { GachaShowcase } from './GachaShowcase'
 import { GachaGauge, GaugeMonth } from './GachaGauge'
@@ -136,6 +138,25 @@ export function V2Gacha() {
   return <GachaScreen key={chosen ?? "auto"} chosen={chosen} onChoose={isStaging() ? setChosen : undefined} />
 }
 
+type GachaRecovery =
+  | { kind: 'draw'; previousId: string | undefined; repeat: boolean }
+  | { kind: 'keep'; drawId: string; choice: 'new' | 'old' }
+
+// Keep the request and its recovery across navigation within this app session.
+const gachaOperations = new Map<string, Promise<void>>()
+const gachaRecoveries = new Map<string, GachaRecovery>()
+
+function needsRecovery(session: string, state: GachaState): boolean {
+  const recovery = gachaRecoveries.get(session)
+  if (!recovery) return false
+  const { today } = state
+  const unresolved = recovery.kind === 'draw'
+    ? !today || (recovery.repeat && today.id === recovery.previousId)
+    : today?.id === recovery.drawId && today.choice === null
+  if (!unresolved) gachaRecoveries.delete(session)
+  return unresolved
+}
+
 function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoose?: (id: Theme["id"]) => void }) {
   const [THEME] = useState(() => pickTheme(chosen))
   useEffect(() => { if (!pick && !chosen) saveLast(THEME.id) }, [THEME, chosen])
@@ -149,6 +170,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const phaseRef = useRef<Phase>('idle')
   const sound = useRef<GachaAudioPlayback | null>(null)
   const introPresented = useRef(false)
+  const waitPresented = useRef(false)
   const openPresented = useRef(false)
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [audioChecking, setAudioChecking] = useState(false)
@@ -162,8 +184,11 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const [attempt, setAttempt] = useState(0)
   const move = useCallback((next: Phase) => { phaseRef.current = next; setPhase(next) }, [])
   const [gacha, setGacha] = useState<GachaState | null>(null) // 今日の結果と持ち券
-  const [drawn, setDrawn] = useState<GachaState | 'error' | null>(null) // 今回回した結果（演出のあいだに届く）
+  const [drawn, setDrawn] = useState<GachaKeepResult | 'error' | null>(null) // 今回回した結果（演出のあいだに届く）
   const [keeping, setKeeping] = useState(false)
+  const [operationPending, setOperationPending] = useState(false)
+  const stateSession = useRef<string | null>(null)
+  const [resultNotice, setResultNotice] = useState<string | null>(null)
   const [lineup, setLineup] = useState(false) // 今月のラインナップ（3D ショーケース）
 
   useEffect(() => {
@@ -179,18 +204,120 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const [stateFailed, setStateFailed] = useState(false)
   const [stateTry, setStateTry] = useState(0)
   useEffect(() => {
-    if (!canUseGacha()) return
+    const session = getCustomerSession()
+    stateSession.current = session
+    if (!session) return
     let live = true
-    loadGacha().then(s => { if (live) { setGacha(s); setStateFailed(false) } }).catch(() => { if (live) setStateFailed(true) }).finally(() => { if (live) setStateReady(true) })
+    const current = () => live && getCustomerSession() === session
+    const load = async () => {
+      try {
+        await gachaOperations.get(session)
+        if (!current()) return
+        const state = await (gachaRecoveries.has(session) ? peekGacha() : loadGacha())
+        if (!current()) return
+        setGacha(state)
+        setStateFailed(needsRecovery(session, state))
+      } catch {
+        if (current()) {
+          setGacha(null)
+          setStateFailed(true)
+        }
+      } finally {
+        if (current()) setStateReady(true)
+      }
+    }
+    void load()
     return () => { live = false }
   }, [stateTry])
-  const retryState = () => { setStateReady(false); setStateFailed(false); setStateTry(n => n + 1) }
+  const retryState = () => {
+    const session = getCustomerSession()
+    if (session && gachaOperations.has(session)) return
+    stateSession.current = null
+    setStateReady(!session)
+    setStateFailed(false)
+    setStateTry(n => n + 1)
+  }
 
-  const choose = async (choice: 'new' | 'old') => {
-    if (keeping) return
-    setKeeping(true)
-    try { const s = await keepGacha(choice); setGacha(s); setDrawn(s) } catch { /* 選べなければそのまま。もう一度押せる */ }
-    finally { setKeeping(false) }
+  const showResult = (state: GachaKeepResult) => {
+    setGacha({
+      today: state.current_today === undefined ? state.today : state.current_today,
+      held: state.held,
+      repeat: state.repeat,
+      gauge: state.gauge,
+    })
+    setDrawn(state)
+    setStateFailed(false)
+  }
+  const recheckResult = async (session: string): Promise<GachaState | null> => {
+    try {
+      if (getCustomerSession() !== session) return null
+      const state = await peekGacha()
+      if (getCustomerSession() !== session) return null
+      const unresolved = needsRecovery(session, state)
+      setGacha(state)
+      setDrawn(!unresolved && state.today ? state : 'error')
+      setStateFailed(unresolved)
+      return unresolved ? null : state
+    } catch {
+      if (getCustomerSession() === session) {
+        setGacha(null)
+        setDrawn('error')
+        setStateFailed(true)
+      }
+      return null
+    }
+  }
+  const actionSession = () => {
+    const session = getCustomerSession()
+    return session && session === stateSession.current && !gachaOperations.has(session) ? session : null
+  }
+  const runOperation = (session: string, run: () => Promise<void>) => {
+    setOperationPending(true)
+    const request = Promise.resolve().then(run).finally(() => {
+      gachaOperations.delete(session)
+      if (getCustomerSession() === session) setOperationPending(false)
+    })
+    gachaOperations.set(session, request)
+  }
+  const submitChoice = (session: string, choice: 'new' | 'old', drawId: string) => {
+    runOperation(session, async () => {
+      setKeeping(true)
+      setResultNotice(null)
+      try {
+        if (getCustomerSession() !== session) return
+        const state = await keepGacha(choice, drawId)
+        if (state.today?.id !== drawId || state.today.choice !== choice) throw new Error('gacha_keep_unconfirmed')
+        gachaRecoveries.delete(session)
+        if (getCustomerSession() === session) showResult(state)
+      } catch (error) {
+        const stale = error instanceof RpcBusinessError && error.code === 'stale_draw'
+        if (!(error instanceof RpcBusinessError)) gachaRecoveries.set(session, { kind: 'keep', drawId, choice })
+        if (stale) gachaRecoveries.delete(session)
+        const state = await recheckResult(session)
+        if (getCustomerSession() !== session) return
+        if (stale || (state && state.today?.id !== drawId)) {
+          setResultNotice('表示していた当選が変わりました。現在の結果をご確認ください。')
+        } else if (state?.today?.choice !== choice) {
+          setResultNotice('券の保存結果を確認できませんでした。現在の結果をご確認ください。')
+        }
+      } finally { if (getCustomerSession() === session) setKeeping(false) }
+    })
+  }
+  const choose = (choice: 'new' | 'old', drawId: string) => {
+    const session = actionSession()
+    if (!session || stateFailed || phaseRef.current !== 'result' || !drawn || drawn === 'error' ||
+        drawn.today?.id !== drawId || drawn.today.choice !== null) return
+    submitChoice(session, choice, drawId)
+  }
+  const retryableChoice = (session: string | null) => {
+    const recovery = session ? gachaRecoveries.get(session) : undefined
+    return stateFailed && recovery?.kind === 'keep' &&
+      gacha?.today?.id === recovery.drawId && gacha.today.choice === null ? recovery : null
+  }
+  const retryChoice = () => {
+    const session = actionSession()
+    const recovery = retryableChoice(session)
+    if (session && recovery) submitChoice(session, recovery.choice, recovery.drawId)
   }
 
   useEffect(() => {
@@ -215,22 +342,54 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     move('idle')
   }, [move])
 
+  useEffect(() => {
+    const sessionChanged = () => {
+      const session = getCustomerSession()
+      if (session === stateSession.current) return
+      stateSession.current = null
+      close()
+      setGacha(null)
+      setDrawn(null)
+      setResultNotice(null)
+      setOperationPending(false)
+      setKeeping(false)
+      setStateReady(!session)
+      setStateFailed(false)
+      setStateTry(n => n + 1)
+    }
+    window.addEventListener('ginjiro:customer-session-changed', sessionChanged)
+    window.addEventListener(CUSTOMER_AUTH_REQUIRED_EVENT, sessionChanged)
+    window.addEventListener('storage', sessionChanged)
+    return () => {
+      window.removeEventListener('ginjiro:customer-session-changed', sessionChanged)
+      window.removeEventListener(CUSTOMER_AUTH_REQUIRED_EVENT, sessionChanged)
+      window.removeEventListener('storage', sessionChanged)
+    }
+  }, [close])
+
   // 選ばずに閉じた当選（日付が変わっても残る・11/3）：演出はもう見せず、最後の場面（券を差し出す銀ちゃん）から選ぶ画面を開き直す（11/3）
-  const pending = !!gacha?.today && gacha.today.choice === null && !!gacha.held
+  const pending = gacha?.today?.choice === null
   const resume = () => {
     const b = burst.current
-    if (phaseRef.current !== 'idle' || !b || !gacha) return
+    const session = actionSession()
+    if (phaseRef.current !== 'idle' || !session || !stateReady || (stateFailed && !retryableChoice(session)) || !b || !gacha) return
     const show = () => { b.pause(); if (Number.isFinite(b.duration)) b.currentTime = Math.max(0, b.duration - 0.05) }
     if (b.readyState >= 1) show(); else b.addEventListener('loadedmetadata', show, { once: true })
     setTicket(false)
-    setDrawn(gacha)
+    setResultNotice(null)
+    setDrawn(stateFailed ? 'error' : gacha)
     setTop('burst')
     move('result')
   }
 
   const start = () => {
     if (loadFailed) { setLoadFailed(false); setPct(0); setAttempt(n => n + 1); return }
-    if (phaseRef.current !== 'idle' || !cache || !stateReady || stateFailed) return
+    if (!getCustomerSession()) {
+      window.dispatchEvent(new CustomEvent(CUSTOMER_AUTH_REQUIRED_EVENT, { detail: { source: 'action' } }))
+      return
+    }
+    const session = actionSession()
+    if (phaseRef.current !== 'idle' || !session || !cache || !stateReady || stateFailed) return
     const i = intro.current
     const w = wait.current
     const b = burst.current
@@ -242,7 +401,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         const current = phaseRef.current
         const video = current === 'intro' ? intro.current : current === 'tap' ? wait.current : burst.current
         return { phase: current, offset: video?.currentTime ?? 0,
-          presented: current === 'intro' ? introPresented.current : current === 'open' ? openPresented.current : true }
+          presented: current === 'intro' ? introPresented.current : current === 'tap' ? waitPresented.current : openPresented.current }
       },
       status => {
         setAudioChecking(status === 'checking')
@@ -250,6 +409,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
       },
     )
     introPresented.current = false
+    waitPresented.current = false
     openPresented.current = false
     setAudioBlocked(false)
     rewind(b)
@@ -259,9 +419,22 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     w.playbackRate = 1
     setTicket(false)
     setDrawn(null)
-    drawGacha().then(s => { setDrawn(s); setGacha(s) }).catch(() => setDrawn('error'))
+    setResultNotice(null)
     setTop('intro')
     move('intro')
+    runOperation(session, async () => {
+      try {
+        if (getCustomerSession() !== session) return
+        const state = await drawGacha()
+        if (!state.today) throw new Error('gacha_draw_unconfirmed')
+        if (getCustomerSession() === session) showResult(state)
+      } catch (error) {
+        if (!(error instanceof RpcBusinessError)) {
+          gachaRecoveries.set(session, { kind: 'draw', previousId: gacha?.today?.id, repeat: gacha?.repeat === true })
+        }
+        await recheckResult(session)
+      }
+    })
     void sound.current.unlock() // Resume is invoked synchronously in the user's gesture.
     void play(i).catch(close)
   }
@@ -277,18 +450,29 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
       pendingReveals.add(cancel)
     }
     // 1部・2部の最後のコマを出したまま待ちを流し、動き出したら入れ替える
+    const introStarted = () => {
+      if (phaseRef.current !== 'intro' || introPresented.current) return
+      introPresented.current = true
+      sound.current?.sync()
+    }
     const introPlaying = () => {
       if (phaseRef.current !== 'intro' || introPresented.current) return
-      presented(i, () => { if (phaseRef.current === 'intro') { introPresented.current = true; sound.current?.sync() } })
+      presented(i, introStarted)
     }
     const introEnded = () => { if (phaseRef.current === 'intro') { move('tap'); void play(w).catch(close) } }
-    const waitPlaying = () => { if (phaseRef.current === 'tap') presented(w, () => {
-      if (phaseRef.current === 'tap') { setTop('wait'); sound.current?.sync() }
-    }) }
+    const waitPlaying = () => {
+      if (phaseRef.current !== 'tap' || waitPresented.current) return
+      presented(w, () => {
+        if (phaseRef.current !== 'tap' || waitPresented.current) return
+        waitPresented.current = true
+        setTop('wait')
+        sound.current?.sync()
+      })
+    }
     const burstPlaying = () => {
       if (phaseRef.current !== 'open' || openPresented.current) return
       presented(b, () => {
-        if (phaseRef.current !== 'open') return
+        if (phaseRef.current !== 'open' || openPresented.current) return
         openPresented.current = true
         sound.current?.sync()
         setTop('burst')
@@ -345,14 +529,15 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   }
 
   const showing = phase !== 'idle'
+  const choiceToRetry = retryableChoice(getCustomerSession())
   return (
     <div className="v2-page">
       <section className="v2-gacha-card">
         <img src="/gacha/gacha-top.jpg" alt="ガチャマシンと銀ちゃん" className="v2-gacha-poster" />
         <div className="v2-gacha-body">
           {!loadFailed && stateFailed ? (
-            <button type="button" className="v2-gacha-start" data-guide="gacha-start" onClick={retryState}>読み込み直す</button>
-          ) : <button type="button" className="v2-gacha-start" data-guide="gacha-start" onClick={pending ? resume : start} disabled={(!src && !loadFailed) || (!loadFailed && !stateReady)}>{loadFailed ? '読み込み直す' : src && !stateReady ? '確認しています…' : src ? <><Sparkles size={20} />{pending ? (gacha?.held?.reserved ? '当選した券を見る' : '当選した券を選ぶ') : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>}
+            <button type="button" className="v2-gacha-start" data-guide="gacha-start" disabled={operationPending} onClick={choiceToRetry ? resume : retryState}>{choiceToRetry ? '券の保存を確認する' : '読み込み直す'}</button>
+          ) : <button type="button" className="v2-gacha-start" data-guide="gacha-start" onClick={!loadFailed && pending ? resume : start} disabled={operationPending || (!src && !loadFailed) || (!loadFailed && !stateReady)}>{loadFailed ? '読み込み直す' : operationPending || (src && !stateReady) ? '確認しています…' : src ? <><Sparkles size={20} />{pending ? (gacha?.held?.reserved ? '当選した券を見る' : '当選した券を選ぶ') : gacha?.today?.choice && !gacha.repeat ? '本日の結果をもう一度見る' : '本日のガチャを回す'}</> : `準備しています ${pct}%`}</button>}
           {!loadFailed && stateFailed && <p className="v2-gacha-again">今日のガチャの状態を確かめられませんでした。電波の良い所で、読み込み直してください。</p>}
           {pending && <p className="v2-gacha-again">{gacha?.held?.reserved ? '新しい券は、ご来店のあとに受け取れます' : '当選した券がまだ選ばれていません'}</p>}
           {gacha?.today?.choice && !gacha.repeat && <p className="v2-gacha-again">次のガチャは明日 0:00 から回せます</p>}
@@ -378,7 +563,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
           <GaugeMonth state={gacha} />
         </section>
       )}
-      {gacha && <GachaGauge state={gacha} onChange={setGacha} />}
+      {gacha && <GachaGauge state={gacha} onChange={state => setGacha(current => current === gacha ? state : current)} />}
       <p className="v2-gacha-note">音が出ます。音量にご注意ください。<br />ガチャは1日1回、ガチャ券は1枚までお持ちいただけます。</p>
 
       <div className={`v2-gacha-stage v2-gacha-${THEME.id}${showing ? ' is-on' : ''}`} aria-hidden={!showing} onClick={open}>
@@ -412,7 +597,16 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         {phase === 'result' && (
           // 結果のポップ（11/3 慶一郎さんの見本：黒×金のパネル）。上の銀ちゃんと金のチケットは動画のまま
           <div className={`v2-gacha-result${ticket ? ' is-ticket' : ''}`} onClick={e => e.stopPropagation()}>
-            <GachaResult drawn={drawn} keeping={keeping} onChoose={choose} onClose={close} />
+            {resultNotice && <span role="status">{resultNotice}</span>}
+            <GachaResult key={drawn && drawn !== 'error' ? drawn.today?.id : undefined} drawn={drawn} keeping={keeping}
+              onChoose={choice => { if (drawn && drawn !== 'error' && drawn.today) choose(choice, drawn.today.id) }}
+              onRetry={stateFailed ? () => {
+                const session = actionSession()
+                if (session) runOperation(session, async () => { await recheckResult(session) })
+              } : undefined}
+              retryChoice={choiceToRetry?.choice}
+              onRetryChoice={retryChoice}
+              checking={operationPending} onClose={close} />
           </div>
         )}
         {showing && <button type="button" className="v2-gacha-close" aria-label="閉じる" onClick={e => { e.stopPropagation(); close() }}><X size={22} /></button>}
@@ -450,25 +644,49 @@ function Head({ prize }: { prize: GachaPrize }) {
 }
 
 /** 結果：出た券。券を持っていたら、どちらを残すか選んでもらう */
-function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState | 'error' | null; keeping: boolean; onChoose: (c: 'new' | 'old') => void; onClose: () => void }) {
+function GachaResult({ drawn, keeping, onChoose, onRetry, retryChoice, onRetryChoice, checking, onClose }: {
+  drawn: GachaKeepResult | 'error' | null
+  keeping: boolean
+  onChoose: (c: 'new' | 'old') => void
+  onRetry?: () => void
+  retryChoice?: 'new' | 'old'
+  onRetryChoice: () => void
+  checking: boolean
+  onClose: () => void
+}) {
   // どちらを残すか：カードをタップで選ぶ（金の枠）→「決定する」。押し間違いで高い券を手放さないよう2段にする（11/3）
   const [pick, setPick] = useState<'new' | 'old' | null>(null)
   const [decline, setDecline] = useState(false) // 「新しい券は受け取らない」は2回押しで
   if (drawn === 'error') {
-    return <><b>結果を受け取れませんでした</b><span>電波の良いところで、もう一度お試しください。本日の結果は変わりません。</span><button type="button" className="v2-gold-btn" onClick={onClose}>閉じる</button></>
+    return <>
+      <b>結果を受け取れませんでした</b>
+      <span>{onRetry ? '電波の良いところで、結果を確認し直してください。' : '確認した時点では、当選結果はありませんでした。'}</span>
+      {retryChoice && <button type="button" className="v2-gold-btn" disabled={checking} onClick={onRetryChoice}>
+        {checking ? '確認しています…' : retryChoice === 'new' ? '新しい券を受け取る操作を再試行' : '現在の券を残す操作を再試行'}
+      </button>}
+      {onRetry && <button type="button" className="v2-gold-btn" disabled={checking} onClick={onRetry}>{checking ? '確認しています…' : '結果を確認する'}</button>}
+      <button type="button" className="v2-gold-btn" onClick={onClose}>閉じる</button>
+    </>
   }
   if (!drawn) return <span>結果を受け取っています…</span>
-  // 返事は届いたが当選が入っていない（ふつうは起きない）：止まらずに、持っている券を見せて閉じられるようにする（11/4）
   if (!drawn.today) {
     return (
       <>
-        {drawn.held ? <span>お持ちのガチャ券：{drawn.held.title}<br />{gachaDays(drawn.held)}・{gachaUntil(drawn.held.expires_at)}</span> : <span>保存しました。</span>}
+        <span>当選結果を確認できませんでした。</span>
         <button type="button" className="v2-gold-btn" onClick={onClose}>閉じる<ChevronRight size={20} strokeWidth={1.8} aria-hidden /></button>
       </>
     )
   }
   const { prize, choice } = drawn.today
   const held = drawn.held
+  if (choice === null && !held) {
+    return <>
+      <Head prize={prize} />
+      <button type="button" className="v2-gold-btn" disabled={keeping} onClick={() => onChoose('new')}>
+        {keeping ? '保存しています…' : 'この券を受け取る'}
+      </button>
+    </>
+  }
   // 今の券が予約に付いている：交換はできない（銀Pay の仮支払いとずれるため）。来店して使ったあとに新しい券を受け取れる（11/4）
   if (choice === null && held?.reserved) {
     return (
@@ -514,7 +732,9 @@ function GachaResult({ drawn, keeping, onChoose, onClose }: { drawn: GachaState 
   return (
     <>
       <Head prize={prize} />
-      {choice === 'old' && held
+      {drawn.replayed
+        ? <span>この当選の選択は確定済みです。</span>
+        : choice === 'old' && held
         ? <span>現在お持ちのガチャ券（{held.title}）を残しました。</span>
         : held && <span>ガチャ券をお渡ししました。<br />{gachaDays(held)}・{gachaUntil(held.expires_at)}<br />AI予約でご利用いただけます。</span>}
       <button type="button" className="v2-gold-btn" onClick={onClose}>閉じる<ChevronRight size={20} strokeWidth={1.8} aria-hidden /></button>

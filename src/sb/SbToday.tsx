@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { Check, ChevronRight, Plus } from 'lucide-react'
 import { jstTime, yen } from '../utils/bookingApi'
 import { summarizeToday } from './sbTodaySummary'
+import { personName } from './sbParty'
 import type { SbLedger } from './sbTypes'
 
 const JST = 9 * 60 * 60 * 1000
@@ -44,14 +45,14 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
         {s.inService.map(r => (
           <button key={r.id} type="button" className="sb-buddy-row" onClick={() => onOpen(r.id)}>
             <span className="sb-buddy-time sb-buddy-live">施術中</span>
-            <span className="sb-buddy-main"><strong>{r.customer_name}</strong><small>{r.items.map(i => i.name).join('・')} / {r.staff_name}</small></span>
+            <span className="sb-buddy-main"><strong>{personName(r)}</strong><small>{r.items.map(i => i.name).join('・')} / {r.staff_name}</small></span>
             <ChevronRight size={16} />
           </button>
         ))}
         {s.next.map(r => (
           <button key={r.id} type="button" className="sb-buddy-row" onClick={() => onOpen(r.id)}>
             <span className="sb-buddy-time">{jstTime(r.starts_at)}</span>
-            <span className="sb-buddy-main"><strong>{r.customer_name}</strong><small>{r.items.map(i => i.name).join('・')} / {r.staff_name}</small></span>
+            <span className="sb-buddy-main"><strong>{personName(r)}</strong><small>{r.items.map(i => i.name).join('・')} / {r.staff_name}</small></span>
             {r === nextOne && <span className="sb-buddy-badge">{until(r.starts_at, now)}</span>}
             <ChevronRight size={16} />
           </button>
@@ -76,9 +77,9 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
         <h2>やること</h2>
         {late.map(r => (
           <div key={r.id} className="sb-buddy-todo">
-            <button type="button" className="sb-buddy-check" onClick={() => markDone(r.id)} aria-label={`${r.customer_name}様のやることを済みにする`}><Check size={14} /></button>
+            <button type="button" className="sb-buddy-check" onClick={() => markDone(r.id)} aria-label={`${personName(r)}様のやることを済みにする`}><Check size={14} /></button>
             <button type="button" className="sb-buddy-row sb-buddy-alert" onClick={() => onOpen(r.id)}>
-              <span className="sb-buddy-main"><strong>{r.customer_name}</strong><small>{jstTime(r.starts_at)}の予約・まだ来店になっていません</small></span>
+              <span className="sb-buddy-main"><strong>{personName(r)}</strong><small>{jstTime(r.starts_at)}の予約・まだ来店になっていません</small></span>
               <ChevronRight size={16} />
             </button>
           </div>

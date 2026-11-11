@@ -13,7 +13,8 @@ import { fetchTodayPartyOrNull, type PartyEntry } from '../utils/partyCheckIn'
 
 const UI = '-apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif'
 
-type Target = { reservationId: string | null; clientId: string; who: PartyEntry | null }
+/** walkIn：予約のない方の会計（「もう1件お会計する」）。会員ご本人の来店・いつものメニューに入れない（11/11 店舗端末点検） */
+type Target = { reservationId: string | null; clientId: string; who: PartyEntry | null; walkIn: boolean }
 /** 受付済みでまだ会計していない予約 */
 const UNPAID = ['checked_in', 'in_service', 'awaiting_payment']
 // 店舗端末の「担当者」（AdminScreen が端末に保存する）。会計の記録には確定した時点の名前を残す
@@ -36,6 +37,8 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   const [partyError, setPartyError] = useState(false)
   /** 会計したのはどなたの予約か（お連れ様なら、ご本人のいつものメニュー・来店の記録には入れない） */
   const [paidWho, setPaidWho] = useState<PartyEntry | null>(null)
+  /** 会計したのが予約のない方か */
+  const [paidWalkIn, setPaidWalkIn] = useState(false)
   // お会計で選んだメニュー（いつものメニューに登録する候補・11/6）
   const [pickedMenu, setPickedMenu] = useState<string | null>(null)
   const opening = useRef(false)
@@ -66,7 +69,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
       const waiting = today.filter(p => UNPAID.includes(p.status)).sort((a, b) => Number(b.is_owner) - Number(a.is_owner) || a.starts_at.localeCompare(b.starts_at))
       if (!reservationId) reservationId = waiting[0]?.id ?? null
       setParty(today)
-      setTarget({ reservationId, clientId: r.client_id, who: today.find(p => p.id === reservationId) ?? null })
+      setTarget({ reservationId, clientId: r.client_id, who: today.find(p => p.id === reservationId) ?? null, walkIn: again && !reservationId })
     } catch (err) {
       setError(rpcErrorMessage(err))
     } finally {
@@ -80,11 +83,25 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { if (staffName.trim()) void open() }, [])
 
+  /** まだ受付していないお連れ様の予約を受付して、その方の会計へ（11/11 店舗端末点検：予約のない会計にされていた） */
+  async function checkInAndPay(p: PartyEntry) {
+    if (loading) return
+    setLoading(true); setError(null)
+    try {
+      await callStaffRpc('staff_check_in_party', { p_user_id: userId, p_reservation_ids: [p.id], p_staff_name: staffName || '店舗端末' })
+    } catch (err) { setError(rpcErrorMessage(err)); setLoading(false); return }
+    setLoading(false)
+    setPaid(null); setPickedMenu(null); setPaidWho(null); setPaidWalkIn(false)
+    void open(true)
+  }
+
   if (paid) {
     // 2名様以上：受付済みでまだ会計していない方がいれば、その方の会計へ（メニュー・担当は予約から）
     const next = party.filter(p => UNPAID.includes(p.status) && p.id !== paidWho?.id).sort((a, b) => Number(b.is_owner) - Number(a.is_owner))[0]
     /** ご来店のグループ（受付した方。来ていない方・取消は入れない） */
     const group = party.filter(p => [...UNPAID, 'completed'].includes(p.status))
+    /** まだ受付していない今日のお連れ様の予約 */
+    const notIn = party.filter(p => !p.is_owner && p.status === 'confirmed')
     return (
       <div data-guide="paid" style={{ textAlign: 'left', fontFamily: UI }}>
         <p style={{ fontSize: 13, fontWeight: 600, color: '#2F7D5B', margin: '0 0 4px' }}>✓ お会計が終わりました</p>
@@ -93,7 +110,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
           <span style={{ fontFamily: '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN",serif', fontSize: 30, fontWeight: 700, color: '#1B1B1A', fontVariantNumeric: 'tabular-nums' }}>{yen(paid.total)}</span>
         </div>
         {error && <p style={{ marginTop: 8, fontSize: 13, color: '#b23a3a' }}>{error}</p>}
-        {!(paidWho && !paidWho.is_owner) && <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} pickedName={paidWho?.menu ?? null} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />}
+        {!(paidWho && !paidWho.is_owner) && !paidWalkIn && <UsualMenuRow userId={userId} staffName={staffName} picked={pickedMenu} pickedName={paidWho?.menu ?? null} loadMenus={async () => (await api.catalog()).service_menus.filter(m => m.kind !== 'option')} />}
         {/* グループ（2名様以上）：全員のお会計が済んだら、グループ全体の完了を出す（11/10 慶一郎さん） */}
         {!next && group.length > 1 && group.every(p => p.status === 'completed') && (
           <p style={{ margin: '14px 0 0', padding: '12px 14px', borderRadius: 12, background: 'rgba(47,125,91,0.07)', color: '#2F7D5B', fontSize: 15, fontWeight: 600 }}>
@@ -109,21 +126,24 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
               もう一度確かめる
             </button>
           </div>
-        ) : <button type="button" disabled={loading} onClick={() => { setPaid(null); setPickedMenu(null); setPaidWho(null); void open(true) }}
+        ) : <>{!next && notIn.map(p => (
+          <button key={p.id} type="button" disabled={loading} onClick={() => void checkInAndPay(p)}
+            style={{ width: '100%', marginTop: 14, minHeight: 54, borderRadius: 14, background: '#161513', border: 'none', color: '#F2E6CC', fontFamily: UI, fontSize: 17, fontWeight: 600, cursor: 'pointer' }}>
+            {p.name}様（お連れ様）を受付して会計{p.menu ? `（${p.menu}）` : ''}
+          </button>
+        ))}<button type="button" disabled={loading} onClick={() => { setPaid(null); setPickedMenu(null); setPaidWho(null); setPaidWalkIn(false); void open(true) }}
           style={next
             ? { width: '100%', marginTop: 14, minHeight: 54, borderRadius: 14, background: '#161513', border: 'none', color: '#F2E6CC', fontFamily: UI, fontSize: 17, fontWeight: 600, cursor: 'pointer' }
             : { width: '100%', marginTop: 12, minHeight: 46, borderRadius: 10, background: '#ffffff', border: '1px solid #D9D9D4', color: '#1B1B1A', fontFamily: UI, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
           {next ? `次：${next.name}様のお会計${next.menu ? `（${next.menu}）` : ''}` : 'もう1件お会計する（予約のない方）'}
-        </button>}
+        </button></>}
       </div>
     )
   }
 
   if (target) {
-    // お連れ様のお会計は、誰の分かを一番上に出す（11/11 点検：上の名前はご本人のままで分からなかった）
-    const mate = target.who && !target.who.is_owner ? target.who.name : null
-    return (<>
-      {mate && <p data-guide="co-mate" style={{ margin: '0 0 10px', padding: '10px 14px', borderRadius: 12, background: '#f8f6f1', border: '1px solid rgba(151,115,43,0.32)', fontSize: 15, fontWeight: 700, color: '#1c1f1d' }}>{mate}様（お連れ様）のお会計</p>}
+    // 誰の分かの見出し（お連れ様・予約のない方）は Checkout の一番上に出す（予約台帳から開いた会計にも出るように）
+    return (
       <Checkout
         quick
         api={api}
@@ -133,11 +153,12 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         initialTicketIds={ticketIds}
         ensureActor={() => !!readActor().trim()}
         onClose={() => setTarget(null)}
-        onDone={sale => { setPaidWho(target.who); setTarget(null); setPaid(sale); onPaid(sale); void fetchTodayPartyOrNull(userId).then(p => { setPartyError(!p); if (p) setParty(p) }) }}
+        notOwner={target.walkIn}
+        onDone={sale => { setPaidWho(target.who); setPaidWalkIn(target.walkIn); setTarget(null); setPaid(sale); onPaid(sale); void fetchTodayPartyOrNull(userId).then(p => { setPartyError(!p); if (p) setParty(p) }) }}
         // お会計で選んだメニューを今日のメニューとして記録する（いつものメニュー・来店の記録に使う。失敗しても会計は続ける）
-        onMenuPicked={code => { setPickedMenu(code); if (target.who && !target.who.is_owner) return; void callStaffRpc('staff_set_visit_menu', { p_user_id: userId, p_menu_code: code, p_staff_name: staffName || null }).catch(() => {}) }}
+        onMenuPicked={code => { setPickedMenu(code); if (target.walkIn || (target.who && !target.who.is_owner)) return; void callStaffRpc('staff_set_visit_menu', { p_user_id: userId, p_menu_code: code, p_staff_name: staffName || null }).catch(() => {}) }}
       />
-    </>)
+    )
   }
 
   return (
@@ -177,6 +198,7 @@ function UsualMenuRow({ userId, staffName, picked, pickedName, loadMenus }: { us
     if (!code || state === 'saving') return
     setState('saving')
     try {
+      // サーバーの引数は p_token（11/11 店舗端末点検：p_staff で送っていて毎回失敗していた）
       const r = await callRpc<{ ok?: boolean; error?: string }>('staff_set_usual_menu', { p_token: getStaffToken(), p_user_id: userId, p_code: code, p_staff_name: staffName || null })
       setState(r.ok ? 'saved' : 'error')
     } catch { setState('error') }
