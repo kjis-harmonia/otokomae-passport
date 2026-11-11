@@ -323,7 +323,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     // 1つだけの案内（ボタンの場所など）は、終わったらそのまま閉じる
     if (task.quiet) { stop(); return null }
     return createPortal(
-      <div className="gd-bubble gd-bottom" role="status" style={aboveNav}>
+      <div className={`gd-bubble gd-bottom${chibi ? ' gd-glass' : ''}`} role="status" style={aboveNav}>
         <p className="gd-count">{task.title}</p>
         <p className="gd-text">これで終わりです</p>
         <div className="gd-actions">
@@ -396,7 +396,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
       )}
       {chibi ? (
         // お客様アプリ：小さいカード（見出しと一言だけ）。終わるは右上の ×（11/11：一覧の下が隠れていた）
-        <div ref={bubbleRef} className={`gd-bubble gd-compact ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite" style={bubbleTop ? undefined : aboveNav}>
+        <div ref={bubbleRef} className={`gd-bubble gd-compact gd-glass ${bubbleTop ? 'gd-top' : 'gd-bottom'}`} role="status" aria-live="polite" style={bubbleTop ? undefined : aboveNav}>
           <button type="button" className="gd-x" aria-label="ガイドを終わる" onClick={stop}>×</button>
           <div className="gd-compact-row">
             <div className="gd-compact-text">

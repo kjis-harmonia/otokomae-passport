@@ -104,3 +104,35 @@
 .gd-compact .gd-text { margin-top: 0 !important; font-size: 16px; line-height: 1.4; }
 .gd-compact .gd-sub { margin-top: 3px !important; font-size: 12.5px; line-height: 1.5; color: rgba(255, 255, 255, 0.75); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .gd-compact .gd-main { flex-shrink: 0; min-height: 40px; min-width: 72px; padding: 0 14px; font-size: 15px !important; }
+
+/* お客様アプリのガイド：iPhone のような、ぷくっとした磨りガラス（11/11 慶一郎さん「黒キモい」）。店舗端末は今までの黒のまま */
+.gd-bubble.gd-glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(250, 247, 240, 0.62) 100%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  color: #1c1f1d;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04),
+    0 12px 32px rgba(28, 31, 29, 0.16),
+    0 2px 6px rgba(28, 31, 29, 0.08);
+}
+/* 磨りガラスが使えない端末は、白に近い地で読めるように */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .gd-bubble.gd-glass { background: rgba(252, 250, 245, 0.97); }
+}
+.gd-glass .gd-count { color: #8a8278; }
+.gd-glass .gd-sub, .gd-glass.gd-compact .gd-sub { color: #5f5a52; }
+.gd-glass .gd-ghost { color: #6b665e; }
+.gd-glass .gd-x, .gd-glass.gd-compact .gd-x { color: #8a8278; }
+.gd-glass .gd-main {
+  background: linear-gradient(180deg, #34312c 0%, #1c1f1d 100%); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 6px rgba(28, 31, 29, 0.22);
+}
+/* 小さいスマホ（〜360px）：ボタンは文の下の行に（文が細く割れて「…」で切れないように） */
+@media (max-width: 360px) {
+  .gd-glass .gd-compact-row { flex-wrap: wrap; justify-content: flex-end; gap: 8px 14px; }
+  .gd-glass .gd-compact-text { flex-basis: 100%; }
+  .gd-glass.gd-compact .gd-sub { -webkit-line-clamp: 3; }
+}
