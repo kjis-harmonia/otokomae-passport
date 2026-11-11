@@ -19,7 +19,7 @@ import { ginFlow } from '../utils/env'
 import { V2Account } from './V2Account'
 import { V2Ginpay } from './V2Ginpay'
 import { LaunchNotice } from './LaunchClock'
-import { V2Campaign } from './V2Campaign'
+import { V2Campaign, hasCampaign } from './V2Campaign'
 import './v2.css'
 
 /** お知らせのリンクの ?hold=…（キャンセル待ちで押さえた枠）を1回だけ読む（読んだら URL から消す） */
@@ -139,7 +139,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
       </nav>
 
       {isHome && showCampaign && <LaunchNotice onOpenChange={onLaunchNotice} />}
-      {isHome && showCampaign && !launchNotice && !noticeShown && <V2Campaign onGacha={() => go('gacha')} />}
+      {isHome && showCampaign && hasCampaign && !launchNotice && !noticeShown && <V2Campaign onGacha={() => go('gacha')} />}
       <V2Menu open={menu} onClose={() => setMenu(false)} onTickets={() => setActiveTab('tickets')} onAccount={() => setActiveTab('mypage')} onPeople={ginFlow() ? () => setPeople(true) : undefined} />
       {/* ☰ の「いつもの・お連れ様」（Staging） */}
       <V2PeopleSheet open={people} onClose={() => setPeople(false)} ownerMenu={null} manage />
