@@ -10,7 +10,7 @@ import { launchAt, launched, launchHm, serverNow } from '../utils/launch'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronRight, Pointer, Sparkles, Volume2, X } from 'lucide-react'
 import { canUseGacha, drawGacha, gachaDays, gachaReservedLabel, gachaUntil, keepGacha, loadGacha, peekGacha, type GachaKeepResult, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
-import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles } from '../audio/gachaSoundtrack'
+import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles, type OpenTame } from '../audio/gachaSoundtrack'
 import { GachaAudioPlayback } from '../audio/gachaAudioPlayback'
 import { isStaging } from '../utils/env'
 import { CUSTOMER_AUTH_REQUIRED_EVENT, getCustomerSession } from '../utils/customerSession'
@@ -21,7 +21,7 @@ import { GachaGauge, GaugeMonth } from './GachaGauge'
 
 // 演出はガチャ画面を開くたびにランダム（11/1、11/3 アプリを開き直さなくても画面ごとに選び直す）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
-type Theme = { short: string; id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean }
+type Theme = { short: string; id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean; openTame?: OpenTame }
 const THEMES: Theme[] = [
   { id: 'deep', short: '深海編', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4?v=deep3', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4?v=deep-pace1', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
   // 銀河の音は1部の終わりがそのまま待ちの頭へ続く曲なので、重ねるのは短く。開放は 7.9 秒で真っ白になりきる。そこからチケットを飛ばす
@@ -29,7 +29,9 @@ const THEMES: Theme[] = [
     audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg', hold: true }, // 保留中（11/1「宇宙編微妙やな」）。ランダムには出さない
   // 恐竜編：レックスの咆哮→大草原→洞窟→光る足跡。開放は足跡から光の柱→真っ白→鳳凰編の走る銀ちゃん（1本につないである・11/2）
   { id: 'dino', short: '恐竜編', name: '太古の覇王', tap: '光る足跡をタップ', intro: '/gacha/dino/intro.mp4?v=cut8', introPoster: '/gacha/dino/intro.jpg?v=cut8', wait: '/gacha/dino/wait.mp4?v=seam2', open: '/gacha/dino/open.mp4?v=cut8', poster: '/gacha/dino/wait.jpg?v=seam2',
-    audio: { intro: '/gacha/dino/intro-audio.m4a?v=cut8', wait: '/gacha/dino/wait-audio.wav', open: '/gacha/dino/open-audio.m4a?v=cut8' } },
+    audio: { intro: '/gacha/dino/intro-audio.m4a?v=cut8', wait: '/gacha/dino/wait-audio.wav', open: '/gacha/dino/open-audio.m4a?v=cut8' },
+    // 白い霧（開く音の 12.75〜13.6 秒）にザーッという強い雑音が入っている。そこだけ高い音を削って小さく（11/12 慶一郎さん）
+    openTame: { from: 12.7, to: 13.8, cutoff: 1500, level: 0.4 } },
 ]
 // ?gacha=galaxy で決めうち（見比べる用・保留中のテーマも出せる）
 const pick = new URLSearchParams(location.search).get('gacha')
@@ -396,7 +398,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     if (!i || !w || !b) return
     sound.current?.dispose()
     sound.current = new GachaAudioPlayback(
-      () => new GachaSoundtrack(gachaAudioContext(), cache.audio, THEME.introFade),
+      () => new GachaSoundtrack(gachaAudioContext(), cache.audio, THEME.introFade, THEME.openTame ?? null),
       () => {
         const current = phaseRef.current
         const video = current === 'intro' ? intro.current : current === 'tap' ? wait.current : burst.current
