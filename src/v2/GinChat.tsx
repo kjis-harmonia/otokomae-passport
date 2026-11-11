@@ -1398,6 +1398,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     let staffSel: string | null = null
     const withStaff = <T extends object>(p: T) => (staffSel === null ? p : { ...p, p_staff: staffSel })
     const staffNames = opts?.staff ?? []
+    // 変更でも、このご予約のメニューを担当できる人だけ。顔そりは【ヨンピル】【テイテイ】【銀二郎】で【どちらでも】は出さない（11/11 慶一郎さん）
+    const shaveOnlyStaff = (x: (typeof staffNames)[number]) => !!x.menus?.length && x.menus.every(c => /^shave-/.test(c))
+    const shaveMenus = () => menuCodes.length > 0 && menuCodes.every(c => /^shave-/.test(c))
+    const changeStaff = () => {
+      const list = staffNames.filter(x => !x.menus || menuCodes.every(c => x.menus!.includes(c)))
+      return shaveMenus() ? [...list].sort((a, b) => Number(shaveOnlyStaff(b)) - Number(shaveOnlyStaff(a))) : list
+    }
     const sameMenus = () => menuCodes.length === originalCodes.length && menuCodes.every((code, i) => code === originalCodes[i])
     const forPerson = (c?: Confirmation) => c?.old?.id === r.id && c.old.companion_id === (r.companion_id ?? null)
     const reviewedLabel = (c: Confirmation) => `${slotLabel(c.old.starts_at)} ${c.old.items.map(i => i.name).join('・')}`
@@ -1419,7 +1426,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       return results.flat().filter(d => typeof d === 'string' && d < addDays(from, days))
     }
     // 「変更・キャンセル」から入るので、キャンセルしたい方にも合う言い方（11/10 夜の点検）
-    let action = await ask(`ご予約の変更・キャンセルですね。\n${label(r)}\nどうされますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(staffNames.length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
+    let action = await ask(`ご予約の変更・キャンセルですね。\n${label(r)}\nどうされますか？`, [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(changeStaff().length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
     let dayOnly: string | null = null
     for (let guard = 0; guard < 24; guard++) {
       // キャンセル
@@ -1525,8 +1532,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         // 担当（指名）を変える（11/10 慶一郎さん「今すぐ変えよ！」）。DB 20261110120000_change_staff の p_staff
         const ANY = 'どちらでも'
         const now = r.staff_name ? `\n今は${r.staff_name}${r.nominated ? '（ご指名）' : ''}です。` : ''
-        const a = await ask(`${who(r)}ご担当のご希望はありますか？${now}`, [...staffNames.map(s => ({ label: s.name, strong: s.name === r.staff_name })), { label: ANY }])
-        const pick = a === ANY || /どちらでも|どっちでも|誰でも|おまかせ/.test(a) ? 'any' : (staffNames.find(s => s.name === a) ?? longestIn(a, staffNames, s => s.name))?.id
+        const a = await ask(`${who(r)}ご担当のご希望はありますか？${now}`, [...changeStaff().map(s => ({ label: s.name, strong: s.name === r.staff_name })), ...(shaveMenus() ? [] : [{ label: ANY }])])
+        const pick = a === ANY || /どちらでも|どっちでも|誰でも|おまかせ/.test(a) ? 'any' : (changeStaff().find(s => s.name === a) ?? longestIn(a, changeStaff(), s => s.name))?.id
         if (!pick) { action = a; continue }
         staffSel = pick
         // 同じ時間で入れるかは確認（preview）で確かめる。入れなければ同じ日のほかの時間へ
@@ -1540,7 +1547,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       }
       if (action !== 'summary') {
         // 分からない言葉：もう一度どれを変えるか聞く
-        action = await ask('どちらを変更されますか？', [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(staffNames.length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
+        action = await ask('どちらを変更されますか？', [{ label: '日時を変更', strong: true }, { label: 'メニューを変更' }, ...(changeStaff().length > 1 ? [{ label: '担当を変更' }] : []), { label: 'キャンセル' }])
         continue
       }
       // まとめて確認：変更前と変更後・料金・銀Pay・外れる券・直前の扱い
@@ -1579,7 +1586,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       ]
       const BTN = 'この内容に変更する'
       const a = await ask(`${who(r)}ご予約をこのように変更します。よろしければ、下の【${BTN}】を押してくださいね。\n${lines.join('\n')}`,
-        [{ label: BTN, strong: true }, { label: '日時を変更' }, { label: 'メニューを変更' }, ...(staffNames.length > 1 ? [{ label: '担当を変更' }] : []), { label: 'やめておく' }])
+        [{ label: BTN, strong: true }, { label: '日時を変更' }, { label: 'メニューを変更' }, ...(changeStaff().length > 1 ? [{ label: '担当を変更' }] : []), { label: 'やめておく' }])
       if (!(a === BTN && fromChip.current)) {
         if (a === 'やめておく' || intent(a) === 'no') { await say('かしこまりました。ご予約はそのままです。'); return end() }
         if (a === BTN || intent(a) === 'yes') { await say(`ありがとうございます！最後に【${BTN}】を押して、変更を確定してくださいね。`); continue }
