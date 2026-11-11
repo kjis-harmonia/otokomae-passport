@@ -8,6 +8,7 @@ import type { SbCommand, SbInput, SbOptions, SbPreview, SbReservation } from './
 import { SbModal } from './SbModal'
 import { SbMenuPicker } from './SbMenuPicker'
 import { recordMenuUsage } from './sbMenuUsage'
+import { boardWarnBefore } from './sbBoardTask'
 
 /** 新規予約の初期値。draft は「話して予約登録」で読み取った内容（スタッフがフォームで確かめてから送る） */
 /** 名前を言わずに入れた予約（サロンボードに電話予約が入ったときの枠埋め） */
@@ -89,7 +90,7 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
       <button className="sb-secondary" disabled={busy} onClick={() => setPreview(null)}><ChevronLeft size={18} />戻る</button>
       <button className="sb-primary" data-guide="sb-register" disabled={busy} onClick={submit}><Check size={18} />{sending ? '送信中…' : r ? '変更を保存' : '予約を登録'}</button>
     </> : <button className="sb-primary sb-grow" data-guide="sb-review" disabled={busy || !options.menus.length} onClick={() => void review()}>{checking ? '内容を確認中…' : '内容を確認'}</button>}</div>}>
-    {preview ? <dl className="sb-facts">
+    {preview ? <><dl className="sb-facts">
       <dt>お客様</dt><dd>{preview.input.customer_name}{preview.input.customer_phone && <small>{preview.input.customer_phone}</small>}</dd>
       <dt>日時</dt><dd>{jstDateLabel(date)} {jstTime(preview.input.starts_at)}〜</dd>
       <dt>担当</dt><dd>{options.staff.find(s => s.id === preview.value.staff_id)?.name}{preview.input.staff_id === null ? '（指名なし）' : '（指名）'}</dd>
@@ -97,7 +98,7 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
       <dt>所要時間</dt><dd>{preview.value.duration_min}分{preview.value.buffer_min ? ` ＋片付け${preview.value.buffer_min}分` : ''}</dd>
       <dt>予約時の金額</dt><dd className="sb-price">{yen(preview.value.total_price)}</dd>
       {preview.input.note && <><dt>メモ</dt><dd className="sb-prewrap">{preview.input.note}</dd></>}
-    </dl> : <form ref={form} onSubmit={e => { e.preventDefault(); void review() }}>
+    </dl>{r && boardWarnBefore(r) && <p className="sb-board-note">{r.source === 'hotpepper' ? 'ホットペッパーの予約です。' : 'サロンボードに入れてある予約です。'}保存したら、サロンボードでも同じ変更をしてください。</p>}</> : <form ref={form} onSubmit={e => { e.preventDefault(); void review() }}>
       <fieldset disabled={busy} className="sb-fieldset">
         {d && <p className="sb-understood">{d.understood.length ? `読み取った内容：${d.understood.join("・")}` : "読み取れた内容がありません"}。足りないところを入れて確かめてください。</p>}
         <label className="sb-field">お客様名<input value={name} onChange={e => { setName(e.target.value); if (!r) setClient(null) }} required={!!r} maxLength={60} autoComplete="off" placeholder={r ? 'お名前' : '空なら「電話予約」で入れます'} /></label>

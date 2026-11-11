@@ -87,7 +87,7 @@ export function SbToday({ ledger, now, blocked, onOpen, onNew, onTransfer }: {
         {s.pendingTransfer > 0 && (
           <button type="button" className="sb-buddy-row" onClick={onTransfer}>
             <i className="sb-dot sb-gold-dot sb-buddy-dot" aria-hidden="true" />
-            <span className="sb-buddy-main"><strong>Salon Board に未転記</strong><small>{s.pendingTransfer}件</small></span>
+            <span className="sb-buddy-main"><strong>サロンボード作業</strong><small>{s.pendingTransfer}件</small></span>
             <ChevronRight size={16} />
           </button>
         )}
