@@ -421,3 +421,25 @@ test('interruption discards frozen old voices immediately instead of replaying a
   assert.equal(f.nodes[2].starts[1], 8)
   f.playback.dispose()
 })
+
+// 深海編：開く音が切れた後（銀ちゃんが券を見せる所）を、待ちの音を小さく重ねてつなぐ（11/12）
+test('open bed fills the silent tail softly and ends with the video', () => {
+  const { ctx, nodes } = fixture()
+  const audio = new GachaSoundtrack(ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 14.25 } }, INTRO_CROSSFADE, null, { from: 9.2, to: 14.25, level: 0.35, fadeIn: 0.8, fadeOut: 2 })
+  audio.startIntro(0); audio.open(30)
+  const bed = nodes.at(-1)
+  assert.equal(bed.loop, true)
+  assert.equal(bed.starts[0], 30 + 9.2)
+  assert(Math.abs(bed.stopped - (30 + 14.25 + 0.01)) < 1e-9)
+  const ramps = bed.gain.gain.events.filter(e => e[0] === 'ramp').map(e => e[1])
+  assert(Math.max(...ramps) <= 0.35 + 1e-9 && Math.max(...ramps) > 0.34)
+  assert.equal(ramps.at(-1), 0)
+  // 途中で閉じても、今の大きさからやわらかく消える（0 に飛ばない）
+  audio.stop(30 + 11)
+  const held = bed.gain.gain.events.filter(e => e[0] === 'ramp' && Math.abs(e[2] - 41) < 1e-9)[0]
+  assert(held && held[1] > 0.3)
+})
+test('a theme without an open bed adds no extra voice', () => {
+  const { audio, nodes } = fixture(); audio.startIntro(0); audio.open(30)
+  assert.equal(nodes.length, 3)
+})
