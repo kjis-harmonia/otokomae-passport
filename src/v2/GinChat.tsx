@@ -104,12 +104,24 @@ type Plan = { staff: Record<string, string | null>; times: Record<string, string
 const sameWho = (a: BookPerson[], b: BookPerson[]) => a.length === b.length && a.every(x => b.some(y => y.key === x.key))
 /** いつもの担当（この端末に覚える）。ご本人は前の AI予約と同じ場所、お連れ様は人ごと */
 const MATE_STAFF_KEY = 'ginjiro_usual_staff_mates'
-function usualStaffOf(personKey: string): string | null {
+/** 顔そりのいつもの担当は別に覚える（カットはテイテイ・顔そりはヨンピル の両方を覚える 11/12 慶一郎さん）。{人: 担当} */
+const SHAVE_STAFF_KEY = 'ginjiro_usual_staff_shave'
+const isShave = (code: string | undefined) => !!code && /^shave-/.test(code)
+function usualStaffOf(personKey: string, menuCode?: string): string | null {
+  if (isShave(menuCode)) {
+    const shave = getStoredValue<Record<string, string> | null>(SHAVE_STAFF_KEY, null)
+    // 顔そりの登録がまだなら、今までの「いつもの担当」（顔そりもできる人なら下で使う）
+    if (shave && typeof shave[personKey] === 'string') return shave[personKey]
+  }
   if (personKey === 'me') return getUsualStaff()
   const map = getStoredValue<Record<string, string> | null>(MATE_STAFF_KEY, null)
   return map && typeof map[personKey] === 'string' ? map[personKey] : null
 }
-function setUsualStaffOf(personKey: string, staffId: string): void {
+function setUsualStaffOf(personKey: string, staffId: string, menuCode?: string): void {
+  if (isShave(menuCode)) {
+    const shave = getStoredValue<Record<string, string> | null>(SHAVE_STAFF_KEY, null) ?? {}
+    setStoredValue(SHAVE_STAFF_KEY, { ...shave, [personKey]: staffId }); return
+  }
   if (personKey === 'me') { setUsualStaff(staffId); return }
   const map = getStoredValue<Record<string, string> | null>(MATE_STAFF_KEY, null) ?? {}
   setStoredValue(MATE_STAFF_KEY, { ...map, [personKey]: staffId })
@@ -851,7 +863,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         // いつもの担当を登録している方にも毎回聞く：「担当はいつもの〇〇でよろしいですか？」【はい】【ほかの担当】【どちらでも】
         //   （11/10 夜 慶一郎さん「AI が聞いてくれんと言われたらむかつく」）
         const pk = d.who[0].key
-        const known = usualStaffOf(pk)
+        const code1 = d.menus[pk]?.code
+        const known = usualStaffOf(pk, code1)
         const usualSt = !usualStaffDeclined && known && pickable.some(s => s.id === known) ? known : null
         const ANY = 'どちらでも', YES = 'はい'
         const a = usualSt
@@ -877,8 +890,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           if (d.recheck && !d.recheck.note) d.recheck.note = st ? `担当を${staffName(st)}に変更しました。` : '担当は、どちらでも に変更しました。'
           // 次回から選ばなくていいように、登録するか聞く（11/10 慶一郎さん）。もういつもの担当なら聞かない
           if (st && st !== known) {
-            const r = await askYN(`次回からも${staffName(st)}で、いつもの担当に登録しておきましょうか？\n登録すると、次からは【はい】を押すだけで選べます。`, '登録する', '毎回選ぶ')
-            if (r === 'yes') { setUsualStaffOf(pk, st); await say(`かしこまりました。いつもの担当を${staffName(st)}で登録しました。`) }
+            const what = isShave(code1) ? '顔そりの' : ''
+            const r = await askYN(`次回の${what}ご予約も${staffName(st)}で、いつもの${what}担当に登録しておきましょうか？\n登録すると、次からは担当を選ぶ手間がなくなります。`, '登録する', '毎回選ぶ')
+            if (r === 'yes') { setUsualStaffOf(pk, st, code1); await say(`かしこまりました。いつもの${what}担当を${staffName(st)}で登録しました。`) }
           }
           continue
         }
@@ -897,7 +911,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           const anyChip = /^shave-/.test(d.menus[ask1.key]?.code ?? '') ? [] : [{ label: 'どちらでも' }]
           // このメニューを担当できるのが1人だけなら聞かない
           if (pickable.length <= 1) { d.staffs[ask1.key] = null; continue }
-          const known = usualStaffOf(ask1.key)
+          const known = usualStaffOf(ask1.key, d.menus[ask1.key]?.code)
           const usualSt = known && pickable.some(s => s.id === known) ? known : null
           const ANY = 'どちらでも', YES = 'はい'
           const a = usualSt
