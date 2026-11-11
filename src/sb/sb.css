@@ -600,3 +600,18 @@
 .sb-over-mark { display: inline-flex; flex: none; align-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #d64545; color: #fff; font-size: 11px; font-weight: 700; vertical-align: 2px; letter-spacing: 0.04em; }
 .sb-reservation-list strong.sb-res-name { display: flex; align-items: center; min-width: 0; }
 .sb-plan-note { margin-left: 6px; font-size: 13px; color: var(--sb-muted); }
+
+/* 11/11 監査 */
+/* 2人以上の組（ご本人にもお連れ様にも同じ印）。お連れ様の印と同じ色で、組だと分かるように */
+.sb-party-mark { display: inline-flex; flex: none; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 7px 1px 5px; border-radius: 999px; background: #e6ecfa; color: #34509a; font-size: 12px; font-weight: 700; vertical-align: 2px; font-variant-numeric: tabular-nums; }
+.sb-party-mark svg { flex: none; }
+.sb-customer-name .sb-companion-of { display: block; font-size: 14px; font-weight: 600; margin: 2px 0 0; }
+/* 不来店・取消は右の端に離して（来店済みにする・施術完了のすぐ隣に置かない） */
+.sb-quick-danger { display: inline-flex; gap: 14px; margin-left: auto; }
+.sb-confirm-note { margin: 4px 0 18px; padding: 12px 14px; border-radius: 12px; background: #fdecea; color: var(--sb-red); font-weight: 600; line-height: 1.55; }
+/* iPhone 320 幅：日付の文字が前の日・次の日のボタンに重ならないように */
+@media (max-width: 360px) {
+  .sb-date-label span { font-size: 15px; letter-spacing: 0; }
+  .sb-compact .sb-date-label span { font-size: 15px; }
+  .sb-date-label { min-width: 0; }
+}

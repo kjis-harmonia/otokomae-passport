@@ -16,6 +16,7 @@ import { SbMoveSheet } from './SbMove'
 import { useReservationDrag, type SbMoveTarget } from './sbDrag'
 import { SbHotpepper } from './SbHotpepper'
 import { SbTicketPlan } from './SbTicketPlan'
+import { companionOf, partyOf, personName } from './sbParty'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
 import { announceVoice, playChime, unlockChime } from './sbChime'
@@ -309,6 +310,8 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
   onOpen: (id: string) => void; onNew: (minute?: number) => void; onTapSlot: (minute: number, shiftEnd: number) => void; onBlock: (block: SbLedger['blocks'][number]) => void
 }) {
   const blocks = ledger.blocks.filter(b => b.staff_id === null || b.staff_id === staff.id)
+  // 組は担当をまたぐ（ご本人はテイテイ・お連れ様は銀二郎）ので、その日の全部の予約から作る
+  const parties = useMemo(() => partyOf(ledger.reservations), [ledger.reservations])
   return <><div className="sb-staff-name" style={{ minHeight: lanes * LANE_H }}><strong>{staff.name}</strong><small>{staff.shifts.length ? `同時${staff.capacity}枠` : '休み'}</small></div>
     <div className="sb-staff-timeline" data-staff-id={staff.id} style={{ height: lanes * LANE_H }}>
       {staff.shifts.map((s, i) => <div key={i} className="sb-working" style={{ left: x(jstMinutesOf(s.start, date)), width: x(jstMinutesOf(s.end, date)) - x(jstMinutesOf(s.start, date)) }} />)}
@@ -333,12 +336,12 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
         const dragging = drag.view?.id === r.id ? drag.view : null
         // 同時枠の外（4本目〜）：HOT PEPPER が枠を超えて受けた予約。赤く出して段取りを組めるように（11/1 慶一郎さん）
         const over = r.booking_lane >= staff.capacity
-        const companion = companionOf(r)
+        const companion = companionOf(r), party = parties.get(r.id)
         return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}${r.source === 'app' ? ' sb-src-ai' : ''}${dragging ? ' sb-dragging' : ''}${over ? ' sb-over' : ''}`} aria-label={`${over ? '枠オーバー ' : ''}${jstTime(r.starts_at)} ${companion ? `${companion}様（${r.customer_name}様のお連れ様）` : r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`}
           onPointerDown={e => drag.start(e, r)} onClick={() => { if (drag.clicked()) onOpen(r.id) }} onContextMenu={e => { if (r.status === 'confirmed') e.preventDefault() }}
           style={{ left: x(start) + 2, width: Math.max(12, x(end) - x(start) - 4), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10, ...(dragging ? { transform: `translate(${dragging.dx}px, ${dragging.dy}px)` } : {}) }}>
           {dragging && <em className="sb-drag-time">{`${Math.floor(dragging.minutes / 60)}:${String(dragging.minutes % 60).padStart(2, '0')}`}</em>}
-          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{over && <b className="sb-over-mark">枠オーバー</b>}{companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}</small>
+          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{over && <b className="sb-over-mark">枠オーバー</b>}{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}</small>
         </button>{until > end && <div className="sb-buffer" aria-label="片付け時間" style={{ left: x(end), width: x(until) - x(end), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10 }} />}</div>
       })}
       {nowMin !== null && nowMin >= range.start && nowMin < range.end && <div className="sb-now" style={{ left: x(nowMin) }} aria-hidden="true" />}
@@ -346,13 +349,16 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
 }
 
 function ReservationList({ reservations, onPick }: { reservations: SbReservation[]; onPick: (id: string) => void }) {
-  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => { const companion = companionOf(r); return <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><small>{r.items.map(i => i.name).join('・')}{companion ? `／${r.customer_name}様のお連れ様` : ''}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}<ChevronRight size={18} /></button> })}</div> : <p className="sb-muted">予約はありません。</p>
+  const parties = partyOf(reservations)
+  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => { const companion = companionOf(r), party = parties.get(r.id); return <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><small>{r.items.map(i => i.name).join('・')}{companion ? `／${r.customer_name}様のお連れ様` : ''}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="未転記" />}<ChevronRight size={18} /></button> })}</div> : <p className="sb-muted">予約はありません。</p>
 }
 
 function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onEdit, onSend }: {
   reservation: SbReservation; actor: string; busy: boolean; blocked: boolean; onClose: () => void; onEdit: () => void; onSend: (c: SbCommand) => Promise<void>
 }) {
   const [cancel, setCancel] = useState(false)
+  // 不来店も確かめてから（11/11 監査：1回押すと送られ、AI予約の停止＝無断キャンセル扱いにもつながる）
+  const [noShow, setNoShow] = useState(false)
   const [reason, setReason] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyFallback, setCopyFallback] = useState(false)
@@ -364,18 +370,17 @@ function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onE
   const base = { reservation_id: r.id, expected_updated_at: r.updated_at }
   const labels: Record<string, string> = { created: '登録', edited: '内容変更', transfer_updated: '転記状態変更', rescheduled: '日時変更', staff_changed: '担当変更', checked_in: '来店', completed: '完了', cancelled: '取消', no_show: '不来店' }
   return <SbModal title={`${jstTime(r.starts_at)}–${jstTime(r.ends_at)} ${STATUS_LABEL[r.status]}`} busy={busy} onClose={onClose}
-    footer={cancel ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setCancel(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'cancel', reason })}>予約を取り消す</button></div> : ['confirmed', 'checked_in'].includes(r.status) ? <button className="sb-primary sb-grow" disabled={blocked} onClick={onEdit}>内容を変更</button> : undefined}>
-    <h3 className="sb-customer-name">{r.customer_name}</h3>{r.customer_phone && <a className="sb-phone" href={`tel:${r.customer_phone}`}>{r.customer_phone}</a>}
+    footer={noShow ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setNoShow(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'no_show' })}>不来店にする</button></div> : cancel ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setCancel(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'cancel', reason })}>予約を取り消す</button></div> : ['confirmed', 'checked_in'].includes(r.status) ? <button className="sb-primary sb-grow" disabled={blocked} onClick={onEdit}>内容を変更</button> : undefined}>
+    <h3 className="sb-customer-name">{personName(r)}{companionOf(r) && <small className="sb-companion-of">（{r.customer_name}様のお連れ様）</small>}</h3>{r.customer_phone && <a className="sb-phone" href={`tel:${r.customer_phone}`}>{r.customer_phone}</a>}
     {r.source === 'app' && <AiPause reservationId={r.id} actor={actor} blocked={blocked} />}
     <dl className="sb-facts"><dt>日付</dt><dd>{jstDateLabel(getJapanDateString(new Date(r.starts_at)))}</dd><dt>担当</dt><dd>{r.staff_name}{r.nominated ? '（指名）' : '（指名なし）'}</dd>
       <dt>メニュー</dt><dd>{r.items.map(i => <span className="sb-line" key={i.menu_code}>{i.name}<small>{i.duration_min}分 / {yen(i.price)}</small></span>)}</dd>
       <dt>予約時の金額</dt><dd>{yen(r.total_price)}</dd><SbTicketPlan reservation={r} />{r.note && <><dt>メモ</dt><dd className="sb-prewrap">{r.note}</dd></>}{r.external_ref && <><dt>予約番号</dt><dd>{r.external_ref}</dd></>}
     </dl>
-    {cancel ? <label className="sb-field">取消理由（任意）<input value={reason} maxLength={100} disabled={busy} onChange={e => setReason(e.target.value)} /></label> : <>
+    {noShow ? <p className="sb-confirm-note">{personName(r)}様を不来店（無断キャンセル）にします。AI予約の受付にも影響します。</p> : cancel ? <label className="sb-field">取消理由（任意）<input value={reason} maxLength={100} disabled={busy} onChange={e => setReason(e.target.value)} /></label> : <>
       <div className="sb-quick-actions">{r.status === 'confirmed' && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'checked_in' })}>来店済みにする</button>}
         {['checked_in', 'in_service', 'awaiting_payment'].includes(r.status) && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'completed' })}>施術完了</button>}
-        {r.status === 'confirmed' && Date.parse(r.starts_at) <= openedAt && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'no_show' })}>不来店</button>}
-        {r.status === 'confirmed' && <button className="sb-text-danger" disabled={blocked} onClick={() => setCancel(true)}>予約を取り消す</button>}</div>
+        {r.status === 'confirmed' && <span className="sb-quick-danger">{Date.parse(r.starts_at) <= openedAt && <button className="sb-text-danger" disabled={blocked} onClick={() => setNoShow(true)}>不来店</button>}<button className="sb-text-danger" disabled={blocked} onClick={() => setCancel(true)}>予約を取り消す</button></span>}</div>
       {!(r.source === 'hotpepper' && r.transfer_status === 'not_required') && <section className="sb-transfer"><h3>Salon Board <span>{TRANSFER[r.transfer_status]}</span></h3>
         <CopyRows r={r} />
         <button className="sb-secondary sb-grow" onClick={() => { void navigator.clipboard?.writeText(text).then(() => { setCopied(true); setCopyFallback(false) }).catch(() => setCopyFallback(true)); if (!navigator.clipboard) setCopyFallback(true) }}><Clipboard size={18} />{copied ? 'コピーしました' : 'まとめてコピー'}</button>
@@ -418,9 +423,9 @@ function CopyRows({ r }: { r: SbReservation }) {
 
 /** AI予約で「お連れ様」として一緒に取った予約（メモの「お連れ様：○○様」）。予約した人の名前のままだと二重予約に見えるので、
  *  お連れ様の名前と印を出し、誰のお連れ様かを添える（11/1 慶一郎さん） */
-function companionOf(r: { note?: string | null }): string | null {
-  const m = r.note?.match(/^お連れ様：(.+?)様?$/m)
-  return m ? m[1].trim() || null : null
+/** 2人以上の組の印（ご本人にもお連れ様にも同じ「2名 1/2」）。11/11 監査：ご本人の枠に印が無く、二重予約に見えた */
+function PartyMark({ p }: { p?: { size: number; index: number } }) {
+  return p ? <b className="sb-party-mark" aria-label={`${p.size}名の組の${p.index}人目`}><Users size={12} strokeWidth={2.4} />{p.size}名 {p.index}/{p.size}</b> : null
 }
 
 function CompanionMark() {
