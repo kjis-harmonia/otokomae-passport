@@ -6,6 +6,7 @@ import { Check } from 'lucide-react'
 import { addDaysToDateString, getJapanDateString } from '../utils/dateUtils'
 import { jstDateLabel, jstTime } from '../utils/bookingApi'
 import { callStaffRpc } from './sbRpc'
+import { sbCloseErrorText } from './sbCloseError'
 import { SbModal } from './SbModal'
 import type { SbOptions } from './sbTypes'
 
@@ -39,13 +40,13 @@ export function SbCloseSheet({ options, preset, actor, onClose, onDone, onNewBoo
     if (!ready || busy) return
     setBusy(true); setError(null)
     try {
-      const r = await callStaffRpc<{ ok?: boolean; overlap?: number; error?: string }>('staff_close_time', {
+      // サーバーの { error } は callStaffRpc が例外にして投げる（ここで r.error を見ても来ない）。理由ごとの文は sbCloseErrorText
+      const r = await callStaffRpc<{ ok?: boolean; overlap?: number }>('staff_close_time', {
         p_staff_ids: staffIds, p_starts_at: iso(date, start!), p_ends_at: iso(date, end!), p_actor: actor || 'SB', p_note: null,
       })
-      if (r.error) { setError(r.error === 'past' ? 'もう過ぎた時間は閉められません。' : r.error === 'invalid_staff' ? '担当を選び直してください。' : '時間を確かめてください（30分刻み・終わりは始まりより後）。'); return }
       const who = options.staff.filter(s => staffIds.includes(s.id)).map(s => s.name).join('・')
       onDone(`${jstDateLabel(date)} ${hm(start!)}〜${hm(end!)}（${who}）をクローズしました。AI 予約は入りません。${r.overlap ? `この時間にはすでに予約が${r.overlap}件あります（そのまま残ります）。` : ''}`)
-    } catch { setError('閉められませんでした。通信を確かめて、もう一度押してください。') }
+    } catch (err) { setError(sbCloseErrorText('close', err)) }
     finally { setBusy(false) }
   }
 
@@ -107,17 +108,16 @@ export function SbReopenSheet({ block, staffName, actor, onClose, onDone }: {
   const reopen = async () => {
     setBusy(true); setError(null)
     try {
-      const r = await callStaffRpc<{ ok?: boolean; error?: string; still_blocked?: number }>('staff_reopen_time', { p_block_id: block.id, p_actor: actor || 'SB' })
-      if (r.error) { setError('この時間は本部で閉めたものです。本部で外してください。'); return }
+      const r = await callStaffRpc<{ ok?: boolean; still_blocked?: number }>('staff_reopen_time', { p_block_id: block.id, p_actor: actor || 'SB' })
       // 監査3 R2：ほかのクローズ・休憩がまだ重なっていれば、AI 予約は入らないまま
       onDone(`${jstTime(block.starts_at)}〜${jstTime(block.ends_at)}（${staffName}）のクローズを外しました。${r.still_blocked ? 'ただし、この時間にはまだ別のクローズか休憩があるので、AI 予約は入りません。' : 'AI 予約が入るようになります。'}`)
-    } catch { setError('外せませんでした。通信を確かめて、もう一度押してください。') }
+    } catch (err) { setError(sbCloseErrorText('reopen', err)) }
     finally { setBusy(false) }
   }
   return <SbModal title="クローズ" busy={busy} onClose={onClose}
     footer={<div className="sb-actions"><button className="sb-secondary sb-grow" disabled={busy} onClick={() => void reopen()}>{busy ? '外しています…' : 'クローズを外す'}</button></div>}>
     <dl className="sb-facts"><dt>担当</dt><dd>{staffName}</dd><dt>時間</dt><dd>{jstTime(block.starts_at)}〜{jstTime(block.ends_at)}</dd></dl>
-    <p className="sb-muted">サロンボードの予約が取り消しになったときだけ外してください。</p>
+    <p className="sb-muted">サロンボードの予約がキャンセルになったときだけ外してください。</p>
     {error && <p role="alert" className="sb-error">{error}</p>}
   </SbModal>
 }
