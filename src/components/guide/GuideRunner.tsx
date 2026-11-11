@@ -302,6 +302,13 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
     if (step.stopHere) advance(run.step, task.steps.length)
     else advance(run.step)
   }
+  // 「あとで」：この作業を飛ばして終える（then があれば続けてそちらへ）
+  const pressSkip = () => { if (run && task) advance(run.step, task.steps.length) }
+  // 続けて次の作業へ（公開の案内：お連れ様の登録 → 銀ちゃんとAI予約する・11/11 慶一郎さん）
+  const thenTask = finished ? task?.then : undefined
+  useEffect(() => {
+    if (thenTask && tasks.some(t => t.id === thenTask)) setShared(ns, { task: thenTask, step: 0 })
+  }, [thenTask, tasks, ns])
 
   // 一覧も、ほかの案内（最初の案内・お知らせなど）が出ている間は休ませる。消えたらまた出す
   if (choosing) return hold ? null : createPortal(<Chooser tasks={tasks.filter(t => !t.hidden && (!t.available || t.available()))} words={words} onPick={start} onClose={() => setChoosing(false)} />, document.body)
@@ -311,6 +318,8 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
   const aboveNav = bottomNav ? { bottom: window.innerHeight - bottomNav.getBoundingClientRect().top + 8 } : undefined
 
   if (finished) {
+    // 続きの作業へ移るところ（上の effect が始める）
+    if (task.then) return null
     // 1つだけの案内（ボタンの場所など）は、終わったらそのまま閉じる
     if (task.quiet) { stop(); return null }
     return createPortal(
@@ -394,6 +403,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
               <p className="gd-text">{alt ? alt.text : step.label ? step.text.replace('{label}', label) : step.text}</p>
               {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}
             </div>
+            {step.next && step.skipLabel && <button type="button" className="gd-ghost" onClick={pressSkip}>{step.skipLabel}</button>}
             {step.next && <button type="button" className="gd-main" onClick={pressNext}>{step.nextLabel ?? '次へ'}</button>}
           </div>
         </div>
@@ -404,6 +414,7 @@ export function GuideRunner({ ns, tasks, openEvent, autoOpen = false, autoTask, 
           {(alt ? alt.sub : step.sub) && <p className="gd-sub">{alt ? alt.sub : step.sub}</p>}
           <div className="gd-actions">
             <button type="button" className="gd-ghost" onClick={stop}>ガイドを終わる</button>
+            {step.next && step.skipLabel && <button type="button" className="gd-ghost" onClick={pressSkip}>{step.skipLabel}</button>}
             {step.next && <button type="button" className="gd-main" onClick={pressNext}>{step.nextLabel ?? '次へ'}</button>}
           </div>
         </div>

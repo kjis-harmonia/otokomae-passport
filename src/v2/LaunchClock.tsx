@@ -92,7 +92,7 @@ const T_ZERO = 400, T_BLACK = 250, T_STAMP = 1700, T_OUT = 700
 function startGuide() {
   try { sessionStorage.setItem('ginjiro_launch_guided', '1') } catch { /* なし */ }
   try { localStorage.setItem('ginjiro_launch_notice_seen', String(launchAt())) } catch { /* なし */ } // 公開後の告知の代わりに案内へ
-  window.setTimeout(() => window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-book' } })), 300)
+  window.setTimeout(() => window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-launch' } })), 300)
 }
 
 /** アプリのいちばん上に置く（お客様アプリだけ）：時刻合わせ・最後の60秒・00:00:00・解禁・切り替え */
@@ -261,7 +261,7 @@ export function LaunchNotice({ onOpenChange }: { onOpenChange?: (open: boolean) 
   const look = () => {
     close()
     // 既存の使い方ガイド「銀ちゃんとAI予約する」を始める
-    window.setTimeout(() => window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-book' } })), 350)
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-launch' } })), 350)
   }
   if (!open) return null
   return (

@@ -75,6 +75,30 @@ export const CUSTOMER_GUIDE_TASKS: GuideTask[] = [
       { target: CHIPS('done'), until: ASK('ended'), next: true, read: true, text: 'ご予約できました', sub: '下の「次回予約」でいつでもご確認いただけます。' },
     ],
   },
+  // 新しい銀二郎の公開の案内（【見てみる】・解禁のあと）：先にお連れ様の登録（あとでも可）→ 続けて銀ちゃんとAI予約する（11/11 慶一郎さん）
+  {
+    id: 'c-launch',
+    title: 'はじめに：お連れ様の登録',
+    sub: 'ご家族・ご友人と一緒に予約',
+    hidden: true,
+    inside: '.v2-sheet',
+    then: 'c-book',
+    steps: [
+      {
+        target: g('menu-open'), read: true, next: true, nextLabel: '登録する', skipLabel: 'あとで',
+        // 小さいカードに入る長さに（11/11 画面で確認：長いと下の行が「…」で切れた）
+        text: '先にお連れ様を登録しますか？',
+        sub: '後からでも ☰ から登録できます。',
+      },
+      MENU_OPEN(`${g('people-add')}, ${g('people-name')}`),
+      MENU_PEOPLE(`${g('people-add')}, ${g('people-name')}`),
+      { target: g('people-add'), skipIf: g('people-name'), text: '「お連れ様を追加」を押してください' },
+      { target: g('people-name'), text: 'お名前を入れてください', sub: 'お店でお呼びするお名前です（例：父、たろう）。' },
+      { target: g('people-menus'), text: 'お連れ様のいつものメニューを押してください', sub: '押すと保存されます。' },
+      { target: g('people-list'), next: true, read: true, text: 'お連れ様が登録されました', sub: '続けて、銀ちゃんとのAI予約をご案内します。' },
+      { target: g('people-close'), optional: true, text: '「閉じる」を押してください' },
+    ],
+  },
   {
     id: 'c-usual',
     title: 'いつものを登録・変更する',
