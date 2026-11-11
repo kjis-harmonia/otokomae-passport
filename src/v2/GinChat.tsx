@@ -846,6 +846,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       // 担当（1人の予約・ご来店を聞く前）：選んだ担当の空きで日時を決める（11/10 慶一郎さん）
       if (d.who.length === 1 && staffFor(d.who[0]).length > 1 && d.staff === undefined) {
         const pickable = staffFor(d.who[0])
+        // 顔そりは担当を選んでもらう（【どちらでも】は出さない・11/11 慶一郎さん）
+        const anyChip = /^shave-/.test(d.menus[d.who[0].key]?.code ?? '') ? [] : [{ label: 'どちらでも' }]
         // いつもの担当を登録している方にも毎回聞く：「担当はいつもの〇〇でよろしいですか？」【はい】【ほかの担当】【どちらでも】
         //   （11/10 夜 慶一郎さん「AI が聞いてくれんと言われたらむかつく」）
         const pk = d.who[0].key
@@ -853,8 +855,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const usualSt = !usualStaffDeclined && known && pickable.some(s => s.id === known) ? known : null
         const ANY = 'どちらでも', YES = 'はい'
         const a = usualSt
-          ? await ask(`担当はいつもの${staffName(usualSt)}でよろしいですか？`, [{ label: YES, strong: true }, ...pickable.filter(s => s.id !== usualSt).map(s => ({ label: s.name })), { label: ANY }])
-          : await ask('ご担当のご希望はありますか？', [...pickable.map(s => ({ label: s.name })), { label: ANY }])
+          ? await ask(`担当はいつもの${staffName(usualSt)}でよろしいですか？`, [{ label: YES, strong: true }, ...pickable.filter(s => s.id !== usualSt).map(s => ({ label: s.name })), ...anyChip])
+          : await ask('ご担当のご希望はありますか？', [...pickable.map(s => ({ label: s.name })), ...anyChip])
         let st = fromChip.current
           ? (a === ANY ? null : a === YES ? usualSt : pickable.find(s => s.name === a)?.id)
           : usualSt && intent(a) === 'yes' ? usualSt : staffIn(a)
@@ -892,14 +894,15 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         if (ask1) {
           d.staffs = d.staffs ?? {}
           const pickable = staffFor(ask1)
+          const anyChip = /^shave-/.test(d.menus[ask1.key]?.code ?? '') ? [] : [{ label: 'どちらでも' }]
           // このメニューを担当できるのが1人だけなら聞かない
           if (pickable.length <= 1) { d.staffs[ask1.key] = null; continue }
           const known = usualStaffOf(ask1.key)
           const usualSt = known && pickable.some(s => s.id === known) ? known : null
           const ANY = 'どちらでも', YES = 'はい'
           const a = usualSt
-            ? await ask(`${ask1.label}の担当は、いつもの${staffName(usualSt)}でよろしいですか？`, [{ label: YES, strong: true }, ...pickable.filter(s => s.id !== usualSt).map(s => ({ label: s.name })), { label: ANY }])
-            : await ask(`${ask1.label}のご担当のご希望はありますか？`, [...pickable.map(s => ({ label: s.name })), { label: ANY }])
+            ? await ask(`${ask1.label}の担当は、いつもの${staffName(usualSt)}でよろしいですか？`, [{ label: YES, strong: true }, ...pickable.filter(s => s.id !== usualSt).map(s => ({ label: s.name })), ...anyChip])
+            : await ask(`${ask1.label}のご担当のご希望はありますか？`, [...pickable.map(s => ({ label: s.name })), ...anyChip])
           let st = fromChip.current
             ? (a === ANY ? null : a === YES ? usualSt : pickable.find(s => s.name === a)?.id)
             : usualSt && intent(a) === 'yes' ? usualSt : staffIn(a)
