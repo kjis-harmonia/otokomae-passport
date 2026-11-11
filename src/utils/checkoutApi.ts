@@ -1,6 +1,6 @@
 // 会計のクライアント。売上は「会計を確定」でだけ発生する（予約の金額は予定売上）。
 // 確定は DB の1トランザクション（会計・明細・値引き・支払・GINPay 支払い・クーポン消費・予約の完了）。テーブルへは直接アクセスしない。
-import { callStaffRpc } from './staffSession'
+import { callStaffRpc, RpcBusinessError } from './staffSession'
 import { callHqRpc } from '../hq/hqSession'
 import type { Reservation } from './bookingApi'
 import { priceServiceCatalog } from './checkoutPricing'
@@ -148,7 +148,7 @@ export interface SalesApi {
   void(id: string, reason: string): Promise<CheckoutResult<Sale>>
 }
 
-export const PAYMENT_LABEL: Record<string, string> = { cash: '現金', card: 'カード', credit: 'カード', qr: 'QR等', other: 'その他', ginpay: 'GINPay' }
+export const PAYMENT_LABEL: Record<string, string> = { cash: '現金', card: 'カード', credit: 'カード', qr: 'QR等', other: 'その他', ginpay: '銀Pay' }
 export const TICKET_BLOCK_LABEL: Record<string, string> = {
   transfer_pending: '譲渡中', welcome_weekend: '土日は使えません', daily_rule: '本日は別の割引を利用済み', gacha_menu: '対象のメニューがありません',
 }
@@ -170,6 +170,8 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   gacha_weekday: 'このガチャ券は平日のみ使えます。',
   gacha_menu: 'ガチャ券の対象のメニューが会計にありません。',
   stylist_required: '担当を選んでください。',
+  welcome_owner_only: 'Welcome クーポンは、ご本人のお会計だけで使えます。',
+  gacha_companion: 'このガチャ券は、この方のお会計では使えません。',
   invalid_payment_method: '支払方法を選んでください。',
   operator_required: '操作者を選んでください。',
   client_not_found: '顧客が見つかりません。',
@@ -214,6 +216,8 @@ async function asResult<T>(fn: () => Promise<T>): Promise<CheckoutResult<T>> {
     if (code && CHECKOUT_ERROR_MESSAGE[code]) return { error: code }
     const message = (err as { message?: string }).message
     if (message && CHECKOUT_ERROR_MESSAGE[message]) return { error: message }
+    // サーバーがはっきり断った（{error}）のなら、確定していない。一覧に無い理由でも「結果不明」にしない（11/11 点検：端末が止まっていた）
+    if (code && err instanceof RpcBusinessError) return { error: code }
     throw err
   }
 }

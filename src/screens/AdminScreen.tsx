@@ -1936,13 +1936,13 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
       {/* ── Staff Picker Modal ── */}
       {showStaffPicker && (
         <div onClick={() => setShowStaffPicker(false)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(28,31,29,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 500, background: 'linear-gradient(180deg, #0D0403 0%, #0A0302 100%)', border: '1px solid rgba(151,115,43,0.32)', borderRadius: 22, boxShadow: '0 32px 80px rgba(28,31,29,0.42)', overflow: 'hidden' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 500, background: '#ffffff', border: '1px solid rgba(151,115,43,0.32)', borderRadius: 22, boxShadow: '0 32px 80px rgba(28,31,29,0.42)', overflow: 'hidden' }}>
             <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 30%, #97732b 50%, rgba(151,115,43,0.45) 70%, transparent)' }} />
             <div style={{ padding: '22px 24px 18px', textAlign: 'center', borderBottom: '1px solid rgba(151,115,43,0.1)' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 6 }}>担当者を選ぶ</p>
+              <p style={{ fontSize: 12, letterSpacing: '0.2em', color: '#6b716d', marginBottom: 6 }}>担当者を選ぶ</p>
               <h2 style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.08em' }}>担当者を選んでください</h2>
             </div>
-            <div data-guide="staff-picker" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '18px 18px 14px' }}>
+            <div data-guide="staff-picker" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(STAFF_NAMES.length, 3)}, 1fr)`, gap: 10, padding: '18px 18px 14px' }}>
               {STAFF_NAMES.map(name => {
                 const selected = staffId === name
                 return (
