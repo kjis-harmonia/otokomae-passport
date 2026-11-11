@@ -970,3 +970,10 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .lc-cal-grid button:active:not(:disabled) { transform: scale(.92); }
 @media (prefers-reduced-motion: reduce) { .lc .gc-chip.gc-chip-on::after, .lc-cal-grid button.lc-day-on::after { animation: none; } }
 .lc-cal-grid button:not(:disabled):active { background: #fff4de; color: #28231e; }
+.launch-shatter { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.launch-layer.is-black.is-out { animation: launch-reveal 0.7s ease-in forwards; }
+.launch-layer.is-black.is-out::backdrop { animation: launch-reveal 0.7s ease-in forwards; }
+.launch-layer.is-light { background: #f9f8f3; animation: none; }
+.launch-layer.is-light::backdrop { background: #f9f8f3; }
+.launch-layer.is-light.is-out { animation: launch-reveal 0.7s ease-in forwards; }
+.launch-layer.is-light.is-out::backdrop { animation: launch-reveal 0.7s ease-in forwards; }
