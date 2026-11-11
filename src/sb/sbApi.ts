@@ -1,6 +1,6 @@
 import { callStaffRpc, expectRpcResult, RpcError } from './sbRpc'
 import { companionOf, personName } from './sbParty'
-import { bookingErrorMessage, jstDateLabel, jstTime, yen } from '../utils/bookingApi'
+import { BOOKING_ERROR_MESSAGE, bookingErrorMessage, jstDateLabel, jstTime, yen } from '../utils/bookingApi'
 import type { SbCommand, SbInput, SbLedger, SbOptions, SbPending, SbPreview, SbReservation } from './sbTypes'
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
@@ -62,6 +62,8 @@ export const sbApi = {
 
 export function sbError(err: unknown): string {
   const code = err instanceof RpcError ? err.code : typeof err === 'string' ? err : ''
+  // supabase_error の RpcError はコードが SQLSTATE（28000 など）で、理由は message にある（staff_locked など）
+  const reason = err instanceof RpcError ? err.message : ''
   const messages: Record<string, string> = {
     preview_changed: 'メニュー・担当の条件が変わりました。内容を確認し直してください。',
     reservation_changed: '別の操作で予約が更新されています。最新の予約を開き直してください。',
@@ -73,8 +75,11 @@ export function sbError(err: unknown): string {
     pending_exists: '先に送信済み予約の結果を確認してください。',
     result_unknown: '通信結果を確認できません。同じ内容で結果を確認してください。',
     staff_auth_required: '端末認証の期限が切れました。PINを入力し直してください。',
+    staff_locked: 'いまは本部の操作で SB が止まっています。本部に確かめてください。',
   }
-  return messages[code] ?? bookingErrorMessage(code)
+  if (messages[code]) return messages[code]
+  if (BOOKING_ERROR_MESSAGE[code]) return BOOKING_ERROR_MESSAGE[code]
+  return messages[reason] ?? bookingErrorMessage(reason || code)
 }
 
 export function salonBoardCopy(r: SbReservation): string {

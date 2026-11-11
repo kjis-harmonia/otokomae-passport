@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Bell, BellOff, CalendarDays, Check, ChevronLeft, ChevronRight, Circle, CircleCheck, Clipboard, List, LoaderCircle, Plus, RefreshCw, Users } from 'lucide-react'
 import { addDaysToDateString, getJapanDateString } from '../utils/dateUtils'
-import { jstDateLabel, jstMinutesOf, jstTime, STATUS_LABEL, yen } from '../utils/bookingApi'
-import { callStaffRpc } from './sbRpc'
+import { jstDateLabel, jstMinutesOf, jstTime, STATUS_LABEL as BOOKING_STATUS_LABEL, yen } from '../utils/bookingApi'
+import { callStaffRpc, RpcError } from './sbRpc'
 import { supabase } from '../lib/supabase'
 import { sbApi, sbError, salonBoardCopy, type SbOutcome } from './sbApi'
 import { sbPending, subscribeSbPending } from './sbPending'
@@ -25,13 +25,16 @@ import './sb.css'
 const ACTOR = 'ginjiro_staff_name'
 const OCCUPYING = new Set(['confirmed', 'checked_in', 'in_service', 'awaiting_payment', 'completed'])
 const TRANSFER: Record<TransferStatus, string> = { pending: '未転記', done: '転記済み', not_required: '転記不要' }
+// SB の言い方にそろえる：cancelled は「キャンセル」、no_show は「不来店」（共通の STATUS_LABEL は「無断キャンセル」）
+const STATUS_LABEL: typeof BOOKING_STATUS_LABEL = { ...BOOKING_STATUS_LABEL, cancelled: 'キャンセル', no_show: '不来店' }
 const SLOT_W = 44
 /** SB で選ぶ時間の刻み（押す・ドラッグ・クローズ・新規予約）。表示は15分の幅のまま（10/28 慶一郎さん：30分ごと） */
 export const SB_STEP = 30
 const LABEL_W = 96
 const LANE_H = 72
 const loadActor = () => { try { return localStorage.getItem(ACTOR) ? JSON.parse(localStorage.getItem(ACTOR)!) as string : '' } catch { return '' } }
-function errorText(err: unknown) { return sbError(err instanceof Error && !(err instanceof TypeError) ? err.message : err) }
+// RpcError はコードで文を選ぶ（message だと「通信結果を確認できません」などが一般的な文になっていた）。sbPending の Error は message がコード
+function errorText(err: unknown) { return sbError(err instanceof RpcError || !(err instanceof Error) || err instanceof TypeError ? err : err.message) }
 
 export function SbScreen() {
   const today = getJapanDateString()
@@ -89,7 +92,7 @@ export function SbScreen() {
   }, [loadHpb])
   const loadOptions = useCallback(async () => {
     try { const value = await sbApi.options(); if (!Array.isArray(value.actors) || !Array.isArray(value.menus)) throw new Error(); setOptions(value) }
-    catch { setError('予約設定を取得できません。SB用migrationの適用・端末認証を確認してください。') }
+    catch { setError('予約の設定を読み込めません。通信と端末の認証（PIN）を確かめてください。') }
   }, [])
   // 新しい AI 予約・アプリでの取り消しの確認：誰かがサロンボードに反映して押すまで帯を出し、2分ごとに声で知らせる（確認は全端末で共通）
   const [unacked, setUnacked] = useState<{ id: string; kind?: 'new' | 'cancel'; starts_at: string; customer_name: string; staff_name: string; sent_at: string; rescheduled?: boolean; companion_name?: string | null }[]>([])
@@ -298,12 +301,12 @@ export function SbScreen() {
             onTapSlot={(minutes, shiftEnd) => openClose({ date, minutes, endMinutes: null, staffId: staff.id, quick: true, shiftEnd })} onBlock={b => setReopening({ block: b, staffName: b.staff_id ? staff.name : '全員' })} /> })}
       </div>{!ledger.staff.length && <p className="sb-empty">本部で予約スタッフの設定が必要です。</p>}</div>}
     <footer className="sb-statusbar"><div>{ledger?.closure ? <span>休業日{ledger.closure.reason ? `：${ledger.closure.reason}` : ''}</span> : ledger && !ledger.staff.some(s => s.shifts.length) ? <span>本部で勤務時間の設定が必要です。</span> : <span>{active.length}件</span>}
-      <button onClick={() => setHpbOpen(true)}>HPBメール</button>{cancelled.length > 0 && <button onClick={() => setArchive('cancelled')}>取消・不来店 {cancelled.length}件</button>}{toTransfer.length > 0 && <button onClick={() => setArchive('transfer')}>未転記 {toTransfer.length}件</button>}</div><span>{updated ? `${updated} 更新` : ''}</span></footer>
+      <button onClick={() => setHpbOpen(true)}>HPBメール</button>{cancelled.length > 0 && <button onClick={() => setArchive('cancelled')}>キャンセル・不来店 {cancelled.length}件</button>}{toTransfer.length > 0 && <button onClick={() => setArchive('transfer')}>未転記 {toTransfer.length}件</button>}</div><span>{updated ? `${updated} 更新` : ''}</span></footer>
     {pushNote && <SbModal title="予約のお知らせ" onClose={() => setPushNote(null)}><p className="sb-push-note">{pushNote}</p></SbModal>}
     {hpbOpen && <SbHotpepper list={hpb} actor={operator} disabled={!online} onClose={() => setHpbOpen(false)}
       onChanged={() => void refresh(dateRef.current)}
       onOpen={(d, id) => { setHpbOpen(false); openReservation(id, d) }} />}
-    {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : '取消・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
+    {archive && <SbModal title={archive === 'transfer' ? '未転記の予約' : 'キャンセル・不来店'} onClose={() => setArchive(null)}><ReservationList reservations={list} onPick={id => { setArchive(null); setSelectedId(id) }} /></SbModal>}
     {selected && !editor && !archive && <ReservationDetails key={selected.id} reservation={selected} actor={operator} busy={busy} blocked={blocked} onClose={() => setSelectedId(null)}
       onEdit={() => { setEditor({ reservation: selected, preset: { date: getJapanDateString(new Date(selected.starts_at)) } }); setSelectedId(null) }} onSend={send} />}
     {closing && options && <SbCloseSheet options={options} preset={closing} actor={operator} onClose={() => setClosing(null)}
@@ -379,19 +382,19 @@ function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onE
   const [historyError, setHistoryError] = useState(false)
   const text = salonBoardCopy(r)
   const base = { reservation_id: r.id, expected_updated_at: r.updated_at }
-  const labels: Record<string, string> = { created: '登録', edited: '内容変更', transfer_updated: '転記状態変更', rescheduled: '日時変更', staff_changed: '担当変更', checked_in: '来店', completed: '完了', cancelled: '取消', no_show: '不来店' }
+  const labels: Record<string, string> = { created: '登録', edited: '内容変更', transfer_updated: '転記状態変更', rescheduled: '日時変更', staff_changed: '担当変更', checked_in: '来店', completed: '完了', cancelled: 'キャンセル', no_show: '不来店' }
   return <SbModal title={`${jstTime(r.starts_at)}–${jstTime(r.ends_at)} ${STATUS_LABEL[r.status]}`} busy={busy} onClose={onClose}
-    footer={noShow ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setNoShow(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'no_show' })}>不来店にする</button></div> : cancel ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setCancel(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'cancel', reason })}>予約を取り消す</button></div> : ['confirmed', 'checked_in'].includes(r.status) ? <button className="sb-primary sb-grow" disabled={blocked} onClick={onEdit}>内容を変更</button> : undefined}>
+    footer={noShow ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setNoShow(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'no_show' })}>不来店にする</button></div> : cancel ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setCancel(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'cancel', reason })}>予約をキャンセルする</button></div> : ['confirmed', 'checked_in'].includes(r.status) ? <button className="sb-primary sb-grow" disabled={blocked} onClick={onEdit}>内容を変更</button> : undefined}>
     <h3 className="sb-customer-name">{personName(r)}{companionOf(r) && <small className="sb-companion-of">（{r.customer_name}様のお連れ様）</small>}</h3>{r.customer_phone && <a className="sb-phone" href={`tel:${r.customer_phone}`}>{r.customer_phone}</a>}
     {r.source === 'app' && <AiPause reservationId={r.id} actor={actor} blocked={blocked} />}
     <dl className="sb-facts"><dt>日付</dt><dd>{jstDateLabel(getJapanDateString(new Date(r.starts_at)))}</dd><dt>担当</dt><dd>{r.staff_name}{r.nominated ? '（指名）' : '（指名なし）'}</dd>
       <dt>メニュー</dt><dd>{r.items.map(i => <span className="sb-line" key={i.menu_code}>{i.name}<small>{i.duration_min}分 / {yen(i.price)}</small></span>)}</dd>
       <dt>予約時の金額</dt><dd>{yen(r.total_price)}</dd><SbTicketPlan reservation={r} />{r.note && <><dt>メモ</dt><dd className="sb-prewrap">{r.note}</dd></>}{r.external_ref && <><dt>予約番号</dt><dd>{r.external_ref}</dd></>}
     </dl>
-    {noShow ? <p className="sb-confirm-note">{personName(r)}様を不来店（無断キャンセル）にします。AI予約の受付にも影響します。</p> : cancel ? <label className="sb-field">取消理由（任意）<input value={reason} maxLength={100} disabled={busy} onChange={e => setReason(e.target.value)} /></label> : <>
+    {noShow ? <p className="sb-confirm-note">{personName(r)}様を不来店にします。AI予約の受付にも影響します。</p> : cancel ? <label className="sb-field">キャンセル理由（任意）<input value={reason} maxLength={100} disabled={busy} onChange={e => setReason(e.target.value)} /></label> : <>
       <div className="sb-quick-actions">{r.status === 'confirmed' && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'checked_in' })}>来店済みにする</button>}
         {['checked_in', 'in_service', 'awaiting_payment'].includes(r.status) && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'completed' })}>施術完了</button>}
-        {r.status === 'confirmed' && <span className="sb-quick-danger">{Date.parse(r.starts_at) <= openedAt && <button className="sb-text-danger" disabled={blocked} onClick={() => setNoShow(true)}>不来店</button>}<button className="sb-text-danger" disabled={blocked} onClick={() => setCancel(true)}>予約を取り消す</button></span>}</div>
+        {r.status === 'confirmed' && <span className="sb-quick-danger">{Date.parse(r.starts_at) <= openedAt && <button className="sb-text-danger" disabled={blocked} onClick={() => setNoShow(true)}>不来店</button>}<button className="sb-text-danger" disabled={blocked} onClick={() => setCancel(true)}>予約をキャンセルする</button></span>}</div>
       {!(r.source === 'hotpepper' && r.transfer_status === 'not_required') && <section className="sb-transfer"><h3>Salon Board <span>{TRANSFER[r.transfer_status]}</span></h3>
         <CopyRows r={r} />
         <button className="sb-secondary sb-grow" onClick={() => { void navigator.clipboard?.writeText(text).then(() => { setCopied(true); setCopyFallback(false) }).catch(() => setCopyFallback(true)); if (!navigator.clipboard) setCopyFallback(true) }}><Clipboard size={18} />{copied ? 'コピーしました' : 'まとめてコピー'}</button>
@@ -411,7 +414,7 @@ function AiPause({ reservationId, actor, blocked }: { reservationId: string; act
   useEffect(() => { let alive = true; void callStaffRpc<typeof st>('staff_ai_penalty_for_reservation', { p_reservation_id: reservationId }).then(v => { if (alive) setSt(v) }).catch(() => {}); return () => { alive = false } }, [reservationId])
   if (!st?.paused || !st.resume_on) return null
   const [, m, d] = st.resume_on.split('-').map(Number)
-  return <p className="sb-ai-pause">AI予約 停止中（{st.reason === 'no_show' ? '無断キャンセル' : '当日キャンセル'}・{m}月{d}日から再開）
+  return <p className="sb-ai-pause">AI予約 停止中（{st.reason === 'no_show' ? '不来店' : '当日キャンセル'}・{m}月{d}日から再開）
     <button className="sb-secondary" disabled={blocked || busy || !actor} onClick={() => { setBusy(true); setError(false); void callStaffRpc('staff_lift_ai_penalty', { p_reservation_id: reservationId, p_staff_name: actor }).then(() => setSt({ paused: false }), () => setError(true)).finally(() => setBusy(false)) }}>{busy ? '解除しています…' : '解除する'}</button>
     {error && <small className="sb-error">解除できませんでした。通信を確かめて、もう一度押してください。</small>}</p>
 }
@@ -459,7 +462,7 @@ function NewAlert({ list, onAck, onOpen }: { list: AlertItem[]; onAck: () => voi
   const title = [added.length ? `新しい予約 ${added.length}件` : '', removed.length ? `キャンセル ${removed.length}件` : ''].filter(Boolean).join('・')
   const label = !removed.length ? 'サロンボードに入れました' : !added.length ? 'サロンボードから消しました' : 'サロンボードに反映しました'
   return <div className={`sb-new-alert${removed.length ? ' is-cancel' : ''}`} role="alert"><Bell size={18} /><span><b>{title}</b>
-    {list.slice(0, 3).map(r => <button type="button" className="sb-alert-row" key={`${r.kind}:${r.id}`} onClick={() => onOpen(r.id, getJapanDateString(new Date(r.starts_at)))}>{r.kind === 'cancel' ? (r.rescheduled ? '日時変更（元の予約を消す） ' : '取消 ') : ''}{day(r.starts_at)} {jstTime(r.starts_at)} {r.companion_name ? `${r.companion_name}様（${r.customer_name}様のお連れ様）` : `${r.customer_name}様`}（{r.staff_name}）<ChevronRight size={14} /></button>)}
+    {list.slice(0, 3).map(r => <button type="button" className="sb-alert-row" key={`${r.kind}:${r.id}`} onClick={() => onOpen(r.id, getJapanDateString(new Date(r.starts_at)))}>{r.kind === 'cancel' ? (r.rescheduled ? '日時変更（元の予約を消す） ' : 'キャンセル ') : ''}{day(r.starts_at)} {jstTime(r.starts_at)} {r.companion_name ? `${r.companion_name}様（${r.customer_name}様のお連れ様）` : `${r.customer_name}様`}（{r.staff_name}）<ChevronRight size={14} /></button>)}
     {list.length > 3 && <small>ほか {list.length - 3}件</small>}</span>
     <button className="sb-primary" onClick={onAck}>{label}</button></div>
 }

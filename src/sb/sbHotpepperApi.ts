@@ -18,7 +18,7 @@ export const hpbApi = {
 export const KIND: Record<HpbMail['kind'], string> = { booking: '予約', cancel: 'キャンセル', change: '変更', unknown: '読めないメール' }
 const REASON: Record<string, string> = {
   slot_taken: 'その時間の枠が埋まっているか、同じお客様の予約と重なっていて入れられません。予約表を確かめてから入れ直してください。',
-  not_found: '取り消す予約が予約表にありません（取込を始める前の予約かもしれません）。',
+  not_found: 'キャンセルする予約が予約表にありません（取込を始める前の予約かもしれません）。',
   invalid_status: '来店済みなどで変更できない状態です。',
   unreadable: 'メールの内容を読み取れませんでした。',
   already_cancelled: '先にキャンセルのメールが届いていたので入れていません。',
@@ -31,5 +31,5 @@ export function hpbResult(m: HpbMail): string {
   if (m.status === 'ignored') return m.reason === 'notice' ? 'SALON BOARD からのお知らせです（予約ではありません）。' : '取込を始める前の予約のキャンセルです。SB ではすることはありません。'
   if (m.status === 'needs_review' || m.status === 'checked') return REASON[m.reason ?? ''] ?? '確認が必要です。'
   if (m.status === 'duplicate') return m.reason === 'already_cancelled' ? REASON.already_cancelled : 'すでに予約表にあります。'
-  return m.kind === 'cancel' ? '予約を取り消しました。' : m.kind === 'change' ? '予約を変更しました。' : '予約表に入れました。'
+  return m.kind === 'cancel' ? '予約をキャンセルしました。' : m.kind === 'change' ? '予約を変更しました。' : '予約表に入れました。'
 }

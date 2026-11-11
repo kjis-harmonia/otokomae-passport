@@ -6,11 +6,14 @@ import { RpcError } from './sbRpc'
 import { hpbApi, hpbResult, KIND, WARNING, type HpbList } from './sbHotpepperApi'
 import { SbModal } from './SbModal'
 
-function errorText(err: unknown) {
+// 「確認済みにする」の失敗も「取り込めませんでした」と出ていた → 何をしていたかで文を分ける
+function errorText(err: unknown, failed: string) {
   const code = err instanceof RpcError ? err.code : ''
   if (code === 'staff_name_required') return '先に操作者を選んでください。'
   if (code === 'invalid_mail') return 'メールの本文をそのまま貼り付けてください。'
-  return '取り込めませんでした。接続を確認してください。'
+  if (code === 'staff_auth_required') return '端末の認証が切れました。PINを入れ直してから、もう一度押してください。'
+  if (code === 'not_found') return 'このメールが見つかりません。開き直してください。'
+  return `${failed}。通信を確かめて、もう一度押してください。`
 }
 
 export function SbHotpepper({ list, actor, disabled, onClose, onChanged, onOpen }: {
@@ -20,17 +23,17 @@ export function SbHotpepper({ list, actor, disabled, onClose, onChanged, onOpen 
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null)
-  async function run<T>(task: () => Promise<T>, done: (v: T) => string) {
+  async function run<T>(task: () => Promise<T>, done: (v: T) => string, failed: string) {
     setBusy(true); setMessage(null)
     try { setMessage({ text: done(await task()), error: false }); onChanged() }
-    catch (err) { setMessage({ text: errorText(err), error: true }) }
+    catch (err) { setMessage({ text: errorText(err, failed), error: true }) }
     finally { setBusy(false) }
   }
   return <SbModal title="HOT PEPPERのメール" busy={busy} onClose={onClose}>
     <p className="sb-muted sb-hpb-lead">SALON BOARD の予約メールは自動で予約表に入ります。届いていないときは本文を貼り付けてください。</p>
     <label className="sb-field">メールの本文<textarea value={text} disabled={busy} maxLength={20000} onChange={e => setText(e.target.value)} /></label>
     <div className="sb-actions sb-hpb-actions"><button className="sb-primary" disabled={busy || disabled || text.trim().length < 20}
-      onClick={() => void run(() => hpbApi.importText(text, actor), m => { setText(''); return hpbResult(m) })}>{busy ? '取込中…' : '取り込む'}</button></div>
+      onClick={() => void run(() => hpbApi.importText(text, actor), m => { setText(''); return hpbResult(m) }, '取り込めませんでした')}>{busy ? '取込中…' : '取り込む'}</button></div>
     {message && <p className={message.error ? 'sb-error' : 'sb-hpb-message'} role="status">{message.text}</p>}
     <h3 className="sb-hpb-heading">届いたメール</h3>
     {!list ? <p className="sb-muted">読み込み中…</p> : !list.mails.length ? <p className="sb-muted">まだありません。</p>
@@ -43,7 +46,7 @@ export function SbHotpepper({ list, actor, disabled, onClose, onChanged, onOpen 
             <small className={m.status === 'needs_review' ? 'sb-hpb-review' : undefined}>{m.status === 'needs_review' ? '要確認：' : m.status === 'checked' ? `確認済み（${m.checked_by}）：` : ''}{hpbResult(m)}{m.warnings.length ? `（${m.warnings.map(w => WARNING[w] ?? w).join('・')}）` : ''}</small></span></>
         return <div className="sb-hpb-row" key={m.id}>
           {canOpen ? <button onClick={() => onOpen(date!, m.reservation_id!)}>{body}<ChevronRight size={18} /></button> : <div>{body}</div>}
-          {m.status === 'needs_review' && <button className="sb-secondary" disabled={busy || disabled} onClick={() => void run(() => hpbApi.check(m.id, actor), () => '確認済みにしました。')}>確認済みにする</button>}
+          {m.status === 'needs_review' && <button className="sb-secondary" disabled={busy || disabled} onClick={() => void run(() => hpbApi.check(m.id, actor), () => '確認済みにしました。', '確認済みにできませんでした')}>確認済みにする</button>}
         </div>
       })}</div>}
   </SbModal>
