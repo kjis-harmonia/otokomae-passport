@@ -877,7 +877,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           if (d.recheck && !d.recheck.note) d.recheck.note = st ? `担当を${staffName(st)}に変更しました。` : '担当は、どちらでも に変更しました。'
           // 次回から選ばなくていいように、登録するか聞く（11/10 慶一郎さん）。もういつもの担当なら聞かない
           if (st && st !== known) {
-            const r = await askYN(`次回からも${staffName(st)}で、いつもの担当に登録しておきましょうか？\n登録すると、次からは【はい】を押すだけで選べます。`, '登録する', '毎回選ぶ')
+            const r = await askYN(`次回からも${staffName(st)}で、いつもの担当に登録しておきましょうか？\n登録すると、次からは担当を選ぶ手間がなくなります。`, '登録する', '毎回選ぶ')
             if (r === 'yes') { setUsualStaffOf(pk, st); await say(`かしこまりました。いつもの担当を${staffName(st)}で登録しました。`) }
           }
           continue
