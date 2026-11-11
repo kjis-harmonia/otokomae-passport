@@ -1,3 +1,5 @@
+import { OptionRow, Sheet } from '../components/booking/ledgerUi'
+import { C as LC } from '../components/booking/ledgerTheme'
 import { pendingIssuance, prepareIssuance, resolveIssuance, withIssuanceLock, type PendingIssuance } from '../utils/ticketIssuance'
 import {StaffStoreApproval} from '../features/customerAccess/StoreVerification'
 import { useState, useRef, useCallback, useEffect } from 'react'
@@ -1933,45 +1935,16 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         </div>
       )}
 
-      {/* ── Staff Picker Modal ── */}
+      {/* ── 担当者を選ぶ（11/11 店舗端末点検：黒地に黒い文字で読めなかった → 予約台帳の ActorSheet と同じ白地のシート） ── */}
       {showStaffPicker && (
-        <div onClick={() => setShowStaffPicker(false)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(28,31,29,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 500, background: 'linear-gradient(180deg, #0D0403 0%, #0A0302 100%)', border: '1px solid rgba(151,115,43,0.32)', borderRadius: 22, boxShadow: '0 32px 80px rgba(28,31,29,0.42)', overflow: 'hidden' }}>
-            <div style={{ height: 2, background: 'linear-gradient(90deg, transparent, rgba(151,115,43,0.45) 30%, #97732b 50%, rgba(151,115,43,0.45) 70%, transparent)' }} />
-            <div style={{ padding: '22px 24px 18px', textAlign: 'center', borderBottom: '1px solid rgba(151,115,43,0.1)' }}>
-              <p style={{ fontSize: 9, letterSpacing: '0.34em', color: '#1c1f1d', marginBottom: 6 }}>担当者を選ぶ</p>
-              <h2 style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 700, color: '#1c1f1d', letterSpacing: '0.08em' }}>担当者を選んでください</h2>
-            </div>
-            <div data-guide="staff-picker" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: '18px 18px 14px' }}>
-              {STAFF_NAMES.map(name => {
-                const selected = staffId === name
-                return (
-                  <button
-                    key={name}
-                    onClick={() => handleSelectStaff(name)}
-                    style={{
-                      padding: '22px 10px', borderRadius: 14,
-                      background: selected ? 'linear-gradient(135deg, rgba(28,31,29,0.12) 0%, rgba(28,31,29,0.12) 100%)' : '#f8f7f4',
-                      border: `1.5px solid ${selected ? 'rgba(151,115,43,0.80)' : 'rgba(151,115,43,0.20)'}`,
-                      boxShadow: selected ? '0 0 20px rgba(151,115,43,0.18)' : 'none',
-                      color: selected ? '#1c1f1d' : '#1c1f1d',
-                      fontFamily: SERIF, fontSize: 22, fontWeight: 700, letterSpacing: '0.04em',
-                      cursor: 'pointer', transition: 'all 0.15s', WebkitTapHighlightColor: 'transparent',
-                    }}
-                  >
-                    {name}
-                    {selected && <span style={{ display: 'block', fontSize: 10, color: '#1c1f1d', letterSpacing: '0.16em', marginTop: 4, fontWeight: 400 }}>選択中</span>}
-                  </button>
-                )
-              })}
-            </div>
-            <div style={{ padding: '0 18px 18px' }}>
-              <button onClick={() => setShowStaffPicker(false)} style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'transparent', border: '1px solid #e6e3dd', color: '#1c1f1d', fontFamily: SERIF, fontSize: 14, cursor: 'pointer', letterSpacing: '0.12em' }}>
-                キャンセル
-              </button>
-            </div>
+        <Sheet title="担当者を選択" onClose={() => setShowStaffPicker(false)}>
+          <p style={{ fontSize: 13, color: LC.sub, margin: '8px 0' }}>会計・予約などの記録に残る名前です。この端末に保存され、ほかの画面でも同じ人になります。</p>
+          <div data-guide="staff-picker">
+            {STAFF_NAMES.map(name => (
+              <OptionRow key={name} selected={staffId === name} check={false} onClick={() => handleSelectStaff(name)}><span>{name}</span><span /></OptionRow>
+            ))}
           </div>
-        </div>
+        </Sheet>
       )}
 
       {/* ── 営業開始／営業終了 確認モーダル ── */}

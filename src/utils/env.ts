@@ -1,4 +1,4 @@
-import { launchBackdoor, launched } from './launch'
+import { launched } from './launch'
 export type AppEnv = 'production' | 'staging'
 
 export function getAppEnv(): AppEnv {
@@ -20,5 +20,5 @@ export function ginFlowConfigured(): boolean {
 
 export function ginFlow(): boolean {
   // 11/11：公開時刻（utils/launch.ts の GIN_LAUNCH_AT）までは旧画面。慶一郎さんの端末だけ先に新画面（裏口）
-  return ginFlowConfigured() && (launched() || launchBackdoor())
+  return ginFlowConfigured() && launched()
 }

@@ -1,6 +1,6 @@
 // 会計のクライアント。売上は「会計を確定」でだけ発生する（予約の金額は予定売上）。
 // 確定は DB の1トランザクション（会計・明細・値引き・支払・GINPay 支払い・クーポン消費・予約の完了）。テーブルへは直接アクセスしない。
-import { callStaffRpc } from './staffSession'
+import { callStaffRpc, RpcBusinessError } from './staffSession'
 import { callHqRpc } from '../hq/hqSession'
 import type { Reservation } from './bookingApi'
 import { priceServiceCatalog } from './checkoutPricing'
@@ -85,6 +85,8 @@ export interface SaleInput {
   idempotency_key: string
   /** GINPay 払いで支払う口座 */
   ginpay_account_id?: string
+  /** 予約のない方の会計（会員ご本人の施術ではない）。来店・施術の記録・Welcome 券・お客様ごとの料金に入れない（11/11） */
+  not_owner?: boolean
 }
 
 export interface Sale {
@@ -169,6 +171,9 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   gacha_invalid: 'ガチャ券が使えませんでした（使用済み・予約から外れています）。画面を開き直してください。',
   gacha_weekday: 'このガチャ券は平日のみ使えます。',
   gacha_menu: 'ガチャ券の対象のメニューが会計にありません。',
+  // 11/11 店舗端末点検：サーバーが断る理由で、案内が無かったもの
+  gacha_companion: 'このガチャ券は、お連れ様の会計では使えません（無料の券だけ使えます）。',
+  welcome_owner_only: 'Welcomeクーポンは、発行された会員ご本人の施術だけに使えます（お連れ様・予約のない方の会計では使えません）。',
   stylist_required: '担当を選んでください。',
   invalid_payment_method: '支払方法を選んでください。',
   operator_required: '操作者を選んでください。',
@@ -186,7 +191,7 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
 }
 
 export function checkoutErrorMessage(code: string): string {
-  return CHECKOUT_ERROR_MESSAGE[code] ?? '処理に失敗しました。通信環境を確認して再度お試しください。'
+  return CHECKOUT_ERROR_MESSAGE[code] ?? '会計を確定できませんでした。内容と通信を確かめて、もう一度お試しください。'
 }
 
 /** ガチャ券の値引き額（DB の finalize_sale と同じ計算）。対象メニューが会計に無ければ null */
@@ -212,6 +217,8 @@ async function asResult<T>(fn: () => Promise<T>): Promise<CheckoutResult<T>> {
     // 業務エラー（{error}）は code、確定・取消の途中で DB が取り消した場合は message に理由が入る
     const code = (err as { code?: string }).code
     if (code && CHECKOUT_ERROR_MESSAGE[code]) return { error: code }
+    // サーバーが {error} で断った（会計は入っていない）：一覧に無い理由でも断りとして返し、端末の未確認の会計を消せるように（11/11 店舗端末点検）
+    if (err instanceof RpcBusinessError && code) return { error: code }
     const message = (err as { message?: string }).message
     if (message && CHECKOUT_ERROR_MESSAGE[message]) return { error: message }
     throw err

@@ -3,7 +3,6 @@
 // 了解は「見た」の記録だけで、砂嵐は消えない。慶一郎さんの確認のあと、本部の「解除」で再開する
 import { useEffect, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
-import { supabase } from '../lib/supabase'
 import { callStaffRpc, deviceCode, deviceHint, keepStaffSession, STAFF_LOCKED_EVENT } from '../utils/staffSession'
 import './securityAlert.css'
 
@@ -36,11 +35,9 @@ export function SecurityAlert({ app, authed = true }: { app: 'staff' | 'sb'; aut
           const r = await callStaffRpc<State>('staff_security_check', { p_app: app, p_hint: deviceHint() })
           if (r.expires_at) keepStaffSession(r.expires_at)
           if (alive) setState({ locked: !!r.locked, since: r.since, alerts: r.alerts ?? [] })
-        } else {
-          const { data } = await supabase.rpc('staff_lockdown_status')
-          const r = data as { locked?: boolean; since?: string | null } | null
-          if (alive && r) setState({ locked: !!r.locked, since: r.since, alerts: [] })
         }
+        // PIN の画面（ログイン前）：ロックの有無はサーバーに聞かない（11/11 店舗端末点検：ログインしていない人には答えない）。
+        //   PIN を送って lockdown と返ってきたら、下の onLocked で砂嵐を出す
       } catch { /* 仕組みが無い・通信切れ：次の見回りで */ }
     }
     void load()
@@ -48,7 +45,7 @@ export function SecurityAlert({ app, authed = true }: { app: 'staff' | 'sb'; aut
     const onVisible = () => { if (document.visibilityState === 'visible') void load() }
     const onMessage = (e: MessageEvent) => { if (e.data?.type === 'sb-intrusion') void load() }
     // どれかの操作が「ロック中」で断られたら、すぐ砂嵐を出す
-    const onLocked = () => { void load() }
+    const onLocked = () => { if (authed) void load(); else if (alive) setState(s => ({ ...s, locked: true })) }
     document.addEventListener('visibilitychange', onVisible)
     navigator.serviceWorker?.addEventListener('message', onMessage)
     window.addEventListener(STAFF_LOCKED_EVENT, onLocked)
