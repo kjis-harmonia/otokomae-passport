@@ -19,7 +19,7 @@ export function isBookingRejection(error: unknown, code: 'reservation_person_ove
 }
 
 export interface BookingSettings { slot_minutes: number; booking_window_days: number; min_lead_minutes: number; hold_minutes: number }
-export interface AssistantOptions { settings: BookingSettings; menus: MenuOption[]; staff?: { id: string; name: string }[] }
+export interface AssistantOptions { settings: BookingSettings; menus: MenuOption[]; staff?: { id: string; name: string; /** その担当ができるメニュー（11/11〜。古いサーバーは無し＝全部できる） */ menus?: string[] }[] }
 
 export interface CustomerReservation {
   id: string

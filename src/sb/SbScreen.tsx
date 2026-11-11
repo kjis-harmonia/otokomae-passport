@@ -292,7 +292,7 @@ export function SbScreen() {
       : view === 'list' ? <div className="sb-agenda"><ReservationList reservations={ledger.reservations} onPick={setSelectedId} /></div>
       : <div className="sb-board-scroll" data-guide="sb-board" ref={scrollRef} role="region" aria-label="担当者別予約表"><div className="sb-grid" style={{ gridTemplateColumns: `${LABEL_W}px ${x(range.end)}px`, width: LABEL_W + x(range.end) }}>
         <div className="sb-axis-name">担当者</div><div className="sb-axis">{Array.from({ length: (range.end - range.start) / 60 }, (_, i) => range.start + i * 60).map(m => <span key={m} style={{ left: x(m) + 8 }}>{Math.floor(m / 60)}:00</span>)}</div>
-        {ledger.staff.map(staff => { const bookings = active.filter(r => r.staff_id === staff.id); const used = Math.max(0, ...bookings.map(r => r.booking_lane + 1)); const lanes = Math.max(2, used) /* ふだんは2段。同時に3件入った日だけ3段に増やす */
+        {ledger.staff.map(staff => { const bookings = active.filter(r => r.staff_id === staff.id); const used = Math.max(0, ...bookings.map(r => r.booking_lane + 1)); const lanes = Math.max(staff.name === 'テイテイ' ? 3 : staff.capacity <= 1 ? 1 : 2, used) /* ふだんは2段（テイテイは常に3段・同時1人の担当＝ヨンピルは1段。11/11 慶一郎さん）。入った件数が多い日はその分だけ増やす */
           return <StaffRow key={staff.id} drag={drag} staff={staff} lanes={lanes} reservations={bookings} ledger={ledger} date={date} range={range} nowMin={minutesNow} x={x} blocked={blocked}
             onOpen={setSelectedId} onNew={minutes => newBooking({ date, staffId: staff.id, minutes })}
             onTapSlot={(minutes, shiftEnd) => openClose({ date, minutes, endMinutes: null, staffId: staff.id, quick: true, shiftEnd })} onBlock={b => setReopening({ block: b, staffName: b.staff_id ? staff.name : '全員' })} /> })}
