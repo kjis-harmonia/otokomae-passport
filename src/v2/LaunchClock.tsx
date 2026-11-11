@@ -8,7 +8,6 @@ import { hms, launchAt, launched, launchHm, syncServerClock } from '../utils/lau
 import { KAIKIN_DONE_EVENT, KAIKIN_FADE_KEY, kaikinSeen, markKaikinSeen, phaseAt, useServerSecond } from './launchTime'
 const RELOADS_KEY = 'ginjiro_launch_reloads'
 import { ginFlow, ginFlowConfigured } from '../utils/env'
-import { KaikinShatter } from './KaikinShatter'
 import { BOOKING_IDLE_EVENT, bookingInFlight } from '../utils/bookingInFlight'
 
 const NOTICE_KEY = 'ginjiro_launch_notice_seen'
@@ -58,23 +57,6 @@ function don() {
   src.connect(f).connect(ng).connect(a.destination); src.start(t)
 }
 
-/** 「解禁」が割れる音：高いところのザッと、細かいきらめき（オリジナル） */
-function crack() {
-  if (!ready()) return
-  const a = audio!, t = a.currentTime
-  const n = a.createBuffer(1, Math.floor(a.sampleRate * 0.5), a.sampleRate), d = n.getChannelData(0)
-  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3)
-  const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain()
-  src.buffer = n; f.type = 'highpass'; f.frequency.value = 1800; g.gain.value = 0.5
-  src.connect(f).connect(g).connect(a.destination); src.start(t)
-  for (let k = 0; k < 7; k++) {
-    const o = a.createOscillator(), og = a.createGain(), at = t + 0.02 + Math.random() * 0.35
-    o.type = 'sine'; o.frequency.value = 2400 + Math.random() * 3200
-    og.gain.setValueAtTime(0.0001, at); og.gain.exponentialRampToValueAtTime(0.05, at + 0.005); og.gain.exponentialRampToValueAtTime(0.0001, at + 0.25)
-    o.connect(og).connect(a.destination); o.start(at); o.stop(at + 0.3)
-  }
-}
-
 /** 公開の60秒間・解禁のあいだ、アプリのほかの操作を一切受け付けない層（いちばん上に開く dialog） */
 function BlockLayer({ children, tone }: { children: React.ReactNode; tone: string }) {
   const ref = useRef<HTMLDialogElement>(null)
@@ -103,10 +85,8 @@ function BlockLayer({ children, tone }: { children: React.ReactNode; tone: strin
 
 // 12:00:00 の流れ：00:00:00（0.4秒）→ 真っ暗（0.25秒）→ 白い筆文字「解禁」をドンと押す＋ドン（1.7秒）→ ふわっと新しい画面（0.7秒）→ 銀ちゃんの案内
 //   旧画面だった人は、読み込み直すと音が出せないので「解禁」とドンを読み込み直す前に見せ、新しい画面で「解禁」からふわっと明ける
-// 11/11 慶一郎さん：「解禁」を叩きつけたあと、粉々に飛び散って金の粉を残して消える → 新しい画面（動きを減らす設定の方は、ふわっと消すだけ）
-type Seq = 'none' | 'zero' | 'black' | 'stamp' | 'shatter' | 'reveal' | 'out'
-const T_ZERO = 400, T_BLACK = 250, T_STAMP = 1000, T_OUT = 700
-const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+type Seq = 'none' | 'zero' | 'black' | 'stamp' | 'reveal' | 'out'
+const T_ZERO = 400, T_BLACK = 250, T_STAMP = 1700, T_OUT = 700
 
 /** 案内を始める：銀ちゃんとAI予約する（既存のガイド） */
 function startGuide() {
@@ -130,23 +110,6 @@ export function LaunchClock() {
   })
   const lastSec = useRef<number | null>(null)
   const seqStarted = useRef(false)
-  const needReloadRef = useRef(false)
-  // 読み込み直した直後に開いた画面か（最初に1回だけ決める）
-  const [fromReload] = useState(() => { try { return sessionStorage.getItem(KAIKIN_FADE_KEY) === String(launchAt()) } catch { return false } })
-  /** 割れ終わったら：旧画面だった人は読み込み直し、新しい画面の人はふわっと明ける */
-  const finale = () => {
-    if (needReloadRef.current) {
-      let n = 0
-      try { n = Number(sessionStorage.getItem(RELOADS_KEY) || 0); sessionStorage.setItem(RELOADS_KEY, String(n + 1)) } catch { /* なし */ }
-      if (n < 2) {
-        try { sessionStorage.setItem(KAIKIN_FADE_KEY, String(launchAt())) } catch { /* なし */ }
-        window.location.reload()
-      } else { setFinished(true); setSeq('none'); startGuide() } // 読み込み直しを繰り返さない（端末の時計が大きくずれているときなど）
-      return
-    }
-    setSeq('out')
-    window.setTimeout(() => { setFinished(true); setSeq('none'); window.dispatchEvent(new Event(KAIKIN_DONE_EVENT)); startGuide() }, T_OUT)
-  }
 
   useEffect(() => {
     void syncServerClock()
@@ -182,10 +145,10 @@ export function LaunchClock() {
   // 読み込み直した直後：「解禁」から新しい画面へふわっと
   useEffect(() => {
     if (seq !== 'reveal' || seqStarted.current) return
-    seqStarted.current = true
+    seqStarted.current = true
     try { sessionStorage.removeItem(KAIKIN_FADE_KEY) } catch { /* なし */ }
-    window.setTimeout(() => setSeq('out'), 250)
-    window.setTimeout(() => { setSeq('none'); window.dispatchEvent(new Event(KAIKIN_DONE_EVENT)); startGuide() }, 250 + T_OUT)
+    window.setTimeout(() => setSeq('out'), 350)
+    window.setTimeout(() => { setSeq('none'); window.dispatchEvent(new Event(KAIKIN_DONE_EVENT)); startGuide() }, 350 + T_OUT)
   }, [seq])
 
   // 公開の瞬間
@@ -201,9 +164,19 @@ export function LaunchClock() {
     at(T_BLACK, () => { setSeq('stamp'); don() })
     markKaikinSeen()
     try { sessionStorage.setItem('ginjiro_launch_guided', '1') } catch { /* なし */ } // この起動ではキャンペーンのお知らせを出さず案内へ
-    needReloadRef.current = needReload
-    // 叩きつけたあと：割れて飛び散る（終わったら finale）。動きを減らす設定の方は、そのまま finale（ふわっと消す）
-    at(T_STAMP, () => { if (reduceMotion()) finale(); else { setSeq('shatter'); crack() } })
+    if (needReload) {
+      at(T_STAMP, () => {
+        let n = 0
+        try { n = Number(sessionStorage.getItem(RELOADS_KEY) || 0); sessionStorage.setItem(RELOADS_KEY, String(n + 1)) } catch { /* なし */ }
+        if (n < 2) {
+          try { sessionStorage.setItem(KAIKIN_FADE_KEY, String(launchAt())) } catch { /* なし */ }
+          window.location.reload()
+        } else { setFinished(true); setSeq('none'); startGuide() } // 読み込み直しを繰り返さない（端末の時計が大きくずれているときなど）
+      })
+    } else {
+      at(T_STAMP, () => setSeq('out'))
+      at(T_OUT, () => { setFinished(true); setSeq('none'); window.dispatchEvent(new Event(KAIKIN_DONE_EVENT)); startGuide() })
+    }
     // タイマーは片付けない（1回だけ・数秒で終わる。途中で消すと真っ暗のまま止まるため）
   }, [on, phase, waiting, clockOn, startedNew])
 
@@ -211,12 +184,7 @@ export function LaunchClock() {
   const showClock = clockOn && !finished && (phase === 'full' || phase === 'after')
   if (seq === 'none' && !showClock) return null
   if (seq === 'black') return <BlockLayer tone="is-black"><span /></BlockLayer>
-  if (seq === 'shatter') return <BlockLayer tone="is-kaikin"><KaikinShatter onDone={finale} /></BlockLayer>
-  // 割れたあと・読み込み直した直後は黒からふわっと。動きを減らす設定の方は「解禁」ごとふわっと消す
-  // 読み込み直した直後（reveal）は、読み込みの間の明るい画面からつながるよう、地の色からふわっと明ける
-  if (seq === 'reveal' || (seq === 'out' && fromReload)) return <BlockLayer tone={`is-light${seq === 'out' ? ' is-out' : ''}`}><span /></BlockLayer>
-  if (seq === 'out' && !reduceMotion()) return <BlockLayer tone='is-black is-out'><span /></BlockLayer>
-  if (seq === 'stamp' || seq === 'out') {
+  if (seq === 'stamp' || seq === 'reveal' || seq === 'out') {
     return (
       <BlockLayer tone={`is-kaikin${seq === 'stamp' ? ' is-stamp' : ''}${seq === 'out' ? ' is-out' : ''}`}>
         <img className="launch-kaikin" src="/gacha/kaikin-brush.png" alt="解禁" />
