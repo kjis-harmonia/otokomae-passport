@@ -98,8 +98,9 @@ export function V2Home({ onGinpay }: { onGinpay: () => void }) {
   const cats = useMemo(() => [...(usual ? [USUAL] : []), ...UI_CATEGORIES.map(c => c.id)], [usual])
 
   const list = useMemo((): Item[] => {
+    // 新しい流れでは「2名以上で予約する」の2枚目は出さない：いつものAI予約で銀ちゃんが「どなたのご予約ですか？」と聞く（11/11 慶一郎さん「消していい」）
     if (cat === USUAL && usual) return [{ key: 'usual', kind: 'usual', code: usual.menu?.code ?? null, label: usual.menu?.name ?? '', title: usual.menu?.title ?? null },
-      { key: 'group', kind: 'group', code: usual.menu?.code ?? null, label: usual.menu?.name ?? '', title: null }]
+      ...(ginFlow() ? [] : [{ key: 'group', kind: 'group', code: usual.menu?.code ?? null, label: usual.menu?.name ?? '', title: null } as Item])]
     const c = UI_CATEGORIES.find(x => x.id === cat) ?? UI_CATEGORIES[0]
     return c.titles.map(t => styles.find(s => s.title === t)).filter((s): s is StyleCard => !!s)
       .map((s): Item => ({ key: s.id, kind: 'style', style: s, code: getStyleMenuCode(s.title), label: s.title }))
