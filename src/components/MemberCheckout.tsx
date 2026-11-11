@@ -142,6 +142,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   }
 
   if (target) {
+    // 誰の分かの見出し（お連れ様・予約のない方）は Checkout の一番上に出す（予約台帳から開いた会計にも出るように）
     return (
       <Checkout
         quick

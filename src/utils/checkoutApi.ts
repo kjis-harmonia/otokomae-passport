@@ -150,7 +150,7 @@ export interface SalesApi {
   void(id: string, reason: string): Promise<CheckoutResult<Sale>>
 }
 
-export const PAYMENT_LABEL: Record<string, string> = { cash: '現金', card: 'カード', credit: 'カード', qr: 'QR等', other: 'その他', ginpay: 'GINPay' }
+export const PAYMENT_LABEL: Record<string, string> = { cash: '現金', card: 'カード', credit: 'カード', qr: 'QR等', other: 'その他', ginpay: '銀Pay' }
 export const TICKET_BLOCK_LABEL: Record<string, string> = {
   transfer_pending: '譲渡中', welcome_weekend: '土日は使えません', daily_rule: '本日は別の割引を利用済み', gacha_menu: '対象のメニューがありません',
 }
