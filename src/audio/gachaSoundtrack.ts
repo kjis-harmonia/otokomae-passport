@@ -58,6 +58,9 @@ const curve = (fadeIn: boolean) => Float32Array.from({ length: 129 }, (_, i) => 
   return fadeIn ? Math.sin(a) : Math.cos(a)
 })
 
+/** 開く音の中で耳ざわりな区間（秒・開く音の頭から）。そこだけ高い音を削って小さくする（11/12 恐竜編の白い霧のザーッという雑音） */
+export interface OpenTame { from: number; to: number; cutoff?: number; level?: number }
+
 export class GachaSoundtrack {
   private readonly ctx: BaseAudioContext
   private readonly buffers: GachaAudioBuffers
@@ -65,14 +68,16 @@ export class GachaSoundtrack {
   private voices = new Set<Voice>()
   private waiting: Voice | null = null
   private readonly introFade: number
+  private readonly openTame: OpenTame | null
   private resultPlayed = false
   private restoreSession: (() => void) | null = null
 
   // introFade: a theme whose intro already runs into the first bar of the wait loop needs only a short overlap.
-  constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE) {
+  constructor(ctx: BaseAudioContext, buffers: GachaAudioBuffers, introFade = INTRO_CROSSFADE, openTame: OpenTame | null = null) {
     this.ctx = ctx
     this.buffers = buffers
     this.introFade = introFade
+    this.openTame = openTame
     this.master = ctx.createGain()
     this.master.gain.value = 0.8 // Headroom for two equal-power voices and AAC reconstruction peaks.
     this.master.connect(ctx.destination)
@@ -170,6 +175,35 @@ export class GachaSoundtrack {
     }
     const open = this.voice(this.buffers.open, at, offset, false, 0)
     this.fade(open, curve(true), at, fade)
+    this.tame(open, at, offset)
+  }
+
+  private tame(voice: Voice, at: number, offset: number): void {
+    const t = this.openTame
+    if (!t || offset >= t.to) return
+    const filter = this.ctx.createBiquadFilter()
+    const duck = this.ctx.createGain()
+    filter.type = 'lowpass'
+    filter.Q.value = 0.7
+    voice.source.disconnect()
+    voice.source.connect(filter)
+    filter.connect(duck)
+    duck.connect(voice.gain)
+    const start = at + Math.max(0, t.from - offset)
+    const end = at + (t.to - offset)
+    const open = 20000, cut = t.cutoff ?? 1500, level = t.level ?? 0.4
+    filter.frequency.setValueAtTime(open, this.ctx.currentTime)
+    duck.gain.setValueAtTime(1, this.ctx.currentTime)
+    filter.frequency.setValueAtTime(open, start)
+    filter.frequency.exponentialRampToValueAtTime(cut, start + 0.03)
+    duck.gain.setValueAtTime(1, start)
+    duck.gain.linearRampToValueAtTime(level, start + 0.03)
+    filter.frequency.setValueAtTime(cut, end)
+    filter.frequency.exponentialRampToValueAtTime(open, end + 0.25)
+    duck.gain.setValueAtTime(level, end)
+    duck.gain.linearRampToValueAtTime(1, end + 0.25)
+    const ended = voice.source.onended
+    voice.source.onended = e => { filter.disconnect(); duck.disconnect(); ended?.call(voice.source, e) }
   }
 
   // Only a rendered, successful result calls this. Re-renders cannot stack the cue.
