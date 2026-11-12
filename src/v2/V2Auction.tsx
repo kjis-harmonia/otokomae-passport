@@ -158,7 +158,7 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
           {shown.length === 0
             ? <p className="v2-note ginoku-empty">{tab === 'done' ? 'まだ落札された出品はありません。' : tab === 'near' ? '24時間以内に終わる出品はありません。' : 'ほかの出品はありません。'}</p>
             : <div className="ginoku-cards">{shown.map(a => <AuctionRow key={a.id} a={a} now={now} rose={risen.has(a.id)} onOpen={onOpen} />)}</div>}
-          <p className="v2-note ginoku-foot">お支払いは銀Payのみです。入札しても銀Payは減りません。落札したときに銀Payから支払い、券をお渡しします（入札中の額は、ほかのお支払いに使えないよう取っておきます）。</p>
+          <p className="v2-note ginoku-foot">お支払いは銀Payのみです。</p>
         </>
       )}
     </div>
@@ -273,7 +273,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
       else if (c.kind === 'bid') {
         setAmount(null)
         lastMine.current = 'leading'
-        setNotice({ text: res.extended ? `${payText(c.amount)}で入札しました。終了間際のため、終了を5分延ばしました。銀Payは落札したときに支払います。` : `${payText(c.amount)}で入札しました。いまの最高額です。銀Payは落札したときに支払います。` })
+        setNotice({ text: res.extended ? `${payText(c.amount)}で入札しました。終了間際のため、終了を5分延ばしました。` : `${payText(c.amount)}で入札しました。いまの最高額です。` })
       }
       window.dispatchEvent(new Event('ginjiro:ginpay-holds-changed'))
     } catch (err) {
@@ -376,7 +376,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
                 // 入札では銀Payは減らない（11/13 慶一郎さん「入札中はまだ銀Pay減らしたらあかん」）。減るのは落札したときだけ
                 <>
                   <div><dt>入札額</dt><dd>{payText(confirm.amount)}</dd></div>
-                  <div><dt>銀Payの残高</dt><dd>{walletBalance === null ? '—' : `${walletBalance.toLocaleString('ja-JP')}（入札では減りません）`}</dd></div>
+                  <div><dt>銀Payの残高</dt><dd>{walletBalance === null ? '—' : `${walletBalance.toLocaleString('ja-JP')}`}</dd></div>
                 </>
               ) : (
                 <>
@@ -387,8 +387,8 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
             </dl>
             <p className="v2-note" style={{ margin: '4px 0 14px' }}>
               {confirm.kind === 'bid'
-                ? '入札しても、銀Payの残高は減りません。落札したときにはじめて銀Payから支払い、そのとき券をお渡しします。入札中は、この額をほかのお支払いに使えないよう取っておき、ほかの方に抜かれたらすぐ使えるように戻します。入札は取り消せません。'
-                : '落札すると、すぐに銀Payから支払い、券をチケットにお渡しします。'}
+                ? '入札は取り消せません。'
+                : '券はチケットに入ります。'}
             </p>
             <div className="ginoku-sheet-actions">
               <button type="button" className="ginoku-go" disabled={busy} onClick={() => void run(confirm)}>{busy ? '送信しています…' : confirm.kind === 'bid' ? '入札する' : '落札する'}</button>

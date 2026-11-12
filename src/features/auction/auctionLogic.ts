@@ -86,4 +86,4 @@ export function ticketRule(a: { free_menu?: string | null; ticket_amount: number
 }
 
 /** 最高額のあいだの押さえの一言（「6,300 銀Payを押さえています。負けたら戻ります」） */
-export const holdNote = (held: number) => `${held.toLocaleString('ja-JP')} 銀Payで入札中です。銀Payは落札したときに支払います（いまは減っていません）`
+export const holdNote = (held: number) => `${held.toLocaleString('ja-JP')} 銀Payで入札中です`
