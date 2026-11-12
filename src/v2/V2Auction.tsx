@@ -158,7 +158,7 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
           {shown.length === 0
             ? <p className="v2-note ginoku-empty">{tab === 'done' ? 'まだ落札された出品はありません。' : tab === 'near' ? '24時間以内に終わる出品はありません。' : 'ほかの出品はありません。'}</p>
             : <div className="ginoku-cards">{shown.map(a => <AuctionRow key={a.id} a={a} now={now} rose={risen.has(a.id)} onOpen={onOpen} />)}</div>}
-          <p className="v2-note ginoku-foot">お支払いは銀Payのみです。最高額のあいだは入札額を押さえ、抜かれたらすぐ戻ります。落札で引き落とし、券はチケットに入ります。</p>
+          <p className="v2-note ginoku-foot">お支払いは銀Payのみです。入札しても銀Payは減りません。落札したときに銀Payから支払い、券をお渡しします（入札中の額は、ほかのお支払いに使えないよう取っておきます）。</p>
         </>
       )}
     </div>
@@ -247,6 +247,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
   if (data === 'error' || !a) return <div className="v2-page"><Back onBack={onBack} /><p className="v2-note">表示できませんでした。通信を確かめてください。</p></div>
 
   const available = walletAvailable(data.wallet)
+  const walletBalance = data.wallet && 'balance' in data.wallet && typeof data.wallet.balance === 'number' ? data.wallet.balance : null
   const walletProblem = data.wallet && 'error' in data.wallet ? data.wallet.error : null
   const canAct = data.signed_in && !walletProblem && !isEnded
   const short = (n: number) => available !== null && available < n
@@ -272,7 +273,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
       else if (c.kind === 'bid') {
         setAmount(null)
         lastMine.current = 'leading'
-        setNotice({ text: res.extended ? `${payText(c.amount)}で入札し、押さえました。終了間際のため、終了を5分延ばしました。` : `${payText(c.amount)}で入札し、押さえました。いまの最高額です。` })
+        setNotice({ text: res.extended ? `${payText(c.amount)}で入札しました。終了間際のため、終了を5分延ばしました。銀Payは落札したときに支払います。` : `${payText(c.amount)}で入札しました。いまの最高額です。銀Payは落札したときに支払います。` })
       }
       window.dispatchEvent(new Event('ginjiro:ginpay-holds-changed'))
     } catch (err) {
@@ -371,13 +372,23 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
             <p className="ginoku-sheet-title">{confirm.kind === 'bid' ? `${payText(confirm.amount)}で入札しますか？` : `即決 ${payText(confirm.amount)}で落札しますか？`}</p>
             <dl className="ginoku-sheet-facts">
               <div><dt>券</dt><dd>{a.title}</dd></div>
-              <div><dt>{confirm.kind === 'bid' ? '入札額' : 'お支払い'}</dt><dd>{payText(confirm.amount)}</dd></div>
-              <div><dt>使える銀Pay</dt><dd>{(buyBase ?? 0).toLocaleString('ja-JP')}{buyBase !== null ? ` → ${((confirm.kind === 'buy' ? buyBase : available ?? 0) - confirm.amount).toLocaleString('ja-JP')}` : ''}</dd></div>
+              {confirm.kind === 'bid' ? (
+                // 入札では銀Payは減らない（11/13 慶一郎さん「入札中はまだ銀Pay減らしたらあかん」）。減るのは落札したときだけ
+                <>
+                  <div><dt>入札額</dt><dd>{payText(confirm.amount)}</dd></div>
+                  <div><dt>銀Payの残高</dt><dd>{walletBalance === null ? '—' : `${walletBalance.toLocaleString('ja-JP')}（入札では減りません）`}</dd></div>
+                </>
+              ) : (
+                <>
+                  <div><dt>お支払い</dt><dd>{payText(confirm.amount)}</dd></div>
+                  <div><dt>銀Payの残高</dt><dd>{walletBalance === null ? '—' : `${walletBalance.toLocaleString('ja-JP')} → ${(walletBalance - confirm.amount).toLocaleString('ja-JP')}`}</dd></div>
+                </>
+              )}
             </dl>
             <p className="v2-note" style={{ margin: '4px 0 14px' }}>
               {confirm.kind === 'bid'
-                ? '入札額の銀Payを、いま押さえます。引き落とすのは落札したときだけで、ほかの方に抜かれたらすぐ戻ります。入札は取り消せません。'
-                : 'すぐに銀Payから引き落とし、券をチケットに入れます。'}
+                ? '入札しても、銀Payの残高は減りません。落札したときにはじめて銀Payから支払い、そのとき券をお渡しします。入札中は、この額をほかのお支払いに使えないよう取っておき、ほかの方に抜かれたらすぐ使えるように戻します。入札は取り消せません。'
+                : '落札すると、すぐに銀Payから支払い、券をチケットにお渡しします。'}
             </p>
             <div className="ginoku-sheet-actions">
               <button type="button" className="ginoku-go" disabled={busy} onClick={() => void run(confirm)}>{busy ? '送信しています…' : confirm.kind === 'bid' ? '入札する' : '落札する'}</button>

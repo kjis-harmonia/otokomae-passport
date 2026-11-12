@@ -41,7 +41,7 @@ export function V2Ginpay({ onBack, onShowQr }: { onBack: () => void; onShowQr: (
           {state === 'ok' && ledger ? yen(ledger.balance) : state === 'loading' ? '…' : '—'}
         </p>
         {holds && reserveHeld > 0 && <p className="v2-note" style={{ marginTop: 6 }}>うち予約の仮支払い {yen(reserveHeld)}。レジで会員QRを読むと確定し、キャンセルすると戻ります。</p>}
-        {holds?.auction_holds?.map(h => <p key={h.auction_id} className="v2-note" style={{ marginTop: 6 }}>銀オクの入札で押さえ中 {yen(h.amount)}（{h.title}）。抜かれたら戻ります。</p>)}
+        {holds?.auction_holds?.map(h => <p key={h.auction_id} className="v2-note" style={{ marginTop: 6 }}>銀オクで入札中 {yen(h.amount)}（{h.title}）。残高は減っていません。落札したときに支払い、抜かれたらすぐ使えるように戻ります。</p>)}
         {holds && holds.held > 0 && <p className="v2-note" style={{ marginTop: 6 }}>今使える額 {yen(holds.available)}</p>}
         {state === 'signedOut' && <p className="v2-note" style={{ marginTop: 6 }}>店頭で本人確認が済むと、残高が表示されます。</p>}
         {state === 'error' && <p className="v2-note" style={{ marginTop: 6 }}>表示できませんでした。通信を確認してください。</p>}

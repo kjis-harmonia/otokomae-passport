@@ -13,7 +13,7 @@ export function V2GinpayBar({ onOpen }: { onOpen: () => void }) {
   const holds = useGinpayHolds()
   const held = holds?.held ?? 0
   // 銀オクの入札の押さえがあるときは「押さえ中」（予約の仮支払いだけなら今までどおり）
-  const heldLabel = auctionHeld(holds) > 0 ? '押さえ中' : '仮支払い済み'
+  const heldLabel = auctionHeld(holds) > 0 ? '入札中' : '仮支払い済み'
 
   useEffect(() => {
     let alive = true
