@@ -231,3 +231,22 @@
 .ginoku-detail .ginoku-gold.is-lg { width: 168px; height: 102px; }
 .ginoku-detail .ginoku-gold.is-lg b { font-size: 24px; }
 .ginoku-detail .ginoku-gold.is-lg .ginoku-laurel { width: 16px; height: 44px; }
+/* 値段と入札を1枚に（11/12） */
+.ginoku-one { padding-bottom: 14px; }
+.ginoku-one-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.ginoku-one-top > div { min-width: 0; }
+.ginoku-one .ginoku-price { margin: 2px 0 0; }
+.ginoku-one-time { text-align: right; }
+.ginoku-one-time .ginoku-k { justify-content: flex-end; }
+.ginoku-one-clock { margin: 2px 0 4px; font: 700 22px/1.2 var(--v2-serif); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ginoku-one-clock.is-hurry { color: #a3402f; }
+.ginoku-one .ginoku-end { margin: 8px 0 0; padding-bottom: 12px; border-bottom: 1px solid var(--v2-line); }
+.ginoku-one-bid { padding-top: 12px; }
+.ginoku-one-bid .ginoku-quick { margin: 0 0 10px; }
+.ginoku-one-bid .ginoku-hint { margin: 0; }
+.ginoku-stepper.is-small { margin: 0 0 8px; }
+.ginoku-stepper.is-small .v2-round { width: 40px; height: 40px; }
+.ginoku-stepper.is-small output .ginoku-pay-n { font-size: 22px; }
+.ginoku-detail { padding-bottom: 24px; }
+.ginoku-bids { margin-top: 14px; }
+@media (max-width: 370px) { .ginoku-one-clock { font-size: 18px; } .ginoku-one .ginoku-pay-n.is-big { font-size: 30px; } }
