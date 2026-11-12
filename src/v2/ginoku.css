@@ -71,3 +71,34 @@
 /* 5つ目のタブ（Staging の銀オク）があるとき */
 .v2-nav.is-five { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
 .v2-nav.is-five button { font-size: 10.5px; letter-spacing: 0; }
+
+/* 入口の看板・目玉の1件・終わり間近・値上がりの光（11/12 慶一郎さん「かっこよく」） */
+.ginoku-banner { position: relative; overflow: hidden; margin: 0 0 14px; padding: 22px 20px 18px; border-radius: 26px; text-align: center; color: #f4e7c4;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(231,201,131,.22), transparent 60%), linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.55)), url(/images/tickets/marble-black.webp) center / cover no-repeat, #0d0b09;
+  border: 1px solid rgba(184,148,79,.55); box-shadow: inset 0 1px 0 rgba(255,236,190,.25), 0 18px 34px -20px rgba(0,0,0,.6); }
+.ginoku-banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(255,236,190,.16) 50%, transparent 65%); transform: translateX(-100%); animation: ginoku-shine 5.5s ease-in-out 1s infinite; pointer-events: none; }
+@keyframes ginoku-shine { 0%, 70% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+.ginoku-banner-kicker { margin: 0; font: 700 10px/1 var(--v2-sans); letter-spacing: .42em; padding-left: .42em; color: rgba(231,201,131,.75); }
+.ginoku-banner-title { margin: 8px 0 4px; font: 800 44px/1.1 var(--v2-serif); letter-spacing: .14em; padding-left: .14em;
+  background: linear-gradient(180deg, #fff3d0 0%, #e7c983 45%, #a77a35 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 2px 8px rgba(0,0,0,.6)); }
+.ginoku-banner-sub { margin: 0; font: 600 12.5px/1.5 var(--v2-sans); letter-spacing: .08em; color: rgba(244,231,196,.85); }
+.ginoku-banner-pay { margin: 12px auto 0; display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(231,201,131,.35); background: rgba(0,0,0,.35); font-size: 11.5px; color: rgba(244,231,196,.8); }
+.ginoku-banner-pay b { font: 700 15px/1.2 var(--v2-serif); color: #e7c983; font-variant-numeric: tabular-nums; }
+
+.ginoku-feature { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; margin: 0 0 12px; padding: 22px 18px 18px; border-radius: 26px; border: 1px solid rgba(184,148,79,.35); color: var(--v2-ink); text-align: center; cursor: pointer; font: inherit; }
+.ginoku-feature .ginoku-tk { margin-bottom: 8px; }
+.ginoku-feature-title { font: 700 17px/1.4 var(--v2-serif); letter-spacing: .03em; }
+.ginoku-feature-label { margin-top: 6px; font-size: 11.5px; color: var(--v2-faint); letter-spacing: .08em; }
+.ginoku-feature-price { font: 800 40px/1.15 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; }
+.ginoku-feature-meta { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 14px; row-gap: 2px; margin-top: 2px; font-size: 12.5px; color: var(--v2-sub); font-variant-numeric: tabular-nums; }
+.ginoku-feature .ginoku-mine { margin-top: 4px; }
+.ginoku-feature-go { display: inline-flex; align-items: center; gap: 2px; margin-top: 12px; min-height: 44px; padding: 0 22px; border-radius: 999px; font: 700 14px/1 var(--v2-sans); color: #3a2a10;
+  background: linear-gradient(180deg, #f6e3b4, #d9b56b); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 8px 16px -10px rgba(120,86,39,.8); }
+
+.ginoku-tag { position: absolute; z-index: 2; top: 14px; right: 14px; padding: 4px 10px; border-radius: 999px; font: 700 11px/1.2 var(--v2-sans); letter-spacing: .06em; color: #fff7e3; background: linear-gradient(180deg, #b8873c, #7d5622); box-shadow: 0 4px 10px -6px rgba(0,0,0,.5); }
+.ginoku-tag.is-small { position: static; padding: 1px 8px; font-size: 10.5px; }
+.ginoku-left.is-hurry { color: var(--v2-gold-deep); font-weight: 700; }
+
+.is-up { animation: ginoku-up 1.6s ease-out 1; }
+@keyframes ginoku-up { 0% { color: #fff; text-shadow: 0 0 0 rgba(231,201,131,0); } 25% { color: #c9963f; text-shadow: 0 0 18px rgba(231,201,131,.95); } 100% { text-shadow: 0 0 0 rgba(231,201,131,0); } }
+@media (prefers-reduced-motion: reduce) { .ginoku-banner::after, .is-up { animation: none; } }

@@ -24,6 +24,21 @@ function AuctionTicket({ a, large = false }: { a: Auction; large?: boolean }) {
   )
 }
 
+/** 前に見た値段より上がったか（入札が入ったら、その値段を一度だけ金色に光らせる・11/12） */
+function useRose() {
+  const seen = useRef(new Map<string, number>())
+  return (a: Auction) => {
+    const p = a.current_price ?? a.start_price
+    const before = seen.current.get(a.id)
+    seen.current.set(a.id, p)
+    return before !== undefined && p > before
+  }
+}
+/** 残り1時間を切った */
+const soon = (a: Auction, now: number) => Date.parse(a.ends_at) - now < 3600_000
+/** 目玉：いちばん早く終わる開催中のもの（同じなら額の大きい券） */
+const pickFeatured = (open: Auction[]) => [...open].sort((x, y) => Date.parse(x.ends_at) - Date.parse(y.ends_at) || y.ticket_amount - x.ticket_amount)[0] ?? null
+
 function useReloadOnVisible(load: () => void) {
   useEffect(() => {
     const onVisible = () => { if (document.visibilityState === 'visible') load() }
@@ -66,13 +81,20 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
   const open = list.filter(a => !ended(a, now))
   const done = list.filter(a => ended(a, now))
   const available = data && data !== 'error' ? walletAvailable(data.wallet) : null
+  const featured = pickFeatured(open)
+  const rest = open.filter(a => a !== featured)
+  const rose = useRose()
+  const risen = new Set(list.filter(rose).map(a => a.id))
 
   return (
     <div className="v2-page">
-      <div className="ginoku-head">
-        <h1 className="v2-title">銀オク</h1>
-        {available !== null && <p className="ginoku-pay">使える銀Pay<b>{yen(available)}</b></p>}
-      </div>
+      {/* 入口の看板（黒い大理石に金の文字）：ガチャの「解禁」と同じ、銀二郎の夜の世界 */}
+      <header className="ginoku-banner">
+        <p className="ginoku-banner-kicker">GINJIRO AUCTION</p>
+        <h1 className="ginoku-banner-title">銀オク</h1>
+        <p className="ginoku-banner-sub">{open.length ? `開催中 ${open.length}件` : '次の出品をお待ちください'}</p>
+        {available !== null && <p className="ginoku-banner-pay">使える銀Pay <b>{yen(available)}</b></p>}
+      </header>
       {data === null && <p className="v2-note">読み込んでいます…</p>}
       {data === 'error' && <p className="v2-note">表示できませんでした。通信を確かめてください。</p>}
       {data && data !== 'error' && (
@@ -80,9 +102,14 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
           {open.length === 0
             ? <p className="v2-note ginoku-empty">いま開催中のオークションはありません。</p>
             : (
-              <section className="v2-panel v2-glass ginoku-list" aria-label="開催中">
-                {open.map(a => <AuctionRow key={a.id} a={a} now={now} onOpen={onOpen} />)}
-              </section>
+              <>
+                {featured && <FeaturedCard a={featured} now={now} rose={risen.has(featured.id)} onOpen={onOpen} />}
+                {rest.length > 0 && (
+                  <section className="v2-panel v2-glass ginoku-list" aria-label="開催中">
+                    {rest.map(a => <AuctionRow key={a.id} a={a} now={now} rose={risen.has(a.id)} onOpen={onOpen} />)}
+                  </section>
+                )}
+              </>
             )}
           {done.length > 0 && (
             <>
@@ -99,10 +126,34 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
   )
 }
 
-function AuctionRow({ a, now, onOpen }: { a: Auction; now: number; onOpen: (id: string) => void }) {
+/** 目玉の1件：券を大きく、今の値段と残り時間を主役に */
+function FeaturedCard({ a, now, rose, onOpen }: { a: Auction; now: number; rose: boolean; onOpen: (id: string) => void }) {
+  const left = timeLeft(Date.parse(a.ends_at), now)
+  const hurry = soon(a, now)
+  const mine = mineLabel(a.mine)
+  return (
+    <button type="button" className="ginoku-feature v2-glass" onClick={() => onOpen(a.id)} aria-label={`${a.title}の入札を見る`}>
+      {hurry && <span className="ginoku-tag">まもなく終了</span>}
+      <AuctionTicket a={a} large />
+      <span className="ginoku-feature-title">{a.title}</span>
+      <span className="ginoku-feature-label">{a.current_price === null ? '開始価格' : '現在価格'}</span>
+      <b className={rose ? 'ginoku-feature-price is-up' : 'ginoku-feature-price'}>{yen(a.current_price ?? a.start_price)}</b>
+      <span className="ginoku-feature-meta">
+        <span className={hurry ? 'ginoku-left is-hurry' : 'ginoku-left'}>残り {left}</span>
+        <span>入札 {a.bid_count}件</span>
+        {a.buy_now_price !== null && <span>即決 {yen(a.buy_now_price)}</span>}
+      </span>
+      {mine && <span className={`ginoku-mine is-${a.mine}`}>{mine}</span>}
+      <span className="ginoku-feature-go">入札する<ChevronRight size={16} /></span>
+    </button>
+  )
+}
+
+function AuctionRow({ a, now, rose = false, onOpen }: { a: Auction; now: number; rose?: boolean; onOpen: (id: string) => void }) {
   const left = timeLeft(Date.parse(a.ends_at), now)
   const isEnded = ended(a, now)
   const mine = mineLabel(a.mine)
+  const hurry = !isEnded && soon(a, now)
   return (
     <button type="button" className="ginoku-row" onClick={() => onOpen(a.id)}>
       <AuctionTicket a={a} />
@@ -113,10 +164,10 @@ function AuctionRow({ a, now, onOpen }: { a: Auction; now: number; onOpen: (id: 
         ) : (
           <>
             <span className="ginoku-row-price">
-              <b>{yen(a.current_price ?? a.start_price)}</b>
+              <b className={rose ? 'is-up' : undefined}>{yen(a.current_price ?? a.start_price)}</b>
               {a.buy_now_price !== null && <small>即決 {yen(a.buy_now_price)}</small>}
             </span>
-            <span className="ginoku-row-meta"><span>残り {left}</span><span>入札 {a.bid_count}件</span></span>
+            <span className="ginoku-row-meta"><span className={hurry ? 'ginoku-left is-hurry' : 'ginoku-left'}>残り {left}</span><span>入札 {a.bid_count}件</span>{hurry && <span className="ginoku-tag is-small">まもなく終了</span>}</span>
           </>
         )}
         {mine && <span className={`ginoku-mine is-${a.mine}`}>{mine}</span>}
@@ -201,7 +252,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
           <p className="v2-label">{isEnded ? (a.status === 'sold' ? '落札価格' : '終了') : a.current_price === null ? '開始価格' : '現在価格'}</p>
           <p className="ginoku-price">{isEnded ? (a.status === 'sold' ? yen(a.final_price) : a.status === 'unsold' ? '落札なし' : '集計中') : yen(a.current_price ?? a.start_price)}</p>
           <dl className="ginoku-facts">
-            <div><dt>残り時間</dt><dd>{left ?? '終了'}</dd></div>
+            <div><dt>残り時間</dt><dd className={!isEnded && Date.parse(a.ends_at) - now < 3600_000 ? 'ginoku-left is-hurry' : undefined}>{left ?? '終了'}</dd></div>
             <div><dt>入札</dt><dd>{a.bid_count}件</dd></div>
             <div><dt>即決</dt><dd>{a.buy_now_price === null ? 'なし' : yen(a.buy_now_price)}</dd></div>
           </dl>
