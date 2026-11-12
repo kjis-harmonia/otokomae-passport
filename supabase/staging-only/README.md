@@ -33,3 +33,5 @@ npx.cmd supabase db query --remote=kfufxzmucjljjouzpumi --yes -f supabase/stagin
 | `app_private.ticket_json` | `_free_and_hold.sql` | 無料券なら `free_menu`・`menu_codes` |
 
 トリガー：`public.ginpay_transactions` の `ginoku_block_reverse`（`_fix1.sql`）、`app_private.ginoku_auctions` の `ginoku_release_on_close`（`_free_and_hold.sql`）。
+
+- `20261112_ginoku_fix2.sql`（2回目の粗探しの直し）：額とメニューが決まった景品は出品できない（`menu_discount_not_supported`）／店の会計の情報 `app_private.checkout_context_json` に `auction_held`（銀オクの入札で押さえている額）を足す。戻すときは `_fix2_off.sql`

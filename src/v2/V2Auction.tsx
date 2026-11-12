@@ -258,6 +258,9 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
   const hurry = !isEnded && endsAt - now < 3600_000
   const leading = a.mine === 'leading'
   const bids = allBids ? data.bids : data.bids.slice(0, 3)
+  // 即決は、自分の押さえ（最高額のあいだの入札額）も使える（DB も同じ数え方・11/12 粗探し）
+  const buyBase = available === null ? null : available + (leading && a.my_bid ? a.my_bid : 0)
+  const shortBuy = a.buy_now_price !== null && buyBase !== null && buyBase < a.buy_now_price
 
   const run = async (c: Confirm) => {
     setBusy(true)
@@ -353,10 +356,10 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
       )}
 
       {/* 下に固定の入札ボタン（どこまで読んでも、すぐ押せる） */}
-      {!isEnded && canAct && !leading && (
+      {!isEnded && canAct && (!leading || a.buy_now_price !== null) && (
         <div className="ginoku-bar v2-glass">
-          {!onlyBuyNow && <button type="button" className="ginoku-go" disabled={busy || short(value)} onClick={() => setConfirm({ kind: 'bid', amount: value })}>{payText(value)}で入札</button>}
-          {a.buy_now_price !== null && <button type="button" className={onlyBuyNow ? 'ginoku-go' : 'ginoku-buy-now'} disabled={busy || short(a.buy_now_price)} onClick={() => setConfirm({ kind: 'buy', amount: a.buy_now_price! })}>即決 {payText(a.buy_now_price)}</button>}
+          {!onlyBuyNow && !leading && <button type="button" className="ginoku-go" disabled={busy || short(value)} onClick={() => setConfirm({ kind: 'bid', amount: value })}>{payText(value)}で入札</button>}
+          {a.buy_now_price !== null && <button type="button" className={onlyBuyNow || leading ? 'ginoku-go' : 'ginoku-buy-now'} disabled={busy || shortBuy} onClick={() => setConfirm({ kind: 'buy', amount: a.buy_now_price! })}>即決 {payText(a.buy_now_price)}</button>}
         </div>
       )}
 
@@ -369,7 +372,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
             <dl className="ginoku-sheet-facts">
               <div><dt>券</dt><dd>{a.title}</dd></div>
               <div><dt>{confirm.kind === 'bid' ? '入札額' : 'お支払い'}</dt><dd>{payText(confirm.amount)}</dd></div>
-              <div><dt>使える銀Pay</dt><dd>{(available ?? 0).toLocaleString('ja-JP')}{available !== null ? ` → ${(available - confirm.amount).toLocaleString('ja-JP')}` : ''}</dd></div>
+              <div><dt>使える銀Pay</dt><dd>{(buyBase ?? 0).toLocaleString('ja-JP')}{buyBase !== null ? ` → ${((confirm.kind === 'buy' ? buyBase : available ?? 0) - confirm.amount).toLocaleString('ja-JP')}` : ''}</dd></div>
             </dl>
             <p className="v2-note" style={{ margin: '4px 0 14px' }}>
               {confirm.kind === 'bid'

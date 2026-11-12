@@ -198,13 +198,16 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const listed = gachaTicket ? [gachaTicket, ...tickets] : tickets
   const chosenTickets = listed.filter(t => t.id === 'gacha' ? gachaOn : usedTicketIds.includes(t.id)).map(t => isFreeTicket(t) ? { ...t, amount: freeOff.get(t.id) ?? 0 } : t)
   const manualAmount = manual ? Math.max(0, parseInt(manual.amount || '0', 10) || 0) : 0
-  const totals = useMemo(() => saleTotals(lines, chosenTickets, manualAmount), [lines, chosenTickets, manualAmount])
+  // 無料券の額は毎回計算し直すので、合計もその場で（軽い計算）
+  const totals = saleTotals(lines, chosenTickets, manualAmount)
   const paid = !!ctx?.paid_sale_id
   const customerReady = !!ctx?.reservation || anonymous || !!client
   // GINPay：顧客の口座（統合顧客で複数あるときは選ぶ。合算しない）
   const ginpayAccounts = clientInfo ? ctx?.ginpay_accounts ?? [] : []
   const ginpayAccount = ginpayAccounts.length === 1 ? ginpayAccounts[0] : ginpayAccounts.find(a => a.id === ginpayAccountId) ?? null
-  const ginpayShort = method === 'ginpay' && !!ginpayAccount && ginpayAccount.balance < totals.total
+  // 銀オクの入札で押さえている分は使えない（DB も断る・11/12 粗探し）
+  const ginpayHeld = ginpayAccount?.auction_held ?? 0
+  const ginpayShort = method === 'ginpay' && !!ginpayAccount && ginpayAccount.balance - ginpayHeld < totals.total
   const ginpayOk = method !== 'ginpay' || (!!ginpayAccount && totals.total > 0 && !ginpayShort)
   // オプションは金額だけでよい（名前は任意。空なら「オプション」で記録・10/28 慶一郎さん）
   const optionsReady = lines.every(l => l.source !== 'manual' || l.unit_price > 0)
@@ -436,7 +439,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                   {/* 同じ券（名前・金額・使える状態が同じ）は1行にまとめて − 枚数 ＋（11/6 慶一郎さん：予約の画面と同じに）。ガチャ券は1枚なので ✓ のまま */}
                   {ticketGroups(listed.filter(t => t.id !== 'gacha'), t => ((!hasPerm || ownerOnlyOff) && welcomeIds.includes(t.id)) || !!t.blocked).map(g => {
                     const first = g.items[0]
-                    const on = g.items.filter(t => ticketIds.includes(t.id))
+                    // 実際に送る枚数で数える（対象の明細が足りない無料券は送らない・11/12 粗探し）
+                    const on = g.items.filter(t => usedTicketIds.includes(t.id))
                     const permOnly = (!hasPerm || ownerOnlyOff) && welcomeIds.includes(first.id)
                     const off = !!first.blocked || permOnly
                     const btn = (dis: boolean): CSSProperties => ({ width: 40, height: 40, borderRadius: 20, border: `1px solid ${C.lineStrong}`, background: 'transparent', color: dis ? C.mute : C.text, fontSize: 20, lineHeight: 1, cursor: dis ? 'default' : 'pointer' })
@@ -597,7 +601,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
       {(ctx || attempt) && !attemptError && (
         <div style={quick ? { marginTop: 16 } : { flexShrink: 0, padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${C.line}` }}>
           <div data-guide="co-confirm" style={quick ? undefined : { maxWidth: 640, margin: '0 auto' }}>
-            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)} style={quick && !(busy || (attempt ? !matchesAttempt : !canConfirm)) ? { minHeight: 56, borderRadius: 14, background: '#161513', color: '#F2E6CC', fontSize: 17, letterSpacing: '0.04em' } : quick ? { minHeight: 56, borderRadius: 14 } : undefined}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? 'GINPayの残高が不足しています' : quick && method === 'cash' ? `現金 ${yen(Math.max(0, totals.total))} を受け取って会計を確定` : quick && method === 'ginpay' ? `銀Payで会計を確定 ${yen(Math.max(0, totals.total))}` : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
+            <PrimaryButton onClick={() => void confirm()} disabled={busy || (attempt ? !matchesAttempt : !canConfirm)} style={quick && !(busy || (attempt ? !matchesAttempt : !canConfirm)) ? { minHeight: 56, borderRadius: 14, background: '#161513', color: '#F2E6CC', fontSize: 17, letterSpacing: '0.04em' } : quick ? { minHeight: 56, borderRadius: 14 } : undefined}>{busy ? '確認中…' : attempt ? '前回の会計結果を確認' : ginpayShort ? (ginpayHeld > 0 ? `GINPayが足りません（銀オクの入札で${yen(ginpayHeld)}押さえ中）` : 'GINPayの残高が不足しています') : quick && method === 'cash' ? `現金 ${yen(Math.max(0, totals.total))} を受け取って会計を確定` : quick && method === 'ginpay' ? `銀Payで会計を確定 ${yen(Math.max(0, totals.total))}` : `会計を確定 ${yen(Math.max(0, totals.total))}`}</PrimaryButton>
           </div>
         </div>
       )}

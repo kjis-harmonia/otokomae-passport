@@ -41,7 +41,7 @@ export interface CheckoutContext {
   client: { id: string; name: string; app_linked: boolean } | null
   tickets: CheckoutTicket[]
   /** 顧客（統合された顧客を含む）の有効な GINPay 口座。口座は合算しない */
-  ginpay_accounts: { id: string; client_name: string; balance: number; is_current_client: boolean }[]
+  ginpay_accounts: { id: string; client_name: string; balance: number; is_current_client: boolean; /** 銀オクの入札で押さえている額（Staging だけ） */ auction_held?: number }[]
   /** 停止中の口座がある（新規の支払いには使えない） */
   ginpay_suspended: boolean
   staff: { id: string; name: string }[]
