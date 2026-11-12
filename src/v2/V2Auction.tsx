@@ -2,9 +2,9 @@
 // 一覧（現在価格・即決・入札数・残り時間）→ 詳細（入札・即決・入札履歴）。入札・即決の前に必ず確かめる。
 // 終了時に最高額の方の銀Pay から引き落とし、券はすぐチケットへ（サーバーが締める。画面は結果を読むだけ）
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Clock, Minus, Plus } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Clock, Minus, Plus } from 'lucide-react'
 import { buyNow, loadAuction, loadAuctions, placeBid, walletAvailable, type Auction, type AuctionAction, type AuctionList } from '../features/auction/auctionApi'
-import { auctionErrorMessage, clampBid, endLabel, mineLabel, timeLeft } from '../features/auction/auctionLogic'
+import { auctionErrorMessage, clampBid, endLabel, mineLabel } from '../features/auction/auctionLogic'
 import { RpcError } from '../utils/staffSession'
 import { useServerSecond } from './launchTime'
 import './ginoku.css'
@@ -129,6 +129,9 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
   const rose = useRose()
   const risen = new Set(list.filter(rose).map(a => a.id))
   const shown = tab === 'open' ? open.filter(a => a !== featured) : tab === 'near' ? open.filter(a => nearEnd(a, now)) : done
+  const count: Record<ListTab, number> = { open: open.length, near: open.filter(a => nearEnd(a, now)).length, done: done.length }
+  // 抜かれた出品：一番上で知らせて、ひと押しで入札し直せるように
+  const outbid = open.filter(a => a.mine === 'outbid')
 
   return (
     <div className="v2-page">
@@ -140,11 +143,17 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
       {data === 'error' && <p className="v2-note">表示できませんでした。通信を確かめてください。</p>}
       {data && data !== 'error' && (
         <>
+          {outbid.length > 0 && (
+            <button type="button" className="ginoku-alert" onClick={() => onOpen(outbid[0].id)}>
+              <span><b>入札されました</b>{outbid.length === 1 ? `${outbid[0].title.replace(/券$/, '')}で、より高い入札がありました` : `${outbid.length}件の出品で、より高い入札がありました`}</span>
+              <span className="ginoku-alert-go">入札し直す<ChevronRight size={16} /></span>
+            </button>
+          )}
           {featured
             ? <FeaturedCard a={featured} now={now} rose={risen.has(featured.id)} onOpen={onOpen} />
             : <p className="v2-note ginoku-empty">いま開催中のオークションはありません。次の出品をお待ちください。</p>}
           <div className="ginoku-tabs" role="tablist" aria-label="表示する出品">
-            {TABS.map(t => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'is-on' : undefined} onClick={() => setTab(t.id)}>{t.label}</button>)}
+            {TABS.map(t => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'is-on' : undefined} onClick={() => setTab(t.id)}>{t.label}{count[t.id] > 0 && <small>{count[t.id]}</small>}</button>)}
           </div>
           {shown.length === 0
             ? <p className="v2-note ginoku-empty">{tab === 'done' ? 'まだ落札された出品はありません。' : tab === 'near' ? '24時間以内に終わる出品はありません。' : 'ほかの出品はありません。'}</p>
@@ -160,14 +169,14 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
 function FeaturedCard({ a, now, rose, onOpen }: { a: Auction; now: number; rose: boolean; onOpen: (id: string) => void }) {
   const mine = mineLabel(a.mine)
   return (
-    <section className="ginoku-feature v2-glass" aria-label={a.title}>
-      <button type="button" className="ginoku-feature-art" onClick={() => onOpen(a.id)} aria-label={`${a.title}を見る`}><AuctionTicket a={a} large /></button>
+    <section className="ginoku-feature v2-glass" aria-label={a.title} onClick={() => onOpen(a.id)}>
+      <button type="button" className="ginoku-feature-art" onClick={e => { e.stopPropagation(); onOpen(a.id) }} aria-label={`${a.title}を見る`}><AuctionTicket a={a} large /></button>
       <div className="ginoku-feature-side">
         <p className="ginoku-k">{a.current_price === null ? '開始価格' : '現在の入札額'}</p>
         <Pay n={a.current_price ?? a.start_price} className={rose ? 'is-big is-up' : 'is-big'} />
         <p className="ginoku-left"><Clock size={16} />残り<b>{clock(Date.parse(a.ends_at), now)}</b></p>
         {mine && <p className={`ginoku-mine is-${a.mine}`}>{mine}</p>}
-        <button type="button" className="ginoku-go" onClick={() => onOpen(a.id)}>入札する</button>
+        <button type="button" className="ginoku-go" onClick={e => { e.stopPropagation(); onOpen(a.id) }}>入札する</button>
       </div>
     </section>
   )
@@ -206,8 +215,10 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ text: string; bad?: boolean } | null>(null)
+  const [allBids, setAllBids] = useState(false)
   const now = useServerSecond()
   const gen = useRef(0)
+  const lastMine = useRef<string | null>(null)
   const load = useCallback(() => {
     const my = ++gen.current
     loadAuction(id).then(d => { if (my === gen.current) setData(d) }).catch((err: unknown) => { if (my === gen.current) setData(prev => (errorCode(err) === 'not_found' ? 'gone' : prev && prev !== 'error' && prev !== 'gone' ? prev : 'error')) })
@@ -220,6 +231,12 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
   const isEnded = a ? ended(a, now) : false
   const passed = a !== null && a.status === 'open' && now >= endsAt + 1500
   useEffect(() => { if (passed) load() }, [passed, load])
+  // 見ている間に抜かれたら、すぐ知らせる（最高額 → 抜かれた）
+  useEffect(() => {
+    const m = a?.mine ?? null
+    if (lastMine.current === 'leading' && m === 'outbid') setNotice({ text: 'より高い入札がありました。もう一度入札できます。', bad: true })
+    lastMine.current = m
+  }, [a?.mine])
 
   // 入力の額はいつも最低額〜即決の手前に収めて出す（ほかの方の入札で最低額が上がっても、そのまま正しい額になる）
   const min = a?.min_bid ?? 0
@@ -231,12 +248,16 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
 
   const available = walletAvailable(data.wallet)
   const walletProblem = data.wallet && 'error' in data.wallet ? data.wallet.error : null
-  const left = timeLeft(endsAt, now)
-  const mine = mineLabel(a.mine)
   const canAct = data.signed_in && !walletProblem && !isEnded
   const short = (n: number) => available !== null && available < n
   // 最低入札額が即決価格に届いたら、入札はできない（サーバーも断る）。ここからは即決だけ（11/12 Claude の確認）
   const onlyBuyNow = a.buy_now_price !== null && min >= a.buy_now_price
+  const maxValue = clampBid(Infinity, min, a.buy_now_price, a.increment)
+  // ひと押しで選べる額：最低額・＋5刻み・＋10刻み（即決の手前まで・同じ額は出さない）
+  const quick = [...new Set([min, min + a.increment * 5, min + a.increment * 10].map(n => clampBid(n, min, a.buy_now_price, a.increment)))]
+  const hurry = !isEnded && endsAt - now < 3600_000
+  const leading = a.mine === 'leading'
+  const bids = allBids ? data.bids : data.bids.slice(0, 5)
 
   const run = async (c: Confirm) => {
     setBusy(true)
@@ -245,7 +266,11 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
       const res = c.kind === 'bid' ? await placeBid(a.id, c.amount) : await buyNow(a.id)
       setData(res)
       if (res.error) setNotice({ text: auctionErrorMessage(res.error), bad: true })
-      else if (c.kind === 'bid') { setAmount(null); setNotice({ text: res.extended ? '入札しました。終了間際のため、終了を5分延ばしました。' : '入札しました。' }) }
+      else if (c.kind === 'bid') {
+        setAmount(null)
+        lastMine.current = 'leading'
+        setNotice({ text: res.extended ? `${payText(c.amount)}で入札しました。終了間際のため、終了を5分延ばしました。` : `${payText(c.amount)}で入札しました。いまの最高額です。` })
+      }
       window.dispatchEvent(new Event('ginjiro:ginpay-holds-changed'))
     } catch (err) {
       setNotice({ text: auctionErrorMessage(errorCode(err)), bad: true })
@@ -256,33 +281,34 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
   }
 
   return (
-    <div className="v2-page">
+    <div className="v2-page ginoku-detail">
       <Back onBack={onBack} />
       <div className="ginoku-hero"><AuctionTicket a={a} large /></div>
       <h1 className="ginoku-title">{a.title}</h1>
       <p className="ginoku-rule">お会計から{a.ticket_amount.toLocaleString('ja-JP')}円引き・{a.weekday_only ? '平日のみ' : '曜日を問わず'}・{a.ticket_days}日間有効</p>
 
       {a.mine === 'won' ? (
-        <section className="v2-panel v2-glass ginoku-panel">
-          <p className="ginoku-won">落札しました</p>
-          <p className="v2-note" style={{ margin: '4px 0 14px' }}>{payText(a.final_price)} を銀Payでお支払い済みです。券はチケットに入っています。</p>
-          <button type="button" className="v2-btn v2-btn-gold" onClick={onTickets}>チケットを見る</button>
+        <section className="v2-panel v2-glass ginoku-panel ginoku-won-panel">
+          <p className="ginoku-won"><Check size={22} />落札しました</p>
+          <p className="v2-note" style={{ margin: '4px 0 14px' }}>{payText(a.final_price)}を銀Payでお支払い済みです。券はチケットに入っています。</p>
+          <button type="button" className="ginoku-go" onClick={onTickets}>チケットを見る</button>
         </section>
       ) : (
         <section className="v2-panel v2-glass ginoku-panel">
-          <p className="v2-label">{isEnded ? (a.status === 'sold' ? '落札価格' : '終了') : a.current_price === null ? '開始価格' : '現在の入札額'}</p>
+          {/* 自分の状況はいちばん上に、色で（最高額＝金、抜かれた＝赤み） */}
+          {a.mine && <p className={`ginoku-state is-${a.mine}`}>{a.mine === 'leading' ? '最高額で入札中' : a.mine === 'outbid' ? '入札されました' : '落札できませんでした'}{a.my_bid !== null && a.mine !== 'lost' ? <small>あなたの入札 {payText(a.my_bid)}</small> : null}</p>}
+          <p className="ginoku-k">{isEnded ? (a.status === 'sold' ? '落札額' : '終了') : a.current_price === null ? '開始価格' : '現在の入札額'}</p>
           <p className="ginoku-price">{isEnded && a.status !== 'sold' ? (a.status === 'unsold' ? '落札なし' : '集計中') : <Pay n={isEnded ? a.final_price : a.current_price ?? a.start_price} className="is-big" />}</p>
           <dl className="ginoku-facts">
-            <div><dt>残り時間</dt><dd className={!isEnded && Date.parse(a.ends_at) - now < 3600_000 ? 'ginoku-left is-hurry' : undefined}>{left ? clock(endsAt, now) : '終了'}</dd></div>
+            <div><dt><Clock size={12} />残り</dt><dd className={hurry ? 'is-hurry' : undefined}>{isEnded ? '終了' : clock(endsAt, now)}</dd></div>
             <div><dt>入札</dt><dd>{a.bid_count}件</dd></div>
             <div><dt>即決</dt><dd>{a.buy_now_price === null ? 'なし' : payText(a.buy_now_price)}</dd></div>
           </dl>
-          <p className="ginoku-end">{isEnded ? '終了' : '終了予定'} {endLabel(endsAt)}{a.extended && !isEnded ? '（延長あり）' : ''}</p>
-          {mine && <p className={`ginoku-mine is-${a.mine}`}>{mine}{a.my_bid !== null && a.mine !== 'lost' ? `（あなたの入札 ${payText(a.my_bid)}）` : ''}</p>}
+          <p className="ginoku-end">{isEnded ? '終了' : '終了予定'} {endLabel(endsAt)}{a.extended && !isEnded ? '（延長あり）' : ''}{!isEnded ? '・終了5分前からの入札で5分延長' : ''}</p>
         </section>
       )}
 
-      {notice && <p className={notice.bad ? 'ginoku-notice is-bad' : 'ginoku-notice'} role="status">{notice.text}</p>}
+      {notice && <p className={notice.bad ? 'ginoku-toast is-bad' : 'ginoku-toast'} role="status">{notice.bad ? null : <Check size={16} />}{notice.text}</p>}
 
       {!isEnded && (
         <section className="v2-panel v2-glass ginoku-panel" aria-label="入札">
@@ -290,41 +316,47 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
             <p className="v2-note" style={{ margin: 0 }}>店頭で本人確認が済むと、銀Payで入札できます。</p>
           ) : walletProblem ? (
             <p className="v2-note" style={{ margin: 0 }}>{auctionErrorMessage(walletProblem)}</p>
+          ) : onlyBuyNow ? (
+            <p className="ginoku-hint" style={{ margin: 0 }}>入札が即決価格まで上がったので、ここからは即決だけです。</p>
+          ) : leading ? (
+            <p className="ginoku-hint" style={{ margin: 0 }}>いまはあなたが最高額です。ほかの方が入札したら、ここでお知らせします。</p>
           ) : (
             <>
-              {onlyBuyNow ? <p className="ginoku-hint">入札が即決価格まで上がったので、ここからは即決だけです。<br />使える銀Pay {(available ?? 0).toLocaleString('ja-JP')}</p> : <>
-              <p className="v2-label">入札額</p>
-              <div className="ginoku-stepper">
-                <button type="button" className="v2-round v2-glass" aria-label={`${a.increment.toLocaleString('ja-JP')}円下げる`} disabled={busy || value <= min} onClick={() => setAmount(value - a.increment)}><Minus size={18} /></button>
-                <output aria-live="polite"><Pay n={value} className="is-big" /></output>
-                <button type="button" className="v2-round v2-glass" aria-label={`${a.increment.toLocaleString('ja-JP')}円上げる`} disabled={busy || value >= clampBid(Infinity, min, a.buy_now_price, a.increment)} onClick={() => setAmount(value + a.increment)}><Plus size={18} /></button>
+              <p className="ginoku-k">入札額を選ぶ</p>
+              <div className="ginoku-quick" role="group" aria-label="入札額">
+                {quick.map(n => <button key={n} type="button" aria-pressed={value === n} disabled={busy || short(n)} onClick={() => setAmount(n)}>{n === min ? <small>最低額</small> : <small>＋{(n - min).toLocaleString('ja-JP')}</small>}{n.toLocaleString('ja-JP')}</button>)}
               </div>
-              <p className="ginoku-hint">最低 {payText(min)}・{a.increment.toLocaleString('ja-JP')}銀Pay単位<br />使える銀Pay {(available ?? 0).toLocaleString('ja-JP')}</p>
+              <div className="ginoku-stepper">
+                <button type="button" className="v2-round v2-glass" aria-label={`${a.increment.toLocaleString('ja-JP')}銀Pay下げる`} disabled={busy || value <= min} onClick={() => setAmount(value - a.increment)}><Minus size={18} /></button>
+                <output aria-live="polite"><Pay n={value} className="is-big" /></output>
+                <button type="button" className="v2-round v2-glass" aria-label={`${a.increment.toLocaleString('ja-JP')}銀Pay上げる`} disabled={busy || value >= maxValue} onClick={() => setAmount(value + a.increment)}><Plus size={18} /></button>
+              </div>
+              <p className="ginoku-hint">{a.increment.toLocaleString('ja-JP')}銀Pay単位・使える銀Pay {(available ?? 0).toLocaleString('ja-JP')}</p>
               {short(value) && <p className="ginoku-hint is-bad">銀Payの残高が足りません。店頭でチャージできます。</p>}
-              <button type="button" className="v2-btn v2-btn-gold" disabled={busy || !canAct || short(value) || a.mine === 'leading'} onClick={() => setConfirm({ kind: 'bid', amount: value })}>
-                {a.mine === 'leading' ? '最高額で入札中です' : `${payText(value)} で入札する`}
-              </button>
-              </>}
-              {a.buy_now_price !== null && (
-                <button type="button" className="v2-btn v2-glass ginoku-buy" disabled={busy || !canAct || short(a.buy_now_price)} onClick={() => setConfirm({ kind: 'buy', amount: a.buy_now_price! })}>
-                  即決 {payText(a.buy_now_price)} で落札する
-                </button>
-              )}
             </>
           )}
         </section>
       )}
 
       {data.bids.length > 0 && (
-        <details className="ginoku-bids">
-          <summary>入札履歴（{a.bid_count}件）</summary>
-          {data.bids.map((b, i) => (
-            <div key={`${b.at}-${i}`} className="ginoku-bid">
-              <span>{b.bidder}{b.mine ? '（あなた）' : ''}<small>{when(b.at)}</small></span>
+        <section className="ginoku-bids" aria-label="入札履歴">
+          <p className="ginoku-k">入札履歴（{a.bid_count}件）</p>
+          {bids.map((b, i) => (
+            <div key={`${b.at}-${i}`} className={b.mine ? 'ginoku-bid is-mine' : 'ginoku-bid'}>
+              <span>{b.mine ? 'あなた' : b.bidder}{i === 0 && !allBids ? <em>最高額</em> : null}<small>{when(b.at)}</small></span>
               <b>{payText(b.amount)}</b>
             </div>
           ))}
-        </details>
+          {!allBids && data.bids.length > 5 && <button type="button" className="ginoku-more" onClick={() => setAllBids(true)}>すべて見る</button>}
+        </section>
+      )}
+
+      {/* 下に固定の入札ボタン（どこまで読んでも、すぐ押せる） */}
+      {!isEnded && canAct && !leading && (
+        <div className="ginoku-bar v2-glass">
+          {!onlyBuyNow && <button type="button" className="ginoku-go" disabled={busy || short(value)} onClick={() => setConfirm({ kind: 'bid', amount: value })}>{payText(value)}で入札</button>}
+          {a.buy_now_price !== null && <button type="button" className={onlyBuyNow ? 'ginoku-go' : 'ginoku-buy-now'} disabled={busy || short(a.buy_now_price)} onClick={() => setConfirm({ kind: 'buy', amount: a.buy_now_price! })}>即決 {payText(a.buy_now_price)}</button>}
+        </div>
       )}
 
       {confirm && (
@@ -332,15 +364,19 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
           <div className="v2-sheet-back" onClick={() => !busy && setConfirm(null)} />
           <div className="v2-sheet ginoku-sheet" role="dialog" aria-modal="true" aria-label="確認">
             <div className="v2-grab" />
-            <p className="ginoku-sheet-title">{confirm.kind === 'bid' ? `${payText(confirm.amount)} で入札しますか？` : `即決 ${payText(confirm.amount)} で落札しますか？`}</p>
-            <p className="v2-note" style={{ margin: '6px 0 4px' }}>
+            <p className="ginoku-sheet-title">{confirm.kind === 'bid' ? `${payText(confirm.amount)}で入札しますか？` : `即決 ${payText(confirm.amount)}で落札しますか？`}</p>
+            <dl className="ginoku-sheet-facts">
+              <div><dt>券</dt><dd>{a.title}</dd></div>
+              <div><dt>{confirm.kind === 'bid' ? '入札額' : 'お支払い'}</dt><dd>{payText(confirm.amount)}</dd></div>
+              <div><dt>使える銀Pay</dt><dd>{(available ?? 0).toLocaleString('ja-JP')}{confirm.kind === 'buy' && available !== null ? ` → ${(available - confirm.amount).toLocaleString('ja-JP')}` : ''}</dd></div>
+            </dl>
+            <p className="v2-note" style={{ margin: '4px 0 14px' }}>
               {confirm.kind === 'bid'
-                ? `終了時に最高額でしたら、銀Payから ${payText(confirm.amount)} を引き落とし、券をチケットに入れます。入札は取り消せません。`
-                : `すぐに銀Payから ${payText(confirm.amount)} を引き落とし、券をチケットに入れます。`}
+                ? '銀Payは、終了時に最高額だったときだけ引き落とします。入札は取り消せません。'
+                : 'すぐに銀Payから引き落とし、券をチケットに入れます。'}
             </p>
-            <p className="ginoku-hint">使える銀Pay {(available ?? 0).toLocaleString('ja-JP')}{confirm.kind === 'buy' && available !== null ? ` → ${payText(available - confirm.amount)}` : ''}</p>
             <div className="ginoku-sheet-actions">
-              <button type="button" className="v2-btn v2-btn-gold" disabled={busy} onClick={() => void run(confirm)}>{busy ? '送信しています…' : confirm.kind === 'bid' ? '入札する' : '落札する'}</button>
+              <button type="button" className="ginoku-go" disabled={busy} onClick={() => void run(confirm)}>{busy ? '送信しています…' : confirm.kind === 'bid' ? '入札する' : '落札する'}</button>
               <button type="button" className="v2-btn v2-btn-quiet" disabled={busy} onClick={() => setConfirm(null)}>やめる</button>
             </div>
           </div>

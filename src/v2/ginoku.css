@@ -186,3 +186,48 @@
 /* 詳細の値段も一覧と同じ形（「6,200 銀Pay」・墨色） */
 .ginoku-price .ginoku-pay-n.is-big { font-size: 36px; }
 .ginoku-stepper output .ginoku-pay-n.is-big { font-size: 30px; }
+
+/* 操作のしやすさ（11/12 慶一郎さん「実際に操作しやすい一流アプリに」） */
+.ginoku-feature { cursor: pointer; }
+.ginoku-tabs button small { margin-left: 4px; font: 700 11px/1 var(--v2-sans); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; }
+.ginoku-alert { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; margin: 0 0 12px; padding: 12px 14px; border-radius: 16px; border: 1px solid rgba(163,64,47,.25); background: #fbefe9; color: #6d2a1f; text-align: left; font: inherit; cursor: pointer; }
+.ginoku-alert > span:first-child { min-width: 0; font-size: 12.5px; line-height: 1.5; }
+.ginoku-alert b { display: block; font: 700 14px/1.4 var(--v2-sans); color: #a3402f; }
+.ginoku-alert-go { flex: none; display: inline-flex; align-items: center; gap: 2px; min-height: 40px; padding: 0 12px; border-radius: 999px; background: #a3402f; color: #fff; font: 700 13px/1 var(--v2-sans); }
+
+.ginoku-detail { padding-bottom: 96px; }
+.ginoku-detail .ginoku-hero { padding-top: 0; }
+.ginoku-state { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; font: 700 14px/1.4 var(--v2-sans); }
+.ginoku-state small { font: 600 12px/1.4 var(--v2-sans); white-space: nowrap; }
+.ginoku-state.is-leading { background: #f7edd6; color: var(--v2-gold-deep); }
+.ginoku-state.is-outbid { background: #fbefe9; color: #a3402f; }
+.ginoku-state.is-lost { background: rgba(0,0,0,.04); color: var(--v2-sub); }
+.ginoku-facts dt { display: inline-flex; align-items: center; gap: 3px; }
+.ginoku-facts dd.is-hurry { color: #a3402f; font-weight: 700; }
+.ginoku-won { display: flex; align-items: center; gap: 6px; }
+.ginoku-won-panel .ginoku-go { width: 100%; }
+.ginoku-toast { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; padding: 10px 14px; border-radius: 14px; background: #f7edd6; color: var(--v2-gold-deep); font: 600 13px/1.5 var(--v2-sans); }
+.ginoku-toast.is-bad { background: #fbefe9; color: #a3402f; }
+.ginoku-quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 6px 0 12px; }
+.ginoku-quick button { min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 14px; border: 1px solid var(--v2-line); background: rgba(255,255,255,.7); color: var(--v2-ink); font: 700 17px/1.1 var(--v2-serif); font-variant-numeric: tabular-nums; cursor: pointer; }
+.ginoku-quick button small { font: 600 10.5px/1 var(--v2-sans); color: var(--v2-faint); }
+.ginoku-quick button[aria-pressed="true"] { border-color: #c9a35a; background: linear-gradient(180deg, #fbefcf, #ecd39c); box-shadow: inset 0 1px 0 rgba(255,255,255,.8); }
+.ginoku-quick button:disabled { opacity: .45; cursor: default; }
+.ginoku-bids { margin: 18px 2px 0; }
+.ginoku-bids .ginoku-k { display: block; margin-bottom: 4px; }
+.ginoku-bid em { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #f7edd6; color: var(--v2-gold-deep); font: 700 10.5px/1.4 var(--v2-sans); font-style: normal; }
+.ginoku-bid.is-mine b { color: var(--v2-gold-deep); }
+.ginoku-more { min-height: 44px; border: 0; background: none; color: var(--v2-gold-deep); font: 600 13px/1 var(--v2-sans); cursor: pointer; }
+.ginoku-bar { position: sticky; bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); z-index: 5; display: flex; gap: 8px; margin: 16px -4px 0; padding: 10px; border-radius: 22px; }
+.ginoku-bar .ginoku-go { flex: 1.4; margin: 0; }
+.ginoku-buy-now { flex: 1; min-height: 48px; border-radius: 999px; border: 1px solid #c9a35a; background: rgba(255,255,255,.85); color: var(--v2-gold-deep); font: 700 14px/1.2 var(--v2-sans); cursor: pointer; }
+.ginoku-buy-now:disabled, .ginoku-go:disabled { opacity: .45; cursor: default; }
+.ginoku-sheet-facts { margin: 10px 0 4px; display: grid; gap: 6px; }
+.ginoku-sheet-facts div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.ginoku-sheet-facts dt { color: var(--v2-faint); }
+.ginoku-sheet-facts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.ginoku-sheet-actions .ginoku-go { width: 100%; }
+/* 詳細は券を小さめに（値段と入札が早く目に入るように） */
+.ginoku-detail .ginoku-gold.is-lg { width: 168px; height: 102px; }
+.ginoku-detail .ginoku-gold.is-lg b { font-size: 24px; }
+.ginoku-detail .ginoku-gold.is-lg .ginoku-laurel { width: 16px; height: 44px; }
