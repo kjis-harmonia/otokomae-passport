@@ -257,3 +257,93 @@
 .ginoku-feature-side { min-width: 0; }
 .ginoku-feature .ginoku-left { flex-wrap: wrap; row-gap: 2px; }
 .ginoku-feature .ginoku-left b { font-size: 18px; }
+
+/* 11/13 慶一郎さん「装飾・グラデーション・影を削ぎ落として、余白と文字で高級感を」。下のタブで隠れない・券は情報と分ける */
+.ginoku-page { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 132px); }
+.ginoku-head { margin: 4px 0 20px; }
+.ginoku-name { font-size: 28px; letter-spacing: .16em; }
+.ginoku-name::before, .ginoku-name::after { flex-basis: 56px; background: var(--v2-line); }
+.ginoku-lead { font-size: 12px; letter-spacing: .1em; color: var(--v2-faint); }
+
+/* 券：傾けない・影なし・平らなクリームに金の細い線 */
+.ginoku-gold { width: 72px; height: 46px; transform: none; filter: none; }
+.ginoku-gold-face { border-radius: 7px; padding: 0 5px; gap: 1px; background: #fbf6ea; box-shadow: inset 0 0 0 1px #c9a35a, inset 0 0 0 3px #fbf6ea, inset 0 0 0 3.5px rgba(176,132,58,.45); }
+.ginoku-gold b { font-size: 10.5px; font-weight: 700; color: #4a3311; text-shadow: none; }
+.ginoku-gold b .is-long { font-size: .82em; }
+.ginoku-laurel { width: 6px; height: 18px; color: #b8944f; }
+.ginoku-gold.is-lg { width: 150px; height: 94px; }
+.ginoku-gold.is-lg .ginoku-gold-face { border-radius: 12px; gap: 4px; }
+.ginoku-gold.is-lg b { font-size: 21px; }
+.ginoku-gold.is-lg .ginoku-laurel { width: 12px; height: 34px; }
+.ginoku-detail .ginoku-gold.is-lg { width: 150px; height: 94px; }
+.ginoku-detail .ginoku-gold.is-lg b { font-size: 21px; }
+
+/* タブ：塗りをやめ、下線で */
+.ginoku-tabs { margin: 0 0 16px; border-bottom: 1px solid var(--v2-line); }
+.ginoku-tabs button { border-radius: 0; min-height: 46px; font-size: 14px; color: var(--v2-faint); }
+.ginoku-tabs button + button::before { display: none; }
+.ginoku-tabs button.is-on { background: none; box-shadow: inset 0 -2px 0 var(--v2-gold-deep); color: var(--v2-ink); font-weight: 700; }
+
+/* 目玉：券は左上に小さく、情報はその下に分けて */
+.ginoku-feature { display: block; margin: 0 0 14px; padding: 18px; border-radius: 20px; border: 1px solid var(--v2-line); background: #fff; box-shadow: none; cursor: default; }
+.ginoku-feature-head { display: flex; align-items: center; gap: 14px; width: 100%; padding: 0; border: 0; background: none; text-align: left; color: var(--v2-ink); font: inherit; cursor: pointer; }
+.ginoku-feature-head .ginoku-gold { width: 96px; height: 60px; }
+.ginoku-feature-head .ginoku-gold b { font-size: 13px; }
+.ginoku-feature-head .ginoku-laurel { width: 8px; height: 22px; }
+.ginoku-feature-name { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ginoku-feature-name b { font: 700 18px/1.35 var(--v2-serif); letter-spacing: .02em; }
+.ginoku-feature-name small { font-size: 12px; line-height: 1.5; color: var(--v2-sub); }
+.ginoku-feature-nums { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--v2-line); }
+.ginoku-feature-nums > div { min-width: 0; }
+.ginoku-feature-time { text-align: right; }
+.ginoku-time { margin: 2px 0 0; font: 600 18px/1.3 var(--v2-sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ginoku-time.is-hurry, .ginoku-card-time.is-hurry { color: #a3402f; }
+.ginoku-feature .ginoku-pay-n.is-big { font-size: 32px; }
+.ginoku-feature .ginoku-mine { margin: 10px 0 0; font-size: 12.5px; }
+.ginoku-feature .ginoku-go { width: 100%; margin-top: 14px; }
+
+/* ボタン：平らな金（グラデーション・影なし） */
+.ginoku-go { background: #c9a35a; border-color: #c9a35a; color: #fff; box-shadow: none; font-weight: 700; letter-spacing: .1em; }
+.ginoku-go:active { background: #b48f4a; }
+.ginoku-buy-now { background: #fff; }
+.ginoku-quick button[aria-pressed="true"] { background: #fbf6ea; border-color: #c9a35a; box-shadow: none; }
+.ginoku-alert-go { background: #a3402f; }
+
+/* 一覧のカード：白に細い線だけ */
+.ginoku-cards { gap: 10px; }
+.ginoku-card { align-items: flex-start; gap: 14px; padding: 14px 12px 14px 14px; border-radius: 16px; border: 1px solid var(--v2-line); background: #fff; box-shadow: none; }
+.ginoku-card > .ginoku-gold { margin-top: 2px; }
+.ginoku-card-main { gap: 3px; }
+.ginoku-card-title { font: 700 15.5px/1.4 var(--v2-sans); white-space: normal; }
+.ginoku-card-rule { font-size: 11.5px; line-height: 1.5; color: var(--v2-faint); }
+.ginoku-card-nums { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 12px; row-gap: 2px; margin-top: 6px; }
+.ginoku-card-price { display: inline-flex; align-items: baseline; gap: 6px; }
+.ginoku-card .ginoku-pay-n { font-size: 18px; }
+.ginoku-card-time { font: 600 13px/1.4 var(--v2-sans); color: var(--v2-sub); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ginoku-card-go { align-self: center; color: #b9ad97; }
+
+/* 詳細：条件は入札より前に */
+.ginoku-terms { margin: 4px 0 14px; padding: 12px 14px; border-radius: 14px; background: #faf7f0; display: grid; gap: 6px; }
+.ginoku-terms div { display: grid; grid-template-columns: 5.5em 1fr; gap: 8px; font-size: 13px; line-height: 1.5; }
+.ginoku-terms dt { color: var(--v2-faint); }
+.ginoku-terms dd { margin: 0; color: var(--v2-ink); font-weight: 600; }
+.ginoku-one { border: 1px solid var(--v2-line); background: #fff; box-shadow: none; }
+.ginoku-bar { box-shadow: 0 -1px 0 var(--v2-line); background: rgba(255,255,255,.96); }
+.is-up { animation: none; color: var(--v2-gold-deep); }
+@media (max-width: 370px) {
+  .ginoku-card { gap: 10px; padding: 12px 10px 12px 12px; }
+  .ginoku-card > .ginoku-gold { width: 60px; height: 40px; }
+  .ginoku-card > .ginoku-gold b { font-size: 9px; }
+  .ginoku-card > .ginoku-gold .ginoku-laurel { width: 5px; height: 14px; }
+  .ginoku-card-nums { flex-direction: column; align-items: flex-start; }
+  .ginoku-feature-head .ginoku-gold { width: 80px; height: 50px; }
+  .ginoku-feature-name b { font-size: 16px; }
+  .ginoku-feature .ginoku-pay-n.is-big { font-size: 28px; }
+  .ginoku-time { font-size: 16px; }
+}
+.ginoku-feature-nums .ginoku-k { display: block; }
+.ginoku-card-price .ginoku-k { font-size: 11px; }
+.ginoku-card-nums > .ginoku-card-price { flex-direction: row; align-items: baseline; gap: 6px; }
+.ginoku-panel { background: #fff; border: 1px solid var(--v2-line); box-shadow: none; }
+.ginoku-detail { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); }
+.ginoku-state { flex-wrap: wrap; row-gap: 2px; white-space: nowrap; }

@@ -45,8 +45,8 @@ test('予約の見込み：そのメニューなら料金ぶん、ほかは 0', 
 })
 
 test('券の決まりの一行と、押さえの一言', () => {
-  assert.equal(ticketRule({ free_menu: '銀パラ', ticket_amount: null, weekday_only: true, ticket_days: 30 }), '銀パラのお会計が無料・平日のみ・30日間有効')
-  assert.equal(ticketRule({ free_menu: null, ticket_amount: 500, weekday_only: true, ticket_days: 30 }), 'お会計から500円引き・平日のみ・30日間有効')
-  assert.equal(ticketRule({ ticket_amount: 9000, weekday_only: false, ticket_days: 14 }), 'お会計から9,000円引き・曜日を問わず・14日間有効')
+  assert.equal(ticketRule({ free_menu: '銀パラ', ticket_amount: null, weekday_only: true, ticket_days: 30 }), '銀パラのお会計が無料・平日のみ・落札後30日以内')
+  assert.equal(ticketRule({ free_menu: null, ticket_amount: 500, weekday_only: true, ticket_days: 30 }), 'お会計から500円引き・平日のみ・落札後30日以内')
+  assert.equal(ticketRule({ ticket_amount: 9000, weekday_only: false, ticket_days: 14 }), 'お会計から9,000円引き・曜日を問わず・落札後14日以内')
   assert.equal(holdNote(6300), '6,300 銀Payで入札中です')
 })

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Clock, Minus, Plus } from 'lucide-react'
 import { buyNow, loadAuction, loadAuctions, placeBid, walletAvailable, type Auction, type AuctionAction, type AuctionList } from '../features/auction/auctionApi'
-import { auctionErrorMessage, clampBid, endLabel, holdNote, mineLabel, ticketRule } from '../features/auction/auctionLogic'
+import { auctionErrorMessage, clampBid, endLabel, holdNote, mineLabel, ticketRule, ticketTerms } from '../features/auction/auctionLogic'
 import { RpcError } from '../utils/staffSession'
 import { useServerSecond } from './launchTime'
 import './ginoku.css'
@@ -75,6 +75,16 @@ function useRose() {
     return before !== undefined && p > before
   }
 }
+/** 詳細以外の残り時間（秒は出さない・11/13）：「2日 19時間」「5時間 28分」「38分」 */
+function leftShort(endsAt: number, now: number): string {
+  const m = Math.max(0, Math.floor((endsAt - now) / 60_000))
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60
+  if (d > 0) return `${d}日 ${h}時間`
+  if (h > 0) return `${h}時間 ${mm}分`
+  return m > 0 ? `${mm}分` : 'まもなく終了'
+}
+/** 残り1時間を切った */
+const soonEnd = (a: Auction, now: number) => Date.parse(a.ends_at) - now < 3600_000
 /** 終了間近：24時間を切った */
 const nearEnd = (a: Auction, now: number) => Date.parse(a.ends_at) - now < 24 * 3600_000
 /** 目玉：いま一番高く競られているもの（同じなら早く終わる方） */
@@ -124,17 +134,20 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
   useEffect(() => { if (passed) load() }, [passed, load])
 
   const open = list.filter(a => !ended(a, now)).sort((x, y) => Date.parse(x.ends_at) - Date.parse(y.ends_at))
+  const near = open.filter(a => nearEnd(a, now))
   const done = list.filter(a => ended(a, now) && a.status === 'sold')
-  const featured = pickFeatured(open)
   const rose = useRose()
   const risen = new Set(list.filter(rose).map(a => a.id))
-  const shown = tab === 'open' ? open.filter(a => a !== featured) : tab === 'near' ? open.filter(a => nearEnd(a, now)) : done
-  const count: Record<ListTab, number> = { open: open.length, near: open.filter(a => nearEnd(a, now)).length, done: done.length }
+  // 選んだタブの出品だけを出す（11/13 慶一郎さん「終了間近を押しても2日以上のものが上に残る」）。
+  //   開催中だけ、いま一番競られている1件を大きく出す。ほかのタブは、そのタブの出品を並べるだけ
+  const featured = tab === 'open' ? pickFeatured(open) : null
+  const shown = tab === 'open' ? open.filter(a => a !== featured) : tab === 'near' ? near : done
+  const count: Record<ListTab, number> = { open: open.length, near: near.length, done: done.length }
   // 抜かれた出品：一番上で知らせて、ひと押しで入札し直せるように
   const outbid = open.filter(a => a.mine === 'outbid')
 
   return (
-    <div className="v2-page">
+    <div className="v2-page ginoku-page">
       <header className="ginoku-head">
         <h1 className="ginoku-name">銀オク</h1>
         <p className="ginoku-lead">銀Payで入札できる公式オークション</p>
@@ -149,15 +162,13 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
               <span className="ginoku-alert-go">入札し直す<ChevronRight size={16} /></span>
             </button>
           )}
-          {featured
-            ? <FeaturedCard a={featured} now={now} rose={risen.has(featured.id)} onOpen={onOpen} />
-            : <p className="v2-note ginoku-empty">いま開催中のオークションはありません。次の出品をお待ちください。</p>}
           <div className="ginoku-tabs" role="tablist" aria-label="表示する出品">
             {TABS.map(t => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'is-on' : undefined} onClick={() => setTab(t.id)}>{t.label}{count[t.id] > 0 && <small>{count[t.id]}</small>}</button>)}
           </div>
-          {shown.length === 0
-            ? <p className="v2-note ginoku-empty">{tab === 'done' ? 'まだ落札された出品はありません。' : tab === 'near' ? '24時間以内に終わる出品はありません。' : 'ほかの出品はありません。'}</p>
-            : <div className="ginoku-cards">{shown.map(a => <AuctionRow key={a.id} a={a} now={now} rose={risen.has(a.id)} onOpen={onOpen} />)}</div>}
+          {featured && <FeaturedCard a={featured} now={now} rose={risen.has(featured.id)} onOpen={onOpen} />}
+          {shown.length > 0
+            ? <div className="ginoku-cards">{shown.map(a => <AuctionRow key={a.id} a={a} now={now} rose={risen.has(a.id)} onOpen={onOpen} />)}</div>
+            : !featured && <p className="v2-note ginoku-empty">{tab === 'done' ? 'まだ落札された出品はありません。' : tab === 'near' ? '24時間以内に終わる出品はありません。' : 'いま開催中のオークションはありません。次の出品をお待ちください。'}</p>}
           <p className="v2-note ginoku-foot">お支払いは銀Payのみです。</p>
         </>
       )}
@@ -165,19 +176,34 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
   )
 }
 
-/** 目玉の1件：左に大きな券、右に「現在の入札額」「残り」「入札する」 */
+/** 値段の見出し：入札があれば「現在の入札額」、まだ無ければ「開始価格」、終わったら「落札額」 */
+const priceLabel = (a: Auction, isEnded: boolean) => (isEnded ? '落札額' : a.current_price === null ? '開始価格' : '現在の入札額')
+
+/** 目玉の1件：券は小さく左上、情報は券と分けて下に（11/13「券がデカすぎて金額や時間に被っとる」） */
 function FeaturedCard({ a, now, rose, onOpen }: { a: Auction; now: number; rose: boolean; onOpen: (id: string) => void }) {
   const mine = mineLabel(a.mine)
+  const hurry = soonEnd(a, now)
   return (
-    <section className="ginoku-feature v2-glass" aria-label={a.title} onClick={() => onOpen(a.id)}>
-      <button type="button" className="ginoku-feature-art" onClick={e => { e.stopPropagation(); onOpen(a.id) }} aria-label={`${a.title}を見る`}><AuctionTicket a={a} large /></button>
-      <div className="ginoku-feature-side">
-        <p className="ginoku-k">{a.current_price === null ? '開始価格' : '現在の入札額'}</p>
-        <Pay n={a.current_price ?? a.start_price} className={rose ? 'is-big is-up' : 'is-big'} />
-        <p className="ginoku-left"><Clock size={16} />残り<b>{clock(Date.parse(a.ends_at), now)}</b></p>
-        {mine && <p className={`ginoku-mine is-${a.mine}`}>{mine}</p>}
-        <button type="button" className="ginoku-go" onClick={e => { e.stopPropagation(); onOpen(a.id) }}>入札する</button>
+    <section className="ginoku-feature" aria-label={a.title}>
+      <button type="button" className="ginoku-feature-head" onClick={() => onOpen(a.id)}>
+        <AuctionTicket a={a} />
+        <span className="ginoku-feature-name">
+          <b>{a.title}</b>
+          <small>{ticketRule(a)}</small>
+        </span>
+      </button>
+      <div className="ginoku-feature-nums">
+        <div>
+          <p className="ginoku-k">{priceLabel(a, false)}</p>
+          <Pay n={a.current_price ?? a.start_price} className={rose ? 'is-big is-up' : 'is-big'} />
+        </div>
+        <div className="ginoku-feature-time">
+          <p className="ginoku-k">残り</p>
+          <p className={hurry ? 'ginoku-time is-hurry' : 'ginoku-time'}>{leftShort(Date.parse(a.ends_at), now)}</p>
+        </div>
       </div>
+      {mine && <p className={`ginoku-mine is-${a.mine}`}>{mine}</p>}
+      <button type="button" className="ginoku-go" onClick={() => onOpen(a.id)}>入札する</button>
     </section>
   )
 }
@@ -185,24 +211,20 @@ function FeaturedCard({ a, now, rose, onOpen }: { a: Auction; now: number; rose:
 function AuctionRow({ a, now, rose = false, onOpen }: { a: Auction; now: number; rose?: boolean; onOpen: (id: string) => void }) {
   const isEnded = ended(a, now)
   const mine = mineLabel(a.mine)
+  const hurry = !isEnded && soonEnd(a, now)
   return (
-    <button type="button" className="ginoku-card v2-glass" onClick={() => onOpen(a.id)}>
-      <span className="ginoku-card-art"><AuctionTicket a={a} /></span>
+    <button type="button" className="ginoku-card" onClick={() => onOpen(a.id)}>
+      <AuctionTicket a={a} />
       <span className="ginoku-card-main">
-        <span className="ginoku-card-title">{a.title.replace(/券$/, '')}</span>
+        <span className="ginoku-card-title">{a.title}</span>
+        <span className="ginoku-card-rule">{ticketRule(a)}</span>
         <span className="ginoku-card-nums">
-          <span>
-            <span className="ginoku-k">{isEnded ? '落札額' : a.current_price === null ? '開始価格' : '現在の入札額'}</span>
-            <Pay n={isEnded ? a.final_price : a.current_price ?? a.start_price} className={rose ? 'is-up' : undefined} />
-          </span>
-          <span className="ginoku-card-time">
-            <span className="ginoku-k"><Clock size={13} />{isEnded ? '終了' : '残り'}</span>
-            <b>{isEnded ? endLabel(Date.parse(a.ends_at)).replace(/（.）/, ' ') : clock(Date.parse(a.ends_at), now)}</b>
-          </span>
+          <span className="ginoku-card-price"><span className="ginoku-k">{isEnded ? '落札' : a.current_price === null ? '開始' : '現在'}</span><Pay n={isEnded ? a.final_price : a.current_price ?? a.start_price} className={rose ? 'is-up' : undefined} /></span>
+          <span className={hurry ? 'ginoku-card-time is-hurry' : 'ginoku-card-time'}>{isEnded ? `${endLabel(Date.parse(a.ends_at)).replace(/（.）/, ' ')} 終了` : `残り ${leftShort(Date.parse(a.ends_at), now)}`}</span>
         </span>
         {mine && <span className={`ginoku-mine is-${a.mine}`}>{mine}</span>}
       </span>
-      <ChevronRight size={20} className="ginoku-card-go" />
+      <ChevronRight size={18} className="ginoku-card-go" />
     </button>
   )
 }
@@ -289,16 +311,18 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
       <Back onBack={onBack} />
       <div className="ginoku-hero"><AuctionTicket a={a} large /></div>
       <h1 className="ginoku-title">{a.title}</h1>
-      <p className="ginoku-rule">{ticketRule(a)}</p>
+      <dl className="ginoku-terms" aria-label="券の条件">
+        {ticketTerms(a).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+      </dl>
 
       {a.mine === 'won' ? (
-        <section className="v2-panel v2-glass ginoku-panel ginoku-won-panel">
+        <section className="v2-panel ginoku-panel ginoku-won-panel">
           <p className="ginoku-won"><Check size={22} />落札しました</p>
           <p className="v2-note" style={{ margin: '4px 0 14px' }}>{payText(a.final_price)}を銀Payでお支払い済みです。券はチケットに入っています。</p>
           <button type="button" className="ginoku-go" onClick={onTickets}>チケットを見る</button>
         </section>
       ) : (
-        <section className="v2-panel v2-glass ginoku-panel ginoku-one">
+        <section className="v2-panel ginoku-panel ginoku-one">
           {/* 自分の状況はいちばん上に、色で（最高額＝金、抜かれた＝赤み） */}
           {a.mine && <p className={`ginoku-state is-${a.mine}`}>{a.mine === 'leading' ? '最高額で入札中' : a.mine === 'outbid' ? '入札されました' : '落札できませんでした'}{a.my_bid !== null && a.mine !== 'lost' ? <small>あなたの入札 {payText(a.my_bid)}</small> : null}</p>}
           <div className="ginoku-one-top">
@@ -358,7 +382,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
 
       {/* 下に固定の入札ボタン（どこまで読んでも、すぐ押せる） */}
       {!isEnded && canAct && (!leading || a.buy_now_price !== null) && (
-        <div className="ginoku-bar v2-glass">
+        <div className="ginoku-bar">
           {!onlyBuyNow && !leading && <button type="button" className="ginoku-go" disabled={busy || short(value)} onClick={() => setConfirm({ kind: 'bid', amount: value })}>{payText(value)}で入札</button>}
           {a.buy_now_price !== null && <button type="button" className={onlyBuyNow || leading ? 'ginoku-go' : 'ginoku-buy-now'} disabled={busy || shortBuy} onClick={() => setConfirm({ kind: 'buy', amount: a.buy_now_price! })}>即決 {payText(a.buy_now_price)}</button>}
         </div>
@@ -372,6 +396,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
             <p className="ginoku-sheet-title">{confirm.kind === 'bid' ? `${payText(confirm.amount)}で入札しますか？` : `即決 ${payText(confirm.amount)}で落札しますか？`}</p>
             <dl className="ginoku-sheet-facts">
               <div><dt>券</dt><dd>{a.title}</dd></div>
+              <div><dt>条件</dt><dd>{ticketRule(a)}</dd></div>
               {confirm.kind === 'bid' ? (
                 // 入札では銀Payは減らない（11/13 慶一郎さん「入札中はまだ銀Pay減らしたらあかん」）。減るのは落札したときだけ
                 <>

@@ -82,7 +82,15 @@ export const isAuctionWeekdayTicket = (t: { issued_by?: string | null; memo?: st
 /** 券の決まりの一行：無料券は「銀パラのお会計が無料・平日のみ・30日間有効」、割引券は「お会計から500円引き・平日のみ・30日間有効」 */
 export function ticketRule(a: { free_menu?: string | null; ticket_amount: number | null; weekday_only: boolean; ticket_days: number }): string {
   const what = a.free_menu ? `${a.free_menu}のお会計が無料` : `お会計から${(a.ticket_amount ?? 0).toLocaleString('ja-JP')}円引き`
-  return `${what}・${a.weekday_only ? '平日のみ' : '曜日を問わず'}・${a.ticket_days}日間有効`
+  return `${what}・${a.weekday_only ? '平日のみ' : '曜日を問わず'}・落札後${a.ticket_days}日以内`
+}
+/** 入札の前に見せる券の条件（11/13 慶一郎さん「使用期限や利用条件は入札前に必ず分かるように」） */
+export function ticketTerms(a: { free_menu?: string | null; ticket_amount: number | null; weekday_only: boolean; ticket_days: number }): [string, string][] {
+  return [
+    ['内容', a.free_menu ? `${a.free_menu}のお会計が無料` : `お会計から${(a.ticket_amount ?? 0).toLocaleString('ja-JP')}円引き`],
+    ['使える日', a.weekday_only ? '平日のみ（土日・祝日は使えません）' : '曜日を問わず'],
+    ['使用期限', `落札後${a.ticket_days}日以内`],
+  ]
 }
 
 /** 最高額のあいだの押さえの一言（「6,300 銀Payを押さえています。負けたら戻ります」） */
