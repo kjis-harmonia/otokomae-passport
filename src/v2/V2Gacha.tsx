@@ -182,6 +182,9 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const waitStop = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reveals = useRef(new Set<() => void>())
   const [top, setTop] = useState<'intro' | 'wait' | 'burst'>('intro') // いま前に出ている動画
+  // タップした瞬間の光（深海編 11/12）：開く映像が映るまで光ったまま、映ったらすっと引く。光の中で待ち→開くを切り替える
+  const [flash, setFlash] = useState<'off' | 'up' | 'down'>('off')
+  useEffect(() => { if (phase !== 'open') setFlash('off') }, [phase]) // eslint-disable-line react-hooks/set-state-in-effect
   const [src, setSrc] = useState<Record<string, string> | null>(cache?.urls ?? null)
   const [pct, setPct] = useState(0)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -480,6 +483,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         openPresented.current = true
         sound.current?.sync()
         setTop('burst')
+        setFlash(f => f === 'up' ? 'down' : f)
         waitStop.current = setTimeout(() => w.pause(), 600) // Only the visual fade; audio has its own scheduled crossfade.
       })
     }
@@ -526,10 +530,10 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     // This edit opens from the same stone, with a short lit transition. Keep
     // the live loop at normal speed underneath the reveal, even on an early tap.
     if (THEME.id === 'dino') { void play(b).catch(close); return }
-    const left = w.duration - w.currentTime
-    if (!Number.isFinite(left) || left < 0.1) { w.pause(); void play(b).catch(close); return }
-    w.loop = false
-    w.playbackRate = Math.min(4, Math.max(1, left / 0.6))
+    // 深海編：前は待ちの映像を最後のコマまで早送り（最大4倍）してからつないでいた。iPhone では早送りがカクつき、
+    //   タップの後がもたついた（11/12 慶一郎さん「グダグダ」）。今はすぐ球を光らせ、光の中で開く映像に切り替える（球の模様の違いは光で隠れる）
+    setFlash('up')
+    void play(b).catch(close)
   }
 
   const showing = phase !== 'idle'
@@ -574,6 +578,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         <video ref={wait} src={src?.[WAIT]} poster={POSTER} loop muted playsInline preload="auto" />
         <video ref={intro} src={src?.[INTRO]} poster={INTRO_POSTER} className={top === 'intro' ? '' : 'is-off'} muted playsInline preload="auto" />
         <video ref={burst} src={src?.[OPEN]} className={`v2-gacha-burst${top === 'burst' ? ' is-on' : ''}`} muted playsInline preload="auto" />
+        {flash !== 'off' && <div className={`v2-gacha-flash is-${flash}`} aria-hidden />}
         {ticket && (
           <div className="v2-ticket-scene" aria-hidden>
             <img src={POSTER} alt="" className="v2-ticket-sky" />

@@ -222,9 +222,9 @@ async function checkScenario(scenario, fixture) {
     await issued()
     const probe = await page.evaluate(() => window.gachaProbe)
     assert(probe.suppressed >= 3)
-    assert.equal(probe.starts.length, 4)
+    // 深海編の結果の決定音（0.1秒）は鳴らさない（11/12「最後のプツッ」）：始まる音は intro・wait・open の3つ
+    assert.equal(probe.starts.length, 3)
     assert(Math.abs(probe.starts[2].seconds - 14.25) < 0.03)
-    assert(probe.starts[3].seconds <= 0.2)
   } else {
     assert(fixture.calls.some(call => call.name === 'customer_gacha_peek'))
     if (scenario === 'drawLost') await issued()
