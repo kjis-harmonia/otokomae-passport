@@ -48,3 +48,11 @@ test('自分の状況と、断られたときの言葉', () => {
   assert.match(auctionErrorMessage('insufficient_balance'), /残高が足りません/)
   assert.match(auctionErrorMessage('unknown_code'), /もう一度/)
 })
+
+// 銀オクの「平日のみ」の落札券（土日・祝日の予約には出さない・11/12 慶一郎さん）
+test('auction weekday-only ticket is recognised', async () => {
+  const { isAuctionWeekdayTicket } = await import('../src/features/auction/auctionLogic.ts')
+  assert.equal(isAuctionWeekdayTicket({ issued_by: '銀オク', memo: '銀オクで落札・平日のみ' }), true)
+  assert.equal(isAuctionWeekdayTicket({ issued_by: '銀オク', memo: '銀オクで即決・曜日を問わず' }), false)
+  assert.equal(isAuctionWeekdayTicket({ issued_by: 'シルビア', memo: '平日のみ' }), false)
+})

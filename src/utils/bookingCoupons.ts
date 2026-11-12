@@ -5,6 +5,7 @@
 //   割引券・漢トク券：何枚でも、種類をまたいでも使える（2026-10-17 お店の決定）。メンテナンスカットのときは使えない
 //   選んだ券は端末に覚え、予約の日の会員 QR に入れる（店舗端末が読み取って選んだ状態にする。使用の確定は店舗端末）
 import type { TicketRow } from '../data/ticket'
+import { isAuctionWeekdayTicket } from '../features/auction/auctionLogic'
 import { GINJIRO_CLASSICS, GINPARA, SPECIAL_PERM, type CouponDefinition } from '../data/wallet'
 import { isPermOnlyCoupon } from './welcomeCoupon'
 import { supabase } from '../lib/supabase'
@@ -118,7 +119,9 @@ export function usableTickets(tickets: readonly TicketRow[], startsAt: string, m
   const visit = Date.parse(startsAt)
   return tickets.filter(t => (t.type === 'discount' || t.type === 'otoku') && !t.used && !t.pending_transfer
     && (!t.expires_at || Date.parse(t.expires_at) > visit)
-    && !(isPermOnlyCoupon(t) && (isWeekendOrHoliday(startsAt) || (menuCode !== undefined && !isPermMenu(menuCode)))))
+    && !(isPermOnlyCoupon(t) && (isWeekendOrHoliday(startsAt) || (menuCode !== undefined && !isPermMenu(menuCode))))
+    // 銀オクで落札した「平日のみ」の券は、土日・祝日の予約には使えない（11/12 慶一郎さん。DB でも断る）
+    && !(isAuctionWeekdayTicket(t) && isWeekendOrHoliday(startsAt)))
 }
 
 export interface PriceBreakdown {

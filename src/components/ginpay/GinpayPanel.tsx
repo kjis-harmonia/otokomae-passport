@@ -315,7 +315,9 @@ function TransactionRow({ tx, canReverse, reversed, onReverse }: {
   // 会計に紐付いた取引（会計の支払いと、その取消の戻し）は、会計の取消で会計と一緒に戻す（GINPay 側だけでは戻さない）
   const saleLinked = !!tx.accounting_session_id
   const canRefund = canReverse && !reversed && !saleLinked && tx.status === 'posted' && tx.type === 'payment' && tx.amount < 0
-  const canVoid = canReverse && !reversed && !saleLinked && tx.status === 'posted' && tx.type !== 'void'
+  // 銀オクの支払いは取り消さない（券が残ったまま銀Payだけ戻るため。DB でも断る・11/12）
+  const auction = tx.idempotency_key?.startsWith('ginoku:')
+  const canVoid = canReverse && !reversed && !saleLinked && !auction && tx.status === 'posted' && tx.type !== 'void'
   return (
     <div style={txRowStyle}>
       <span style={{ minWidth: 0 }}>

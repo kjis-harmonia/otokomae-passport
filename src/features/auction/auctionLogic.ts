@@ -75,3 +75,6 @@ const ERRORS: Record<string, string> = {
 export function auctionErrorMessage(code: string): string {
   return ERRORS[code] ?? '処理できませんでした。通信を確かめて、もう一度お試しください。'
 }
+
+/** 銀オクで落札した「平日のみ」の券（発行は銀オク・メモに「平日のみ」）。土日・祝日の予約には使えない（11/12 慶一郎さん） */
+export const isAuctionWeekdayTicket = (t: { issued_by?: string | null; memo?: string | null }) => t.issued_by === '銀オク' && !!t.memo?.includes('平日のみ')

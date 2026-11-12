@@ -129,7 +129,7 @@ function AuctionRow({ a, now, onOpen }: { a: Auction; now: number; onOpen: (id: 
 type Confirm = { kind: 'bid'; amount: number } | { kind: 'buy'; amount: number }
 
 function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () => void; onTickets: () => void }) {
-  const [data, setData] = useState<AuctionAction | 'error' | null>(null)
+  const [data, setData] = useState<AuctionAction | 'error' | 'gone' | null>(null)
   const [amount, setAmount] = useState<number | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [busy, setBusy] = useState(false)
@@ -138,12 +138,12 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
   const gen = useRef(0)
   const load = useCallback(() => {
     const my = ++gen.current
-    loadAuction(id).then(d => { if (my === gen.current) setData(d) }).catch(() => { if (my === gen.current) setData(prev => (prev && prev !== 'error' ? prev : 'error')) })
+    loadAuction(id).then(d => { if (my === gen.current) setData(d) }).catch((err: unknown) => { if (my === gen.current) setData(prev => (errorCode(err) === 'not_found' ? 'gone' : prev && prev !== 'error' && prev !== 'gone' ? prev : 'error')) })
   }, [id])
   useEffect(() => { load(); const t = window.setInterval(load, 10_000); return () => window.clearInterval(t) }, [load])
   useReloadOnVisible(load)
 
-  const a = data && data !== 'error' ? data.auction : null
+  const a = data && data !== 'error' && data !== 'gone' ? data.auction : null
   const endsAt = a ? Date.parse(a.ends_at) : 0
   const isEnded = a ? ended(a, now) : false
   const passed = a !== null && a.status === 'open' && now >= endsAt + 1500
@@ -154,6 +154,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
   const value = a ? clampBid(amount ?? min, min, a.buy_now_price, a.increment) : 0
 
   if (data === null) return <div className="v2-page"><Back onBack={onBack} /><p className="v2-note">読み込んでいます…</p></div>
+  if (data === 'gone') return <div className="v2-page"><Back onBack={onBack} /><p className="v2-note">この出品は終わったか、取り下げられました。</p></div>
   if (data === 'error' || !a) return <div className="v2-page"><Back onBack={onBack} /><p className="v2-note">表示できませんでした。通信を確かめてください。</p></div>
 
   const available = walletAvailable(data.wallet)
@@ -222,9 +223,9 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
               {onlyBuyNow ? <p className="ginoku-hint">入札が即決価格まで上がったので、ここからは即決だけです。<br />使える銀Pay {yen(available)}</p> : <>
               <p className="v2-label">入札額</p>
               <div className="ginoku-stepper">
-                <button type="button" className="v2-round v2-glass" aria-label="100円下げる" disabled={busy || value <= min} onClick={() => setAmount(value - a.increment)}><Minus size={18} /></button>
+                <button type="button" className="v2-round v2-glass" aria-label={`${a.increment.toLocaleString('ja-JP')}円下げる`} disabled={busy || value <= min} onClick={() => setAmount(value - a.increment)}><Minus size={18} /></button>
                 <output aria-live="polite">{yen(value)}</output>
-                <button type="button" className="v2-round v2-glass" aria-label="100円上げる" disabled={busy || value >= clampBid(Infinity, min, a.buy_now_price, a.increment)} onClick={() => setAmount(value + a.increment)}><Plus size={18} /></button>
+                <button type="button" className="v2-round v2-glass" aria-label={`${a.increment.toLocaleString('ja-JP')}円上げる`} disabled={busy || value >= clampBid(Infinity, min, a.buy_now_price, a.increment)} onClick={() => setAmount(value + a.increment)}><Plus size={18} /></button>
               </div>
               <p className="ginoku-hint">最低 {yen(min)}・{a.increment.toLocaleString('ja-JP')}円単位<br />使える銀Pay {yen(available)}</p>
               {short(value) && <p className="ginoku-hint is-bad">銀Payの残高が足りません。店頭でチャージできます。</p>}
