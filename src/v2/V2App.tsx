@@ -1,8 +1,9 @@
 // 銀二郎App V2.0 の外枠：上に正式ロゴと ☰、下に浮かぶガラスのタブ4つ（ホーム｜会員QR｜次回予約｜ガチャ）。
+// Staging だけ、ガチャのとなりに5つ目の「銀オク」（オークション・11/12）。本番にはタブそのものを出さない。
 // チケット・ログインと引き継ぎは ☰ から開くページ、AI予約（Johnny）は全画面。どの機能も消さず、入口だけ整理する。
 // 画面の切り替えは App の activeTab（お知らせのリンク ?tab=reserve・?tab=tickets もそのまま効く）。
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CalendarClock, ChevronLeft, CircleHelp, Home, Menu, QrCode, Sparkles } from 'lucide-react'
+import { CalendarClock, ChevronLeft, CircleHelp, Gavel, Home, Menu, QrCode, Sparkles } from 'lucide-react'
 import { openCustomerGuide } from '../components/guide/guideEvents'
 import type { NavTab } from '../data/brand'
 import { JOHNNY_INTENT_EVENT } from '../features/johnny/bookingIntent'
@@ -13,9 +14,10 @@ import { V2Home } from './V2Home'
 import { V2Qr } from './V2Qr'
 import { V2Next } from './V2Next'
 import { V2Gacha } from './V2Gacha'
+import { V2Auction } from './V2Auction'
 import { V2Menu } from './V2Menu'
 import { V2PeopleSheet } from './V2PeopleSheet'
-import { ginFlow } from '../utils/env'
+import { ginFlow, isStaging } from '../utils/env'
 import { V2Account } from './V2Account'
 import { V2Ginpay } from './V2Ginpay'
 import { LaunchNotice } from './LaunchClock'
@@ -39,6 +41,8 @@ const TABS: { id: NavTab; label: string; icon: typeof Home }[] = [
   { id: 'qr', label: '会員QR', icon: QrCode },
   { id: 'next', label: '次回予約', icon: CalendarClock },
   { id: 'gacha', label: 'ガチャ', icon: Sparkles },
+  // 銀二郎オークション【銀オク】：Staging だけ（本番の画面には出さない）
+  ...(isStaging() ? [{ id: 'auction' as const, label: '銀オク', icon: Gavel }] : []),
 ]
 
 export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModalChange, showCampaign }: {
@@ -55,7 +59,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
   const [pay, setPay] = useState(false)
   const go = (t: NavTab) => { setPay(false); setActiveTab(t) }
   // Johnny・チケットなどを閉じたら、開く前のタブへ戻る
-  const isTab = (t: NavTab) => t === 'qr' || t === 'next' || t === 'gacha'
+  const isTab = (t: NavTab) => t === 'qr' || t === 'next' || t === 'gacha' || (t === 'auction' && isStaging())
   const lastTab = useRef<NavTab>(isTab(activeTab) ? activeTab : 'home')
   const tab: NavTab = isTab(activeTab) ? activeTab : 'home'
   useEffect(() => { if (activeTab === 'home' || isTab(activeTab)) lastTab.current = activeTab }, [activeTab])
@@ -107,7 +111,7 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
 
   // ホーム・会員QR・次回予約は1画面に収めて固定（上下にスワイプしない）
   const isHome = tab === 'home' && !pay && activeTab !== 'mypage'
-  const fixed = isHome || (activeTab !== 'mypage' && (tab === 'qr' || tab === 'next' || tab === 'gacha'))
+  const fixed = isHome || (activeTab !== 'mypage' && (tab === 'qr' || tab === 'next' || tab === 'gacha' || tab === 'auction'))
   return (
     <div className={isHome ? 'v2 v2-fixed v2-home' : fixed ? 'v2 v2-fixed' : 'v2'}>
       <header className="v2-head">
@@ -124,10 +128,11 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
           : tab === 'home' ? <V2Home onGinpay={() => setPay(true)} />
           : tab === 'qr' ? <V2Qr onTickets={() => setActiveTab('tickets')} />
           : tab === 'gacha' ? <V2Gacha />
+          : tab === 'auction' ? <V2Auction onTickets={() => setActiveTab('tickets')} />
           : <V2Next onJohnny={() => setActiveTab('reserve')} />}
       </main>
 
-      <nav className="v2-nav v2-glass" aria-label="メインナビゲーション">
+      <nav className={TABS.length > 4 ? 'v2-nav v2-glass is-five' : 'v2-nav v2-glass'} aria-label="メインナビゲーション">
         {TABS.map(t => {
           const Icon = t.icon
           return (

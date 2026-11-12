@@ -212,7 +212,8 @@ function App() {
     if (requestedTab === 'shop' && !isShopUnlocked()) return 'home'
     // 下タブの SHOP（番号入力のあと）は予約の画面を開く。ショップのページへは行かない
     if (requestedTab === 'shop') return 'reserve'
-    const valid: NavTab[] = ['home', 'qr', 'next', 'gacha', 'reserve', 'mypage', 'tickets']
+    // 銀オク（?tab=auction）は Staging だけ
+    const valid: NavTab[] = ['home', 'qr', 'next', 'gacha', ...(isStaging() ? ['auction' as const] : []), 'reserve', 'mypage', 'tickets']
     return valid.includes(requestedTab as NavTab) ? (requestedTab as NavTab) : 'home'
   })
   const setActiveTab = useCallback((tab: NavTab) => {

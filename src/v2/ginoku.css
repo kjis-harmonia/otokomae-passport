@@ -1,0 +1,73 @@
+/* 銀オク（Staging だけ）。v2.css の部品（v2-panel・v2-btn・v2-sheet）に乗せ、足すのは並べ方と券の絵だけ */
+.ginoku-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ginoku-pay { margin: 0; font-size: 12px; color: var(--v2-faint); text-align: right; white-space: nowrap; }
+.ginoku-pay b { display: block; font: 700 17px/1.3 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; }
+.ginoku-empty { margin: 4px 0 18px; }
+.ginoku-section { margin: 22px 4px 8px; }
+.ginoku-foot { margin: 16px 4px 0; font-size: 12px; line-height: 1.7; }
+
+.ginoku-list { padding: 2px 14px; }
+.ginoku-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 84px; padding: 12px 0; border: 0; border-top: 1px solid var(--v2-line); background: none; color: var(--v2-ink); text-align: left; cursor: pointer; }
+.ginoku-row:first-child { border-top: 0; }
+.ginoku-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ginoku-row-title { font: 600 15px/1.4 var(--v2-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ginoku-row-meta { display: flex; flex-wrap: wrap; column-gap: 8px; font-size: 12px; color: var(--v2-faint); font-variant-numeric: tabular-nums; }
+.ginoku-row-price { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 10px; }
+.ginoku-row-price b { font: 700 18px/1.2 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; }
+.ginoku-row-price small { font-size: 12px; color: var(--v2-faint); font-variant-numeric: tabular-nums; }
+.ginoku-row-go { flex: none; color: #a8997f; margin-left: -4px; }
+.ginoku-list.is-done .ginoku-row { min-height: 72px; }
+.ginoku-list.is-done .ginoku-tk { opacity: .7; }
+
+.ginoku-mine { margin: 0; font: 600 12px/1.4 var(--v2-sans); color: var(--v2-sub); }
+.ginoku-mine.is-leading, .ginoku-mine.is-won { color: var(--v2-gold-deep); }
+
+/* 券の絵：ガチャのラインナップと同じ白い大理石。大当たりは黒い大理石に金の文字 */
+.ginoku-tk { flex: none; position: relative; width: 76px; height: 52px; overflow: hidden; border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  background: linear-gradient(160deg, rgba(255,255,255,.55), rgba(255,255,255,.25) 60%, rgba(255,255,255,.5)), url(/images/v2/marble-bg.webp) center / cover no-repeat, #f4f1eb;
+  border: 1px solid rgba(0,0,0,.07); box-shadow: inset 0 1px 0 #fff, 0 6px 12px -8px rgba(0,0,0,.3); }
+.ginoku-tk-brand { font: 700 6.5px/1 var(--v2-sans); letter-spacing: .3em; color: rgba(0,0,0,.38); margin-right: -.3em; }
+.ginoku-tk b { font: 800 14.5px/1.15 var(--v2-serif); color: #1d1d1f; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ginoku-tk b small { font-size: 8px; font-weight: 700; margin-left: 1px; }
+.ginoku-tk.is-legend { background: linear-gradient(160deg, rgba(0,0,0,.35), rgba(0,0,0,.55)), url(/images/tickets/marble-black.webp) center / cover no-repeat, #0b0a09; border-color: #b8944f; }
+.ginoku-tk.is-legend b { color: #e7c983; }
+.ginoku-tk.is-legend .ginoku-tk-brand { color: rgba(231,201,131,.6); }
+.ginoku-tk.is-lg { width: 196px; height: 124px; border-radius: 18px; gap: 6px; box-shadow: inset 0 1px 0 #fff, 0 18px 30px -16px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.06); }
+.ginoku-tk.is-lg .ginoku-tk-brand { font-size: 9px; }
+.ginoku-tk.is-lg b { font-size: 36px; }
+.ginoku-tk.is-lg b small { font-size: 15px; margin-left: 3px; }
+
+.ginoku-hero { display: flex; justify-content: center; padding: 6px 0 16px; }
+.ginoku-title { font: 700 21px/1.4 var(--v2-serif); letter-spacing: .03em; margin: 0; text-align: center; }
+.ginoku-rule { margin: 4px 0 16px; font-size: 12.5px; line-height: 1.6; color: var(--v2-sub); text-align: center; }
+.ginoku-panel { margin-top: 12px; }
+.ginoku-price { margin: 0; font: 700 34px/1.25 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; }
+.ginoku-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--v2-line); }
+.ginoku-facts div { min-width: 0; }
+.ginoku-facts dt { font-size: 11.5px; color: var(--v2-faint); }
+.ginoku-facts dd { margin: 3px 0 0; font: 600 14.5px/1.3 var(--v2-sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ginoku-end { margin: 10px 0 0; font-size: 12px; color: var(--v2-faint); font-variant-numeric: tabular-nums; }
+.ginoku-panel .ginoku-mine { margin-top: 8px; font-size: 13.5px; }
+.ginoku-won { margin: 0; font: 700 22px/1.4 var(--v2-serif); color: var(--v2-gold-deep); }
+
+.ginoku-notice { margin: 12px 4px 0; font-size: 13px; line-height: 1.6; color: var(--v2-gold-deep); }
+.ginoku-notice.is-bad, .ginoku-hint.is-bad { color: #a3402f; }
+
+.ginoku-stepper { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 2px 0 8px; }
+.ginoku-stepper output { flex: 1; text-align: center; font: 700 30px/1.2 var(--v2-serif); font-variant-numeric: tabular-nums; color: var(--v2-ink); }
+.ginoku-hint { margin: 0 0 14px; font-size: 12px; line-height: 1.6; color: var(--v2-faint); text-align: center; font-variant-numeric: tabular-nums; }
+.ginoku-buy { margin-top: 10px; color: var(--v2-ink); }
+
+.ginoku-bids { margin: 14px 4px 0; }
+.ginoku-bids summary { min-height: 44px; display: flex; align-items: center; font: 600 14px/1.4 var(--v2-sans); color: var(--v2-sub); cursor: pointer; }
+.ginoku-bid { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--v2-line); font-size: 14px; }
+.ginoku-bid small { display: block; font-size: 11.5px; color: var(--v2-faint); margin-top: 2px; }
+.ginoku-bid b { font: 700 15px/1 var(--v2-serif); font-variant-numeric: tabular-nums; }
+
+.ginoku-sheet-title { margin: 0; font: 700 19px/1.5 var(--v2-serif); }
+.ginoku-sheet .ginoku-hint { text-align: left; margin: 6px 0 16px; }
+.ginoku-sheet-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* 5つ目のタブ（Staging の銀オク）があるとき */
+.v2-nav.is-five { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
+.v2-nav.is-five button { font-size: 10.5px; letter-spacing: 0; }
