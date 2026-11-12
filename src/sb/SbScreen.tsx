@@ -19,7 +19,7 @@ import { SbTicketPlan } from './SbTicketPlan'
 import { companionOf, partyOf, personName } from './sbParty'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
-import { announceVoice, playChime, unlockChime } from './sbChime'
+import { announceVoice, checkSound, onSoundBlocked, playChime, soundBlocked, unlockChime } from './sbChime'
 import './sb.css'
 
 const ACTOR = 'ginjiro_staff_name'
@@ -144,13 +144,20 @@ export function SbScreen() {
   }
   // AI 予約のお知らせ：この端末で受け取っているか。届いたら（開いているとき）ピコーンと鳴らして予約表を読み直す
   const [push, setPush] = useState<SbPushState | null>(null)
+  const [muted, setMuted] = useState(soundBlocked)
+  useEffect(() => onSoundBlocked(setMuted), [])
   const [pushNote, setPushNote] = useState<string | null>(null)
   useEffect(() => {
     void sbPushState().then(setPush); void sbPushRefresh()
     const onMessage = (e: MessageEvent) => { if (e.data?.type === 'sb-new-reservation' || e.data?.type === 'sb-cancel' || e.data?.type === 'sb-final') { announce(e.data.type === 'sb-final' ? 'final' : e.data.type === 'sb-cancel' ? 'cancel' : 'new'); void refresh(dateRef.current); void loadUnacked() } }
     navigator.serviceWorker?.addEventListener('message', onMessage)
     window.addEventListener('pointerdown', unlockChime)
-    return () => { navigator.serviceWorker?.removeEventListener('message', onMessage); window.removeEventListener('pointerdown', unlockChime) }
+    // 音が止まっていないか：画面に戻った時と1分ごとに見回る（11/12 開いたままでも鳴らない時があった）
+    const onVisible = () => checkSound()
+    document.addEventListener('visibilitychange', onVisible)
+    const look = window.setInterval(checkSound, 60_000)
+    checkSound()
+    return () => { navigator.serviceWorker?.removeEventListener('message', onMessage); window.removeEventListener('pointerdown', unlockChime); document.removeEventListener('visibilitychange', onVisible); clearInterval(look) }
   }, [refresh]) // eslint-disable-line react-hooks/exhaustive-deps -- announce・loadUnacked は ref だけを使う
   const togglePush = async () => {
     unlockChime()
@@ -281,6 +288,7 @@ export function SbScreen() {
           ? 'この端末・ブラウザは、SB を閉じているときのお知らせに対応していません。'
           : 'この端末は、SB を閉じていると予約のお知らせが届きません。右上の「通知」を押して受け取りをオンにしてください。'}</span>
       {push === 'off' && <button className="sb-secondary" onClick={() => void togglePush()}>通知をオンにする</button>}</div>}
+    {muted && <div className="sb-alert sb-sound-off" role="alert"><span>予約が入っても音が鳴らない状態です。画面のどこかを一度タップしてください。</span><button className="sb-secondary" onClick={unlockChime}>音を戻す</button></div>}
     {hpb && hpb.open > 0 && <div className="sb-alert" role="status"><span>HOT PEPPERのメールで確認が必要なものが{hpb.open}件あります。</span><button className="sb-secondary" onClick={() => setHpbOpen(true)}>確認する</button></div>}
     {unacked.length > 0 && <NewAlert list={unacked} onAck={() => void ackNew()} onOpen={openReservation} />}
     {ledger && date === today && <SbToday ledger={ledger} now={now} blocked={blocked} onOpen={setSelectedId}
