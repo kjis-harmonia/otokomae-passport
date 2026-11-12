@@ -72,33 +72,117 @@
 .v2-nav.is-five { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
 .v2-nav.is-five button { font-size: 10.5px; letter-spacing: 0; }
 
-/* 入口の看板・目玉の1件・終わり間近・値上がりの光（11/12 慶一郎さん「かっこよく」） */
-.ginoku-banner { position: relative; overflow: hidden; margin: 0 0 14px; padding: 22px 20px 18px; border-radius: 26px; text-align: center; color: #f4e7c4;
-  background: radial-gradient(120% 90% at 50% 0%, rgba(231,201,131,.22), transparent 60%), linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.55)), url(/images/tickets/marble-black.webp) center / cover no-repeat, #0d0b09;
-  border: 1px solid rgba(184,148,79,.55); box-shadow: inset 0 1px 0 rgba(255,236,190,.25), 0 18px 34px -20px rgba(0,0,0,.6); }
-.ginoku-banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(255,236,190,.16) 50%, transparent 65%); transform: translateX(-100%); animation: ginoku-shine 5.5s ease-in-out 1s infinite; pointer-events: none; }
-@keyframes ginoku-shine { 0%, 70% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-.ginoku-banner-kicker { margin: 0; font: 700 10px/1 var(--v2-sans); letter-spacing: .42em; padding-left: .42em; color: rgba(231,201,131,.75); }
-.ginoku-banner-title { margin: 8px 0 4px; font: 800 44px/1.1 var(--v2-serif); letter-spacing: .14em; padding-left: .14em;
-  background: linear-gradient(180deg, #fff3d0 0%, #e7c983 45%, #a77a35 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 2px 8px rgba(0,0,0,.6)); }
-.ginoku-banner-sub { margin: 0; font: 600 12.5px/1.5 var(--v2-sans); letter-spacing: .08em; color: rgba(244,231,196,.85); }
-.ginoku-banner-pay { margin: 12px auto 0; display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(231,201,131,.35); background: rgba(0,0,0,.35); font-size: 11.5px; color: rgba(244,231,196,.8); }
-.ginoku-banner-pay b { font: 700 15px/1.2 var(--v2-serif); color: #e7c983; font-variant-numeric: tabular-nums; }
+/* 11/12 慶一郎さんの見本の形：クリーム地・まん中に「銀オク」・金の券・「6,000 銀Pay」「残り 02:14:18」 */
+.ginoku-head { display: block; text-align: center; margin: 6px 0 18px; }
+.ginoku-name { display: flex; align-items: center; justify-content: center; gap: 18px; margin: 0; font: 700 34px/1.2 var(--v2-serif); letter-spacing: .12em; padding-left: .12em; color: var(--v2-ink); }
+.ginoku-name::before, .ginoku-name::after { content: ""; flex: 0 1 72px; height: 1px; background: linear-gradient(90deg, transparent, var(--v2-gold)); }
+.ginoku-name::after { background: linear-gradient(90deg, var(--v2-gold), transparent); }
+.ginoku-lead { margin: 6px 0 0; font-size: 13px; letter-spacing: .14em; color: var(--v2-sub); }
+.ginoku-k { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: 11.5px; color: var(--v2-faint); letter-spacing: .04em; }
+.ginoku-pay-n { display: inline-flex; align-items: baseline; gap: 4px; font: 700 21px/1.2 var(--v2-serif); color: var(--v2-ink); font-variant-numeric: tabular-nums; }
+.ginoku-pay-n small { font: 700 12px/1 var(--v2-serif); color: var(--v2-ink); }
+.ginoku-pay-n.is-big { font-size: 34px; }
+.ginoku-pay-n.is-big small { font-size: 15px; }
 
-.ginoku-feature { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; margin: 0 0 12px; padding: 22px 18px 18px; border-radius: 26px; border: 1px solid rgba(184,148,79,.35); color: var(--v2-ink); text-align: center; cursor: pointer; font: inherit; }
-.ginoku-feature .ginoku-tk { margin-bottom: 8px; }
-.ginoku-feature-title { font: 700 17px/1.4 var(--v2-serif); letter-spacing: .03em; }
-.ginoku-feature-label { margin-top: 6px; font-size: 11.5px; color: var(--v2-faint); letter-spacing: .08em; }
-.ginoku-feature-price { font: 800 40px/1.15 var(--v2-serif); color: var(--v2-gold-deep); font-variant-numeric: tabular-nums; }
-.ginoku-feature-meta { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 14px; row-gap: 2px; margin-top: 2px; font-size: 12.5px; color: var(--v2-sub); font-variant-numeric: tabular-nums; }
-.ginoku-feature .ginoku-mine { margin-top: 4px; }
-.ginoku-feature-go { display: inline-flex; align-items: center; gap: 2px; margin-top: 12px; min-height: 44px; padding: 0 22px; border-radius: 999px; font: 700 14px/1 var(--v2-sans); color: #3a2a10;
-  background: linear-gradient(180deg, #f6e3b4, #d9b56b); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 8px 16px -10px rgba(120,86,39,.8); }
+/* 金の券：ふちに切り欠き・左右に月桂樹・少し傾ける */
+.ginoku-gold { flex: none; display: inline-flex; width: 118px; height: 72px; transform: rotate(-7deg); filter: drop-shadow(0 8px 10px rgba(120,86,39,.28)); }
+.ginoku-gold-face { flex: 1; display: flex; align-items: center; justify-content: center; gap: 2px; padding: 0 8px; border-radius: 9px; color: #b0843a;
+  background: linear-gradient(130deg, #fff8e6 0%, #f1dfb2 32%, #fffaf0 52%, #e3c37f 78%, #f7e7c0 100%);
+  box-shadow: inset 0 0 0 1.5px #c9a35a, inset 0 0 0 4px rgba(255,255,255,.6), inset 0 0 0 5px rgba(176,132,58,.45);
+  -webkit-mask: radial-gradient(circle 6px at 0 50%, transparent 97%, #000 100%) left / 51% 100% no-repeat, radial-gradient(circle 6px at 100% 50%, transparent 97%, #000 100%) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle 6px at 0 50%, transparent 97%, #000 100%) left / 51% 100% no-repeat, radial-gradient(circle 6px at 100% 50%, transparent 97%, #000 100%) right / 51% 100% no-repeat; }
+.ginoku-gold b { display: flex; flex-direction: column; align-items: center; font: 800 15px/1.12 var(--v2-serif); color: #4a3311; letter-spacing: .02em; text-shadow: 0 1px 0 rgba(255,255,255,.8); white-space: nowrap; }
+.ginoku-gold b.is-two span:first-child { font-size: .92em; }
+.ginoku-laurel { flex: none; width: 11px; height: 30px; }
+.ginoku-gold.is-lg { width: 210px; height: 128px; }
+.ginoku-gold.is-lg .ginoku-gold-face { border-radius: 14px; gap: 6px; }
+.ginoku-gold.is-lg b { font-size: 30px; }
+.ginoku-gold.is-lg .ginoku-laurel { width: 20px; height: 54px; }
 
-.ginoku-tag { position: absolute; z-index: 2; top: 14px; right: 14px; padding: 4px 10px; border-radius: 999px; font: 700 11px/1.2 var(--v2-sans); letter-spacing: .06em; color: #fff7e3; background: linear-gradient(180deg, #b8873c, #7d5622); box-shadow: 0 4px 10px -6px rgba(0,0,0,.5); }
-.ginoku-tag.is-small { position: static; padding: 1px 8px; font-size: 10.5px; }
-.ginoku-left.is-hurry { color: var(--v2-gold-deep); font-weight: 700; }
+/* 目玉の1件 */
+.ginoku-feature { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); align-items: center; gap: 0; margin: 0 0 18px; padding: 18px 16px; border-radius: 26px; }
+.ginoku-feature-art { display: flex; justify-content: center; padding: 6px 4px; border: 0; background: none; cursor: pointer; }
+.ginoku-feature .ginoku-gold.is-lg { width: min(100%, 210px); }
+.ginoku-feature-side { display: flex; flex-direction: column; gap: 6px; padding-left: 14px; border-left: 1px solid var(--v2-line); min-width: 0; }
+.ginoku-left { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; padding-top: 10px; border-top: 1px solid var(--v2-line); font-size: 13px; color: var(--v2-sub); }
+.ginoku-left b { font: 700 20px/1.2 var(--v2-serif); color: var(--v2-ink); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.ginoku-go { margin-top: 10px; min-height: 48px; border-radius: 999px; border: 1px solid #c9a35a; font: 700 16px/1 var(--v2-sans); letter-spacing: .08em; color: #3a2a10; cursor: pointer;
+  background: linear-gradient(180deg, #fbefcf, #e2c07b 60%, #d3ac5f); box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 8px 16px -10px rgba(120,86,39,.9); }
+.ginoku-feature .ginoku-mine { font-size: 12px; }
+
+/* 開催中・終了間近・落札済み */
+.ginoku-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; margin: 0 0 14px; }
+.ginoku-tabs button { min-height: 44px; border: 0; border-radius: 999px; background: none; font: 600 15px/1 var(--v2-sans); letter-spacing: .06em; color: var(--v2-sub); cursor: pointer; position: relative; }
+.ginoku-tabs button + button::before { content: ""; position: absolute; left: 0; top: 30%; bottom: 30%; width: 1px; background: var(--v2-line); }
+.ginoku-tabs button.is-on { color: var(--v2-ink); background: linear-gradient(180deg, #fbefcf, #ead097); box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 4px 10px -6px rgba(120,86,39,.6); }
+.ginoku-tabs button.is-on::before, .ginoku-tabs button.is-on + button::before { display: none; }
+
+/* 一覧のカード */
+.ginoku-cards { display: flex; flex-direction: column; gap: 10px; }
+.ginoku-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 12px 12px 10px; border-radius: 20px; border: 0; color: var(--v2-ink); text-align: left; cursor: pointer; font: inherit; }
+.ginoku-card-art { flex: none; display: flex; align-items: center; justify-content: center; width: 124px; height: 84px; border-radius: 14px; background: radial-gradient(80% 80% at 50% 45%, rgba(255,250,236,.95), rgba(240,230,210,.4)); }
+.ginoku-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ginoku-card-title { font: 700 17px/1.3 var(--v2-sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ginoku-card-nums { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.ginoku-card-nums > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ginoku-card-time { padding-left: 10px; border-left: 1px solid var(--v2-line); }
+.ginoku-card-time b { font: 700 18px/1.2 var(--v2-serif); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ginoku-card .ginoku-pay-n { font-size: 19px; }
+.ginoku-card .ginoku-mine { font-size: 11.5px; }
+.ginoku-card-go { flex: none; color: #a8997f; }
+@media (max-width: 370px) {
+  .ginoku-card-art { width: 96px; height: 70px; }
+  .ginoku-card .ginoku-gold { width: 92px; height: 58px; }
+  .ginoku-card .ginoku-gold b { font-size: 12.5px; }
+  .ginoku-card .ginoku-laurel { width: 9px; height: 24px; }
+  .ginoku-card-time b { font-size: 15px; }
+  .ginoku-card .ginoku-pay-n { font-size: 16px; }
+  .ginoku-feature { grid-template-columns: 1fr; }
+  .ginoku-feature-side { padding-left: 0; border-left: 0; padding-top: 12px; border-top: 1px solid var(--v2-line); }
+}
 
 .is-up { animation: ginoku-up 1.6s ease-out 1; }
-@keyframes ginoku-up { 0% { color: #fff; text-shadow: 0 0 0 rgba(231,201,131,0); } 25% { color: #c9963f; text-shadow: 0 0 18px rgba(231,201,131,.95); } 100% { text-shadow: 0 0 0 rgba(231,201,131,0); } }
-@media (prefers-reduced-motion: reduce) { .ginoku-banner::after, .is-up { animation: none; } }
+@keyframes ginoku-up { 0% { text-shadow: 0 0 0 rgba(231,201,131,0); } 25% { color: #c9963f; text-shadow: 0 0 18px rgba(231,201,131,.95); } 100% { text-shadow: 0 0 0 rgba(231,201,131,0); } }
+@media (prefers-reduced-motion: reduce) { .is-up { animation: none; } }
+/* 詰まって折り返していた所（11/12 撮って見て直す） */
+.ginoku-k, .ginoku-pay-n, .ginoku-left, .ginoku-card-time b { white-space: nowrap; }
+.ginoku-feature .ginoku-mine { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; }
+.ginoku-left { gap: 5px; font-size: 12px; }
+.ginoku-left b { font-size: 19px; }
+.ginoku-card { gap: 10px; }
+.ginoku-card-art { width: 108px; height: 76px; }
+.ginoku-card .ginoku-gold { width: 100px; height: 62px; }
+.ginoku-card .ginoku-gold b { font-size: 13px; }
+.ginoku-card .ginoku-laurel { width: 9px; height: 25px; }
+.ginoku-card-nums { gap: 8px; }
+.ginoku-card-time { padding-left: 8px; }
+.ginoku-card .ginoku-pay-n { font-size: 18px; }
+.ginoku-card .ginoku-pay-n small { font-size: 10.5px; }
+.ginoku-card-time b { font-size: 17px; }
+.ginoku-name { white-space: nowrap; }
+.ginoku-gold b .is-long { font-size: .8em; }
+/* 細いスマホ（〜370px）：見出しの線を短く、一覧の数字は縦に積む */
+@media (max-width: 370px) {
+  .ginoku-name { font-size: 30px; gap: 12px; }
+  .ginoku-name::before, .ginoku-name::after { flex-basis: 40px; }
+  .ginoku-lead { font-size: 12px; letter-spacing: .08em; }
+  .ginoku-card { padding: 10px 10px 10px 8px; gap: 8px; }
+  .ginoku-card-art { width: 84px; height: 62px; }
+  .ginoku-card .ginoku-gold { width: 80px; height: 50px; }
+  .ginoku-card .ginoku-gold b { font-size: 10.5px; }
+  .ginoku-card .ginoku-laurel { width: 7px; height: 20px; }
+  .ginoku-card-title { font-size: 15px; }
+  .ginoku-card-nums { grid-template-columns: 1fr; gap: 4px; }
+  .ginoku-card-nums > span { flex-direction: row; align-items: baseline; gap: 6px; }
+  .ginoku-card-time { padding-left: 0; border-left: 0; }
+  .ginoku-card .ginoku-pay-n { font-size: 17px; }
+  .ginoku-card-time b { font-size: 15px; }
+}
+@media (max-width: 370px) {
+  .ginoku-card .ginoku-k { font-size: 10.5px; }
+  .ginoku-card .ginoku-pay-n { font-size: 16px; }
+  .ginoku-card-go { width: 16px; margin-left: -2px; }
+}
+/* 詳細の値段も一覧と同じ形（「6,200 銀Pay」・墨色） */
+.ginoku-price .ginoku-pay-n.is-big { font-size: 36px; }
+.ginoku-stepper output .ginoku-pay-n.is-big { font-size: 30px; }
