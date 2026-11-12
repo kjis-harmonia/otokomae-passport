@@ -162,6 +162,8 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
   const mine = mineLabel(a.mine)
   const canAct = data.signed_in && !walletProblem && !isEnded
   const short = (n: number) => available !== null && available < n
+  // 最低入札額が即決価格に届いたら、入札はできない（サーバーも断る）。ここからは即決だけ（11/12 Claude の確認）
+  const onlyBuyNow = a.buy_now_price !== null && min >= a.buy_now_price
 
   const run = async (c: Confirm) => {
     setBusy(true)
@@ -217,6 +219,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
             <p className="v2-note" style={{ margin: 0 }}>{auctionErrorMessage(walletProblem)}</p>
           ) : (
             <>
+              {onlyBuyNow ? <p className="ginoku-hint">入札が即決価格まで上がったので、ここからは即決だけです。<br />使える銀Pay {yen(available)}</p> : <>
               <p className="v2-label">入札額</p>
               <div className="ginoku-stepper">
                 <button type="button" className="v2-round v2-glass" aria-label="100円下げる" disabled={busy || value <= min} onClick={() => setAmount(value - a.increment)}><Minus size={18} /></button>
@@ -228,6 +231,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
               <button type="button" className="v2-btn v2-btn-gold" disabled={busy || !canAct || short(value) || a.mine === 'leading'} onClick={() => setConfirm({ kind: 'bid', amount: value })}>
                 {a.mine === 'leading' ? '最高額で入札中です' : `${yen(value)} で入札する`}
               </button>
+              </>}
               {a.buy_now_price !== null && (
                 <button type="button" className="v2-btn v2-glass ginoku-buy" disabled={busy || !canAct || short(a.buy_now_price)} onClick={() => setConfirm({ kind: 'buy', amount: a.buy_now_price! })}>
                   即決 {yen(a.buy_now_price)} で落札する
