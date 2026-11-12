@@ -9,6 +9,8 @@ export interface GinpayHoldSummary {
   /** 使える額（残高 − ほかの予約で押さえている分） */
   available: number
   holds: { reservation_id: string; amount: number }[]
+  /** 銀オクの入札の押さえ（Staging だけ。最高額のあいだ。抜かれたら戻る）。held にはこの分も入っている。古い DB・本番には無い */
+  auction_holds?: { auction_id: string; title: string; amount: number; ends_at: string }[]
 }
 
 const EVENT = 'ginjiro:ginpay-holds-changed'
@@ -63,6 +65,11 @@ export function useGinpayHolds(): GinpayHoldSummary | null {
     }
   }, [])
   return summary
+}
+
+/** 銀オクの入札で押さえている合計（無ければ 0） */
+export function auctionHeld(summary: GinpayHoldSummary | null): number {
+  return (summary?.auction_holds ?? []).reduce((n, h) => n + h.amount, 0)
 }
 
 /** その予約の仮支払い額（無ければ null） */

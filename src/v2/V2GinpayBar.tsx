@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronRight, Wallet } from 'lucide-react'
 import { getCustomerGinpayLedger, yen } from '../utils/ginpayApi'
-import { useGinpayHolds } from '../features/ginpay/holds'
+import { auctionHeld, useGinpayHolds } from '../features/ginpay/holds'
 import { getCustomerSession } from '../utils/customerSession'
 import { RpcError } from '../utils/staffSession'
 
@@ -12,6 +12,8 @@ export function V2GinpayBar({ onOpen }: { onOpen: () => void }) {
   const [balance, setBalance] = useState<number | 'signedOut' | 'failed' | undefined>(undefined)
   const holds = useGinpayHolds()
   const held = holds?.held ?? 0
+  // 銀オクの入札の押さえがあるときは「押さえ中」（予約の仮支払いだけなら今までどおり）
+  const heldLabel = auctionHeld(holds) > 0 ? '押さえ中' : '仮支払い済み'
 
   useEffect(() => {
     let alive = true
@@ -45,7 +47,7 @@ export function V2GinpayBar({ onOpen }: { onOpen: () => void }) {
       <span className="v2-pay-name">銀Pay</span>
       <span className={typeof balance === 'string' ? 'v2-pay-bal is-off' : 'v2-pay-bal'}>
         {balance === undefined ? '…' : balance === 'signedOut' ? '店頭でご利用いただけます' : balance === 'failed' ? '残高を確認できませんでした' : yen(held > 0 ? Math.max(0, balance - held) : balance)}
-        {typeof balance === 'number' && held > 0 && <small className="v2-pay-held">仮支払い済み {yen(held)}</small>}
+        {typeof balance === 'number' && held > 0 && <small className="v2-pay-held">{heldLabel} {yen(held)}</small>}
       </span>
       <span className="v2-pay-go">支払う・チャージ<ChevronRight size={16} /></span>
     </button>

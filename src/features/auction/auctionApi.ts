@@ -10,7 +10,10 @@ export type Auction = {
   title: string
   prize_code: string | null
   rank: 'normal' | 'rare' | 'legend'
-  ticket_amount: number
+  /** 割引券の額（無料券は null） */
+  ticket_amount: number | null
+  /** 無料券のメニューの名前（「銀パラ」。割引券は null・古い DB には無い） */
+  free_menu?: string | null
   ticket_days: number
   weekday_only: boolean
   note: string | null
@@ -27,6 +30,8 @@ export type Auction = {
   sold_via: 'bid' | 'buy_now' | null
   final_price: number | null
   my_bid: number | null
+  /** 最高額のあいだ押さえている自分の銀Pay（無ければ null・古い DB には無い） */
+  held?: number | null
   mine: AuctionMine
   ticket_id: string | null
 }

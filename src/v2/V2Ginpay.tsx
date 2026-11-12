@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { ChevronLeft, QrCode } from 'lucide-react'
 import { GINPAY_CUSTOMER_LABEL, getCustomerGinpayLedger, ginpayTxLabel, type GinpayLedger, yen } from '../utils/ginpayApi'
 import { RpcError } from '../utils/staffSession'
-import { useGinpayHolds } from '../features/ginpay/holds'
+import { auctionHeld, useGinpayHolds } from '../features/ginpay/holds'
 
 const when = (iso: string) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso))
 
@@ -12,6 +12,9 @@ export function V2Ginpay({ onBack, onShowQr }: { onBack: () => void; onShowQr: (
   const [ledger, setLedger] = useState<GinpayLedger | null>(null)
   const [state, setState] = useState<'loading' | 'ok' | 'signedOut' | 'error'>('loading')
   const holds = useGinpayHolds()
+  // 予約の仮支払いと、銀オクの入札の押さえ（Staging だけ）を分けて出す
+  const bidHeld = auctionHeld(holds)
+  const reserveHeld = (holds?.held ?? 0) - bidHeld
 
   useEffect(() => {
     let alive = true
@@ -37,7 +40,9 @@ export function V2Ginpay({ onBack, onShowQr }: { onBack: () => void; onShowQr: (
         <p className="v2-big" style={{ fontSize: 40, color: 'var(--v2-gold-deep)', fontVariantNumeric: 'tabular-nums' }}>
           {state === 'ok' && ledger ? yen(ledger.balance) : state === 'loading' ? '…' : '—'}
         </p>
-        {holds && holds.held > 0 && <p className="v2-note" style={{ marginTop: 6 }}>うち予約の仮支払い {yen(holds.held)}（今使える額 {yen(holds.available)}）。レジで会員QRを読むと確定し、キャンセルすると戻ります。</p>}
+        {holds && reserveHeld > 0 && <p className="v2-note" style={{ marginTop: 6 }}>うち予約の仮支払い {yen(reserveHeld)}。レジで会員QRを読むと確定し、キャンセルすると戻ります。</p>}
+        {holds?.auction_holds?.map(h => <p key={h.auction_id} className="v2-note" style={{ marginTop: 6 }}>銀オクの入札で押さえ中 {yen(h.amount)}（{h.title}）。抜かれたら戻ります。</p>)}
+        {holds && holds.held > 0 && <p className="v2-note" style={{ marginTop: 6 }}>今使える額 {yen(holds.available)}</p>}
         {state === 'signedOut' && <p className="v2-note" style={{ marginTop: 6 }}>店頭で本人確認が済むと、残高が表示されます。</p>}
         {state === 'error' && <p className="v2-note" style={{ marginTop: 6 }}>表示できませんでした。通信を確認してください。</p>}
         {ledger && !ledger.consistent && <p className="v2-note" style={{ marginTop: 6, color: '#a3402f' }}>残高の確認が必要です。店舗へお声がけください。</p>}

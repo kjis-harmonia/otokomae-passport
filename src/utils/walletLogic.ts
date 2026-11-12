@@ -17,6 +17,7 @@ import {
 import { MAINTENANCE_CUT_WINDOW_DAYS } from './visitHistory'
 import { getJapanDateString, addDaysToDateString } from './dateUtils'
 import { isWelcomeCouponTicket } from './welcomeCoupon'
+import { freeTicketLabel, isFreeTicket } from '../features/auction/freeTicket'
 
 // ── Priority bands（小さいほど前面） ─────────────────────────────────────────
 //  1. メンテナンス残り3日以内        10〜13（残りが少ないほど前）
@@ -321,7 +322,7 @@ export function buildTicketCards(tickets: TicketRow[], now = new Date()): Wallet
     // 漢トク券は、発行したスタッフが違っても同じ金額・期限・名前なら1枚のカードに（10/29 慶一郎さん：同じ値段なのに別々のカードだった）。
     //   割引券・Welcome・再来店パーマクーポンは発行元で見分けるので、今までどおり発行元も見る
     const issuer = ticketTypeKey === 'otoku' ? '' : t.issued_by
-    const key = `${expired ? 'x' : 'a'}::${ticketTypeKey}::${t.amount}::${t.expires_at?.slice(0, 10) ?? ''}::${issuer}::${t.title}`
+    const key = `${expired ? 'x' : 'a'}::${ticketTypeKey}::${t.amount}::${t.expires_at?.slice(0, 10) ?? ''}::${issuer}::${t.title}::${isFreeTicket(t) ? t.menu_codes.join(',') : ''}`
     const list = groups.get(key)
     if (list) list.push(t)
     else groups.set(key, [t])
@@ -360,6 +361,9 @@ function ticketCard(list: TicketRow[], status: 'active' | 'expired' | 'used', no
   }
 
   const allPending = list.every(t => t.pending_transfer)
+  // 銀オクの無料券（「銀パラ無料」）：金額ではなく、何が無料かを出す
+  const free = isFreeTicket(rep) ? freeTicketLabel(rep) : undefined
+  const weekdayOnly = !!rep.memo?.includes('平日のみ')
   return {
     id:           status === 'used' ? `ticket-${rep.id}` : `ticket-${status}-${rep.type}-${rep.amount}-${expiresAt ?? 'none'}-${rep.issued_by}-${rep.title}`,
     category:     'otoku',
@@ -371,14 +375,17 @@ function ticketCard(list: TicketRow[], status: 'active' | 'expired' | 'used', no
       ? '譲渡手続き中'
       : status === 'active' && isWelcome
         ? 'パーマ全種類対象 / 平日のみ（土日利用不可）'
-        : undefined,
-    prices:       rep.amount > 0 ? [{ memberPrice: rep.amount }] : [],
+        : status === 'active' && free
+          ? `${rep.free_menu || '対象のメニュー'}のお会計が無料${weekdayOnly ? '・平日のみ' : ''}`
+          : undefined,
+    prices:       !free && rep.amount > 0 ? [{ memberPrice: rep.amount }] : [],
+    freeLabel:    free,
     validFrom:    rep.created_at,
     validUntil:   expiresAt,
     bookingType:  'in-store',
     isMemberOnly: false,
     priority,
-    accent:       status === 'active' ? otokuAccent(rep.amount) : 'muted',
+    accent:       status === 'active' ? otokuAccent(free ? 1000 : rep.amount) : 'muted',
     count:        list.length,
     source:       { kind: 'ticket', ticketType: rep.type, tickets: list },
   }

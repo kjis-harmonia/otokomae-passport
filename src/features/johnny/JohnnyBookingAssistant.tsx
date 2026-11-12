@@ -35,6 +35,7 @@ import { pushState } from '../../utils/webPush'
 import { MAINTENANCE_CUT_URL } from '../../data/reserveLinks'
 import type { TicketRow } from '../../data/ticket'
 import { TICKET_TYPE_LABELS } from '../../data/ticket'
+import { freeTicketLabel, isFreeTicket } from '../auction/freeTicket'
 import { clearCouponPlan, gachaNote, gachaOff, priceFor, saveCouponPlan, usableTickets, yen as yenOf, type PriceBreakdown } from '../../utils/bookingCoupons'
 import { attachGacha, canUseGacha, loadGacha, type GachaHeld } from '../gacha/gachaApi'
 import { suspendBgm } from '../../audio/bgm'
@@ -2451,7 +2452,9 @@ function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpa
         <SummaryRow label={`料金（${menuName}）`} value={yenOf(price.normal ?? price.base)} />
         {price.normal != null && p && <SummaryRow label={p.def.title} value={`−${yenOf(price.normal - price.base)}`} />}
         {/* 同じ券はまとめて「漢トク券 × 3」（11/6 慶一郎さん「いっぱい並んでるの鬱陶しい」） */}
-        {ticketGroups(selected).map(g => <SummaryRow key={g.key} label={`${TICKET_TYPE_LABELS[g.type]}${g.items.length > 1 ? ` × ${g.items.length}` : ''}`} value={`−${yenOf(g.items.reduce((a, t) => a + t.amount, 0))}`} />)}
+        {ticketGroups(selected).map(g => isFreeTicket(g.items[0])
+          ? <SummaryRow key={g.key} label={g.items[0].title} value={freeTicketLabel(g.items[0])} />
+          : <SummaryRow key={g.key} label={`${TICKET_TYPE_LABELS[g.type]}${g.items.length > 1 ? ` × ${g.items.length}` : ''}`} value={`−${yenOf(g.items.reduce((a, t) => a + t.amount, 0))}`} />)}
         {gacha && gachaOn && <SummaryRow label={`ガチャ券（${gacha}）`} value={`−${yenOf(price.gacha)}`} />}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 54, padding: '0 16px', borderTop: `0.5px solid ${C.separator}` }}>
           <span style={{ fontSize: 15, color: C.secondary }}>{ginpay?.on ? 'お会計（銀Pay）' : 'お会計（店頭で）'}</span>
@@ -2510,16 +2513,19 @@ function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpa
             const add = () => { const next = g.items.find(t => !on.some(x => x.id === t.id)); if (next) onToggle(next.id) }
             const remove = () => { if (n > 0) onToggle(on[on.length - 1].id) }
             const btn = (dis: boolean): CSSProperties => ({ width: 44, height: 44, borderRadius: 22, border: `1px solid ${C.separator}`, background: 'transparent', color: dis ? C.tertiary : C.text, fontSize: 22, lineHeight: 1, cursor: dis ? 'default' : 'pointer', fontFamily: FONT })
-            const label = TICKET_TYPE_LABELS[g.type]
+            // 銀オクの無料券（「銀パラ無料券」）：1回の予約に1枚（メニュー1つ分）
+            const free = isFreeTicket(g.items[0])
+            const label = free ? g.items[0].title : TICKET_TYPE_LABELS[g.type]
+            const max = free ? Math.min(1, g.items.length) : g.items.length
             return (
               <div key={g.key} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 60, padding: '0 12px 0 16px', borderTop: `0.5px solid ${C.separator}` }}>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 16 }}>{label} {yenOf(g.items[0].amount)}</span>
-                  <span style={{ display: 'block', fontSize: 12, color: C.secondary }}>お持ち {g.items.length}枚</span>
+                  <span style={{ display: 'block', fontSize: 16 }}>{free ? label : `${label} ${yenOf(g.items[0].amount)}`}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: C.secondary }}>{free ? `${freeTicketLabel(g.items[0])}・` : ''}お持ち {g.items.length}枚</span>
                 </span>
                 <button type="button" aria-label={`${label}を1枚減らす`} disabled={n === 0} onClick={remove} style={btn(n === 0)}>−</button>
                 <span aria-live="polite" style={{ minWidth: 44, textAlign: 'center', fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{n}枚</span>
-                <button type="button" aria-label={`${label}を1枚増やす`} disabled={n >= g.items.length} onClick={add} style={btn(n >= g.items.length)}>＋</button>
+                <button type="button" aria-label={`${label}を1枚増やす`} disabled={n >= max} onClick={add} style={btn(n >= max)}>＋</button>
               </div>
             )
           })}
@@ -2533,7 +2539,7 @@ function PriceBox({ menuName, price, usable, selected, onToggle, ginpay, onGinpa
 function ticketGroups(list: readonly TicketRow[]): { key: string; type: TicketRow['type']; items: TicketRow[] }[] {
   const m = new Map<string, { key: string; type: TicketRow['type']; items: TicketRow[] }>()
   for (const t of [...list].sort((a, b) => (a.expires_at ?? '9999').localeCompare(b.expires_at ?? '9999'))) {
-    const key = `${t.type}|${t.amount}`
+    const key = `${t.type}|${t.amount}|${isFreeTicket(t) ? t.menu_codes.join(',') : ''}`
     const g = m.get(key) ?? { key, type: t.type, items: [] }
     g.items.push(t)
     m.set(key, g)

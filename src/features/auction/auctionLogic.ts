@@ -1,5 +1,5 @@
 // 銀オク（Staging だけ）の計算と言葉。画面とテスト（scripts/ginoku-auction.test.mjs）で使う。
-// 正はサーバー（supabase/staging-only/20261112_ginoku.sql）。ここは表示と入力の手助けだけ
+// 正はサーバー（supabase/staging-only/20261112_ginoku.sql・_free_and_hold.sql）。ここは表示と入力の手助けだけ
 
 /** 次に入札できる最低額（入札が無ければ開始価格、あれば現在価格＋刻み）。サーバーの ginoku_min_bid と同じ */
 export function nextMinBid(current: number | null, start: number, increment: number): number {
@@ -58,7 +58,7 @@ export function mineLabel(mine: AuctionMine): string | null {
 
 const ERRORS: Record<string, string> = {
   too_low: '最低入札額に届いていません。金額を確かめてください。',
-  insufficient_balance: '銀Payの残高が足りません。店頭でチャージしてからお試しください。',
+  insufficient_balance: '銀Payの残高が足りません（入札・予約で押さえている分は使えません）。店頭でチャージできます。',
   use_buy_now: '即決価格以上は、即決でお申し込みください。',
   already_leading: 'いまは最高額で入札中です。',
   ended: 'このオークションは終了しました。',
@@ -68,7 +68,7 @@ const ERRORS: Record<string, string> = {
   account_not_found: '銀Payをお使いいただくと、入札できます。店頭でお声がけください。',
   account_selection_required: '銀Payの口座の確認が必要です。店頭でお声がけください。',
   account_not_active: 'この銀Payは現在お使いいただけません。',
-  held_funds: '予約の仮支払いの分は使えません。',
+  held_funds: '押さえている分（入札・予約の仮支払い）は使えません。',
   customer_auth_required: '店頭で本人確認が済むと、入札できます。',
 }
 
@@ -78,3 +78,12 @@ export function auctionErrorMessage(code: string): string {
 
 /** 銀オクで落札した「平日のみ」の券（発行は銀オク・メモに「平日のみ」）。土日・祝日の予約には使えない（11/12 慶一郎さん） */
 export const isAuctionWeekdayTicket = (t: { issued_by?: string | null; memo?: string | null }) => t.issued_by === '銀オク' && !!t.memo?.includes('平日のみ')
+
+/** 券の決まりの一行：無料券は「銀パラのお会計が無料・平日のみ・30日間有効」、割引券は「お会計から500円引き・平日のみ・30日間有効」 */
+export function ticketRule(a: { free_menu?: string | null; ticket_amount: number | null; weekday_only: boolean; ticket_days: number }): string {
+  const what = a.free_menu ? `${a.free_menu}のお会計が無料` : `お会計から${(a.ticket_amount ?? 0).toLocaleString('ja-JP')}円引き`
+  return `${what}・${a.weekday_only ? '平日のみ' : '曜日を問わず'}・${a.ticket_days}日間有効`
+}
+
+/** 最高額のあいだの押さえの一言（「6,300 銀Payを押さえています。負けたら戻ります」） */
+export const holdNote = (held: number) => `${held.toLocaleString('ja-JP')} 銀Payを押さえています。負けたら戻ります`

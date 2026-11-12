@@ -82,7 +82,7 @@ export function WalletCardFace({
   // チケットの英字（OTOKU TICKET 等）は券種名の繰り返しで、狭い画面では途切れるため出さない
   // 券の上の小さな文字：漢トク券・割引券は金額も（重ねたとき上の段しか見えないので、金額違いを見分けられるように・10/29）
   const ticketAmount = card.prices[0]?.memberPrice
-  const tag       = isTicket ? (!isPermCoupon && ticketAmount !== undefined ? yen(ticketAmount) : '') : card.subtitle ?? card.eyebrow
+  const tag       = isTicket ? (card.freeLabel ? '' : (!isPermCoupon && ticketAmount !== undefined ? yen(ticketAmount) : '')) : card.subtitle ?? card.eyebrow
   // Welcomeクーポンは見出しを「特殊パーマ」だけにして途切れさせない
   // 再来店パーマクーポンも「再来店パーマ」だけに（種類は上の小さな文字で）
   const title     = isWelcome ? card.title.replace(/\s*Welcome\s*クーポン\s*$/, '') || card.title
@@ -297,6 +297,16 @@ function PermHero({ card, theme }: { card: WalletCard; theme: CardTheme }) {
 
 function TicketHero({ card, theme }: { card: WalletCard; theme: CardTheme }) {
   const amount = card.prices[0]?.memberPrice
+  // 無料券（銀オク）：「銀パラ無料」を金額の場所に（上の小さな文字には出さない＝同じ言葉を2度出さない）
+  if (card.freeLabel) {
+    return (
+      <div>
+        <p style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: theme.accent, lineHeight: 1.1, letterSpacing: '0.04em', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.55))' }}>
+          {card.freeLabel}
+        </p>
+      </div>
+    )
+  }
   return (
     <div>
       {amount !== undefined && (

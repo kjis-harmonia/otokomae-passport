@@ -71,6 +71,8 @@ export interface WalletCard {
   /** 補足（例: 次回受付 明日 17:00〜） */
   statusHint?:  string
   prices:       WalletPriceLine[]
+  /** 無料券の値打ち（「銀パラ無料」）。あれば金額の代わりに出す */
+  freeLabel?:   string
   validFrom?:   string | null
   validUntil?:  string | null
   bookingType:  BookingType

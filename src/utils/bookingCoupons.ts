@@ -6,6 +6,7 @@
 //   選んだ券は端末に覚え、予約の日の会員 QR に入れる（店舗端末が読み取って選んだ状態にする。使用の確定は店舗端末）
 import type { TicketRow } from '../data/ticket'
 import { isAuctionWeekdayTicket } from '../features/auction/auctionLogic'
+import { freeTicketValue, isFreeTicket } from '../features/auction/freeTicket'
 import { GINJIRO_CLASSICS, GINPARA, SPECIAL_PERM, type CouponDefinition } from '../data/wallet'
 import { isPermOnlyCoupon } from './welcomeCoupon'
 import { supabase } from '../lib/supabase'
@@ -121,7 +122,9 @@ export function usableTickets(tickets: readonly TicketRow[], startsAt: string, m
     && (!t.expires_at || Date.parse(t.expires_at) > visit)
     && !(isPermOnlyCoupon(t) && (isWeekendOrHoliday(startsAt) || (menuCode !== undefined && !isPermMenu(menuCode))))
     // 銀オクで落札した「平日のみ」の券は、土日・祝日の予約には使えない（11/12 慶一郎さん。DB でも断る）
-    && !(isAuctionWeekdayTicket(t) && isWeekendOrHoliday(startsAt)))
+    && !(isAuctionWeekdayTicket(t) && isWeekendOrHoliday(startsAt))
+    // 銀オクの無料券（「銀パラ無料券」）は、そのメニューの予約だけ（11/12。DB でも断る）
+    && !(isFreeTicket(t) && menuCode !== undefined && !t.menu_codes.includes(menuCode)))
 }
 
 export interface PriceBreakdown {
@@ -168,7 +171,8 @@ export function priceFor(menuCode: string, menuPrice: number | null, startsAt: s
   // プレミアム対象で使えない時間帯は、ふつうの料金
   const base = mine ?? (premium ? (premium.eligible ? premium.memberPrice : premium.normalPrice) : menuPrice)
   if (base == null) return null
-  const ticketsTotal = selected.reduce((a, t) => a + t.amount, 0)
+  // 無料券は、そのメニューの料金（券の額は 0）。ほかの券は券の額
+  const ticketsTotal = selected.reduce((a, t) => a + (isFreeTicket(t) ? freeTicketValue(t, menuCode, base) : t.amount), 0)
   const gacha = gachaOff(gachaHeld, menuCode, startsAt, base, changeOf) ?? 0
   return { normal: premium?.eligible ? premium.normalPrice : null, base, premium, ticketsTotal, gacha, total: Math.max(0, base - ticketsTotal - gacha) }
 }

@@ -16,6 +16,7 @@ const MINCHO = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN",serif'
 import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
 import { playCue } from '../../audio/cue'
 import { isPermOnlyCoupon } from '../../utils/welcomeCoupon'
+import { freeTicketAmounts, freeTicketLabel, isFreeTicket } from '../../features/auction/freeTicket'
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
 // 「会計を確定」で初めて売上になる（確定は DB の1トランザクション。予約は完了になる）。毎日何十回も使うので、文字と金額だけで構成する。
@@ -176,16 +177,26 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   }
 
   const clientInfo = ctx?.reservation ? ctx.client : client ?? null
-  const tickets = clientInfo ? ctx?.tickets ?? [] : []
   // 予約に付いたガチャ券：最初から使う状態。券の一覧に並べ、外すこともできる（11/4）
   const gachaOf = ctx?.reservation ? ctx.gacha ?? null : null
   const gachaOff = gachaOf ? gachaAmount(gachaOf, lines) : null
   const gachaTicket: CheckoutTicket | null = gachaOf
     ? { id: 'gacha', type: 'gacha', title: `ガチャ券 ${gachaOf.title}`, amount: gachaOff ?? 0, expires_at: null, blocked: gachaOff === null ? 'gacha_menu' : null }
     : null
-  const listed = gachaTicket ? [gachaTicket, ...tickets] : tickets
   const gachaOn = !!gachaTicket && !gachaTicket.blocked && useGacha
-  const chosenTickets = listed.filter(t => t.id === 'gacha' ? gachaOn : ticketIds.includes(t.id))
+  // 銀オクの無料券（Staging だけ）：そのメニューが会計に無ければ使えない。値引きは DB と同じ計算（その明細1つ分・ガチャ券のあと）
+  const menuLine = (l: SaleLine) => (l.source === 'reservation' || l.source === 'service_menu') && !!l.ref_id
+  const gachaLine = gachaOn && gachaOf?.menu_codes ? lines.findIndex(l => menuLine(l) && gachaOf.menu_codes!.includes(l.ref_id!)) : -1
+  const gachaUse = gachaLine >= 0 ? { lineIndex: gachaLine, amount: gachaOff ?? 0 } : null
+  const tickets = (clientInfo ? ctx?.tickets ?? [] : []).map(t => isFreeTicket(t) && !t.blocked && !lines.some(l => menuLine(l) && t.menu_codes.includes(l.ref_id!)) ? { ...t, blocked: 'free_menu' as const } : t)
+  const pickedFree = tickets.filter(t => isFreeTicket(t) && !t.blocked && ticketIds.includes(t.id))
+  const freeOff = freeTicketAmounts(lines, pickedFree, gachaUse)
+  /** この無料券をもう1枚足しても、全部に対象の明細が残るか */
+  const freeFits = (t: CheckoutTicket) => [...freeTicketAmounts(lines, [...pickedFree, t], gachaUse).values()].every(v => v !== null)
+  // 送る券：対象のメニューが無くなった無料券は外す（DB も断る）
+  const usedTicketIds = ticketIds.filter(id => { const t = tickets.find(x => x.id === id); return !t || !isFreeTicket(t) || (!t.blocked && freeOff.get(id) != null) })
+  const listed = gachaTicket ? [gachaTicket, ...tickets] : tickets
+  const chosenTickets = listed.filter(t => t.id === 'gacha' ? gachaOn : usedTicketIds.includes(t.id)).map(t => isFreeTicket(t) ? { ...t, amount: freeOff.get(t.id) ?? 0 } : t)
   const manualAmount = manual ? Math.max(0, parseInt(manual.amount || '0', 10) || 0) : 0
   const totals = useMemo(() => saleTotals(lines, chosenTickets, manualAmount), [lines, chosenTickets, manualAmount])
   const paid = !!ctx?.paid_sale_id
@@ -273,7 +284,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
     try {
       const proposed: CheckoutAttempt = attempt ?? { version: 1, backend: api.backend, customerLabel: clientInfo?.name ?? ctx?.reservation?.customer_name ?? '匿名', operator: api.operator(), createdAt: new Date().toISOString(), input: {
         reservation_id: ctx?.reservation?.id, client_id: ctx?.reservation ? undefined : client?.id,
-        stylist_id: stylistId!, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.source === 'manual' && !l.name.trim() ? 'オプション' : l.name.trim() || l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: ticketIds,
+        stylist_id: stylistId!, items: lines.map(l => ({ source: l.source, ref_id: l.ref_id, name: l.source === 'manual' && !l.name.trim() ? 'オプション' : l.name.trim() || l.name, category: l.category, unit_price: l.unit_price, quantity: l.quantity, discount: l.discount })), ticket_ids: usedTicketIds,
         use_gacha: gachaOn || undefined,
         manual_discount: manualAmount > 0 ? { amount: manualAmount, label: manual!.label.trim() } : undefined,
         payment_method: method!, expected_total: Math.max(0, totals.total), idempotency_key: saleKey,
@@ -411,11 +422,11 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
               {plan && plan.length > 0 && (() => {
                 const mine = tickets.filter(t => plan.includes(t.id))
                 if (!mine.length) return null
-                const groups = [...mine.reduce((m, t) => m.set(t.title, { n: (m.get(t.title)?.n ?? 0) + 1, amt: (m.get(t.title)?.amt ?? 0) + t.amount }), new Map<string, { n: number; amt: number }>())]
+                const groups = [...mine.reduce((m, t) => m.set(t.title, { n: (m.get(t.title)?.n ?? 0) + 1, amt: (m.get(t.title)?.amt ?? 0) + t.amount, free: isFreeTicket(t) ? freeTicketLabel(t) : null }), new Map<string, { n: number; amt: number; free: string | null }>())]
                 return (
                   <div role="note" data-guide="co-plan" style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(151,115,43,0.08)', border: '1px solid rgba(151,115,43,0.35)', fontSize: 14, lineHeight: 1.6 }}>
                     <b>お客様がAI予約で選んだ券</b><br />
-                    {groups.map(([title, g]) => <span key={title} style={{ display: 'block' }}>{title} × {g.n}枚（−{yen(g.amt)}）</span>)}
+                    {groups.map(([title, g]) => <span key={title} style={{ display: 'block' }}>{title} × {g.n}枚（{g.free ?? `−${yen(g.amt)}`}）</span>)}
                     <span style={{ fontSize: 12, color: C.sub }}>下の券の枚数に入れています。お会計は下の合計のとおりです。</span>
                   </div>
                 )
@@ -433,13 +444,13 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                       <div key={g.key} style={{ ...lineBtn, cursor: 'default', opacity: off ? 0.55 : 1 }}>
                         <span style={{ minWidth: 0 }}>
                           <span style={{ display: 'block', fontSize: 14 }}>{first.title}</span>
-                          <span style={{ display: 'block', fontSize: 12, color: C.mute }}>{first.blocked ? TICKET_BLOCK_LABEL[first.blocked] : permOnly ? (ownerOnlyOff ? '会員ご本人の施術だけ使えます' : 'パーマのときだけ使えます') : `1枚 −${yen(first.amount)}・お持ち ${g.items.length}枚`}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: C.mute }}>{first.blocked ? TICKET_BLOCK_LABEL[first.blocked] : permOnly ? (ownerOnlyOff ? '会員ご本人の施術だけ使えます' : 'パーマのときだけ使えます') : isFreeTicket(first) ? `${freeTicketLabel(first)}・お持ち ${g.items.length}枚` : `1枚 −${yen(first.amount)}・お持ち ${g.items.length}枚`}</span>
                         </span>
                         {!off && (
                           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                             <button type="button" aria-label={`${first.title}を1枚減らす`} disabled={on.length === 0} onClick={() => toggleTicket(on[on.length - 1].id, first.type)} style={btn(on.length === 0)}>−</button>
                             <span aria-live="polite" style={{ minWidth: 40, textAlign: 'center', fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{on.length}枚</span>
-                            <button type="button" aria-label={`${first.title}を1枚増やす`} disabled={on.length >= g.items.length} onClick={() => { const next = g.items.find(t => !ticketIds.includes(t.id)); if (next) toggleTicket(next.id, first.type) }} style={btn(on.length >= g.items.length)}>＋</button>
+                            <button type="button" aria-label={`${first.title}を1枚増やす`} disabled={on.length >= g.items.length || (isFreeTicket(first) && !freeFits(g.items.find(t => !ticketIds.includes(t.id)) ?? first))} onClick={() => { const next = g.items.find(t => !ticketIds.includes(t.id)); if (next) toggleTicket(next.id, first.type) }} style={btn(on.length >= g.items.length || (isFreeTicket(first) && !freeFits(g.items.find(t => !ticketIds.includes(t.id)) ?? first)))}>＋</button>
                           </span>
                         )}
                       </div>

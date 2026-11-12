@@ -17,7 +17,10 @@ export interface CheckoutTicket {
   amount: number
   expires_at: string | null
   /** 今日使えない理由（使えるなら null） */
-  blocked: 'transfer_pending' | 'welcome_weekend' | 'daily_rule' | 'gacha_menu' | null
+  blocked: 'transfer_pending' | 'welcome_weekend' | 'daily_rule' | 'gacha_menu' | 'ginoku_weekday' | 'free_menu' | null
+  /** 銀オクの無料券（Staging だけ）：メニューの名前と使えるメニュー。値引きはその明細1つ分（画面と DB が同じ計算）。ほかの券・本番には無い */
+  free_menu?: string | null
+  menu_codes?: string[] | null
 }
 /** 予約に付いたガチャ券（お客様が AI 予約で付けた券。11/4） */
 export interface CheckoutGacha {
@@ -153,6 +156,7 @@ export interface SalesApi {
 export const PAYMENT_LABEL: Record<string, string> = { cash: '現金', card: 'カード', credit: 'カード', qr: 'QR等', other: 'その他', ginpay: '銀Pay' }
 export const TICKET_BLOCK_LABEL: Record<string, string> = {
   transfer_pending: '譲渡中', welcome_weekend: '土日は使えません', daily_rule: '本日は別の割引を利用済み', gacha_menu: '対象のメニューがありません',
+  ginoku_weekday: '平日のみ使えます', free_menu: '対象のメニューがありません',
 }
 
 export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
@@ -171,6 +175,9 @@ export const CHECKOUT_ERROR_MESSAGE: Record<string, string> = {
   gacha_invalid: 'ガチャ券が使えませんでした（使用済み・予約から外れています）。画面を開き直してください。',
   gacha_weekday: 'このガチャ券は平日のみ使えます。',
   gacha_menu: 'ガチャ券の対象のメニューが会計にありません。',
+  // 銀オクの券（Staging だけ・11/12）
+  ginoku_weekday: '銀オクの券は平日のみ使えます（土日・祝日は使えません）。',
+  free_menu: '無料券の対象のメニューが会計にありません（1つのメニューに使えるのは1枚です）。',
   // 11/11 店舗端末点検：サーバーが断る理由で、案内が無かったもの
   gacha_companion: 'このガチャ券は、お連れ様の会計では使えません（無料の券だけ使えます）。',
   welcome_owner_only: 'Welcomeクーポンは、発行された会員ご本人の施術だけに使えます（お連れ様・予約のない方の会計では使えません）。',

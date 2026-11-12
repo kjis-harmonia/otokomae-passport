@@ -1,10 +1,10 @@
 // 銀二郎オークション【銀オク】（Staging だけ・11/12 慶一郎さん）：お店が出品したガチャ券を、銀Pay で競り落とす。
 // 一覧（現在価格・即決・入札数・残り時間）→ 詳細（入札・即決・入札履歴）。入札・即決の前に必ず確かめる。
-// 終了時に最高額の方の銀Pay から引き落とし、券はすぐチケットへ（サーバーが締める。画面は結果を読むだけ）
+// 最高額のあいだ入札額の銀Payを押さえ、抜かれたらすぐ戻す。終了時にその押さえを引き落とし、券はすぐチケットへ（サーバーが締める。画面は結果を読むだけ）
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Clock, Minus, Plus } from 'lucide-react'
 import { buyNow, loadAuction, loadAuctions, placeBid, walletAvailable, type Auction, type AuctionAction, type AuctionList } from '../features/auction/auctionApi'
-import { auctionErrorMessage, clampBid, endLabel, mineLabel } from '../features/auction/auctionLogic'
+import { auctionErrorMessage, clampBid, endLabel, holdNote, mineLabel, ticketRule } from '../features/auction/auctionLogic'
 import { RpcError } from '../utils/staffSession'
 import { useServerSecond } from './launchTime'
 import './ginoku.css'
@@ -158,7 +158,7 @@ function AuctionListView({ onOpen }: { onOpen: (id: string) => void }) {
           {shown.length === 0
             ? <p className="v2-note ginoku-empty">{tab === 'done' ? 'まだ落札された出品はありません。' : tab === 'near' ? '24時間以内に終わる出品はありません。' : 'ほかの出品はありません。'}</p>
             : <div className="ginoku-cards">{shown.map(a => <AuctionRow key={a.id} a={a} now={now} rose={risen.has(a.id)} onOpen={onOpen} />)}</div>}
-          <p className="v2-note ginoku-foot">お支払いは銀Payのみです。終了時に一番高く入札した方の銀Payから引き落とし、券はチケットに入ります。</p>
+          <p className="v2-note ginoku-foot">お支払いは銀Payのみです。最高額のあいだは入札額を押さえ、抜かれたらすぐ戻ります。落札で引き落とし、券はチケットに入ります。</p>
         </>
       )}
     </div>
@@ -269,7 +269,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
       else if (c.kind === 'bid') {
         setAmount(null)
         lastMine.current = 'leading'
-        setNotice({ text: res.extended ? `${payText(c.amount)}で入札しました。終了間際のため、終了を5分延ばしました。` : `${payText(c.amount)}で入札しました。いまの最高額です。` })
+        setNotice({ text: res.extended ? `${payText(c.amount)}で入札し、押さえました。終了間際のため、終了を5分延ばしました。` : `${payText(c.amount)}で入札し、押さえました。いまの最高額です。` })
       }
       window.dispatchEvent(new Event('ginjiro:ginpay-holds-changed'))
     } catch (err) {
@@ -285,7 +285,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
       <Back onBack={onBack} />
       <div className="ginoku-hero"><AuctionTicket a={a} large /></div>
       <h1 className="ginoku-title">{a.title}</h1>
-      <p className="ginoku-rule">お会計から{a.ticket_amount.toLocaleString('ja-JP')}円引き・{a.weekday_only ? '平日のみ' : '曜日を問わず'}・{a.ticket_days}日間有効</p>
+      <p className="ginoku-rule">{ticketRule(a)}</p>
 
       {a.mine === 'won' ? (
         <section className="v2-panel v2-glass ginoku-panel ginoku-won-panel">
@@ -318,7 +318,7 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
               ) : onlyBuyNow ? (
                 <p className="ginoku-hint">入札が即決価格まで上がったので、ここからは即決だけです。</p>
               ) : leading ? (
-                <p className="ginoku-hint">いまはあなたが最高額です。ほかの方が入札したら、ここでお知らせします。</p>
+                <p className="ginoku-hint">{holdNote(a.held ?? a.my_bid ?? 0)}</p>
               ) : (
                 <>
                   <div className="ginoku-quick" role="group" aria-label="入札額">
@@ -369,11 +369,11 @@ function AuctionDetailView({ id, onBack, onTickets }: { id: string; onBack: () =
             <dl className="ginoku-sheet-facts">
               <div><dt>券</dt><dd>{a.title}</dd></div>
               <div><dt>{confirm.kind === 'bid' ? '入札額' : 'お支払い'}</dt><dd>{payText(confirm.amount)}</dd></div>
-              <div><dt>使える銀Pay</dt><dd>{(available ?? 0).toLocaleString('ja-JP')}{confirm.kind === 'buy' && available !== null ? ` → ${(available - confirm.amount).toLocaleString('ja-JP')}` : ''}</dd></div>
+              <div><dt>使える銀Pay</dt><dd>{(available ?? 0).toLocaleString('ja-JP')}{available !== null ? ` → ${(available - confirm.amount).toLocaleString('ja-JP')}` : ''}</dd></div>
             </dl>
             <p className="v2-note" style={{ margin: '4px 0 14px' }}>
               {confirm.kind === 'bid'
-                ? '銀Payは、終了時に最高額だったときだけ引き落とします。入札は取り消せません。'
+                ? '入札額の銀Payを、いま押さえます。引き落とすのは落札したときだけで、ほかの方に抜かれたらすぐ戻ります。入札は取り消せません。'
                 : 'すぐに銀Payから引き落とし、券をチケットに入れます。'}
             </p>
             <div className="ginoku-sheet-actions">

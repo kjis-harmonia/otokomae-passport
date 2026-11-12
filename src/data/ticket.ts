@@ -62,6 +62,9 @@ export interface TicketRow {
   expires_at: string | null
   // UI-only: set by getUserTickets from ticket_transfers table, not a DB column
   pending_transfer?: boolean
+  /** 無料券（銀オク・Staging だけ）：メニューの名前（「銀パラ」）と使えるメニュー。そのメニューのお会計が無料。ほかの券・本番には無い */
+  free_menu?:  string | null
+  menu_codes?: string[] | null
 }
 
 export interface TicketTransferRow {
