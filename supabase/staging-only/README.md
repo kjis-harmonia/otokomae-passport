@@ -35,3 +35,4 @@ npx.cmd supabase db query --remote=kfufxzmucjljjouzpumi --yes -f supabase/stagin
 トリガー：`public.ginpay_transactions` の `ginoku_block_reverse`（`_fix1.sql`）、`app_private.ginoku_auctions` の `ginoku_release_on_close`（`_free_and_hold.sql`）。
 
 - `20261112_ginoku_fix2.sql`（2回目の粗探しの直し）：額とメニューが決まった景品は出品できない（`menu_discount_not_supported`）／店の会計の情報 `app_private.checkout_context_json` に `auction_held`（銀オクの入札で押さえている額）を足す。戻すときは `_fix2_off.sql`
+- `20261113_ginoku_change.sql`：予約を変えたとき、銀オクの平日のみの券（土日・祝日へ）と無料券（対象のメニューが無い予約へ）を外す。`app_private.change_effects` を Staging で置き換え。戻すときは `_change_off.sql`
