@@ -46,6 +46,8 @@ export interface GinpayTransaction {
   created_at: string
   balance?: number
   idempotent?: boolean
+  /** お客様の利用履歴だけ：'auction' は銀オクの引き落とし（Staging・11/12） */
+  kind?: 'auction'
 }
 
 export interface GinpayLedger {
@@ -132,6 +134,12 @@ export const GINPAY_CUSTOMER_LABEL: Record<GinpayTransactionType, string> = {
   refund: '返金',
   adjustment: '残高の調整',
   void: 'お取り消し',
+}
+
+/** 利用履歴の名前。銀オクの引き落とし（台帳では調整・冪等キー ginoku:<ID>）は「オークション」（11/12 慶一郎さん） */
+export function ginpayTxLabel(tx: Pick<GinpayTransaction, 'type'> & { kind?: string; idempotency_key?: string | null }, labels: Record<GinpayTransactionType, string>): string {
+  if (tx.kind === 'auction' || tx.idempotency_key?.startsWith('ginoku:')) return 'オークション'
+  return labels[tx.type]
 }
 
 export function ginpayErrorMessage(code: string): string {

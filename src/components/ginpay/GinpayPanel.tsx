@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   GINPAY_TYPE_LABEL,
+  ginpayTxLabel,
   type GinpayChargeTier,
   type GinpayClientApi,
   type GinpayLedger,
@@ -318,7 +319,7 @@ function TransactionRow({ tx, canReverse, reversed, onReverse }: {
   return (
     <div style={txRowStyle}>
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 14, lineHeight: 1.5 }}>{GINPAY_TYPE_LABEL[tx.type]}</span>
+        <span style={{ display: 'block', fontSize: 14, lineHeight: 1.5 }}>{ginpayTxLabel(tx, GINPAY_TYPE_LABEL)}</span>
         <span style={{ display: 'block', fontSize: 12, color: C.mute, lineHeight: 1.5 }}>
           {formatDateTime(tx.created_at)}
           {tx.operator_name ? ` / ${tx.operator_name}` : ''}

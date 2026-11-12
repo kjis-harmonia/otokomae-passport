@@ -2,7 +2,7 @@
 // 支払い・チャージは店頭で、会員QR をスタッフが読み取る（仕組みは今のまま）
 import { useEffect, useState } from 'react'
 import { ChevronLeft, QrCode } from 'lucide-react'
-import { GINPAY_CUSTOMER_LABEL, getCustomerGinpayLedger, type GinpayLedger, yen } from '../utils/ginpayApi'
+import { GINPAY_CUSTOMER_LABEL, getCustomerGinpayLedger, ginpayTxLabel, type GinpayLedger, yen } from '../utils/ginpayApi'
 import { RpcError } from '../utils/staffSession'
 import { useGinpayHolds } from '../features/ginpay/holds'
 
@@ -53,7 +53,7 @@ export function V2Ginpay({ onBack, onShowQr }: { onBack: () => void; onShowQr: (
             : ledger.transactions.slice(0, 12).map(tx => (
               <div key={tx.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--v2-line)' }}>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 15 }}>{GINPAY_CUSTOMER_LABEL[tx.type]}</span>
+                  <span style={{ display: 'block', fontSize: 15 }}>{ginpayTxLabel(tx, GINPAY_CUSTOMER_LABEL)}</span>
                   <span style={{ display: 'block', fontSize: 12, color: 'var(--v2-faint)', marginTop: 2 }}>{when(tx.created_at)}</span>
                 </span>
                 <span style={{ font: '700 16px/1 var(--v2-serif)', fontVariantNumeric: 'tabular-nums', color: tx.amount > 0 ? 'var(--v2-gold-deep)' : 'var(--v2-ink)' }}>

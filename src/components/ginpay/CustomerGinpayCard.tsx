@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import {
   GINPAY_TYPE_LABEL,
+  ginpayTxLabel,
   getCustomerGinpayLedger,
   type GinpayLedger,
   type GinpayTransaction,
@@ -98,7 +99,7 @@ function HistoryRow({ tx }: { tx: GinpayTransaction }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '11px 0', borderBottom: LINE }}>
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 14 }}>{GINPAY_TYPE_LABEL[tx.type]}</span>
+        <span style={{ display: 'block', fontSize: 14 }}>{ginpayTxLabel(tx, GINPAY_TYPE_LABEL)}</span>
         <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: MUTED }}>{formatDateTime(tx.created_at)}</span>
       </span>
       <span style={{ fontSize: 14, fontVariantNumeric: 'tabular-nums', color: tx.amount > 0 ? GOLD : IVORY }}>
