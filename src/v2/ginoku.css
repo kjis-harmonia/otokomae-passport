@@ -250,3 +250,10 @@
 .ginoku-detail { padding-bottom: 24px; }
 .ginoku-bids { margin-top: 14px; }
 @media (max-width: 370px) { .ginoku-one-clock { font-size: 18px; } .ginoku-one .ginoku-pay-n.is-big { font-size: 30px; } }
+/* 値段と残り時間が重ならないように（11/13 iPhone で「1日 02:45:23」が隠れていた）：入らなければ2段に折り返す */
+.ginoku-card-nums { display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 14px; row-gap: 4px; }
+.ginoku-card-nums > span { flex: 0 1 auto; }
+.ginoku-card-time { padding-left: 0; border-left: 0; }
+.ginoku-feature-side { min-width: 0; }
+.ginoku-feature .ginoku-left { flex-wrap: wrap; row-gap: 2px; }
+.ginoku-feature .ginoku-left b { font-size: 18px; }

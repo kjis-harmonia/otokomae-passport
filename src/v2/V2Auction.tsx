@@ -19,12 +19,12 @@ function Pay({ n, className }: { n: number | null | undefined; className?: strin
 }
 /** 文の中の金額（「6,000 銀Pay」） */
 const payText = (n: number | null | undefined) => `${(n ?? 0).toLocaleString('ja-JP')} 銀Pay`
-/** 残り時間は時計の形（02:14:18）。1日以上は「2日 03:10:00」 */
+/** 残り時間は時計の形（02:14:18）。1日以上は秒を出さず「2日 03:10」（文字が隠れないように・11/13） */
 function clock(endsAt: number, now: number): string {
   const s = Math.max(0, Math.floor((endsAt - now) / 1000))
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
   const hms = [h, m, sec].map(x => String(x).padStart(2, '0')).join(':')
-  return d > 0 ? `${d}日 ${hms}` : hms
+  return d > 0 ? `${d}日 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` : hms
 }
 
 /** 月桂樹（券の左右の金の飾り） */
