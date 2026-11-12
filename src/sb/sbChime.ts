@@ -10,10 +10,54 @@ function audio(): AudioContext | null {
   return ctx
 }
 
+// 音が出せない状態か（11/12：SB を開いたまま画面がついていても、予約の音が鳴らない時があった）。
+//   iPad は、画面が消えてついた後・ほかの音が鳴った後・長く触っていない時に、音の仕組みが止まる（suspended / interrupted）。
+//   止まっていたら鳴らす前に起こし直し、起きなければ画面に「一度タップしてください」を出す
+let blocked = false
+const listeners = new Set<(b: boolean) => void>()
+function setBlocked(b: boolean) { if (blocked === b) return; blocked = b; listeners.forEach(f => f(b)) }
+export function soundBlocked(): boolean { return blocked }
+export function onSoundBlocked(f: (b: boolean) => void): () => void { listeners.add(f); return () => { listeners.delete(f) } }
+
+/** 音の仕組みを起こす。止まっていたら resume。0.6 秒で起きなければ false */
+async function ensureRunning(a: AudioContext): Promise<boolean> {
+  if (a.state === 'running') { setBlocked(false); return true }
+  const ok = await Promise.race([
+    a.resume().then(() => (a.state as string) === 'running', () => false),
+    new Promise<boolean>(r => window.setTimeout(() => r(false), 600)),
+  ])
+  setBlocked(!ok)
+  return ok
+}
+/** 画面が見えている間、音が止まっていないか見回る（止まっていたら起こす・起きなければ知らせる） */
+export function checkSound(): void {
+  const a = audio()
+  if (a && document.visibilityState === 'visible') void ensureRunning(a)
+}
+
+// 予備の鳴らし方：音のファイルを <audio> で鳴らす。最初のタップで一度鳴らしておく（iPad は触った時に鳴らした音しか、後で鳴らせない）
+let fallback: HTMLAudioElement | null = null
+function fallbackEl(): HTMLAudioElement | null {
+  if (fallback) return fallback
+  try { fallback = new Audio(); fallback.preload = 'auto' } catch { fallback = null }
+  return fallback
+}
+async function playFallback(file: string): Promise<boolean> {
+  const el = fallbackEl()
+  if (!el) return false
+  try { el.muted = false; el.volume = 1; el.src = file; el.currentTime = 0; await el.play(); return true } catch { return false }
+}
+
 let speechReady = false
+let fallbackReady = false
 export function unlockChime(): void {
   const a = audio()
-  if (a && a.state === 'suspended') void a.resume().catch(() => {})
+  if (a && a.state !== 'running') void ensureRunning(a)
+  else if (a) setBlocked(false)
+  if (!fallbackReady) {
+    const el = fallbackEl()
+    if (el) { fallbackReady = true; el.muted = true; el.src = SB_VOICES.new.file; void el.play().then(() => { el.pause(); el.currentTime = 0 }, () => { fallbackReady = false }) }
+  }
   // iPad は一度タップの中で話させないと、あとから声が出ない：最初のタップで無音の一言を話しておく
   if (!speechReady && 'speechSynthesis' in window) {
     speechReady = true
@@ -45,8 +89,12 @@ async function voiceBuffer(file: string): Promise<AudioBuffer | null> {
 /** ピコーンのあとに声（ファイル、無ければ端末の声） */
 export function announceVoice(kind: keyof typeof SB_VOICES): void {
   const v = SB_VOICES[kind]
-  playChime()
-  void voiceBuffer(v.file).then(buf => {
+  const a0 = audio()
+  // 音の仕組みが止まっていて起きないときは、予備の鳴らし方で声のファイルを鳴らす（それも駄目なら画面で知らせる）
+  void (a0 ? ensureRunning(a0) : Promise.resolve(false)).then(async running => {
+    if (!running) { if (!(await playFallback(v.file))) setBlocked(true); return }
+    playChime()
+    const buf = await voiceBuffer(v.file)
     const a = audio()
     if (buf && a) {
       // 3つの声の大きさをそろえる：一番大きい所が 0.9 になるように持ち上げる（上げすぎない）
@@ -97,6 +145,6 @@ export function playChime(): void {
     bell(a, 1318.5, t, 0.5, 0.22)        // ピ（E6）
     bell(a, 1975.5, t + 0.13, 1.6, 0.26) // コーン（B6）
   }
-  if (a.state === 'suspended') void a.resume().then(go, () => {})
-  else go()
+  if (a.state === 'running') go()
+  else void ensureRunning(a).then(ok => { if (ok) go() })
 }
