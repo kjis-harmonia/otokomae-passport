@@ -421,3 +421,23 @@ test('interruption discards frozen old voices immediately instead of replaying a
   assert.equal(f.nodes[2].starts[1], 8)
   f.playback.dispose()
 })
+
+// 深海編：開く音が急に切れる前に、きれいに消す（11/12）
+test('open fade-out lowers the open sound smoothly to zero before the hard cut', () => {
+  const { ctx, nodes } = fixture()
+  const gains = []; const make = ctx.createGain.bind(ctx); ctx.createGain = () => { const g = make(); gains.push(g); return g }
+  const audio = new GachaSoundtrack(ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 14.25 } }, INTRO_CROSSFADE, null, { from: 7.6, to: 9.4 })
+  audio.startIntro(0); audio.open(30)
+  assert.equal(nodes.length, 3) // 音は増やさない
+  const tail = gains.at(-1).gain.events.filter(e => e[0] === 'ramp')
+  assert.equal(tail.length, 64)
+  assert.equal(tail.at(-1)[1], 0); assert(Math.abs(tail.at(-1)[2] - 39.4) < 1e-9)
+  for (let i = 1; i < tail.length; i++) assert(tail[i][1] <= tail[i - 1][1] + 1e-12)
+})
+test('resuming the open sound after the fade starts at the faded level', () => {
+  const { ctx } = fixture()
+  const gains = []; const make = ctx.createGain.bind(ctx); ctx.createGain = () => { const g = make(); gains.push(g); return g }
+  const audio = new GachaSoundtrack(ctx, { intro: { duration: 28 }, wait: { duration: 4 }, open: { duration: 14.25 } }, INTRO_CROSSFADE, null, { from: 7.6, to: 9.4 })
+  audio.open(0, 10)
+  assert.deepEqual(gains.at(-1).gain.events[0], ['set', 0, 0])
+})

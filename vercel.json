@@ -1,8 +1,21 @@
 {
+  "ignoreCommand": "node scripts/vercel-ignore.mjs",
   "rewrites": [
-    { "source": "/staff", "destination": "/staff.html" },
-    { "source": "/headquarters", "destination": "/headquarters.html" },
-    { "source": "/sb", "destination": "/sb.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/staff",
+      "destination": "/staff.html"
+    },
+    {
+      "source": "/headquarters",
+      "destination": "/headquarters.html"
+    },
+    {
+      "source": "/sb",
+      "destination": "/sb.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }

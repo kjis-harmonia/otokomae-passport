@@ -10,7 +10,7 @@ import { launchAt, launched, launchHm, serverNow } from '../utils/launch'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronRight, Pointer, Sparkles, Volume2, X } from 'lucide-react'
 import { canUseGacha, drawGacha, gachaDays, gachaReservedLabel, gachaUntil, keepGacha, loadGacha, peekGacha, type GachaKeepResult, type GachaPrize, type GachaState } from '../features/gacha/gachaApi'
-import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles, type OpenTame } from '../audio/gachaSoundtrack'
+import { GACHA_AUDIO_FILES, GachaSoundtrack, gachaAudioContext, loadGachaAudio, type GachaAudioBuffers, type GachaAudioFiles, type OpenFadeOut, type OpenTame } from '../audio/gachaSoundtrack'
 import { GachaAudioPlayback } from '../audio/gachaAudioPlayback'
 import { isStaging } from '../utils/env'
 import { CUSTOMER_AUTH_REQUIRED_EVENT, getCustomerSession } from '../utils/customerSession'
@@ -21,9 +21,11 @@ import { GachaGauge, GaugeMonth } from './GachaGauge'
 
 // 演出はガチャ画面を開くたびにランダム（11/1、11/3 アプリを開き直さなくても画面ごとに選び直す）。読むのは選ばれたテーマの3本と音だけ（スマホで全テーマを読むと重い）。
 // 深海の秘宝は最後に銀ちゃん（動画）、銀河の秘宝は真っ白の中から黄金チケットがこちらへ飛んでくる（アプリで描く・11/1 慶一郎さん「銀ちゃんは難しい！」）
-type Theme = { short: string; id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean; openTame?: OpenTame }
+type Theme = { short: string; id: 'deep' | 'galaxy' | 'dino'; name: string; tap?: string; intro: string; introPoster: string; wait: string; open: string; poster: string; audio: GachaAudioFiles; introFade?: number; ticketAt?: number; ticket?: string; hold?: boolean; openTame?: OpenTame; openFadeOut?: OpenFadeOut }
 const THEMES: Theme[] = [
-  { id: 'deep', short: '深海編', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4?v=deep3', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4?v=deep-pace1', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES },
+  { id: 'deep', short: '深海編', name: '深海の秘宝', intro: '/gacha/gacha-intro.mp4?v=deep3', introPoster: '/gacha/gacha-intro.jpg', wait: '/gacha/gacha-wait.mp4', open: '/gacha/gacha-open.mp4?v=deep-pace1', poster: '/gacha/gacha-wait.jpg', audio: GACHA_AUDIO_FILES,
+    // 開く音は 9.5 秒で急に切れる。銀ちゃんが出てくる時の神聖な音は残して、泡の音の前（7.4〜8.6 秒）にきれいに消す（11/12 慶一郎さんが聞きくらべて C）
+    openFadeOut: { from: 7.4, to: 8.6 } },
   // 銀河の音は1部の終わりがそのまま待ちの頭へ続く曲なので、重ねるのは短く。開放は 7.9 秒で真っ白になりきる。そこからチケットを飛ばす
   { id: 'galaxy', short: '銀河編', name: '銀河の秘宝', intro: '/gacha/galaxy/intro.mp4', introPoster: '/gacha/galaxy/intro.jpg', wait: '/gacha/galaxy/wait.mp4', open: '/gacha/galaxy/open.mp4', poster: '/gacha/galaxy/wait.jpg',
     audio: { intro: '/gacha/galaxy/intro-audio.m4a', wait: '/gacha/galaxy/wait-audio.wav', open: '/gacha/galaxy/open-audio.m4a' }, introFade: 0.15, ticketAt: 7.9, ticket: '/gacha/galaxy/ticket.jpg', hold: true }, // 保留中（11/1「宇宙編微妙やな」）。ランダムには出さない
@@ -180,6 +182,9 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const waitStop = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reveals = useRef(new Set<() => void>())
   const [top, setTop] = useState<'intro' | 'wait' | 'burst'>('intro') // いま前に出ている動画
+  // タップした瞬間の光（深海編 11/12）：開く映像が映るまで光ったまま、映ったらすっと引く。光の中で待ち→開くを切り替える
+  const [flash, setFlash] = useState<'off' | 'up' | 'down'>('off')
+  useEffect(() => { if (phase !== 'open') setFlash('off') }, [phase]) // eslint-disable-line react-hooks/set-state-in-effect
   const [src, setSrc] = useState<Record<string, string> | null>(cache?.urls ?? null)
   const [pct, setPct] = useState(0)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -398,7 +403,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     if (!i || !w || !b) return
     sound.current?.dispose()
     sound.current = new GachaAudioPlayback(
-      () => new GachaSoundtrack(gachaAudioContext(), cache.audio, THEME.introFade, THEME.openTame ?? null),
+      () => new GachaSoundtrack(gachaAudioContext(), cache.audio, THEME.introFade, THEME.openTame ?? null, THEME.openFadeOut ?? null),
       () => {
         const current = phaseRef.current
         const video = current === 'intro' ? intro.current : current === 'tap' ? wait.current : burst.current
@@ -478,6 +483,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         openPresented.current = true
         sound.current?.sync()
         setTop('burst')
+        setFlash(f => f === 'up' ? 'down' : f)
         waitStop.current = setTimeout(() => w.pause(), 600) // Only the visual fade; audio has its own scheduled crossfade.
       })
     }
@@ -524,10 +530,10 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     // This edit opens from the same stone, with a short lit transition. Keep
     // the live loop at normal speed underneath the reveal, even on an early tap.
     if (THEME.id === 'dino') { void play(b).catch(close); return }
-    const left = w.duration - w.currentTime
-    if (!Number.isFinite(left) || left < 0.1) { w.pause(); void play(b).catch(close); return }
-    w.loop = false
-    w.playbackRate = Math.min(4, Math.max(1, left / 0.6))
+    // 深海編：前は待ちの映像を最後のコマまで早送り（最大4倍）してからつないでいた。iPhone では早送りがカクつき、
+    //   タップの後がもたついた（11/12 慶一郎さん「グダグダ」）。今はすぐ球を光らせ、光の中で開く映像に切り替える（球の模様の違いは光で隠れる）
+    setFlash('up')
+    void play(b).catch(close)
   }
 
   const showing = phase !== 'idle'
@@ -572,6 +578,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         <video ref={wait} src={src?.[WAIT]} poster={POSTER} loop muted playsInline preload="auto" />
         <video ref={intro} src={src?.[INTRO]} poster={INTRO_POSTER} className={top === 'intro' ? '' : 'is-off'} muted playsInline preload="auto" />
         <video ref={burst} src={src?.[OPEN]} className={`v2-gacha-burst${top === 'burst' ? ' is-on' : ''}`} muted playsInline preload="auto" />
+        {flash !== 'off' && <div className={`v2-gacha-flash is-${flash}`} aria-hidden />}
         {ticket && (
           <div className="v2-ticket-scene" aria-hidden>
             <img src={POSTER} alt="" className="v2-ticket-sky" />

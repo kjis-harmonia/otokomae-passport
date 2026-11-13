@@ -452,6 +452,14 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-gacha-stage video.is-off { opacity: 0; }
 .v2-gacha-stage .v2-gacha-burst { opacity: 0; transition: opacity .5s ease; }
 .v2-gacha-stage .v2-gacha-burst.is-on { opacity: 1; }
+/* タップした瞬間の光（深海編 11/12）：球のまわりから水色がかった白く光る。開く映像が映るまで光ったまま、映ったら引く */
+.v2-gacha-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 47%, rgba(255,255,255,1) 0%, rgba(230,250,255,.96) 22%, rgba(170,230,255,.7) 42%, rgba(90,190,240,.25) 68%, rgba(40,120,200,0) 88%); }
+.v2-gacha-flash.is-up { animation: v2-gacha-flash-up .22s ease-out forwards; }
+.v2-gacha-flash.is-down { opacity: 1; animation: v2-gacha-flash-down .6s ease-in .08s forwards; }
+@keyframes v2-gacha-flash-up { from { opacity: 0; } to { opacity: 1; } }
+@keyframes v2-gacha-flash-down { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .v2-gacha-flash.is-up { animation-duration: .01s; } }
 /* タップ待ちの文字：球（画面のまん中）のすぐ下の台座に重ねる。深海の水色で光らせ、指のアイコンが球を指す（10/31 慶一郎さん「タップの文字も添えて」） */
 .v2-gacha-tap { position: absolute; left: 0; right: 0; top: 70%; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; color: #fff;
   font: 700 22px/1.4 var(--v2-serif); letter-spacing: .24em; text-shadow: 0 0 10px rgba(120,230,255,.95), 0 0 24px rgba(60,200,255,.8), 0 2px 6px rgba(0,0,0,.7);

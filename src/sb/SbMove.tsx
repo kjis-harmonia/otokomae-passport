@@ -7,6 +7,7 @@ import { sbApi, sbError } from './sbApi'
 import type { SbCommand, SbInput, SbOptions, SbPreview } from './sbTypes'
 import { SbModal } from './SbModal'
 import type { SbMoveTarget } from './sbDrag'
+import { boardWarnBefore } from './sbBoardTask'
 
 /** 動かす先の確認。予約エンジンで空き・担当を確かめてから「この時間に変更」 */
 export function SbMoveSheet({ target, options, date, busy: sending, onSend, onClose }: {
@@ -51,6 +52,7 @@ export function SbMoveSheet({ target, options, date, busy: sending, onSend, onCl
         <strong>{jstDateLabel(date)} {hhmm} {preview ? name(preview.value.staff_id) : name(staffId)}</strong>
       </dd>
     </dl>
+    {boardWarnBefore(r) && <p className="sb-board-note">{r.source === 'hotpepper' ? 'ホットペッパーの予約です。' : 'サロンボードに入れてある予約です。'}変更したら、サロンボードでも同じ変更をしてください。</p>}
     {!preview && !error && <p className="sb-notice">空きを確認しています…</p>}
     {error && <p className="sb-error" role="alert">この時間には変更できません：{error}</p>}
   </SbModal>
