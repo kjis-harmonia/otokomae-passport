@@ -68,12 +68,14 @@ async function sendStaffNew(test = false): Promise<{ reservations: number; cance
   const gone: string[] = []
   let delivered = 0
   const when = (r: StaffNew) => { const jst = new Date(Date.parse(r.starts_at) + 9 * 3600_000).toISOString(); return `${dayLabel(jst.slice(0, 10))} ${jst.slice(11, 16)}〜` }
-  const send = async (payload: string) => {
-    for (const s of p.subs ?? []) {
+  // すべての端末へ一度に送る（11/12：1台ずつだと9台×2件で5秒を超え、呼び出し元の見回りが打ち切っていた）
+  const sendTo = async (subs: Sub[], payload: string) => {
+    await Promise.all(subs.map(async s => {
       try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 3600, urgency: 'high' }); delivered++ }
       catch (e) { const code = (e as { statusCode?: number }).statusCode; if ((code === 404 || code === 410) && !gone.includes(s.endpoint)) gone.push(s.endpoint) }
-    }
+    }))
   }
+  const send = (payload: string) => sendTo(p.subs ?? [], payload)
   for (const r of list) {
     await send(JSON.stringify({ title: '予約が入りました', body: `${when(r)} ${r.customer_name}様・${r.menus ?? 'メニュー未定'}（${r.staff_name}）。サロンボードに入れてください。`, url: '/sb', tag: `sb-new-${r.id}`, kind: 'sb-new-reservation' }))
   }
@@ -97,13 +99,7 @@ async function sendStaffNew(test = false): Promise<{ reservations: number; cance
     ...(sec?.alerts ?? []).map(a => ({ title: '⚠ 登録していない端末がPINで入ろうとしました', body: '慶一郎まで急いで報告してください。店舗端末・SB を止めています。', url: '/sb', tag: `sb-intrusion-${a.id}`, kind: 'sb-intrusion' })),
     ...(sec?.remind ? [{ title: '⚠ ロック中：店舗端末・SB を止めています', body: '登録していない端末がPINで入ろうとしました。慶一郎まで急いで報告してください。', url: '/sb', tag: `sb-intrusion-remind-${Date.now()}`, kind: 'sb-intrusion' }] : []),
   ]
-  for (const p of secPayloads) {
-    const payload = JSON.stringify(p)
-    for (const s of sec?.subs ?? []) {
-      try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 3600, urgency: 'high' }); delivered++ }
-      catch (e) { const code = (e as { statusCode?: number }).statusCode; if ((code === 404 || code === 410) && !gone.includes(s.endpoint)) gone.push(s.endpoint) }
-    }
-  }
+  for (const p of secPayloads) await sendTo(sec?.subs ?? [], JSON.stringify(p))
   if (gone.length) await rpc('staff_push_gone_for_sender', { p_secret: SECRET, p_gone: gone }).catch(() => {})
   return { reservations: list.length, cancels: (p.cancels ?? []).length, devices: (p.subs ?? []).length, delivered }
 }
