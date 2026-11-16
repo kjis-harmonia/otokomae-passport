@@ -21,6 +21,8 @@ export function phrasesOf(line: string): string[] {
     const glue = out.length > 0 && !pendingOpen && (PUNCT.test(s) || TAIL.test(s)
       // 数と単位（10月・27日・100円・2名・30分）、「¥4,000」「※ガチャ」、1字の漢字＋次（銀＋二郎）、「いつ頃」
       || (/[0-9０-９]$/.test(prev) && /^[年月日時分秒円名件人回歳枚個pt]/.test(s))
+      // 時刻・金額は途中で折り返さない（「10:／00」「¥2,／000」と割れていた・11/18）
+      || (/[0-9０-９]$/.test(prev) && /^[:：,，.]/.test(s)) || (/[0-9０-９][:：,，.]$/.test(prev) && /^[0-9０-９]/.test(s))
       || /[¥￥※#＃]$/.test(prev) || /^[\p{Script=Han}]$/u.test(prev) || /^[頃様]/.test(s)
       // カタカナの続き（テイ＋テイ・パンチ＋パーマ）はひとつに
       || (/[\p{Script=Katakana}ー]$/u.test(prev) && /^[\p{Script=Katakana}ー]/u.test(s)))
