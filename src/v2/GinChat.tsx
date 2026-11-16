@@ -1498,9 +1498,14 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const maintOk = !!person?.maintenance_ok && !!maintMenu
         const usual = person?.menu_code ? all.find(m => m.code === person.menu_code) ?? null : null
         const chips: Chip[] = [...(usual && usual.code !== menu?.code ? [{ label: usual.name, sub: yen(usual.price) }] : []), ...(maintOk && menu?.code !== 'maintenance' ? [{ label: 'メンテナンスカット', sub: person?.days_left != null ? `あと${person.days_left}日` : undefined }] : []), { label: 'ほかのメニュー' }]
-        const a = await ask(`${who(r)}何のメニューに変更されますか？`, chips)
-        const next = a === 'メンテナンスカット' || /メンテ/.test(a) ? maintMenu ?? null : usual && a === usual.name ? usual
-          : (all.find(m => m.name === a) ?? longestIn(a, all, m => m.name)) ?? await hearMenu(whoArg, '何のメニューにされますか？', null)
+        // 「何のメニューに？」を2回聞かない（11/17 慶一郎さん「二度手間」）：
+        //   選べるのが【ほかのメニュー】だけなら最初から聞き取りへ。【ほかのメニュー】を押したらすぐ一覧を開く
+        const OTHER = 'ほかのメニュー'
+        const a = chips.length === 1 ? OTHER : await ask(`${who(r)}何のメニューに変更されますか？`, chips)
+        const picked = a === OTHER && chips.length > 1 && fromChip.current ? await pickFromList() : null
+        if (picked) push('you', picked.name)
+        const next = picked ?? (a === 'メンテナンスカット' || /メンテ/.test(a) ? maintMenu ?? null : usual && a === usual.name ? usual
+          : (a !== OTHER ? all.find(m => m.name === a) ?? longestIn(a, all, m => m.name) : null) ?? await hearMenu(whoArg, `${who(r)}何のメニューに変更されますか？`, null))
         if (!next) { action = '日時を変更'; continue }
         menu = next
         menuCodes = [next.code]
