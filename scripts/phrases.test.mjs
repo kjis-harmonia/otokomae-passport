@@ -20,3 +20,15 @@ test('つなげても元の文と同じ（文字を足したり消したりし�
   for (const t of ['ご来店は、', 'こちらでよろしければ【この内容で予約する】を押してください。', '※ガチャ券（100円引き）は、平日のご予約で使えます。', ''])
     assert.equal(phrasesOf(t).join(''), t)
 })
+
+test('時刻と金額は途中で割らない（11/18 iPhone の「10:／00」）', () => {
+  const t = '変更前：11月21日（土） 10:00 濡れパン ¥8,000'
+  assert.ok(phrasesOf(t).some(p => p.includes('10:00')), JSON.stringify(phrasesOf(t)))
+  assert.ok(phrasesOf(t).some(p => p.includes('¥8,000')), JSON.stringify(phrasesOf(t)))
+  assert.ok(phrasesOf('Black Monday割引（−2,000円）を適用します。').some(p => p.includes('2,000円')))
+  assert.equal(phrasesOf(t).join(''), t)
+})
+
+test('「−2,000円」はマイナスと数を離さない（11/18 iPhone の「（−／2,000円）」）', () => {
+  assert.ok(phrasesOf('Black Monday割引（−2,000円）を適用します。').some(p => p.includes('−2,000円')), JSON.stringify(phrasesOf('Black Monday割引（−2,000円）を適用します。')))
+})

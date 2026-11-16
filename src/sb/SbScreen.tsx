@@ -16,6 +16,7 @@ import { SbMoveSheet } from './SbMove'
 import { useReservationDrag, type SbMoveTarget } from './sbDrag'
 import { SbHotpepper } from './SbHotpepper'
 import { SbTicketPlan } from './SbTicketPlan'
+import { BLACK_MONDAY_LABEL, blackMondayOffText, blackMondayAmount } from '../utils/blackMonday'
 import { companionOf, partyOf, personName } from './sbParty'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
@@ -363,7 +364,7 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
           onPointerDown={e => drag.start(e, r)} onClick={() => { if (drag.clicked()) onOpen(r.id) }} onContextMenu={e => { if (r.status === 'confirmed') e.preventDefault() }}
           style={{ left: x(start) + 2, width: Math.max(12, x(end) - x(start) - 4), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10, ...(dragging ? { transform: `translate(${dragging.dx}px, ${dragging.dy}px)` } : {}) }}>
           {dragging && <em className="sb-drag-time">{`${Math.floor(dragging.minutes / 60)}:${String(dragging.minutes % 60).padStart(2, '0')}`}</em>}
-          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{over && <b className="sb-over-mark">枠オーバー</b>}{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="サロンボード作業" />}</small>
+          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{over && <b className="sb-over-mark">枠オーバー</b>}{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}<BlackMondayMark r={r} /></strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="サロンボード作業" />}</small>
         </button>{until > end && <div className="sb-buffer" aria-label="片付け時間" style={{ left: x(end), width: x(until) - x(end), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10 }} />}</div>
       })}
       {nowMin !== null && nowMin >= range.start && nowMin < range.end && <div className="sb-now" style={{ left: x(nowMin) }} aria-hidden="true" />}
@@ -372,7 +373,7 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
 
 function ReservationList({ reservations, onPick }: { reservations: SbReservation[]; onPick: (id: string) => void }) {
   const parties = partyOf(reservations)
-  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => { const companion = companionOf(r), party = parties.get(r.id); return <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}</strong><small>{r.items.map(i => i.name).join('・')}{companion ? `／${r.customer_name}様のお連れ様` : ''}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{(() => { const t = boardTask(r); return t && <em className="sb-board-tag">{BOARD_TASK_TAG[t]}</em> })()}<ChevronRight size={18} /></button> })}</div> : <p className="sb-muted">予約はありません。</p>
+  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => { const companion = companionOf(r), party = parties.get(r.id); return <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}<BlackMondayMark r={r} /></strong><small>{r.items.map(i => i.name).join('・')}{companion ? `／${r.customer_name}様のお連れ様` : ''}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{(() => { const t = boardTask(r); return t && <em className="sb-board-tag">{BOARD_TASK_TAG[t]}</em> })()}<ChevronRight size={18} /></button> })}</div> : <p className="sb-muted">予約はありません。</p>
 }
 
 function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onEdit, onSend }: {
@@ -467,6 +468,12 @@ function PartyMark({ p }: { p?: { size: number; index: number } }) {
 
 function CompanionMark() {
   return <b className="sb-companion-mark" aria-label="お連れ様の予約"><Users size={12} strokeWidth={2.4} />お連れ様</b>
+}
+
+/** Black Monday（月曜来店のアプリの予約・11/17）の印。お会計で自動で引く額 */
+function BlackMondayMark({ r }: { r: SbReservation }) {
+  const n = blackMondayAmount(r)
+  return n > 0 ? <b className="sb-bm-mark" aria-label={`${BLACK_MONDAY_LABEL} ${n}円引き`}>{BLACK_MONDAY_LABEL} {blackMondayOffText(n)}</b> : null
 }
 
 /** 銀Pay で前もって支払い済みの印（名前の横・ピンク） */

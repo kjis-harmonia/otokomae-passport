@@ -2,6 +2,7 @@
 // 呼び出す RPC だけを差し替える。テーブルへは直接アクセスしない。予約の可否判定はすべて DB 側の予約エンジン。
 import { callStaffRpc } from './staffSession'
 import { callHqRpc } from '../hq/hqSession'
+import type { BlackMondayInfo } from './blackMonday'
 
 export type ReservationStatus = 'confirmed' | 'checked_in' | 'in_service' | 'awaiting_payment' | 'completed' | 'cancelled' | 'no_show'
 export type ReservationSource = 'app' | 'hotpepper' | 'phone' | 'staff'
@@ -33,6 +34,8 @@ export interface Reservation {
   created_by: string | null
   cancel_reason: string | null
   items: ReservationItem[]
+  /** Black Monday（11/17）：月曜来店のアプリの予約の値引きの見込み（対象外は null。サーバーが古いと無い） */
+  black_monday?: BlackMondayInfo | null
 }
 
 export interface BookingMenu { code: string; name: string; duration_min: number; price: number | null; staff_ids: string[] }

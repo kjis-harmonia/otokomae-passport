@@ -21,7 +21,8 @@ import { matchMenu } from '../features/johnny/menuMatcher'
 import { ReservationMutationClient, reservationMenuCodes, type Confirmation, type MutationReply } from '../features/johnny/reservationMutation'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
-import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
+import { MenuPickerSheet } from './MenuPickerSheet'
+import { canBeUsual, getUsualMenu, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
 import { loadUsual } from './usualPicks'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
 import { askUsualAi } from '../features/johnny/usualAi'
@@ -34,7 +35,9 @@ import { SHOP_PHONE_TEL } from '../data/wallet'
 import { RpcBusinessError, RpcError } from '../utils/staffSession'
 import { longestIn, namesIn } from './ginWords'
 import { planParty } from './partyPlan'
-import { gachaNote, gachaOff, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
+import { blackMondayFor, blackMondayMenus, gachaNote, gachaOff, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
+import { BLACK_MONDAY_LABEL, blackMondayOffText } from '../utils/blackMonday'
+import { isPermOnlyCoupon } from '../utils/welcomeCoupon'
 import { attachGacha, loadGacha, type GachaHeld } from '../features/gacha/gachaApi'
 import type { TicketRow } from '../data/ticket'
 import type { PendingVisits as Pending, PendingVisit as Visit } from './visitConfirm'
@@ -169,7 +172,6 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const [waiting, setWaiting] = useState(false)
   const [text, setText] = useState('')
   const [sheet, setSheet] = useState<Menu[] | null>(null)
-  const [showAll, setShowAll] = useState(false)
   const [finished, setFinished] = useState(false)
   const [bookingComplete, setBookingComplete] = useState(false)
   const nextId = useRef(1)
@@ -767,17 +769,23 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (me && fits(me)) return me
       return gachaHeld.free_menu && !gachaHeld.self_only ? d.who.find(fits) : undefined
     }
-    /** 券・ガチャ券を引いたお支払い予定の行（引くものが無ければ空） */
+    /** Black Monday（11/17）：人ごと（お連れ様の予約もアプリの予約なので対象）。ご本人が Welcome・再来店パーマクーポンを選んだら、ご本人の分は付かない */
+    const bmOf = (p: BookPerson) => p.key === 'me' && picked && isPermOnlyCoupon(picked) ? 0 : blackMondayFor(d.menus[p.key].code, startOf(p), d.menus[p.key].price)
+    /** 券・Black Monday・ガチャ券を引いたお支払い予定の行（引くものが無ければ空） */
     const priceLines = () => {
       const g = gachaFor()
-      const gOff = g ? gachaOff(gachaHeld, d.menus[g.key].code, d.at!, d.menus[g.key].price ?? 0) ?? 0 : 0
+      const bm = d.who!.map(p => ({ p, off: bmOf(p) })).filter(x => x.off > 0)
+      // ガチャの無料券は Black Monday のあとの残りをまかなう（サーバーの会計と同じ順）
+      const gOff = g ? gachaOff(gachaHeld, d.menus[g.key].code, d.at!, Math.max(0, (d.menus[g.key].price ?? 0) - bmOf(g))) ?? 0 : 0
       const tOff = picked ? picked.amount : 0
-      if (!gOff && !tOff) return ''
+      const bmOff = bm.reduce((a, x) => a + x.off, 0)
+      if (!gOff && !tOff && !bmOff) return ''
       const sum = d.who!.reduce((a, p) => a + (d.menus[p.key].price ?? 0), 0)
       return [
         ...(picked ? [`${picked.title} −${yen(tOff)}`] : []),
+        ...bm.map(x => `${BLACK_MONDAY_LABEL}${d.who!.length > 1 ? `・${x.p.label}` : ''} ${blackMondayOffText(x.off)}`),
         ...(g ? [`ガチャ券（${gachaHeld!.title}）${d.who!.length > 1 ? `・${g.label}` : ''} −${yen(gOff)}`] : []),
-        `お支払い予定 ${yen(Math.max(0, sum - tOff - gOff))}`,
+        `お支払い予定 ${yen(Math.max(0, sum - tOff - bmOff - gOff))}`,
       ].join('\n')
     }
     const canCreate = async (persons: BookPerson[]) => {
@@ -1082,8 +1090,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const groups = [...new Map(usable.map(t => [`${t.title}|${t.amount}`, t])).values()]
         const label = (t: TicketRow) => groups.filter(x => x.title === t.title).length > 1 ? `${t.title}（${yen(t.amount)}）` : t.title
         // 2人以上のときは、券が付くのはご本人の予約だけと分かるように（11/10 夜の点検）
-        const a = await ask(`お持ちの券を、${d.who.length > 1 ? 'ご本人の' : 'この'}ご予約で使いますか？\nご来店のときのお会計で差し引きます。`,
-          [...groups.map(t => ({ label: label(t), sub: `−${yen(t.amount)}`, strong: groups.length === 1 })), { label: NO_TICKET }])
+        // Black Monday の日（11/17 慶一郎さん「B」）：パーマのクーポン（Welcome・再来店）は出すが、一緒に使えないことを添える。券を選べば Black Monday は外れる
+        const bmMe = me ? blackMondayFor(d.menus.me.code, startOf(me), d.menus.me.price) : 0
+        const permVsBm = (t: TicketRow) => bmMe > 0 && isPermOnlyCoupon(t)
+        const bmNote = groups.some(permVsBm) ? `\nパーマのクーポン（Welcome・再来店）は、Black Monday（−${yen(bmMe)}）と一緒には使えません。` : ''
+        const a = await ask(`お持ちの券を、${d.who.length > 1 ? 'ご本人の' : 'この'}ご予約で使いますか？\nご来店のときのお会計で差し引きます。${bmNote}`,
+          [...groups.map(t => ({ label: label(t), sub: permVsBm(t) ? `−${yen(t.amount)}（Black Monday なし）` : `−${yen(t.amount)}`, strong: groups.length === 1 && !permVsBm(t) })), { label: NO_TICKET, strong: groups.length > 0 && groups.every(permVsBm) }])
         if (fromChip.current) { picked = groups.find(t => label(t) === a) ?? null; continue }
         if (await change(a)) continue
         picked = intent(a) === 'no' ? null : groups.length === 1 && intent(a) === 'yes' ? groups[0] : longestIn(a, groups, t => t.title) ?? null
@@ -1394,7 +1406,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       // ボタンは「どなた」を大きく、日時・メニューは下の小さい字に（11/10 夜の点検：番号つきの長い1行が折り返して読みにくかった）
       const choices = list.map(x => ({ label: `${x.companion_name ? honor(x.companion_name) : 'ご本人'}：${slotLabel(x.starts_at)}`, sub: x.items.map(i => i.name).join('・') }))
       for (;;) {
-        const a = await ask('ご予約の変更・キャンセルですね。\nどのご予約にしますか？', choices)
+        const a = await ask('変更・キャンセルするご予約を、お選びください。', choices)
         const index = choices.findIndex(x => x.label === a)
         if (fromChip.current && index >= 0) { r = list[index]; break }
       }
@@ -1486,9 +1498,14 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const maintOk = !!person?.maintenance_ok && !!maintMenu
         const usual = person?.menu_code ? all.find(m => m.code === person.menu_code) ?? null : null
         const chips: Chip[] = [...(usual && usual.code !== menu?.code ? [{ label: usual.name, sub: yen(usual.price) }] : []), ...(maintOk && menu?.code !== 'maintenance' ? [{ label: 'メンテナンスカット', sub: person?.days_left != null ? `あと${person.days_left}日` : undefined }] : []), { label: 'ほかのメニュー' }]
-        const a = await ask(`${who(r)}何のメニューに変更されますか？`, chips)
-        const next = a === 'メンテナンスカット' || /メンテ/.test(a) ? maintMenu ?? null : usual && a === usual.name ? usual
-          : (all.find(m => m.name === a) ?? longestIn(a, all, m => m.name)) ?? await hearMenu(whoArg, '何のメニューにされますか？', null)
+        // 「何のメニューに？」を2回聞かない（11/17 慶一郎さん「二度手間」）：
+        //   選べるのが【ほかのメニュー】だけなら最初から聞き取りへ。【ほかのメニュー】を押したらすぐ一覧を開く
+        const OTHER = 'ほかのメニュー'
+        const a = chips.length === 1 ? OTHER : await ask(`${who(r)}何のメニューに変更されますか？`, chips)
+        const picked = a === OTHER && chips.length > 1 && fromChip.current ? await pickFromList() : null
+        if (picked) push('you', picked.name)
+        const next = picked ?? (a === 'メンテナンスカット' || /メンテ/.test(a) ? maintMenu ?? null : usual && a === usual.name ? usual
+          : (a !== OTHER ? all.find(m => m.name === a) ?? longestIn(a, all, m => m.name) : null) ?? await hearMenu(whoArg, `${who(r)}何のメニューに変更されますか？`, null))
         if (!next) { action = '日時を変更'; continue }
         menu = next
         menuCodes = [next.code]
@@ -1571,7 +1588,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (!menuCodes.length) { await say('すみません、このご予約のメニューが分からないので、お店にお電話いただけますか？'); return end() }
       setTyping(true)
       const pv = await callCustomerRpc<{ error?: string; kind: string; confirmation: Confirmation; menu_names: string[]; duration_after: number; late_penalty: boolean; price_before: number | null; price_after: number | null; slot_ok: boolean;
-        ginpay_before: number; ginpay_after: number; tickets_drop: { title: string; why: string }[]; gacha: { title: string; keep: boolean; why: string | null } | null }>('customer_change_preview',
+        ginpay_before: number; ginpay_after: number; tickets_drop: { title: string; why: string }[]; gacha: { title: string; keep: boolean; why: string | null } | null;
+        /** Black Monday の変更の前と後の額（サーバーが古いと無い） */
+        black_monday?: { before: number; after: number } }>('customer_change_preview',
         withStaff({ p_reservation_id: r.id, p_starts_at: at, p_menu_codes: menuCodes })).catch((e: unknown) => ({ error: e instanceof RpcError ? e.code : 'network' } as never))
       setTyping(false)
       if (pv.error === 'call_shop') { await say('開始の30分前を過ぎたので、変更はお電話でお願いします。'); return end() }
@@ -1591,10 +1610,18 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         r.staff_name && staffAfter && r.staff_name !== staffAfter ? `${r.staff_name}から変わります` : '',
       ].filter(Boolean).join('・')
       const staffLine = staffAfter ? `担当：${staffAfter}${staffNote ? `（${staffNote}）` : ''}` : ''
+      // Black Monday（11/17）：変更で付く・外れる・額が変わる
+      const bmB = pv.black_monday?.before ?? 0, bmA = pv.black_monday?.after ?? 0
+      // 言い方は「Black Monday割引（−2,000円）を適用します」（11/17 慶一郎さん）
+      const bmYen = (n: number) => `${n.toLocaleString('ja-JP')}円`
+      const bmLine = bmA > 0 && bmB === 0 ? `${BLACK_MONDAY_LABEL}割引（−${bmYen(bmA)}）を適用します。`
+        : bmA === 0 && bmB > 0 ? `※月曜・対象メニューではなくなるため、${BLACK_MONDAY_LABEL}割引（−${bmYen(bmB)}）は適用されません。`
+        : bmA > 0 ? `${BLACK_MONDAY_LABEL}割引（−${bmYen(bmA)}）を適用します。${bmA !== bmB ? `（変更前 −${bmYen(bmB)}）` : ''}` : ''
       const lines = [
         `変更前：${reviewedLabel(pv.confirmation)}${pv.price_before != null ? ` ${yen(pv.price_before)}` : ''}`,
         `変更後：${slotLabel(at)} ${pv.menu_names.join('・')}（${pv.duration_after}分）${pv.price_after != null ? ` ${yen(pv.price_after)}` : ''}`,
         ...(staffLine ? [staffLine] : []),
+        ...(bmLine ? [bmLine] : []),
         ...(pv.ginpay_before > 0 ? [`銀Payの先払い：${yen(pv.ginpay_before)} → ${yen(pv.ginpay_after)}${pv.ginpay_after < pv.ginpay_before ? `（${yen(pv.ginpay_before - pv.ginpay_after)} は残高に戻ります）` : ''}`] : []),
         ...(pv.ginpay_before > 0 && pv.price_after != null && pv.price_after > pv.ginpay_after ? [`残りの ${yen(pv.price_after - pv.ginpay_after)} は、お店でお支払いください`] : []),
         ...pv.tickets_drop.map(t => `※「${t.title}」は${why(t.why)}、外れます`),
@@ -1677,7 +1704,6 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     : chips.some(c => c.label === '一覧から選ぶ' || c.label === 'ほかのメニュー') ? 'menu'
     : chips.length === 2 ? 'yesno' : chips.length ? 'choice' : waiting ? 'free' : 'wait'
   const send = () => { const t = text.trim(); if (!t || !waiting) return; setText(''); fromChip.current = false; answer(t) }
-  const shown = sheet ? (showAll ? sheet : sheet.slice(0, 7)) : null
   const dockGuide = !sheet && ['who', 'menu', 'yesno', 'staff', 'when', 'time', 'ticket', 'confirm'].includes(askKind)
 
   return (
@@ -1759,20 +1785,15 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         {sheet && (
           <>
             <motion.div key="back" className="gc-sheet-back" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => { setSheet(null); setShowAll(false); sheetRef.current?.(null); sheetRef.current = null }} />
+              onClick={() => { setSheet(null); sheetRef.current?.(null); sheetRef.current = null }} />
             <motion.div key="sheet" className="gc-sheet" role="dialog" aria-label="メニューを選ぶ"
               initial={reduce ? false : { y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: reduce ? 0 : 40, opacity: 0 }} transition={{ duration: reduce ? 0 : 0.26, ease: [0.22, 1, 0.36, 1] }}>
               <div className="gc-grab" />
               <GinNavigationMark step="menu-list" />
-              <p className="gc-sheet-title">メニューを選ぶ</p>
-              <div className="gc-menu">
-                {shown?.map(m => (
-                  <button key={m.code} type="button" onClick={() => { setSheet(null); setShowAll(false); sheetRef.current?.(m); sheetRef.current = null }}>
-                    <span>{m.name}</span><small>{yen(m.price)}</small><ChevronRight size={16} aria-hidden="true" />
-                  </button>
-                ))}
-                {sheet.length > 7 && !showAll && <button type="button" className="gc-more" onClick={() => setShowAll(true)}>ほかのメニューを見る（{sheet.length - 7}）</button>}
-              </div>
+              {/* いつもの・検索・種類のタブ・所要時間・Black Monday（11/17 慶一郎さん「親切設計で」） */}
+              <MenuPickerSheet menus={sheet} usualCode={getUsualMenu()?.code ?? null} bm={blackMondayMenus()}
+                onPick={m => { setSheet(null); sheetRef.current?.(m as Menu); sheetRef.current = null }}
+                onClose={() => { setSheet(null); sheetRef.current?.(null); sheetRef.current = null }} />
               <a className="gc-quiet gc-sheet-link" href={HOTPEPPER_MENU_URL} target="_blank" rel="noopener noreferrer">HOT PEPPER Beauty で写真を見る</a>
             </motion.div>
           </>
