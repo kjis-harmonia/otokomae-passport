@@ -36,7 +36,7 @@ import { RpcBusinessError, RpcError } from '../utils/staffSession'
 import { longestIn, namesIn } from './ginWords'
 import { planParty } from './partyPlan'
 import { blackMondayFor, blackMondayMenus, gachaNote, gachaOff, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
-import { BLACK_MONDAY_LABEL } from '../utils/blackMonday'
+import { BLACK_MONDAY_LABEL, blackMondayOffText } from '../utils/blackMonday'
 import { isPermOnlyCoupon } from '../utils/welcomeCoupon'
 import { attachGacha, loadGacha, type GachaHeld } from '../features/gacha/gachaApi'
 import type { TicketRow } from '../data/ticket'
@@ -783,7 +783,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const sum = d.who!.reduce((a, p) => a + (d.menus[p.key].price ?? 0), 0)
       return [
         ...(picked ? [`${picked.title} −${yen(tOff)}`] : []),
-        ...bm.map(x => `${BLACK_MONDAY_LABEL}${d.who!.length > 1 ? `・${x.p.label}` : ''} −${yen(x.off)}`),
+        ...bm.map(x => `${BLACK_MONDAY_LABEL}${d.who!.length > 1 ? `・${x.p.label}` : ''} ${blackMondayOffText(x.off)}`),
         ...(g ? [`ガチャ券（${gachaHeld!.title}）${d.who!.length > 1 ? `・${g.label}` : ''} −${yen(gOff)}`] : []),
         `お支払い予定 ${yen(Math.max(0, sum - tOff - bmOff - gOff))}`,
       ].join('\n')

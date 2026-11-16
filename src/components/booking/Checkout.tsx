@@ -17,7 +17,7 @@ import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
 import { playCue } from '../../audio/cue'
 import { isPermOnlyCoupon } from '../../utils/welcomeCoupon'
 import { freeTicketAmounts, freeTicketLabel, isFreeTicket } from '../../features/auction/freeTicket'
-import { BLACK_MONDAY_LABEL, blackMondayLineOffs } from '../../utils/blackMonday'
+import { BLACK_MONDAY_LABEL, blackMondayOffText, blackMondayLineOffs } from '../../utils/blackMonday'
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
 // 「会計を確定」で初めて売上になる（確定は DB の1トランザクション。予約は完了になる）。毎日何十回も使うので、文字と金額だけで構成する。
@@ -516,7 +516,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     {ready && totals.discount > 0 && (
                       <div style={{ marginBottom: 6 }}>
                         <div style={{ ...row, color: C.sub }}><span>料金</span><span>{yen(totals.subtotal)}</span></div>
-                        {bmTotal > 0 && <div data-guide="co-black-monday" style={{ ...row, color: C.text }}><span style={{ minWidth: 0 }}>{BLACK_MONDAY_LABEL}</span><span>−{yen(bmTotal)}</span></div>}
+                        {bmTotal > 0 && <div data-guide="co-black-monday" style={{ ...row, color: C.text }}><span style={{ minWidth: 0 }}>{BLACK_MONDAY_LABEL}</span><span>{blackMondayOffText(bmTotal)}</span></div>}
                         {chosenTickets.map(t => <div key={t.id} style={{ ...row, color: C.sub }}><span style={{ minWidth: 0 }}>{t.title}</span><span>−{yen(t.amount)}</span></div>)}
                         {otherDiscount > 0 && <div style={{ ...row, color: C.sub }}><span>値引き</span><span>−{yen(otherDiscount)}</span></div>}
                       </div>
@@ -541,7 +541,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 {totals.discount > 0 && (
                   <>
                     <Sum label="小計" value={yen(totals.subtotal)} />
-                    {bmTotal > 0 && <Sum label={BLACK_MONDAY_LABEL} value={`−${yen(bmTotal)}`} />}
+                    {bmTotal > 0 && <Sum label={BLACK_MONDAY_LABEL} value={blackMondayOffText(bmTotal)} />}
                     {totals.discount - bmTotal > 0 && <Sum label="値引き" value={`−${yen(totals.discount - bmTotal)}`} />}
                   </>
                 )}

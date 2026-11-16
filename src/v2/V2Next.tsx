@@ -11,12 +11,11 @@ import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { hasCustomerSession } from '../utils/customerSession'
 import { getMaintenanceVisit, getDaysUntilRecommended, getNextRecommendedDate, fmtDate, MAINTENANCE_CYCLE_DAYS } from '../utils/maintenanceSchedule'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../data/wallet'
-import { BLACK_MONDAY_LABEL, blackMondayAmount } from '../utils/blackMonday'
-import { yen } from '../utils/bookingCoupons'
+import { BLACK_MONDAY_LABEL, blackMondayOffText, blackMondayAmount } from '../utils/blackMonday'
 
 /** Black Monday の1行（対象外なら出さない）。お会計のときに差し引く */
 function BlackMondayLine({ amount }: { amount: number }) {
-  return amount > 0 ? <span style={{ color: 'var(--v2-gold-deep)' }}>{BLACK_MONDAY_LABEL} −{yen(amount)}<small style={{ color: 'var(--v2-sub)', marginLeft: 6, display: 'inline-block', whiteSpace: 'nowrap' }}>お会計で差し引きます</small></span> : null
+  return amount > 0 ? <span style={{ color: 'var(--v2-gold-deep)' }}>{BLACK_MONDAY_LABEL} {blackMondayOffText(amount)}<small style={{ color: 'var(--v2-sub)', marginLeft: 6, display: 'inline-block', whiteSpace: 'nowrap' }}>お会計で差し引きます</small></span> : null
 }
 
 function useLastVisit(): string | null {

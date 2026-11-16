@@ -4,6 +4,8 @@
 // 正はサーバー（予約の印・finalize_sale）。ここは同じ計算で画面に出すだけ（このファイルはほかを読み込まない＝試験からそのまま使える）
 
 export const BLACK_MONDAY_LABEL = 'Black Monday'
+/** 値引きの額の書き方（「−2,000円」・11/18 慶一郎さん「Black Monday −2,000円 でいい」） */
+export const blackMondayOffText = (n: number) => `−${n.toLocaleString('ja-JP')}円`
 
 /** 料金表（menu_price_rules）の black_monday：予約前の見込みに使う */
 export interface BlackMondayRule { starts_on: string; amount: number; menu_codes: string[] }

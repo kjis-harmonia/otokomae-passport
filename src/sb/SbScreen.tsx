@@ -16,7 +16,7 @@ import { SbMoveSheet } from './SbMove'
 import { useReservationDrag, type SbMoveTarget } from './sbDrag'
 import { SbHotpepper } from './SbHotpepper'
 import { SbTicketPlan } from './SbTicketPlan'
-import { BLACK_MONDAY_LABEL, blackMondayAmount } from '../utils/blackMonday'
+import { BLACK_MONDAY_LABEL, blackMondayOffText, blackMondayAmount } from '../utils/blackMonday'
 import { companionOf, partyOf, personName } from './sbParty'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
@@ -473,7 +473,7 @@ function CompanionMark() {
 /** Black Monday（月曜来店のアプリの予約・11/17）の印。お会計で自動で引く額 */
 function BlackMondayMark({ r }: { r: SbReservation }) {
   const n = blackMondayAmount(r)
-  return n > 0 ? <b className="sb-bm-mark" aria-label={`${BLACK_MONDAY_LABEL} ${n}円引き`}>{BLACK_MONDAY_LABEL} −{yen(n)}</b> : null
+  return n > 0 ? <b className="sb-bm-mark" aria-label={`${BLACK_MONDAY_LABEL} ${n}円引き`}>{BLACK_MONDAY_LABEL} {blackMondayOffText(n)}</b> : null
 }
 
 /** 銀Pay で前もって支払い済みの印（名前の横・ピンク） */
