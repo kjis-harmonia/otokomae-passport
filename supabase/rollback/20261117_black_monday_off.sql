@@ -402,3 +402,6 @@ drop function if exists app_private.black_monday_quote(timestamptz, text[]);
 update public.service_menus set booking_enabled = false, checkout_enabled = false, updated_at = now() where code = 'perm-pin';
 notify pgrst, 'reload schema';
 commit;
+
+-- メニュー名を元に戻す
+update public.service_menus set name = 'ツイスト系' where code = 'perm-twist' and name = 'ツイストパーマ';

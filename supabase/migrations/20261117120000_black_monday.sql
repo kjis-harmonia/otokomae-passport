@@ -633,3 +633,6 @@ AS $function$
     'black_monday', (select json_build_object('label', 'Black Monday', 'starts_on', s.starts_on, 'amount', s.amount, 'menu_codes', s.menu_codes)
                      from app_private.black_monday_settings s where s.id = 1 and s.amount > 0))
 $function$;
+
+-- メニュー名「ツイスト系」を「ツイストパーマ」に（11/17 慶一郎さん。Black Monday の告知と同じ名前に）
+update public.service_menus set name = 'ツイストパーマ' where code = 'perm-twist' and name = 'ツイスト系';

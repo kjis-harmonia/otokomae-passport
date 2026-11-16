@@ -74,14 +74,41 @@ const daysLeft = () => Math.round((Date.parse(GACHA_OPENS) - Date.parse(jstToday
 /** Black Monday の告知：黒地に白い文字、金は細い線と小さな見出しだけ（写真なしで成り立つ） */
 function BlackMondayPoster() {
   const soon = jstToday() < BLACK_MONDAY_STARTS
+  const [more, setMore] = useState(false)
+  // 日本語は Noto Sans JP（iPhone には入っていないので、この告知を開いたときだけ読み込む・11/17 慶一郎さん）
+  useEffect(() => {
+    if (document.getElementById('noto-sans-jp')) return
+    const link = document.createElement('link')
+    link.id = 'noto-sans-jp'
+    link.rel = 'stylesheet'
+    link.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600&display=swap'
+    document.head.appendChild(link)
+  }, [])
+  // 11/17 慶一郎さんの見本どおり：黒のカードに白い文字（金の文字は白に）。大きな ¥2,000 OFF と、対象メニュー・利用条件は押して開く
   return (
-    // 11/17 慶一郎さん「AIっぽい。Apple が作ったようにかっこよく美しく・黒背景・白字」：飾り（金・線・字間の広い見出し）をやめ、大きさの差と余白だけで見せる
     <div className="v2-bm">
-      <p className="v2-bm-eyebrow">{soon && <span>11月23日（月・祝）から、</span>}<span>毎週月曜。</span></p>
+      <p className="v2-bm-eyebrow"><i aria-hidden="true" />毎週月曜日限定<i aria-hidden="true" /></p>
       <h2 className="v2-bm-title">Black Monday</h2>
+      <p className="v2-bm-price" aria-label="2,000円オフ">¥2,000<span>OFF</span></p>
       <p className="v2-bm-offer"><span>パーマが、</span><span>¥2,000オフ。</span></p>
       <p className="v2-bm-only">アプリでのご予約限定。</p>
-      <p className="v2-bm-menus"><b>対象</b>{BLACK_MONDAY_MENUS.map((m, i) => <span key={m}>{m}{i < BLACK_MONDAY_MENUS.length - 1 ? '、' : ''}</span>)}</p>
+      {soon && <p className="v2-bm-start"><i aria-hidden="true" />{BLACK_MONDAY_STARTS.replace(/-/g, '.')} START<i aria-hidden="true" /></p>}
+      <button type="button" className="v2-bm-more" aria-expanded={more} onClick={() => setMore(v => !v)}>
+        {more ? '閉じる' : '対象メニュー・利用条件を見る'}<span aria-hidden="true">{more ? '−' : '›'}</span>
+      </button>
+      {more && (
+        <div className="v2-bm-detail">
+          <p className="v2-bm-detail-h">対象メニュー</p>
+          <p className="v2-bm-menus">{BLACK_MONDAY_MENUS.map((m, i) => <span key={m}>{m}{i < BLACK_MONDAY_MENUS.length - 1 ? '、' : ''}</span>)}</p>
+          <p className="v2-bm-detail-h">利用条件</p>
+          <ul className="v2-bm-rules">
+            <li>毎週月曜（祝日を含む）のご来店が対象です。</li>
+            <li>アプリ（銀ちゃん）でのご予約に限ります。お電話・HOT PEPPER・当日のご来店は対象外です。</li>
+            <li>対象メニュー1つにつき ¥2,000 を、お会計で差し引きます。</li>
+            <li>Welcome クーポン・再来店パーマクーポンとは一緒に使えません。ガチャ券とは一緒に使えます。</li>
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

@@ -1090,8 +1090,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const groups = [...new Map(usable.map(t => [`${t.title}|${t.amount}`, t])).values()]
         const label = (t: TicketRow) => groups.filter(x => x.title === t.title).length > 1 ? `${t.title}（${yen(t.amount)}）` : t.title
         // 2人以上のときは、券が付くのはご本人の予約だけと分かるように（11/10 夜の点検）
-        const a = await ask(`お持ちの券を、${d.who.length > 1 ? 'ご本人の' : 'この'}ご予約で使いますか？\nご来店のときのお会計で差し引きます。`,
-          [...groups.map(t => ({ label: label(t), sub: `−${yen(t.amount)}`, strong: groups.length === 1 })), { label: NO_TICKET }])
+        // Black Monday の日（11/17 慶一郎さん「B」）：パーマのクーポン（Welcome・再来店）は出すが、一緒に使えないことを添える。券を選べば Black Monday は外れる
+        const bmMe = me ? blackMondayFor(d.menus.me.code, startOf(me), d.menus.me.price) : 0
+        const permVsBm = (t: TicketRow) => bmMe > 0 && isPermOnlyCoupon(t)
+        const bmNote = groups.some(permVsBm) ? `\nパーマのクーポン（Welcome・再来店）は、Black Monday（−${yen(bmMe)}）と一緒には使えません。` : ''
+        const a = await ask(`お持ちの券を、${d.who.length > 1 ? 'ご本人の' : 'この'}ご予約で使いますか？\nご来店のときのお会計で差し引きます。${bmNote}`,
+          [...groups.map(t => ({ label: label(t), sub: permVsBm(t) ? `−${yen(t.amount)}（Black Monday なし）` : `−${yen(t.amount)}`, strong: groups.length === 1 && !permVsBm(t) })), { label: NO_TICKET, strong: groups.length > 0 && groups.every(permVsBm) }])
         if (fromChip.current) { picked = groups.find(t => label(t) === a) ?? null; continue }
         if (await change(a)) continue
         picked = intent(a) === 'no' ? null : groups.length === 1 && intent(a) === 'yes' ? groups[0] : longestIn(a, groups, t => t.title) ?? null
