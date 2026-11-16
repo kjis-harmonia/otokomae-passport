@@ -16,7 +16,7 @@ import { yen } from '../utils/bookingCoupons'
 
 /** Black Monday の1行（対象外なら出さない）。お会計のときに差し引く */
 function BlackMondayLine({ amount }: { amount: number }) {
-  return amount > 0 ? <span style={{ color: 'var(--v2-gold-deep)' }}>{BLACK_MONDAY_LABEL} −{yen(amount)}<small style={{ color: 'var(--v2-sub)', marginLeft: 6 }}>お会計で差し引きます</small></span> : null
+  return amount > 0 ? <span style={{ color: 'var(--v2-gold-deep)' }}>{BLACK_MONDAY_LABEL} −{yen(amount)}<small style={{ color: 'var(--v2-sub)', marginLeft: 6, display: 'inline-block', whiteSpace: 'nowrap' }}>お会計で差し引きます</small></span> : null
 }
 
 function useLastVisit(): string | null {

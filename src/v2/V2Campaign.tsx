@@ -38,7 +38,7 @@ const APACHI: Campaign = {
 // Black Monday（11/17 オーナー決定）：毎週月曜・アプリ予約限定でパーマ ¥2,000 OFF。写真は使わず、黒地に文字だけの告知。
 //   「AI予約する」は銀ちゃん（メニューは決めずに始める）。額・対象メニューの正はサーバーの設定（app_private.black_monday_settings）
 const BLACK_MONDAY_STARTS = '2026-11-23'
-const BLACK_MONDAY_MENUS = ['パンチパーマ', '濡れパン', 'アイパー', 'カーリーパーマ', 'スペインパーマ', 'ツイスト', 'ピンパーマ']
+const BLACK_MONDAY_MENUS = ['パンチパーマ', '濡れパン', 'アイパー', 'カーリーパーマ', 'スペインパーマ', 'ツイストパーマ', 'ピンパーマ']
 const BLACK_MONDAY: Campaign = {
   id: 'black-monday-2026', image: '', blackMonday: true, alt: '', label: 'Black Monday', kicker: '', title: '',
   detail: [], action: { text: 'AI予約する', kind: 'book' },
@@ -75,15 +75,13 @@ const daysLeft = () => Math.round((Date.parse(GACHA_OPENS) - Date.parse(jstToday
 function BlackMondayPoster() {
   const soon = jstToday() < BLACK_MONDAY_STARTS
   return (
+    // 11/17 慶一郎さん「AIっぽい。Apple が作ったようにかっこよく美しく・黒背景・白字」：飾り（金・線・字間の広い見出し）をやめ、大きさの差と余白だけで見せる
     <div className="v2-bm">
-      <p className="v2-bm-kicker">毎週月曜</p>
-      <h2 className="v2-bm-title" aria-label="ブラックマンデー">BLACK<br />MONDAY</h2>
-      <span className="v2-bm-rule" aria-hidden="true" />
-      <p className="v2-bm-offer">パーマ<b>¥2,000</b>OFF</p>
-      <p className="v2-bm-only">アプリ予約限定</p>
-      <p className="v2-bm-for">対象メニュー</p>
-      <ul className="v2-bm-menus" aria-label="対象メニュー">{BLACK_MONDAY_MENUS.map(m => <li key={m}>{m}</li>)}</ul>
-      {soon && <p className="v2-bm-start">11月23日（月・祝）から</p>}
+      <p className="v2-bm-eyebrow">{soon && <span>11月23日（月・祝）から、</span>}<span>毎週月曜。</span></p>
+      <h2 className="v2-bm-title">Black Monday</h2>
+      <p className="v2-bm-offer"><span>パーマが、</span><span>¥2,000オフ。</span></p>
+      <p className="v2-bm-only">アプリでのご予約限定。</p>
+      <p className="v2-bm-menus"><b>対象</b>{BLACK_MONDAY_MENUS.map((m, i) => <span key={m}>{m}{i < BLACK_MONDAY_MENUS.length - 1 ? '、' : ''}</span>)}</p>
     </div>
   )
 }
