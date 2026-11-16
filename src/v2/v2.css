@@ -1010,3 +1010,30 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .lc-cal-grid button:active:not(:disabled) { transform: scale(.92); }
 @media (prefers-reduced-motion: reduce) { .lc .gc-chip.gc-chip-on::after, .lc-cal-grid button.lc-day-on::after { animation: none; } }
 .lc-cal-grid button:not(:disabled):active { background: #fff4de; color: #28231e; }
+
+/* 銀ちゃんの「メニューを選ぶ」（11/17）：いつもの・検索・種類のタブ。行は大きく、料金は折り返さない */
+.mp { display: grid; gap: 10px; padding: 0 2px 6px; }
+.mp-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px; }
+.mp-title { margin: 0; font: 600 18px/1.4 var(--v2-sans); color: var(--v2-ink); }
+.mp-x { width: 44px; height: 44px; margin-right: -10px; display: grid; place-items: center; border: 0; background: transparent; color: var(--v2-sub); cursor: pointer; }
+.mp-search { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 12px; border-radius: 14px; background: #fff; border: 1px solid rgba(40,35,30,.12); color: var(--v2-sub); }
+.mp-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 400 16px/1.4 var(--v2-sans); color: var(--v2-ink); }
+.mp-search input::-webkit-search-cancel-button { display: none; }
+.mp-clear { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(40,35,30,.08); color: var(--v2-sub); cursor: pointer; }
+.mp-tabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -2px; padding: 2px; }
+.mp-tabs::-webkit-scrollbar { display: none; }
+.mp-tabs button { flex: none; min-height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(40,35,30,.16); background: #fff; color: var(--v2-ink); font: 500 14px/1 var(--v2-sans); cursor: pointer; }
+.mp-tabs button.is-on { background: #1c1b19; border-color: #1c1b19; color: #fff; }
+.mp-label { margin: 6px 4px -2px; font: 500 12px/1.4 var(--v2-sans); letter-spacing: .04em; color: var(--v2-sub); }
+.mp-list { border-radius: 16px; background: #fff; border: 1px solid rgba(40,35,30,.1); overflow: hidden; }
+.mp-usual { border-color: rgba(40,35,30,.22); }
+.mp-row { width: 100%; min-height: 60px; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border: 0; border-top: 1px solid rgba(40,35,30,.08); background: transparent; text-align: left; color: var(--v2-ink); cursor: pointer; }
+.mp-row:first-child { border-top: 0; }
+.mp-row:active { background: rgba(40,35,30,.05); }
+.mp-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.mp-name { font: 600 16px/1.35 var(--v2-sans); }
+.mp-sub { display: flex; align-items: center; gap: 8px; font: 400 12px/1.4 var(--v2-sans); color: var(--v2-sub); }
+.mp-bm { font-style: normal; font-weight: 600; color: #1c1b19; padding: 1px 6px; border-radius: 6px; background: rgba(28,27,25,.07); }
+.mp-price { flex: none; white-space: nowrap; font: 600 15px/1 var(--v2-sans); font-variant-numeric: tabular-nums; color: var(--v2-ink); }
+.mp-chev { flex: none; color: var(--v2-faint); }
+.mp-empty { margin: 4px; padding: 18px 12px; text-align: center; font: 400 14px/1.6 var(--v2-sans); color: var(--v2-sub); }

@@ -21,7 +21,8 @@ import { matchMenu } from '../features/johnny/menuMatcher'
 import { ReservationMutationClient, reservationMenuCodes, type Confirmation, type MutationReply } from '../features/johnny/reservationMutation'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
-import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
+import { MenuPickerSheet } from './MenuPickerSheet'
+import { canBeUsual, getUsualMenu, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
 import { loadUsual } from './usualPicks'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
 import { askUsualAi } from '../features/johnny/usualAi'
@@ -34,7 +35,7 @@ import { SHOP_PHONE_TEL } from '../data/wallet'
 import { RpcBusinessError, RpcError } from '../utils/staffSession'
 import { longestIn, namesIn } from './ginWords'
 import { planParty } from './partyPlan'
-import { blackMondayFor, gachaNote, gachaOff, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
+import { blackMondayFor, blackMondayMenus, gachaNote, gachaOff, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
 import { BLACK_MONDAY_LABEL } from '../utils/blackMonday'
 import { isPermOnlyCoupon } from '../utils/welcomeCoupon'
 import { attachGacha, loadGacha, type GachaHeld } from '../features/gacha/gachaApi'
@@ -1702,7 +1703,6 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     : chips.some(c => c.label === '一覧から選ぶ' || c.label === 'ほかのメニュー') ? 'menu'
     : chips.length === 2 ? 'yesno' : chips.length ? 'choice' : waiting ? 'free' : 'wait'
   const send = () => { const t = text.trim(); if (!t || !waiting) return; setText(''); fromChip.current = false; answer(t) }
-  const shown = sheet ? (showAll ? sheet : sheet.slice(0, 7)) : null
   const dockGuide = !sheet && ['who', 'menu', 'yesno', 'staff', 'when', 'time', 'ticket', 'confirm'].includes(askKind)
 
   return (
@@ -1789,15 +1789,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
               initial={reduce ? false : { y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: reduce ? 0 : 40, opacity: 0 }} transition={{ duration: reduce ? 0 : 0.26, ease: [0.22, 1, 0.36, 1] }}>
               <div className="gc-grab" />
               <GinNavigationMark step="menu-list" />
-              <p className="gc-sheet-title">メニューを選ぶ</p>
-              <div className="gc-menu">
-                {shown?.map(m => (
-                  <button key={m.code} type="button" onClick={() => { setSheet(null); setShowAll(false); sheetRef.current?.(m); sheetRef.current = null }}>
-                    <span>{m.name}</span><small>{yen(m.price)}</small><ChevronRight size={16} aria-hidden="true" />
-                  </button>
-                ))}
-                {sheet.length > 7 && !showAll && <button type="button" className="gc-more" onClick={() => setShowAll(true)}>ほかのメニューを見る（{sheet.length - 7}）</button>}
-              </div>
+              {/* いつもの・検索・種類のタブ・所要時間・Black Monday（11/17 慶一郎さん「親切設計で」） */}
+              <MenuPickerSheet menus={sheet} usualCode={getUsualMenu()?.code ?? null} bm={blackMondayMenus()}
+                onPick={m => { setSheet(null); setShowAll(false); sheetRef.current?.(m as Menu); sheetRef.current = null }}
+                onClose={() => { setSheet(null); setShowAll(false); sheetRef.current?.(null); sheetRef.current = null }} />
               <a className="gc-quiet gc-sheet-link" href={HOTPEPPER_MENU_URL} target="_blank" rel="noopener noreferrer">HOT PEPPER Beauty で写真を見る</a>
             </motion.div>
           </>

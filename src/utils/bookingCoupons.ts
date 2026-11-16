@@ -85,6 +85,9 @@ if (typeof window !== 'undefined') void ensurePriceRules()
 const jst = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3600000); return { date: d.toISOString().slice(0, 10), dow: d.getUTCDay(), min: d.getUTCHours() * 60 + d.getUTCMinutes() } }
 const isWeekendOrHoliday = (iso: string) => { const j = jst(iso); return j.dow === 0 || j.dow === 6 || (rules ? rules.holidays.includes(j.date) : HOLIDAYS.has(j.date)) }
 
+/** Black Monday の対象メニュー（料金表を読めていなければ空）。メニューの一覧に「月曜 −¥2,000」と添えるのに使う */
+export const blackMondayMenus = (): { codes: string[]; amount: number } => ({ codes: rules?.black_monday?.menu_codes ?? [], amount: rules?.black_monday?.amount ?? 0 })
+
 /** Black Monday の見込み（アプリの予約・月曜・対象メニュー。料金表を読めていなければ 0。正は会計のときのサーバー） */
 export function blackMondayFor(menuCode: string, startsAt: string, price?: number | null): number {
   return blackMondayOff(rules?.black_monday, menuCode, startsAt, price)
