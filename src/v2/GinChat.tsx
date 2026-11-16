@@ -1612,9 +1612,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const staffLine = staffAfter ? `担当：${staffAfter}${staffNote ? `（${staffNote}）` : ''}` : ''
       // Black Monday（11/17）：変更で付く・外れる・額が変わる
       const bmB = pv.black_monday?.before ?? 0, bmA = pv.black_monday?.after ?? 0
-      const bmLine = bmA > 0 && bmB === 0 ? `${BLACK_MONDAY_LABEL} −${yen(bmA)} が付きます`
-        : bmA === 0 && bmB > 0 ? `※${BLACK_MONDAY_LABEL} −${yen(bmB)} は外れます`
-        : bmA > 0 ? `${BLACK_MONDAY_LABEL} −${yen(bmA)}${bmA !== bmB ? `（変更前 −${yen(bmB)}）` : ''}` : ''
+      // 言い方は「Black Monday割引（−2,000円）を適用します」（11/17 慶一郎さん）
+      const bmYen = (n: number) => `${n.toLocaleString('ja-JP')}円`
+      const bmLine = bmA > 0 && bmB === 0 ? `${BLACK_MONDAY_LABEL}割引（−${bmYen(bmA)}）を適用します。`
+        : bmA === 0 && bmB > 0 ? `※月曜・対象メニューではなくなるため、${BLACK_MONDAY_LABEL}割引（−${bmYen(bmB)}）は適用されません。`
+        : bmA > 0 ? `${BLACK_MONDAY_LABEL}割引（−${bmYen(bmA)}）を適用します。${bmA !== bmB ? `（変更前 −${bmYen(bmB)}）` : ''}` : ''
       const lines = [
         `変更前：${reviewedLabel(pv.confirmation)}${pv.price_before != null ? ` ${yen(pv.price_before)}` : ''}`,
         `変更後：${slotLabel(at)} ${pv.menu_names.join('・')}（${pv.duration_after}分）${pv.price_after != null ? ` ${yen(pv.price_after)}` : ''}`,
