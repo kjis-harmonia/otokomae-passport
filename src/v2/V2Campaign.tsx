@@ -109,7 +109,7 @@ function BlackMondayPoster() {
           <p className="v2-bm-detail-h">利用条件</p>
           <ul className="v2-bm-rules">
             <li>毎週月曜（祝日を含む）のご来店が対象です。</li>
-            <li>アプリ（銀ちゃん）でのご予約に限ります。お電話・HOT PEPPER・当日のご来店は対象外です。</li>
+            <li>アプリ（AI予約）でのご予約に限ります。お電話・HOT PEPPER・当日のご来店は対象外です。</li>
             <li>対象メニュー1つにつき ¥2,000 を、お会計で差し引きます。</li>
             <li>Welcome クーポン・再来店パーマクーポンとは一緒に使えません。ガチャ券とは一緒に使えます。</li>
           </ul>
