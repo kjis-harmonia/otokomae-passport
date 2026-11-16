@@ -85,13 +85,17 @@ function BlackMondayPoster() {
     document.head.appendChild(link)
   }, [])
   // 11/17 慶一郎さんの見本どおり：黒のカードに白い文字（金の文字は白に）。大きな ¥2,000 OFF と、対象メニュー・利用条件は押して開く
+  // 11/17 慶一郎さん「見た目以上で。月曜限定・2,000円オフが一瞬で目に飛び込むように」
+  //   目に入る順：①曜日の列で「月」だけが光る ②¥2,000 OFF ③対象（パーマ・アプリ予約）と開始日。開いた瞬間に曜日が順に灯って「月」で止まり、¥2,000 に光が1回走る
   return (
     <div className="v2-bm">
-      <p className="v2-bm-eyebrow"><i aria-hidden="true" />毎週月曜日限定<i aria-hidden="true" /></p>
-      <h2 className="v2-bm-title">Black Monday</h2>
-      <p className="v2-bm-price" aria-label="2,000円オフ">¥2,000<span>OFF</span></p>
-      <p className="v2-bm-offer"><span>パーマが、</span><span>¥2,000オフ。</span></p>
-      <p className="v2-bm-only">アプリでのご予約限定。</p>
+      <p className="v2-bm-name">BLACK MONDAY</p>
+      <ol className="v2-bm-week" aria-label="毎週月曜日限定">
+        {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => <li key={w} className={i === 1 ? 'is-mon' : undefined} style={{ animationDelay: `${i * 60}ms` }} aria-hidden="true">{w}</li>)}
+      </ol>
+      <p className="v2-bm-limit">毎週月曜限定</p>
+      <p className="v2-bm-price" aria-label="2,000円オフ"><b>¥2,000</b><span>OFF</span></p>
+      <p className="v2-bm-offer"><span>対象のパーマ7種・</span><span>アプリでのご予約限定</span></p>
       {soon && <p className="v2-bm-start"><i aria-hidden="true" />{BLACK_MONDAY_STARTS.replace(/-/g, '.')} START<i aria-hidden="true" /></p>}
       <button type="button" className="v2-bm-more" aria-expanded={more} onClick={() => setMore(v => !v)}>
         {more ? '閉じる' : '対象メニュー・利用条件を見る'}<span aria-hidden="true">{more ? '−' : '›'}</span>
