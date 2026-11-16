@@ -12,6 +12,7 @@ import { consultStylist, type ConsultReply } from './consult'
 import type { DayOverview } from './dayAdvisor'
 import type { VisitRecord } from './welcome'
 import type { TicketRow } from '../../data/ticket'
+import type { BlackMondayInfo } from '../../utils/blackMonday'
 import { askAgent, askAgentVoice, type AgentAnswer, type AgentShown, type AgentTurn, type VoiceAnswer } from './agentClient'
 
 export function isBookingRejection(error: unknown, code: 'reservation_person_overlap' | 'slot_taken' | 'person_has_reservation'): boolean {
@@ -38,6 +39,8 @@ export interface CustomerReservation {
   companion_name?: string | null
   /** 施術を受けるお連れ様（サーバーに登録したお連れ様の番号・11/8）。null＝会員本人 */
   companion_id?: string | null
+  /** Black Monday（11/17）：値引きの見込み（対象外は null。予約に Welcome 等の券を付けていれば amount は 0） */
+  black_monday?: BlackMondayInfo | null
 }
 
 /** お連れ様の予約をご本人の予約につなぐ（つながらなくても予約はそのまま。別の端末でも見分けられるように） */

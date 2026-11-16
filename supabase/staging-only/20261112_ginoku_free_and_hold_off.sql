@@ -81,6 +81,7 @@ end;
 $function$
 ;
 
+-- 戻す先は本番の版（Black Monday 入り・11/17。supabase/migrations/20261117120000_black_monday.sql と同じ）
 CREATE OR REPLACE FUNCTION app_private.finalize_sale(p jsonb, p_actor_type text, p_actor_name text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -93,6 +94,8 @@ declare r public.reservations; v_client uuid; v_member uuid; v_user text; v_name
         v_tax public.accounting_settings; v_id uuid; v_i int := 0; v_uids text[]; t record;
         v_key text := nullif(btrim(coalesce(p->>'idempotency_key', '')), ''); v_existing uuid; v_gp jsonb; v_account public.ginpay_accounts;
         h app_private.gacha_holdings; v_gacha int := 0; v_gitem jsonb;
+        -- Black Monday（11/17）：予約の印・対象メニュー・明細ごとの値引き（明細の順）・合計。v_gidx はガチャ券の明細の番号
+        v_bm app_private.black_monday_marks; v_bm_codes text[]; v_bm_line int[] := '{}'; v_bm_total bigint := 0; v_gidx bigint;
         v_is_comp boolean := false; v_comp uuid; v_comp_name text; v_owner text;
         -- 11/11：予約のない方の会計（お子様・お連れ様など）。会員ご本人の施術ではない印（予約がある会計では使わない）
         v_not_owner boolean := coalesce(p->>'not_owner', '') = 'true' and nullif(p->>'reservation_id', '') is null;
@@ -192,6 +195,22 @@ begin
     end if;
   end if;
 
+  -- Black Monday（11/17 オーナー決定）：月曜来店のアプリの予約（予約の印＝app_private.black_monday_marks）で、会計の明細に対象メニューがあれば
+  --   明細1つにつき1メニューの額（明細の残りを超えない）を引く。額は DB が決める（端末の額は使わない。expected_total の照合にも入る）。
+  --   Welcome・再来店パーマクーポンを使う会計では引かない（券を優先）。予約のない会計では引かない
+  if r.id is not null and not exists (select 1 from public.tickets t2 where t2.id = any(v_tids) and app_private.is_perm_coupon(t2)) then
+    select * into v_bm from app_private.black_monday_marks where reservation_id = r.id;
+    if v_bm.reservation_id is not null then
+      select menu_codes into v_bm_codes from app_private.black_monday_settings where id = 1;
+      select coalesce(array_agg(case when x.i->>'source' in ('reservation', 'service_menu') and x.i->>'ref_id' = any(coalesce(v_bm_codes, '{}'::text[]))
+                                     then greatest(0, least(v_bm.unit_amount, (x.i->>'unit_price')::int * coalesce((x.i->>'quantity')::int, 1) - coalesce((x.i->>'discount')::int, 0)))
+                                     else 0 end order by x.n), '{}'::int[])
+        into v_bm_line
+      from jsonb_array_elements(v_items) with ordinality x(i, n);
+      select coalesce(sum(v), 0) into v_bm_total from unnest(v_bm_line) v;
+    end if;
+  end if;
+
   -- ガチャ券（予約に付いた券。11/4 工程②）。店舗端末が use_gacha を付けたときだけ使う
   if coalesce(p->>'use_gacha', '') = 'true' then
     if r.id is null then return jsonb_build_object('error', 'gacha_invalid'); end if;
@@ -201,21 +220,22 @@ begin
     -- 本人だけの券（無料券以外・本人限定）はお連れ様の会計では使えない（予約に付けるときと同じ）
     if v_is_comp and (h.free_menu is null or h.self_only) then return jsonb_build_object('error', 'gacha_companion'); end if;
     if h.menu_codes is not null then
-      select i into v_gitem from jsonb_array_elements(v_items) i
-       where i->>'source' in ('reservation', 'service_menu') and i->>'ref_id' = any(h.menu_codes) limit 1;
+      select x.i, x.n into v_gitem, v_gidx from jsonb_array_elements(v_items) with ordinality x(i, n)
+       where x.i->>'source' in ('reservation', 'service_menu') and x.i->>'ref_id' = any(h.menu_codes) order by x.n limit 1;
       if v_gitem is null then return jsonb_build_object('error', 'gacha_menu'); end if;
     end if;
-    -- 無料券はそのメニュー1つ分の料金（明細の値引き後）
-    v_gacha := coalesce(h.amount, least((v_gitem->>'unit_price')::int,
-      (v_gitem->>'unit_price')::int * coalesce((v_gitem->>'quantity')::int, 1) - coalesce((v_gitem->>'discount')::int, 0)));
+    -- 無料券はそのメニュー1つ分の料金（明細の値引き後）。Black Monday を先に引き、無料券はその明細の残りをまかなう（11/17）
+    v_gacha := coalesce(h.amount, greatest(0, least((v_gitem->>'unit_price')::int,
+      (v_gitem->>'unit_price')::int * coalesce((v_gitem->>'quantity')::int, 1) - coalesce((v_gitem->>'discount')::int, 0)
+      - coalesce(v_bm_line[v_gidx], 0))));
     -- 値引き額が決まらない券（額もメニューも無い）は使わない（11/4 守り）
     if v_gacha is null or v_gacha < 0 then return jsonb_build_object('error', 'gacha_invalid'); end if;
     v_ticket_disc := v_ticket_disc + v_gacha;
   end if;
 
-  v_total := v_subtotal - v_line_disc - v_ticket_disc - v_manual;
+  v_total := v_subtotal - v_line_disc - v_ticket_disc - v_manual - v_bm_total;
   -- 券が料金を超えたときは 0円（超えた分はおつりにしない＝お店の従来どおり・10/28 慶一郎さん）。券以外の値引きが料金を超えるのは今までどおり不可
-  if v_total < 0 and v_ticket_disc > 0 and v_subtotal - v_line_disc - v_manual >= 0 then v_total := 0; end if;
+  if v_total < 0 and v_ticket_disc > 0 and v_subtotal - v_line_disc - v_manual - v_bm_total >= 0 then v_total := 0; end if;
   if v_total < 0 then return jsonb_build_object('error', 'discount_exceeds'); end if;
   if nullif(p->>'expected_total', '') is null or (p->>'expected_total')::bigint <> v_total then
     return jsonb_build_object('error', 'total_mismatch', 'total', v_total);
@@ -247,7 +267,7 @@ begin
     insert into public.accounting_sessions (user_id, customer_name, staff_name, stylist_name, stylist_id, payment_method, status,
       subtotal, discount_total, total, used_ticket_ids, client_id, reservation_id, tax_mode, tax_rate, idempotency_key)
     values (v_user, coalesce(v_name, r.customer_name, ''), btrim(p_actor_name), v_stylist.display_name, v_stylist.id, v_legacy, 'pending',
-      v_subtotal, v_line_disc + v_ticket_disc + v_manual, v_total, (select array_agg(x::text) from unnest(v_tids) x),
+      v_subtotal, v_line_disc + v_ticket_disc + v_manual + v_bm_total, v_total, (select array_agg(x::text) from unnest(v_tids) x),
       v_client, r.id, v_tax.tax_mode, v_tax.tax_rate, v_key)
     returning id into v_id;
   exception when unique_violation then
@@ -284,6 +304,9 @@ begin
   if v_manual > 0 then
     insert into public.accounting_discounts (session_id, kind, label, amount) values (v_id, 'manual', btrim(p->'manual_discount'->>'label'), v_manual);
   end if;
+  if v_bm_total > 0 then
+    insert into public.accounting_discounts (session_id, kind, label, amount) values (v_id, 'campaign', 'Black Monday', v_bm_total);
+  end if;
   insert into public.accounting_payments (session_id, method, amount) values (v_id, v_method, v_total);
 
   -- GINPay 支払い（同じトランザクション。会計1件につき1件。失敗すれば会計ごと取り消す）
@@ -308,7 +331,8 @@ begin
 
   update public.accounting_sessions set status = 'completed', completed_at = now() where id = v_id;
   insert into public.accounting_events (session_id, event_type, actor_type, actor_name, detail)
-  values (v_id, 'completed', p_actor_type, btrim(p_actor_name), jsonb_build_object('total', v_total, 'payment_method', v_method));
+  values (v_id, 'completed', p_actor_type, btrim(p_actor_name), jsonb_build_object('total', v_total, 'payment_method', v_method)
+          || case when v_bm_total > 0 then jsonb_build_object('black_monday', v_bm_total) else '{}'::jsonb end);
 
   -- 予約の完了（会計と同じトランザクション。完了にできなければ全体を取り消す）
   if r.id is not null and r.status <> 'completed' then

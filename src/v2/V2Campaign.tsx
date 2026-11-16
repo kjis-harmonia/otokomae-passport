@@ -20,8 +20,8 @@ function justRegistered(): boolean {
 }
 
 type Campaign = {
-  id: string; image: string; wide?: boolean; kaikin?: boolean; alt: string; label: string; kicker: string; title: string; lead?: string; detail: string[]
-  action?: { text: string; kind: 'johnny'; menuCode: string } | { text: string; kind: 'lineup' | 'gacha' }
+  id: string; image: string; wide?: boolean; kaikin?: boolean; blackMonday?: boolean; alt: string; label: string; kicker: string; title: string; lead?: string; detail: string[]
+  action?: { text: string; kind: 'johnny'; menuCode: string } | { text: string; kind: 'lineup' | 'gacha' | 'book' }
 }
 
 const APACHI: Campaign = {
@@ -35,10 +35,18 @@ const APACHI: Campaign = {
   action: { text: 'この髪型でAI予約する', kind: 'johnny', menuCode: 'perm-apache' },
 }
 
+// Black Monday（11/17 オーナー決定）：毎週月曜・アプリ予約限定でパーマ ¥2,000 OFF。写真は使わず、黒地に文字だけの告知。
+//   「AI予約する」は銀ちゃん（メニューは決めずに始める）。額・対象メニューの正はサーバーの設定（app_private.black_monday_settings）
+const BLACK_MONDAY_STARTS = '2026-11-23'
+const BLACK_MONDAY_MENUS = ['パンチパーマ', '濡れパン', 'アイパー', 'カーリーパーマ', 'スペインパーマ', 'ツイスト', 'ピンパーマ']
+const BLACK_MONDAY: Campaign = {
+  id: 'black-monday-2026', image: '', blackMonday: true, alt: '', label: 'Black Monday', kicker: '', title: '',
+  detail: [], action: { text: 'AI予約する', kind: 'book' },
+}
+
 // ガチャの告知（11/5 慶一郎さん）。11/11 より前は予告（ラインナップを見せる）、11/11〜11/30 は「はじまりました」（ガチャへ）。
 //   日付は Staging でも本当の日付で切り替える（予告を Staging で確かめられるように）。id が別なので、予告を止めた人にも開始の告知は出る
 const GACHA_OPENS = '2026-11-11'
-const GACHA_NEWS_UNTIL = '2026-11-30'
 const jstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
 const GACHA_SOON: Campaign = {
   id: 'gacha-2026-11-soon', image: '/gacha/dino/wait.jpg?v=seam2', kaikin: true, alt: '', label: 'ガチャ',
@@ -52,9 +60,9 @@ function pickCampaign(): Campaign | null {
   // 当日も 12:00（launched）までは予告のまま。タイトルは「本日 12:00 ガチャ解禁」・ボタンなし（11/11）
   if (d === GACHA_OPENS && !launched() && !isStaging()) return { ...GACHA_SOON, id: 'gacha-2026-11-today', title: `本日 ${launchHm()} ガチャ解禁` }
   if (d < GACHA_OPENS) return GACHA_SOON
-  // 「ガチャ、はじまりました」の告知は 11/12 で終わり（慶一郎さん「告知ポップ消していいよ」）。11/30 までは何も出さない
-  if (d <= GACHA_NEWS_UNTIL) return null
-  return APACHI
+  // 「ガチャ、はじまりました」の告知は 11/12 で終わり（慶一郎さん「告知ポップ消していいよ」）。
+  // 11/17 から Black Monday の告知（11/30 以降に出す予定だった APACHI より優先・オーナー決定）
+  return BLACK_MONDAY
 }
 const PICKED = pickCampaign()
 /** 今出すお知らせがあるか（無ければホームに何も重ねない） */
@@ -62,6 +70,23 @@ export const hasCampaign = PICKED !== null
 const CAMPAIGN = PICKED ?? APACHI
 // 解禁までの日数（JST の日付どうし）
 const daysLeft = () => Math.round((Date.parse(GACHA_OPENS) - Date.parse(jstToday())) / 86400e3)
+
+/** Black Monday の告知：黒地に白い文字、金は細い線と小さな見出しだけ（写真なしで成り立つ） */
+function BlackMondayPoster() {
+  const soon = jstToday() < BLACK_MONDAY_STARTS
+  return (
+    <div className="v2-bm">
+      <p className="v2-bm-kicker">毎週月曜</p>
+      <h2 className="v2-bm-title" aria-label="ブラックマンデー">BLACK<br />MONDAY</h2>
+      <span className="v2-bm-rule" aria-hidden="true" />
+      <p className="v2-bm-offer">パーマ<b>¥2,000</b>OFF</p>
+      <p className="v2-bm-only">アプリ予約限定</p>
+      <p className="v2-bm-for">対象メニュー</p>
+      <ul className="v2-bm-menus" aria-label="対象メニュー">{BLACK_MONDAY_MENUS.map(m => <li key={m}>{m}</li>)}</ul>
+      {soon && <p className="v2-bm-start">11月23日（月・祝）から</p>}
+    </div>
+  )
+}
 
 // 「解禁」の告知（11/5 慶一郎さん「狩猟解禁みたいにカッコよく」）：暗い岩に光る足跡（恐竜編の絵）の上に、大きな「解禁」と日付・残りの日数だけ
 function Kaikin({ reduce }: { reduce: boolean | null }) {
@@ -98,8 +123,8 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
     let guided = false
     try { guided = !!sessionStorage.getItem('ginjiro_launch_guided') } catch { /* なし */ }
     if (shownThisLaunch || guided || getStoredValue<string>(HIDE_KEY, '') === CAMPAIGN.id || justRegistered()) return
-    const img = new Image()
-    img.src = CAMPAIGN.image
+    // 写真の無い告知（Black Monday）は読み込むものが無い
+    if (CAMPAIGN.image) new Image().src = CAMPAIGN.image
     if (CAMPAIGN.kaikin) new Image().src = '/gacha/kaikin-brush.png'
     const t = window.setTimeout(() => { shownThisLaunch = true; setOpen(true) }, 700)
     return () => window.clearTimeout(t)
@@ -111,6 +136,12 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
     if (!a) return
     if (a.kind === 'lineup') { setLineup(true); return } // ラインナップを閉じたら、告知に戻る
     close()
+    // メニューを決めずに AI予約（銀ちゃんが「どなたの・何を」から聞く）
+    if (a.kind === 'book') {
+      if (ginFlow()) window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } }))
+      else requestJohnny({ menuCode: null, label: '' })
+      return
+    }
     // Staging：AI予約は銀ちゃんの会話（髪型のメニューを入れて始める）。本番は承認のあと
     if (a.kind === 'johnny' && ginFlow()) window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: a.menuCode, label: CAMPAIGN.label } }))
     else if (a.kind === 'johnny') requestJohnny({ menuCode: a.menuCode, label: CAMPAIGN.label })
@@ -126,7 +157,7 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
           <motion.div className="v2-campaign-body" onClick={e => e.stopPropagation()}
             initial={reduce ? false : { opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={reduce ? undefined : { opacity: 0, y: 8 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
-            {CAMPAIGN.kaikin ? (
+            {CAMPAIGN.blackMonday ? <BlackMondayPoster /> : CAMPAIGN.kaikin ? (
               <div className="v2-kaikin" style={{ backgroundImage: `url(${CAMPAIGN.image})` }}><Kaikin reduce={reduce} /></div>
             ) : (
               <>

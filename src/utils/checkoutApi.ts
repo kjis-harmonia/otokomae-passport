@@ -1,5 +1,6 @@
 // 会計のクライアント。売上は「会計を確定」でだけ発生する（予約の金額は予定売上）。
 // 確定は DB の1トランザクション（会計・明細・値引き・支払・GINPay 支払い・クーポン消費・予約の完了）。テーブルへは直接アクセスしない。
+import type { BlackMondayCheckout } from './blackMonday'
 import { callStaffRpc, RpcBusinessError } from './staffSession'
 import { callHqRpc } from '../hq/hqSession'
 import type { Reservation } from './bookingApi'
@@ -34,6 +35,8 @@ export interface CheckoutGacha {
 }
 export interface CheckoutContext {
   reservation: Reservation | null
+  /** Black Monday（11/17）：この予約が対象か・1メニューの額・対象メニュー（予約のない会計・サーバーが古いと無い）。引く額は確定のとき DB が決める */
+  black_monday?: BlackMondayCheckout | null
   /** 予約に付いたガチャ券（無ければ null。DB が古いと無い） */
   gacha?: CheckoutGacha | null
   /** すでに確定済みの会計（同じ予約は2回会計できない） */
@@ -108,7 +111,8 @@ export interface Sale {
   tax_mode: string | null
   tax_rate: number | null
   items: { name: string; category: string; unit_price: number; quantity: number; line_discount: number; line_total: number; list_price: number | null; source: string | null; tax_mode: string | null; tax_rate: number | null }[]
-  discounts: { kind: 'ticket' | 'manual'; label: string; amount: number; ticket_type: string | null }[]
+  /** campaign：Black Monday など、DB が自動で引いたもの（11/17） */
+  discounts: { kind: 'ticket' | 'manual' | 'campaign'; label: string; amount: number; ticket_type: string | null }[]
   payments: { method: string; amount: number }[]
   /** この会計の GINPay 取引（支払い・取消時の戻し） */
   ginpay?: { id: string; type: 'payment' | 'void' | 'refund'; amount: number; account_id: string; original_transaction_id: string | null; created_at: string }[]
@@ -202,10 +206,12 @@ export function checkoutErrorMessage(code: string): string {
 }
 
 /** ガチャ券の値引き額（DB の finalize_sale と同じ計算）。対象メニューが会計に無ければ null */
-export function gachaAmount(g: CheckoutGacha, lines: SaleLine[]): number | null {
-  const line = g.menu_codes ? lines.find(l => (l.source === 'reservation' || l.source === 'service_menu') && !!l.ref_id && g.menu_codes!.includes(l.ref_id)) : undefined
-  if (g.menu_codes && !line) return null
-  return g.amount ?? Math.min(line!.unit_price, line!.unit_price * line!.quantity - line!.discount)
+/** ガチャ券の値引き。無料券はその明細の残り（less＝先に引いた Black Monday の明細ごとの額。DB の finalize_sale と同じ順） */
+export function gachaAmount(g: CheckoutGacha, lines: SaleLine[], less?: readonly number[]): number | null {
+  const index = g.menu_codes ? lines.findIndex(l => (l.source === 'reservation' || l.source === 'service_menu') && !!l.ref_id && g.menu_codes!.includes(l.ref_id)) : -1
+  if (g.menu_codes && index < 0) return null
+  const line = lines[index]
+  return g.amount ?? Math.max(0, Math.min(line.unit_price, line.unit_price * line.quantity - line.discount - (less?.[index] ?? 0)))
 }
 
 /** 画面の合計（確定時に DB が同じ計算で照合する） */

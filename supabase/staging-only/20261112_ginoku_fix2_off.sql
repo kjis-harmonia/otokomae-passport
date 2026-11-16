@@ -1,4 +1,5 @@
 -- 20261112_ginoku_fix2.sql を戻す（Staging だけ）。出品の関数は 20261112_ginoku_free_and_hold.sql を流し直すと元に戻る
+-- 戻す先は本番の版（Black Monday 入り・11/17。supabase/migrations/20261117120000_black_monday.sql と同じ）
 CREATE OR REPLACE FUNCTION app_private.checkout_context_json(p_reservation_id uuid, p_client_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -23,6 +24,8 @@ begin
                 'app_linked', cardinality(app_private.client_members(app_private.client_family(c.id))) > 0)
               from public.clients c where c.id = v_client) end,
     'gacha', app_private.gacha_for_reservation(r.id),
+    -- Black Monday（11/17）：この予約が対象か・1メニューの額・対象メニュー。引く額は会計の明細から finalize_sale が決める（端末は表示と expected_total 用）
+    'black_monday', app_private.black_monday_checkout_json(r.id),
     'tickets', case when v_client is null then '[]'::jsonb else app_private.client_tickets_json(v_client) end,
     'ginpay_accounts', case when v_client is null then '[]'::jsonb else
       (select coalesce(jsonb_agg(jsonb_build_object('id', a.id, 'client_name', c.display_name, 'balance', a.balance_cached,

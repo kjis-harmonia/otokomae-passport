@@ -17,6 +17,7 @@ import { C, SANS, inputStyle, linkStyle } from './ledgerTheme'
 import { playCue } from '../../audio/cue'
 import { isPermOnlyCoupon } from '../../utils/welcomeCoupon'
 import { freeTicketAmounts, freeTicketLabel, isFreeTicket } from '../../features/auction/freeTicket'
+import { BLACK_MONDAY_LABEL, blackMondayLineOffs } from '../../utils/blackMonday'
 
 // 会計。予約から開く（顧客・担当・予約メニュー・予約時価格を引き継ぎ、実際の内容に合わせて直せる）／予約なしの店頭会計。
 // 「会計を確定」で初めて売上になる（確定は DB の1トランザクション。予約は完了になる）。毎日何十回も使うので、文字と金額だけで構成する。
@@ -179,7 +180,13 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const clientInfo = ctx?.reservation ? ctx.client : client ?? null
   // 予約に付いたガチャ券：最初から使う状態。券の一覧に並べ、外すこともできる（11/4）
   const gachaOf = ctx?.reservation ? ctx.gacha ?? null : null
-  const gachaOff = gachaOf ? gachaAmount(gachaOf, lines) : null
+  // Black Monday（11/17）：月曜来店のアプリの予約。対象メニューの明細1つにつき自動で引く（DB と同じ計算。確定のとき DB が決めて照合する）。
+  //   Welcome・再来店パーマクーポンを選んだら外す（券を優先）
+  const permPicked = !!clientInfo && (ctx?.tickets ?? []).some(t => ticketIds.includes(t.id) && isPermOnlyCoupon({ title: t.title, amount: t.amount, issued_by: '' }))
+  const bmOffs = blackMondayLineOffs(lines, ctx?.reservation ? ctx.black_monday : null, permPicked)
+  const bmTotal = bmOffs.reduce((n, v) => n + v, 0)
+  // ガチャの無料券は Black Monday のあとの明細の残り
+  const gachaOff = gachaOf ? gachaAmount(gachaOf, lines, bmOffs) : null
   const gachaTicket: CheckoutTicket | null = gachaOf
     ? { id: 'gacha', type: 'gacha', title: `ガチャ券 ${gachaOf.title}`, amount: gachaOff ?? 0, expires_at: null, blocked: gachaOff === null ? 'gacha_menu' : null }
     : null
@@ -190,16 +197,17 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const gachaUse = gachaLine >= 0 ? { lineIndex: gachaLine, amount: gachaOff ?? 0 } : null
   const tickets = (clientInfo ? ctx?.tickets ?? [] : []).map(t => isFreeTicket(t) && !t.blocked && !lines.some(l => menuLine(l) && t.menu_codes.includes(l.ref_id!)) ? { ...t, blocked: 'free_menu' as const } : t)
   const pickedFree = tickets.filter(t => isFreeTicket(t) && !t.blocked && ticketIds.includes(t.id))
-  const freeOff = freeTicketAmounts(lines, pickedFree, gachaUse)
+  const freeOff = freeTicketAmounts(lines, pickedFree, gachaUse, bmOffs)
   /** この無料券をもう1枚足しても、全部に対象の明細が残るか */
-  const freeFits = (t: CheckoutTicket) => [...freeTicketAmounts(lines, [...pickedFree, t], gachaUse).values()].every(v => v !== null)
+  const freeFits = (t: CheckoutTicket) => [...freeTicketAmounts(lines, [...pickedFree, t], gachaUse, bmOffs).values()].every(v => v !== null)
   // 送る券：対象のメニューが無くなった無料券は外す（DB も断る）
   const usedTicketIds = ticketIds.filter(id => { const t = tickets.find(x => x.id === id); return !t || !isFreeTicket(t) || (!t.blocked && freeOff.get(id) != null) })
   const listed = gachaTicket ? [gachaTicket, ...tickets] : tickets
   const chosenTickets = listed.filter(t => t.id === 'gacha' ? gachaOn : usedTicketIds.includes(t.id)).map(t => isFreeTicket(t) ? { ...t, amount: freeOff.get(t.id) ?? 0 } : t)
   const manualAmount = manual ? Math.max(0, parseInt(manual.amount || '0', 10) || 0) : 0
   // 無料券の額は毎回計算し直すので、合計もその場で（軽い計算）
-  const totals = saleTotals(lines, chosenTickets, manualAmount)
+  // Black Monday は券以外の値引きとして合計に入れる（expected_total も同じ）
+  const totals = saleTotals(lines, chosenTickets, manualAmount + bmTotal)
   const paid = !!ctx?.paid_sale_id
   const customerReady = !!ctx?.reservation || anonymous || !!client
   // GINPay：顧客の口座（統合顧客で複数あるときは選ぶ。合算しない）
@@ -212,7 +220,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   // オプションは金額だけでよい（名前は任意。空なら「オプション」で記録・10/28 慶一郎さん）
   const optionsReady = lines.every(l => l.source !== 'manual' || l.unit_price > 0)
   // 券を引く前の金額（券以外の値引きのあと）。券がこれを超えた分はおつりにしない
-  const beforeTickets = totals.subtotal - lines.reduce((n, l) => n + l.discount, 0) - manualAmount
+  const beforeTickets = totals.subtotal - lines.reduce((n, l) => n + l.discount, 0) - manualAmount - bmTotal
   const canConfirm = !!ctx && !paid && customerReady && !!stylistId && lines.length > 0 && optionsReady && !!method && (totals.total >= 0 || beforeTickets >= 0)
     && (!manual || manualAmount === 0 || manual.label.trim() !== '') && ginpayOk && !busy
 
@@ -488,7 +496,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
 
               {/* 合計。QR を読んだあとの短い会計は、券を引いたあとの「お受け取り金額」を大きく（現金でいくら受け取るか迷わないように・10/27 慶一郎さん） */}
               {quick ? (() => {
-                const otherDiscount = totals.discount - ticketSum
+                const otherDiscount = totals.discount - ticketSum - bmTotal
                 const viaGinpay = method === 'ginpay'
                 const ready = lines.length > 0 && !!method
                 const accent = viaGinpay ? '#2F7D5B' : C.text
@@ -508,6 +516,7 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                     {ready && totals.discount > 0 && (
                       <div style={{ marginBottom: 6 }}>
                         <div style={{ ...row, color: C.sub }}><span>料金</span><span>{yen(totals.subtotal)}</span></div>
+                        {bmTotal > 0 && <div data-guide="co-black-monday" style={{ ...row, color: C.text }}><span style={{ minWidth: 0 }}>{BLACK_MONDAY_LABEL}</span><span>−{yen(bmTotal)}</span></div>}
                         {chosenTickets.map(t => <div key={t.id} style={{ ...row, color: C.sub }}><span style={{ minWidth: 0 }}>{t.title}</span><span>−{yen(t.amount)}</span></div>)}
                         {otherDiscount > 0 && <div style={{ ...row, color: C.sub }}><span>値引き</span><span>−{yen(otherDiscount)}</span></div>}
                       </div>
@@ -532,7 +541,8 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
                 {totals.discount > 0 && (
                   <>
                     <Sum label="小計" value={yen(totals.subtotal)} />
-                    <Sum label="値引き" value={`−${yen(totals.discount)}`} />
+                    {bmTotal > 0 && <Sum label={BLACK_MONDAY_LABEL} value={`−${yen(bmTotal)}`} />}
+                    {totals.discount - bmTotal > 0 && <Sum label="値引き" value={`−${yen(totals.discount - bmTotal)}`} />}
                   </>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>

@@ -34,7 +34,9 @@ import { SHOP_PHONE_TEL } from '../data/wallet'
 import { RpcBusinessError, RpcError } from '../utils/staffSession'
 import { longestIn, namesIn } from './ginWords'
 import { planParty } from './partyPlan'
-import { gachaNote, gachaOff, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
+import { blackMondayFor, gachaNote, gachaOff, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
+import { BLACK_MONDAY_LABEL } from '../utils/blackMonday'
+import { isPermOnlyCoupon } from '../utils/welcomeCoupon'
 import { attachGacha, loadGacha, type GachaHeld } from '../features/gacha/gachaApi'
 import type { TicketRow } from '../data/ticket'
 import type { PendingVisits as Pending, PendingVisit as Visit } from './visitConfirm'
@@ -767,17 +769,23 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (me && fits(me)) return me
       return gachaHeld.free_menu && !gachaHeld.self_only ? d.who.find(fits) : undefined
     }
-    /** 券・ガチャ券を引いたお支払い予定の行（引くものが無ければ空） */
+    /** Black Monday（11/17）：人ごと（お連れ様の予約もアプリの予約なので対象）。ご本人が Welcome・再来店パーマクーポンを選んだら、ご本人の分は付かない */
+    const bmOf = (p: BookPerson) => p.key === 'me' && picked && isPermOnlyCoupon(picked) ? 0 : blackMondayFor(d.menus[p.key].code, startOf(p), d.menus[p.key].price)
+    /** 券・Black Monday・ガチャ券を引いたお支払い予定の行（引くものが無ければ空） */
     const priceLines = () => {
       const g = gachaFor()
-      const gOff = g ? gachaOff(gachaHeld, d.menus[g.key].code, d.at!, d.menus[g.key].price ?? 0) ?? 0 : 0
+      const bm = d.who!.map(p => ({ p, off: bmOf(p) })).filter(x => x.off > 0)
+      // ガチャの無料券は Black Monday のあとの残りをまかなう（サーバーの会計と同じ順）
+      const gOff = g ? gachaOff(gachaHeld, d.menus[g.key].code, d.at!, Math.max(0, (d.menus[g.key].price ?? 0) - bmOf(g))) ?? 0 : 0
       const tOff = picked ? picked.amount : 0
-      if (!gOff && !tOff) return ''
+      const bmOff = bm.reduce((a, x) => a + x.off, 0)
+      if (!gOff && !tOff && !bmOff) return ''
       const sum = d.who!.reduce((a, p) => a + (d.menus[p.key].price ?? 0), 0)
       return [
         ...(picked ? [`${picked.title} −${yen(tOff)}`] : []),
+        ...bm.map(x => `${BLACK_MONDAY_LABEL}${d.who!.length > 1 ? `・${x.p.label}` : ''} −${yen(x.off)}`),
         ...(g ? [`ガチャ券（${gachaHeld!.title}）${d.who!.length > 1 ? `・${g.label}` : ''} −${yen(gOff)}`] : []),
-        `お支払い予定 ${yen(Math.max(0, sum - tOff - gOff))}`,
+        `お支払い予定 ${yen(Math.max(0, sum - tOff - bmOff - gOff))}`,
       ].join('\n')
     }
     const canCreate = async (persons: BookPerson[]) => {
@@ -1571,7 +1579,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (!menuCodes.length) { await say('すみません、このご予約のメニューが分からないので、お店にお電話いただけますか？'); return end() }
       setTyping(true)
       const pv = await callCustomerRpc<{ error?: string; kind: string; confirmation: Confirmation; menu_names: string[]; duration_after: number; late_penalty: boolean; price_before: number | null; price_after: number | null; slot_ok: boolean;
-        ginpay_before: number; ginpay_after: number; tickets_drop: { title: string; why: string }[]; gacha: { title: string; keep: boolean; why: string | null } | null }>('customer_change_preview',
+        ginpay_before: number; ginpay_after: number; tickets_drop: { title: string; why: string }[]; gacha: { title: string; keep: boolean; why: string | null } | null;
+        /** Black Monday の変更の前と後の額（サーバーが古いと無い） */
+        black_monday?: { before: number; after: number } }>('customer_change_preview',
         withStaff({ p_reservation_id: r.id, p_starts_at: at, p_menu_codes: menuCodes })).catch((e: unknown) => ({ error: e instanceof RpcError ? e.code : 'network' } as never))
       setTyping(false)
       if (pv.error === 'call_shop') { await say('開始の30分前を過ぎたので、変更はお電話でお願いします。'); return end() }
@@ -1591,10 +1601,16 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         r.staff_name && staffAfter && r.staff_name !== staffAfter ? `${r.staff_name}から変わります` : '',
       ].filter(Boolean).join('・')
       const staffLine = staffAfter ? `担当：${staffAfter}${staffNote ? `（${staffNote}）` : ''}` : ''
+      // Black Monday（11/17）：変更で付く・外れる・額が変わる
+      const bmB = pv.black_monday?.before ?? 0, bmA = pv.black_monday?.after ?? 0
+      const bmLine = bmA > 0 && bmB === 0 ? `${BLACK_MONDAY_LABEL} −${yen(bmA)} が付きます`
+        : bmA === 0 && bmB > 0 ? `※${BLACK_MONDAY_LABEL} −${yen(bmB)} は外れます`
+        : bmA > 0 ? `${BLACK_MONDAY_LABEL} −${yen(bmA)}${bmA !== bmB ? `（変更前 −${yen(bmB)}）` : ''}` : ''
       const lines = [
         `変更前：${reviewedLabel(pv.confirmation)}${pv.price_before != null ? ` ${yen(pv.price_before)}` : ''}`,
         `変更後：${slotLabel(at)} ${pv.menu_names.join('・')}（${pv.duration_after}分）${pv.price_after != null ? ` ${yen(pv.price_after)}` : ''}`,
         ...(staffLine ? [staffLine] : []),
+        ...(bmLine ? [bmLine] : []),
         ...(pv.ginpay_before > 0 ? [`銀Payの先払い：${yen(pv.ginpay_before)} → ${yen(pv.ginpay_after)}${pv.ginpay_after < pv.ginpay_before ? `（${yen(pv.ginpay_before - pv.ginpay_after)} は残高に戻ります）` : ''}`] : []),
         ...(pv.ginpay_before > 0 && pv.price_after != null && pv.price_after > pv.ginpay_after ? [`残りの ${yen(pv.price_after - pv.ginpay_after)} は、お店でお支払いください`] : []),
         ...pv.tickets_drop.map(t => `※「${t.title}」は${why(t.why)}、外れます`),

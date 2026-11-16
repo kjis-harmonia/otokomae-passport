@@ -11,6 +11,13 @@ import { bookingAssistantApi } from '../features/johnny/bookingAssistantApi'
 import { hasCustomerSession } from '../utils/customerSession'
 import { getMaintenanceVisit, getDaysUntilRecommended, getNextRecommendedDate, fmtDate, MAINTENANCE_CYCLE_DAYS } from '../utils/maintenanceSchedule'
 import { SHOP_PHONE_DISPLAY, SHOP_PHONE_TEL } from '../data/wallet'
+import { BLACK_MONDAY_LABEL, blackMondayAmount } from '../utils/blackMonday'
+import { yen } from '../utils/bookingCoupons'
+
+/** Black Monday の1行（対象外なら出さない）。お会計のときに差し引く */
+function BlackMondayLine({ amount }: { amount: number }) {
+  return amount > 0 ? <span style={{ color: 'var(--v2-gold-deep)' }}>{BLACK_MONDAY_LABEL} −{yen(amount)}<small style={{ color: 'var(--v2-sub)', marginLeft: 6 }}>お会計で差し引きます</small></span> : null
+}
 
 function useLastVisit(): string | null {
   const [last, setLast] = useState<string | null>(() => getMaintenanceVisit()?.lastVisitDate ?? null)
@@ -55,6 +62,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
           <div style={{ marginTop: 14, display: 'grid', gap: 6, fontSize: 15 }}>
             <span>{next.items.map(i => i.name).join('・')}</span>
             <span style={{ color: 'var(--v2-sub)' }}>担当：{next.staff_name}</span>
+            <BlackMondayLine amount={blackMondayAmount(next)} />
             {prepaid != null && <span style={{ color: 'var(--v2-gold-deep)', fontWeight: 700 }}>✓ 銀Pay 仮支払い済み ¥{prepaid.toLocaleString()}<br /><small style={{ fontWeight: 400, color: 'var(--v2-sub)' }}>ご来店時にレジで会員QRを読むと、お支払いが確定します</small></span>}
           </div>
           {/* お連れ様の予約（同じ日のほかの予約・10/30 慶一郎さん） */}
@@ -65,6 +73,7 @@ export function V2Next({ onJohnny }: { onJohnny: () => void }) {
                 <span className="v2-label" style={{ margin: 0 }}>{companionName(c) ? `お連れ様（${companionName(c)}様）` : 'お連れ様'}</span>
                 <span><b style={{ color: 'var(--v2-gold-deep)' }}>{formatVisit(c.starts_at).time}〜</b>{' '}{c.items.map(i => i.name).join('・')}</span>
                 <span style={{ color: 'var(--v2-sub)' }}>担当：{c.staff_name}</span>
+                <BlackMondayLine amount={blackMondayAmount(c)} />
                 {paid != null && <span style={{ color: 'var(--v2-gold-deep)', fontWeight: 700 }}>✓ 銀Pay 仮支払い済み ¥{paid.toLocaleString()}</span>}
               </div>
             )

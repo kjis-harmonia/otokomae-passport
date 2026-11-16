@@ -603,6 +603,17 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-kaikin-title small { font-size: .3em; letter-spacing: .5em; padding-left: .5em; margin-bottom: .18em; font-weight: 700; color: rgba(255,255,255,.92); }
 .v2-kaikin-count { margin: 6px 0 0; padding: 10px 0 0; border-top: 1px solid rgba(231,207,156,.55); min-width: 62%; font: 600 15px/1 var(--v2-sans); letter-spacing: .16em; color: rgba(255,255,255,.9); }
 .v2-kaikin-count b { font: 800 30px/1 var(--v2-serif); color: #e7cf9c; margin: 0 .18em; letter-spacing: 0; vertical-align: -3px; }
+/* Black Monday の告知（11/17）：写真なしの黒地。金は小さな見出しと細い線だけ。文字の大きさで階層を作る */
+.v2-bm { min-width: 0; border-radius: 18px; background: #0e0d0c; border: 1px solid rgba(216,189,134,.22); display: grid; justify-items: center; padding: 34px 20px 28px; text-align: center; color: #f4ead6; }
+.v2-bm-kicker { margin: 0; font: 600 13px/1 var(--v2-sans); letter-spacing: .42em; padding-left: .42em; color: #d8bd86; }
+.v2-bm-title { margin: 18px 0 0; font: 700 clamp(40px, 12vw, 52px)/1.06 var(--v2-serif); letter-spacing: .07em; padding-left: .07em; color: #fff; }
+.v2-bm-rule { width: 44px; height: 1px; margin: 22px 0 18px; background: rgba(216,189,134,.75); }
+.v2-bm-offer { margin: 0; display: flex; align-items: baseline; gap: .35em; font: 600 17px/1 var(--v2-sans); letter-spacing: .1em; }
+.v2-bm-offer b { font: 700 36px/1 var(--v2-serif); letter-spacing: .02em; color: #fff; }
+.v2-bm-only { margin: 14px 0 0; font: 600 14px/1 var(--v2-sans); letter-spacing: .16em; padding-left: .16em; color: rgba(255,255,255,.9); }
+.v2-bm-for { margin: 26px 0 0; padding-top: 16px; width: 100%; border-top: 1px solid rgba(255,255,255,.14); font: 500 12px/1 var(--v2-sans); letter-spacing: .14em; color: rgba(255,255,255,.5); }
+.v2-bm-menus { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 14px; font: 500 13px/1.75 var(--v2-sans); color: rgba(255,255,255,.8); }
+.v2-bm-start { margin: 14px 0 0; font: 500 13px/1 var(--v2-sans); letter-spacing: .08em; color: #d8bd86; }
 .v2-campaign-go { height: 54px; margin-top: 6px; border: 0; border-radius: 27px; background: #f8f6f1; color: #1d1915; font: 600 16px/1 var(--v2-sans); letter-spacing: .04em; cursor: pointer; }
 .v2-campaign-foot { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
 .v2-campaign-hide { position: relative; display: flex; align-items: center; gap: 8px; min-height: 44px; font: 500 13px/1 var(--v2-sans); color: rgba(255,255,255,.82); cursor: pointer; }

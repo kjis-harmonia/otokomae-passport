@@ -30,7 +30,7 @@ export interface FreeLine {
 
 /**
  * お会計で、選んだ無料券それぞれの値引き額（サーバーの finalize_sale と同じ割り当て）。
- *   ・明細の残り＝単価×数量 − 明細の値引き（メニューの明細だけ）。ガチャ券がその明細を使っていれば、その分も引く
+ *   ・明細の残り＝単価×数量 − 明細の値引き（メニューの明細だけ）。Black Monday（less・明細ごと）とガチャ券がその明細を使っていれば、その分も引く
  *   ・券の ID の順に、明細の順で最初に残りのある対象の明細へ。値引き＝min(単価, 残り)。1つの明細を2枚で引かない
  *   ・対象の明細が無い券は null（使えない）
  */
@@ -38,9 +38,10 @@ export function freeTicketAmounts(
   lines: readonly FreeLine[],
   tickets: readonly (FreeMenuInfo & { id: string })[],
   gacha?: { lineIndex: number; amount: number } | null,
+  less?: readonly number[],
 ): Map<string, number | null> {
   const isMenu = (l: FreeLine) => (l.source === 'reservation' || l.source === 'service_menu') && !!l.ref_id
-  const rem = lines.map(l => (isMenu(l) ? l.unit_price * l.quantity - l.discount : 0))
+  const rem = lines.map((l, i) => (isMenu(l) ? Math.max(0, l.unit_price * l.quantity - l.discount - (less?.[i] ?? 0)) : 0))
   if (gacha && gacha.lineIndex >= 0 && gacha.lineIndex < rem.length) rem[gacha.lineIndex] = Math.max(rem[gacha.lineIndex] - gacha.amount, 0)
   const out = new Map<string, number | null>()
   // uuid は小文字の16進なので、文字の順＝DB の uuid の順

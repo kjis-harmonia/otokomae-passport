@@ -7,6 +7,7 @@ import {
 } from '../../utils/bookingApi'
 import { Chip, ChipRow, Field, PrimaryButton, SecondaryButton, Section, Sheet, TimeGrid } from './ledgerUi'
 import { C, inputStyle, linkStyle } from './ledgerTheme'
+import { BLACK_MONDAY_LABEL, blackMondayAmount } from '../../utils/blackMonday'
 
 // 予約の詳細と操作（来店・施術開始・会計待ち・完了・無断キャンセル・担当変更・日時変更・キャンセル）。
 // すべて既存の予約 RPC（状態変更／日時・担当変更）を呼ぶだけで、画面側では判定しない。
@@ -87,7 +88,7 @@ export function ReservationDetail({ api, options, reservation: r, ensureActor, o
             <dt style={{ color: C.sub }}>担当</dt><dd>{r.nominated ? `${r.staff_name}（指名）` : `フリー（指名なし） / ${r.staff_name}${r.staff_confirmed ? '' : '（仮）'}`}</dd>
             <dt style={{ color: C.sub }}>所要時間</dt><dd>{duration}分</dd>
             <dt style={{ color: C.sub }}>片付け</dt><dd>{cleanup > 0 ? `${cleanup}分（${jstTime(r.occupied_until)}まで）` : 'なし'}</dd>
-            <dt style={{ color: C.sub }}>金額</dt><dd>{yen(r.total_price)}</dd>
+            <dt style={{ color: C.sub }}>金額</dt><dd>{yen(r.total_price)}{blackMondayAmount(r) > 0 && <span style={{ display: 'block', fontSize: 13, color: C.sub }}>{BLACK_MONDAY_LABEL} −{yen(blackMondayAmount(r))}（お会計で自動で引きます）</span>}</dd>
             <dt style={{ color: C.sub }}>予約経路</dt><dd>{SOURCE_LABEL[r.source]}</dd>
             {r.external_ref && (<><dt style={{ color: C.sub }}>予約番号</dt><dd style={{ fontVariantNumeric: 'tabular-nums' }}>{r.external_ref}</dd></>)}
             {r.note && (<><dt style={{ color: C.sub }}>メモ</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{r.note}</dd></>)}

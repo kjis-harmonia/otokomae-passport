@@ -12,6 +12,7 @@ import { isPermOnlyCoupon } from './welcomeCoupon'
 import { supabase } from '../lib/supabase'
 import { callCustomerRpc, getCustomerSession } from './customerSession'
 import type { GachaHeld } from '../features/gacha/gachaApi'
+import { blackMondayOff, type BlackMondayRule } from './blackMonday'
 
 /** プレミアムクーポンの対象メニュー（アプリのメニューの code） */
 const PREMIUM_BY_MENU: Record<string, CouponDefinition> = {
@@ -32,6 +33,8 @@ const HOLIDAYS = new Set([
 interface PriceRules {
   menus: { code: string; price: number | null; normal_price: number | null; member_label: string | null }[]
   holidays: string[]
+  /** Black Monday（11/17）：開始日・1メニューの額・対象メニュー。サーバーが古い・止めているときは無い */
+  black_monday?: BlackMondayRule | null
 }
 const COUPON_BY_LABEL: Record<string, CouponDefinition> = { [GINJIRO_CLASSICS.title]: GINJIRO_CLASSICS, [SPECIAL_PERM.title]: SPECIAL_PERM, [GINPARA.title]: GINPARA }
 let rules: PriceRules | null = null
@@ -81,6 +84,11 @@ if (typeof window !== 'undefined') void ensurePriceRules()
 
 const jst = (iso: string) => { const d = new Date(Date.parse(iso) + 9 * 3600000); return { date: d.toISOString().slice(0, 10), dow: d.getUTCDay(), min: d.getUTCHours() * 60 + d.getUTCMinutes() } }
 const isWeekendOrHoliday = (iso: string) => { const j = jst(iso); return j.dow === 0 || j.dow === 6 || (rules ? rules.holidays.includes(j.date) : HOLIDAYS.has(j.date)) }
+
+/** Black Monday の見込み（アプリの予約・月曜・対象メニュー。料金表を読めていなければ 0。正は会計のときのサーバー） */
+export function blackMondayFor(menuCode: string, startsAt: string, price?: number | null): number {
+  return blackMondayOff(rules?.black_monday, menuCode, startsAt, price)
+}
 
 export interface PremiumApplied {
   def: CouponDefinition
