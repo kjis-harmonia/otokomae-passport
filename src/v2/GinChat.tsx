@@ -172,7 +172,6 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const [waiting, setWaiting] = useState(false)
   const [text, setText] = useState('')
   const [sheet, setSheet] = useState<Menu[] | null>(null)
-  const [showAll, setShowAll] = useState(false)
   const [finished, setFinished] = useState(false)
   const [bookingComplete, setBookingComplete] = useState(false)
   const nextId = useRef(1)
@@ -1784,15 +1783,15 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         {sheet && (
           <>
             <motion.div key="back" className="gc-sheet-back" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => { setSheet(null); setShowAll(false); sheetRef.current?.(null); sheetRef.current = null }} />
+              onClick={() => { setSheet(null); sheetRef.current?.(null); sheetRef.current = null }} />
             <motion.div key="sheet" className="gc-sheet" role="dialog" aria-label="メニューを選ぶ"
               initial={reduce ? false : { y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: reduce ? 0 : 40, opacity: 0 }} transition={{ duration: reduce ? 0 : 0.26, ease: [0.22, 1, 0.36, 1] }}>
               <div className="gc-grab" />
               <GinNavigationMark step="menu-list" />
               {/* いつもの・検索・種類のタブ・所要時間・Black Monday（11/17 慶一郎さん「親切設計で」） */}
               <MenuPickerSheet menus={sheet} usualCode={getUsualMenu()?.code ?? null} bm={blackMondayMenus()}
-                onPick={m => { setSheet(null); setShowAll(false); sheetRef.current?.(m as Menu); sheetRef.current = null }}
-                onClose={() => { setSheet(null); setShowAll(false); sheetRef.current?.(null); sheetRef.current = null }} />
+                onPick={m => { setSheet(null); sheetRef.current?.(m as Menu); sheetRef.current = null }}
+                onClose={() => { setSheet(null); sheetRef.current?.(null); sheetRef.current = null }} />
               <a className="gc-quiet gc-sheet-link" href={HOTPEPPER_MENU_URL} target="_blank" rel="noopener noreferrer">HOT PEPPER Beauty で写真を見る</a>
             </motion.div>
           </>

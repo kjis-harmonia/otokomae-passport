@@ -18,7 +18,7 @@ const TABS = [
 type Tab = typeof TABS[number]['id']
 
 /** メニューの記号の頭で分ける（cut-・maintenance・store-＝カット、perm-、set-、color-、shave-） */
-export function menuTab(code: string): Exclude<Tab, 'all'> | 'other' {
+function menuTab(code: string): Exclude<Tab, 'all'> | 'other' {
   if (/^(cut|maintenance|store)(-|$)/.test(code)) return 'cut'
   if (code.startsWith('perm-')) return 'perm'
   if (code.startsWith('set-')) return 'set'
