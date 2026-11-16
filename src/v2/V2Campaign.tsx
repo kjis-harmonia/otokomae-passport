@@ -91,9 +91,12 @@ function BlackMondayPoster() {
     <div className="v2-bm">
       <p className="v2-bm-eyebrow">毎週月曜日だけの特別なご案内</p>
       <h2 className="v2-bm-title">Black Monday</h2>
-      <span className="v2-bm-rule" aria-hidden="true" />
+      {/* 曜日の列で「月」だけが光る（開くと順に灯って月で止まる・11/17 慶一郎さん「曜日の列は好き」） */}
+      <ol className="v2-bm-week" aria-label="毎週月曜日">
+        {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => <li key={w} className={i === 1 ? 'is-mon' : undefined} style={{ animationDelay: `${i * 60}ms` }} aria-hidden="true">{w}</li>)}
+      </ol>
       <p className="v2-bm-price" aria-label="パーマ 2,000円オフ"><b>¥2,000</b><span>OFF</span></p>
-      <p className="v2-bm-only">パーマ・アプリからのご予約限定</p>
+      <p className="v2-bm-only">パーマ・アプリ予約限定</p>
       <hr className="v2-bm-hr" />
       {soon && <p className="v2-bm-start">{Number(BLACK_MONDAY_STARTS.slice(5, 7))}月{Number(BLACK_MONDAY_STARTS.slice(8, 10))}日（月・祝）より開始</p>}
       <button type="button" className="v2-bm-more" aria-expanded={more} onClick={() => setMore(v => !v)}>
