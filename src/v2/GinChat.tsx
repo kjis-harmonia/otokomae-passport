@@ -1406,7 +1406,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       // ボタンは「どなた」を大きく、日時・メニューは下の小さい字に（11/10 夜の点検：番号つきの長い1行が折り返して読みにくかった）
       const choices = list.map(x => ({ label: `${x.companion_name ? honor(x.companion_name) : 'ご本人'}：${slotLabel(x.starts_at)}`, sub: x.items.map(i => i.name).join('・') }))
       for (;;) {
-        const a = await ask('ご予約の変更・キャンセルですね。\nどのご予約にしますか？', choices)
+        const a = await ask('変更・キャンセルするご予約を、お選びください。', choices)
         const index = choices.findIndex(x => x.label === a)
         if (fromChip.current && index >= 0) { r = list[index]; break }
       }
