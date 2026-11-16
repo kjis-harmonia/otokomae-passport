@@ -57,7 +57,7 @@ export function MenuPickerSheet({ menus, usualCode, bm, onPick, onClose }: {
         <span className="mp-name">{m.name}</span>
         <span className="mp-sub">
           {mins(m.duration_min)}
-          {bm.amount > 0 && bm.codes.includes(m.code) && <em className="mp-bm">月曜のご来店で −¥{bm.amount.toLocaleString('ja-JP')}</em>}
+          {bm.amount > 0 && bm.codes.includes(m.code) && <em className="mp-bm">月曜のご来店で −{bm.amount.toLocaleString('ja-JP')}円</em>}
         </span>
       </span>
       <span className="mp-price">{yen(m.price)}</span>

@@ -28,3 +28,7 @@ test('時刻と金額は途中で割らない（11/18 iPhone の「10:／00」�
   assert.ok(phrasesOf('Black Monday割引（−2,000円）を適用します。').some(p => p.includes('2,000円')))
   assert.equal(phrasesOf(t).join(''), t)
 })
+
+test('「−2,000円」はマイナスと数を離さない（11/18 iPhone の「（−／2,000円）」）', () => {
+  assert.ok(phrasesOf('Black Monday割引（−2,000円）を適用します。').some(p => p.includes('−2,000円')), JSON.stringify(phrasesOf('Black Monday割引（−2,000円）を適用します。')))
+})
