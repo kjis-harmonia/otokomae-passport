@@ -622,7 +622,10 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-bm-detail-h { margin: 16px 0 6px; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: #fff }
 .v2-bm-detail-h:first-child { margin-top: 0; }
 .v2-bm-menus { margin: 0; font-size: 14px; font-weight: 400; line-height: 1.8; color: rgba(255,255,255,.78) }
-.v2-bm-rules { margin: 0; padding-left: 1.1em; font-size: 13px; font-weight: 400; line-height: 1.75; color: rgba(255,255,255,.78) }
+.v2-bm-rules { margin: 0; padding: 0; list-style: none; font-size: 13px; font-weight: 400; line-height: 1.75; color: rgba(255,255,255,.78) }
+.v2-bm-rules li { position: relative; padding-left: 1.1em; }
+.v2-bm-rules li + li { margin-top: 4px; }
+.v2-bm-rules li::before { content: "・"; position: absolute; left: 0; color: rgba(255,255,255,.55); }
 /* 言葉の途中で改行しない */
 .v2-bm-menus span { display: inline-block; white-space: nowrap; }
 @keyframes bm-day { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

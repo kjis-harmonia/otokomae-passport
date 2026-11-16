@@ -100,7 +100,7 @@ function BlackMondayPoster() {
       <hr className="v2-bm-hr" />
       {soon && <p className="v2-bm-start">{Number(BLACK_MONDAY_STARTS.slice(5, 7))}月{Number(BLACK_MONDAY_STARTS.slice(8, 10))}日（月・祝）より開始</p>}
       <button type="button" className="v2-bm-more" aria-expanded={more} onClick={() => setMore(v => !v)}>
-        {more ? '閉じる' : '対象メニュー・利用条件'}<span aria-hidden="true">{more ? '−' : '›'}</span>
+        対象メニュー・利用条件<span aria-hidden="true">{more ? '−' : '›'}</span>
       </button>
       {more && (
         <div className="v2-bm-detail">
