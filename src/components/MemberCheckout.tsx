@@ -45,8 +45,9 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   const [api] = useState(() => createStaffCheckoutApi(readActor))
   const [customers] = useState(() => createStaffCustomerApi(readActor))
 
-  /** again：同じお客様の2件目（お子様・お連れ様など）。予約は1件目で会計済みなので、予約なしの会計にする */
-  async function open(again = false) {
+  /** again：同じお客様の2件目（お子様・お連れ様など）。予約は1件目で会計済みなので、予約なしの会計にする。
+   *  prefer：この予約の会計を開く（受付したばかりのお連れ様など。受付済み・未会計のときだけ） */
+  async function open(again = false, prefer: string | null = null) {
     if (opening.current) return
     if (!staffName.trim()) { setError('上の「担当者」を選んでからお会計に進んでください。'); return }
     opening.current = true
@@ -66,8 +67,19 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
       setPartyError(!fresh)
       if (!fresh && again && !party.length) { setError('今日のご予約を確かめられませんでした。通信を確かめて、もう一度押してください。'); return }
       const today = fresh ?? party
+      // 2名様以上・お連れ様の予約がある日は、まだ受付していない予約（confirmed）の会計を開かない。
+      //   お連れ様だけ受付したのに、ご本人の予約・メニュー・金額の会計が開いていた（11/18 Codex 監査 SR-01）
+      const multi = today.length >= 2 || today.some(p => !p.is_owner)
+      if (reservationId && multi && today.find(p => p.id === reservationId)?.status === 'confirmed') reservationId = null
       const waiting = today.filter(p => UNPAID.includes(p.status)).sort((a, b) => Number(b.is_owner) - Number(a.is_owner) || a.starts_at.localeCompare(b.starts_at))
+      if (prefer && waiting.some(p => p.id === prefer)) reservationId = prefer
       if (!reservationId) reservationId = waiting[0]?.id ?? null
+      // 受付した方がまだいない：ご本人の予約や予約のない会計に進まず、受付をしてもらう
+      if (!reservationId && !again && multi && today.some(p => p.status === 'confirmed')) {
+        setParty(today); setTarget(null)
+        setError('来られた方の受付がまだです。下から来られた方を選んでください。')
+        return
+      }
       setParty(today)
       setTarget({ reservationId, clientId: r.client_id, who: today.find(p => p.id === reservationId) ?? null, walkIn: again && !reservationId })
     } catch (err) {
@@ -92,7 +104,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
     } catch (err) { setError(rpcErrorMessage(err)); setLoading(false); return }
     setLoading(false)
     setPaid(null); setPickedMenu(null); setPaidWho(null); setPaidWalkIn(false)
-    void open(true)
+    void open(true, p.id)
   }
 
   if (paid) {
@@ -181,6 +193,13 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
         </span>
       </button>
       {error && <p role="alert" style={{ marginTop: 8, fontSize: 13, color: '#b23a3a', textAlign: 'left' }}>{error}</p>}
+      {/* 受付がまだの方（2名様以上・お連れ様の予約）：来られた方を受付して、その方の会計へ（11/18 SR-01） */}
+      {party.some(p => UNPAID.includes(p.status)) ? null : party.filter(p => p.status === 'confirmed').map(p => (
+        <button key={p.id} type="button" disabled={loading} onClick={() => void checkInAndPay(p)}
+          style={{ width: '100%', marginTop: 10, minHeight: 50, borderRadius: 12, background: '#ffffff', border: '1px solid #D9D9D4', color: '#1B1B1A', fontFamily: UI, fontSize: 16, fontWeight: 600, cursor: 'pointer' }}>
+          {p.name}様{p.is_owner ? '' : '（お連れ様）'}を受付して会計{p.menu ? `（${p.menu}）` : ''}
+        </button>
+      ))}
     </>
   )
 }

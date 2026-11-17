@@ -299,6 +299,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [checkInStatus, setCheckInStatus] = useState<'idle' | 'loading' | 'done'>('idle')
   // 今日のご予約が2名以上・お連れ様のご予約があるとき：来た方だけ受付（11/8）
   const [partyAsk, setPartyAsk] = useState<{ userId: string; party: PartyEntry[] } | null>(null)
+  /** 来られた方を受付したら、お会計を開き直す（受付した予約の会計にする・11/18 SR-01） */
+  const [partyRound, setPartyRound] = useState(0)
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
   const [, setVisitInfo]         = useState<VisitInfo | null>(null)
 
@@ -983,7 +985,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
               {checkInStatus === 'done' && checkInDate ? (
                 /* メニューはお会計の中で選ぶ。券は会計確定と同時に使用済みにする */
                 <MemberCheckout
-                  key={scannedData.userId}
+                  key={`${scannedData.userId}:${partyRound}`}
                   userId={scannedData.userId}
                   staffName={staffId}
                   ticketIds={selectedTicketIds}
@@ -1842,7 +1844,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
       {/* ── Confirmation modal ── */}
       {partyAsk && (
-        <PartyCheckIn userId={partyAsk.userId} party={partyAsk.party} staffName={staffId} onDone={() => setPartyAsk(null)} />
+        <PartyCheckIn userId={partyAsk.userId} party={partyAsk.party} staffName={staffId} onDone={p => { setPartyAsk(null); if (p) setPartyRound(n => n + 1) }} />
       )}
 
       {showConfirm && scannedData && (
