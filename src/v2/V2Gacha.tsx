@@ -113,6 +113,8 @@ const GACHA_OPENS = '2026-11-11'
 // 11/11：新しい銀二郎と同時に 12:00（launched＝サーバー時刻）で解禁。Staging も同じ（?launch=分 で確かめる）
 // Staging はいつでも回せる（試すため）。本番は 12:00（launched）まで閉じたまま（11/11 慶一郎さん）
 const gachaOpen = () => isStaging() || (launched() && new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) >= GACHA_OPENS)
+/** 日本時間の今日（サーバー時刻で）。ガチャの「本日」はこの日付で決まる */
+const gachaDay = () => new Date(serverNow() + 9 * 3600e3).toISOString().slice(0, 10)
 const sameDay = () => new Date(launchAt() + 9 * 3600e3).toISOString().slice(0, 10) === new Date(serverNow() + 9 * 3600e3).toISOString().slice(0, 10)
 
 // 今月のラインナップも解禁日まで見せない（11/6 慶一郎さん「今月のラインナップも見れないようにして」）
@@ -195,6 +197,8 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   const [keeping, setKeeping] = useState(false)
   const [operationPending, setOperationPending] = useState(false)
   const stateSession = useRef<string | null>(null)
+  /** 今の「本日の状態」を読んだ日（日本時間）。日付が変わったら取り直す（SR-04） */
+  const stateDay = useRef<string | null>(null)
   const [resultNotice, setResultNotice] = useState<string | null>(null)
   const [lineup, setLineup] = useState(false) // 今月のラインナップ（3D ショーケース）
 
@@ -223,6 +227,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
         const state = await (gachaRecoveries.has(session) ? peekGacha() : loadGacha())
         if (!current()) return
         setGacha(state)
+        stateDay.current = gachaDay()
         setStateFailed(needsRecovery(session, state))
       } catch {
         if (current()) {
@@ -246,6 +251,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
   }
 
   const showResult = (state: GachaKeepResult) => {
+    stateDay.current = gachaDay()
     setGacha({
       today: state.current_today === undefined ? state.today : state.current_today,
       held: state.held,
@@ -261,6 +267,7 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
       const state = await peekGacha()
       if (getCustomerSession() !== session) return null
       const unresolved = needsRecovery(session, state)
+      stateDay.current = gachaDay()
       setGacha(state)
       setDrawn(!unresolved && state.today ? state : 'error')
       setStateFailed(unresolved)
@@ -374,6 +381,31 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     }
   }, [close])
 
+  // 画面に戻った時・開いたまま日付をまたいだ時は、今日の状態を取り直す（SR-04）
+  useEffect(() => {
+    const check = () => {
+      if (document.hidden || phaseRef.current !== 'idle') return
+      if (!stateDay.current || stateDay.current === gachaDay()) return
+      const session = getCustomerSession()
+      if (session && gachaOperations.has(session)) return
+      stateDay.current = null
+      stateSession.current = null
+      setStateReady(!session)
+      setStateFailed(false)
+      setStateTry(n => n + 1)
+    }
+    const timer = window.setInterval(check, 60_000)
+    document.addEventListener('visibilitychange', check)
+    window.addEventListener('focus', check)
+    window.addEventListener('pageshow', check)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', check)
+      window.removeEventListener('focus', check)
+      window.removeEventListener('pageshow', check)
+    }
+  }, [])
+
   // 選ばずに閉じた当選（日付が変わっても残る・11/3）：演出はもう見せず、最後の場面（券を差し出す銀ちゃん）から選ぶ画面を開き直す（11/3）
   const pending = gacha?.today?.choice === null
   const resume = () => {
@@ -397,6 +429,10 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     }
     const session = actionSession()
     if (phaseRef.current !== 'idle' || !session || !cache || !stateReady || stateFailed) return
+    // 開いたまま日付をまたいだら、前の日の「もう一度見る」で新しい抽選をしない。まず今日の状態を読み直す（SR-04）
+    if (stateDay.current !== gachaDay()) { retryState(); return }
+    // 今日はもう回した（1日1回）：結果を読み直して見せるだけ。抽選の RPC は呼ばない（SR-04）
+    const replay = gacha?.today?.choice != null && !gacha.repeat ? gacha.today.id : null
     const i = intro.current
     const w = wait.current
     const b = burst.current
@@ -432,10 +468,25 @@ function GachaScreen({ chosen, onChoose }: { chosen: Theme["id"] | null; onChoos
     runOperation(session, async () => {
       try {
         if (getCustomerSession() !== session) return
+        if (replay) {
+          const state = await peekGacha()
+          if (getCustomerSession() !== session) return
+          if (state.today?.id !== replay) {
+            // 見ている間にサーバーの「本日」が変わった：演出を止めて、今の状態から選び直してもらう
+            close()
+            setGacha(state)
+            setDrawn(null)
+            stateDay.current = gachaDay()
+            return
+          }
+          showResult(state)
+          return
+        }
         const state = await drawGacha()
         if (!state.today) throw new Error('gacha_draw_unconfirmed')
         if (getCustomerSession() === session) showResult(state)
       } catch (error) {
+        if (replay) { await recheckResult(session); return }
         if (!(error instanceof RpcBusinessError)) {
           gachaRecoveries.set(session, { kind: 'draw', previousId: gacha?.today?.id, repeat: gacha?.repeat === true })
         }

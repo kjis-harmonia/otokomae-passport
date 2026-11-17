@@ -17,6 +17,8 @@ const token = 'synthetic-gacha-session-for-local-regression'
 const drawId = '00000000-0000-4000-8000-000000000004'
 const nextDrawId = '00000000-0000-4000-8000-000000000005'
 const fixedTime = new Date('2026-11-12T03:00:00Z')
+// 試験用サーバーの時計（Date ヘッダー）。日付をまたぐ試験では端末と一緒に進める
+let serverTime = fixedTime
 const prize = (amount, title = `試験${amount}円引き`) => ({
   code: `qa-${amount}`, title, amount, free_menu: null, weekday_only: false, rank: 'normal',
 })
@@ -40,6 +42,7 @@ const shellReplies = {
 function makeRpcFixture(scenario) {
   const calls = []
   const counts = { state: 0, draw: 0, keep: 0 }
+  const flags = { nextDay: false }
   const respond = (name, args) => {
     calls.push({ name, args })
     if (name === 'customer_gacha_state' || name === 'customer_gacha_peek') {
@@ -50,6 +53,8 @@ function makeRpcFixture(scenario) {
       if (scenario === 'keep503' || scenario === 'keepOldReplay') return ok(pending)
       if (scenario === 'malformed' && counts.state === 1) return ok({ today: { ...pending.today, prize: {} }, held: [] })
       if (scenario === 'drawUnconfirmed' && counts.draw) return outage
+      // SR-04：今日はもう回して券を受け取った状態。翌日になったら「まだ回していない」に変わる
+      if (scenario.startsWith('replay')) return ok(flags.nextDay ? (counts.draw ? won : empty) : received)
       return ok(counts.draw ? won : empty)
     }
     if (name === 'customer_gacha_draw') {
@@ -66,7 +71,7 @@ function makeRpcFixture(scenario) {
     if (name === 'customer_gacha_keep') throw new Error('Client called the old decision RPC')
     return ok(shellReplies[name] ?? null)
   }
-  return { calls, counts, respond }
+  return { calls, counts, flags, respond }
 }
 
 const stage = '.v2-gacha-stage'
@@ -156,6 +161,41 @@ async function checkScenario(scenario, fixture) {
   const result = page.locator('.v2-gacha-result')
   const resultButton = name => result.getByRole('button', { name, exact: typeof name === 'string' })
   const issued = () => result.getByText(/ガチャ券をお渡ししました/).waitFor()
+
+  // SR-04：「本日の結果をもう一度見る」は抽選しない。開いたまま日付をまたいだら、今日の状態を読み直す
+  if (scenario.startsWith('replay')) {
+    const again = button('本日の結果をもう一度見る')
+    await again.waitFor()
+    if (scenario === 'replaySameDay') {
+      const peeks = fixture.calls.filter(call => call.name === 'customer_gacha_peek').length
+      await again.click()
+      await finishClip(page, intro, 0.4)
+      await page.locator('.v2-gacha-tap').waitFor({ timeout: 12_000 })
+      await page.locator(stage).click({ position: { x: 140, y: 285 } })
+      await finishClip(page, openVideo, 0.5)
+      await result.waitFor({ timeout: 12_000 })
+      assert(fixture.calls.filter(call => call.name === 'customer_gacha_peek').length > peeks)
+      assert.equal(counts.draw, 0)
+      return
+    }
+    // 日本時間 11/13 0:30（翌日）。サーバーの「本日」も変わっている
+    fixture.flags.nextDay = true
+    serverTime = new Date('2026-11-12T15:30:00Z')
+    await page.clock.setFixedTime(serverTime)
+    if (scenario === 'replayNextDayReturn') {
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+    } else {
+      // 復帰の合図が来ないまま、残っていた前日の「もう一度見る」を押す
+      await again.click()
+    }
+    await button('本日のガチャを回す').waitFor()
+    assert.equal(await result.count(), 0)
+    assert.equal(counts.draw, 0)
+    await button('本日のガチャを回す').click()
+    for (let i = 0; i < 50 && counts.draw === 0; i++) await page.waitForTimeout(100)
+    assert.equal(counts.draw, 1)
+    return
+  }
 
   if (scenario === 'malformed') {
     await page.getByText(/今日のガチャの状態を確かめられませんでした/).waitFor()
@@ -255,7 +295,7 @@ const server = createServer(async (req, res) => {
     const content = await readFile(file)
     res.setHeader('Content-Type', types[extname(file)] ?? 'application/octet-stream')
     res.setHeader('Content-Length', content.length)
-    res.setHeader('Date', fixedTime.toUTCString())
+    res.setHeader('Date', serverTime.toUTCString())
     res.end(req.method === 'HEAD' ? undefined : content)
   } catch {
     res.writeHead(404).end()
@@ -274,10 +314,12 @@ try {
     })
   browser = await chromium.launch({ headless: true, channel: process.env.GACHA_CHROMIUM_CHANNEL || undefined })
   const scenarios = ['keep503', 'keepLost', 'keepStale', 'keepNoHeld', 'keepOldReplay',
-    'malformed', 'frameAll', 'frameMissing', 'drawLost', 'drawUnconfirmed']
+    'malformed', 'frameAll', 'frameMissing', 'drawLost', 'drawUnconfirmed',
+    'replaySameDay', 'replayNextDayReturn', 'replayNextDayStale']
   let passed = 0
   for (const scenario of scenarios) {
     let fixture
+    serverTime = fixedTime
     try {
       fixture = await prepare(browser, origin, scenario)
       await checkScenario(scenario, fixture)
