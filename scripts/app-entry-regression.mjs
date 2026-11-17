@@ -444,6 +444,37 @@ const cases = {
       await answerOffer(f.page)
     } finally { await f.close() }
   },
+  // SR-06（再検査3）：通信の失敗の案内から【ホームへ】で閉じても預かりは残り、ログインし直したら1回聞く
+  async holdNetworkGoHome(browser, origin) {
+    const f = await prepare(browser, origin, 'holdNetwork', { signedIn: true, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
+    const pending = () => f.page.evaluate(() => JSON.parse(localStorage.getItem('ginjiro_pending_hold') ?? 'null')?.holdId ?? null)
+    try {
+      await chat(f.page).getByText(/通信の具合で確認できませんでした/).waitFor()
+      await f.page.getByRole('button', { name: 'ホームへ', exact: true }).click()
+      await chat(f.page).waitFor({ state: 'detached' })
+      assert.equal(await pending(), holdId)
+      const n = holdCalls(f)
+      await Promise.all([f.page.waitForEvent('load'), passkeyLogin(f.page)])
+      await offeredOnce(f.page)
+      assert.equal(holdCalls(f) - n, 1)
+      await answerOffer(f.page)
+    } finally { await f.close() }
+  },
+  // SR-06（再検査3）：枠をお見せしてから答えずに閉じたら、預かりは消える（次に開いた時にくり返し聞かない）
+  async holdShownThenClosed(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: true, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
+    try {
+      await offeredOnce(f.page)
+      await f.page.locator('.lc-close').click()
+      await chat(f.page).waitFor({ state: 'detached' })
+      assert.equal(await f.page.evaluate(() => localStorage.getItem('ginjiro_pending_hold')), null)
+      const n = holdCalls(f)
+      await f.page.reload()
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.waitForTimeout(800)
+      assert.equal(holdCalls(f), n)
+    } finally { await f.close() }
+  },
   // SR-06：ログイン済みは今までどおり、すぐ枠を聞く（1回）
   async holdSignedIn(browser, origin) {
     const f = await prepare(browser, origin, 'hold', { signedIn: true, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
