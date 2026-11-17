@@ -752,9 +752,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const l = await (st ? api.staffSlots(day, menus[0].code, st) : api.slots(day, menus[0].code))
         return l.some(x => Date.parse(x.starts_at) === t) ? { staff: { [who[0].key]: st }, times: { [who[0].key]: at } } : null
       }
+      let failed = false
       const free = await Promise.all(who.map((_, i) => Promise.all(staffList.map(st => !canDo(st, menus[i].code) ? Promise.resolve(new Set<number>()) : api.staffSlots(day, menus[i].code, st.id)
-        .then(l => new Set(l.map(x => Date.parse(x.starts_at)))).catch(() => new Set<number>())))))
-      return partyAt(t, free)
+        .then(l => new Set(l.map(x => Date.parse(x.starts_at))), () => { failed = true; return new Set<number>() })))))
+      const plan = partyAt(t, free)
+      // 読めなかった担当がいて、そろう形が見つからない：満席ではなく通信の不具合（SR-09）
+      if (!plan && failed) throw new Error('slots_unreachable')
+      return plan
     }
     /** 人ごとの開始時刻（続けての方は前の方のあと）。案内した時間と同じときだけ */
     const startOf = (p: BookPerson) => (d.at && d.times?.at === d.at ? d.times.map[p.key] ?? d.at : d.at!)
@@ -1028,8 +1032,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const { at, note, why } = d.recheck
         d.recheck = null
         setTyping(true)
-        const plan = await planAt(at).catch(() => null)
+        const plan = await planAt(at).catch(() => 'network' as const)
         setTyping(false)
+        // 通信で確かめられなかった：「入れなくなった」とは言わない。時間と新しいメニューのまま、もう一度確かめる（SR-09）
+        if (plan === 'network') {
+          if (await retryAfterNetwork()) { d.recheck = { at, note, why }; continue }
+          break
+        }
         if (plan) {
           const r = await askYN(`${note}${note ? '\n' : ''}${slotLabel(at)}のままでよろしいですか？`, 'そのまま', '時間を変更')
           if (r === 'yes') { takeAt(at, plan); continue }
