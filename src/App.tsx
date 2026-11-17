@@ -39,6 +39,7 @@ import { clearPendingHold, peekPendingHold } from './v2/pendingHold'
 import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 /** ログインのあとに開いたキャンセル待ちの枠（この画面の間に同じ枠を2回開かない・SR-06） */
+/** 銀ちゃんが聞いた枠（ログイン＋枠ごと）。同じログインで同じ枠を2回は開かない。ログインし直したら、まだ答えていない枠をもう一度聞く */
 const offeredHolds = new Set<string>()
 import { refreshPushIfGranted } from './utils/webPush'
 
@@ -378,16 +379,21 @@ function App() {
     const onOffer = (e: Event) => {
       if (!getCustomerSession()) { setActiveTab('mypage'); return }
       const holdId = (e as CustomEvent<{ holdId?: string } | null>).detail?.holdId
-      if (holdId) setGinChat({ kind: 'offer', holdId })
+      if (!holdId) return
+      const tag = `${getCustomerSession()}:${holdId}`
+      offeredHolds.add(tag)
+      setGinChat({ kind: 'offer', holdId, tag })
     }
     // ログインの前に開いたキャンセル待ちのお知らせ：ログインできたら1回だけ枠を聞く（SR-06）
     //   預かりは銀ちゃんが聞き始めた時に消す（Face ID のあとの読み込み直しで失わない）。同じ画面で2回は開かない
     const resumeOffer = () => {
-      if (!getCustomerSession()) return
+      const session = getCustomerSession()
+      if (!session) return
       const holdId = peekPendingHold()
-      if (!holdId || offeredHolds.has(holdId)) return
-      offeredHolds.add(holdId)
-      setGinChat({ kind: 'offer', holdId })
+      const tag = `${session}:${holdId}`
+      if (!holdId || offeredHolds.has(tag)) return
+      offeredHolds.add(tag)
+      setGinChat({ kind: 'offer', holdId, tag })
     }
     resumeOffer()
     window.addEventListener('ginjiro:gin-book', onBook)
@@ -420,7 +426,7 @@ function App() {
     window.addEventListener('ginjiro:gin-change', onChange)
     return () => window.removeEventListener('ginjiro:gin-change', onChange)
   }, [phase])
-  const closeGinChat = () => { if (ginChat?.kind === 'offer') clearPendingHold(ginChat.holdId); try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
+  const closeGinChat = () => { if (ginChat?.kind === 'offer' && getCustomerSession()) clearPendingHold(ginChat.holdId); try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
 
   return (
     <>
@@ -446,7 +452,7 @@ function App() {
           <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
 
           {firstGuide && firstGuideOpen && !welcomeCouponDialog && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
-          {ginChat && !firstGuideOpen && !welcomeCouponDialog && <GinChat key={ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
+          {ginChat && !firstGuideOpen && !welcomeCouponDialog && <GinChat key={ginChat.kind === 'offer' ? `offer:${ginChat.tag ?? ginChat.holdId}` : ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
 
           {/* 使い方ガイド：最初の案内・Welcome クーポン・Face ID の案内が出ている間は出さない */}
           {/* 新しい銀二郎の公開（11/11 12:00）：60秒前からの全画面の時計・00:00 の切り替え */}

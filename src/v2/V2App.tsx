@@ -81,10 +81,12 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
     // 起動直後は App の受け口（親の effect）がまだ無いので、1拍おいて送る（タブも同じときに戻す）
     const t = setTimeout(() => {
       const holdId = takeHoldParam()
-      // ログインがまだなら、ログインの画面へ。お知らせの枠は預かって、ログインできたら銀ちゃんが聞く（SR-06）
+      // お知らせの枠は、ログインの有無にかかわらず先に預かる（SR-06）。
+      //   端末に残ったログインが期限切れだと、銀ちゃんを開いた所でログインが外れる。預かっておけば、ログインし直したあとに聞ける（再検査）
+      if (holdId) savePendingHold(holdId)
+      // ログインがまだなら、ログインの画面へ。ログインできたら銀ちゃんが聞く
       //   （前は App がログインへ送った直後に、ここでホームへ戻して行き先が消えていた）
       if (!getCustomerSession()) {
-        if (holdId) savePendingHold(holdId)
         setActiveTab('mypage')
         return
       }

@@ -49,7 +49,7 @@ type Who = { kind: 'me' } | { kind: 'mate'; id: string | null; name: string }
 type Chip = { label: string; sub?: string; strong?: boolean }
 type Msg = { id: number; from: 'gin' | 'you'; text: string } | { id: number; from: 'cal'; open: string[]; first: string; last: string }
 /** book.menuCode：ホームの髪型の写真から来たときのメニュー（label は髪型の名前） */
-export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string; group?: boolean } | { kind: 'change'; reservationId?: string } | { kind: 'offer'; holdId: string }
+export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string; group?: boolean } | { kind: 'change'; reservationId?: string } | { kind: 'offer'; holdId: string; /** ログイン＋枠。ログインし直して聞き直す時は、銀ちゃんを開き直す */ tag?: string }
 
 const HOTPEPPER_MENU_URL = 'https://beauty.hotpepper.jp/slnH000583749/coupon/'
 // お客様向けの言葉（システムの言葉を出さない・11/9 点検）
@@ -1307,7 +1307,14 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const hold = await api.getHold(holdId).catch((e: unknown) => (e instanceof RpcBusinessError ? e.code : 'network'))
     setTyping(false)
     if (typeof hold === 'string') {
-      clearPendingHold(holdId) // 枠が無い・期限切れ：預かりも消す（SR-06）
+      // ログインが外れた（期限切れ）：預かりは残し、ログインし直したら聞く（SR-06 再検査）
+      if (getCustomerSession() !== session) {
+        await say('ログインの期限が切れていました。ログインし直していただくと、お取りしている枠をもう一度ご案内しますね。')
+        return endChange()
+      }
+      // 枠が無い・期限切れ・予約済み：預かりも消す（SR-06）。通信の失敗では消さない
+      //   （Face ID のあとの読み込み直しで、途中の照会が切れて「通信の失敗」になり、預かりを消していた・再検査2）
+      if (hold !== 'network') clearPendingHold(holdId)
       await say(hold === 'already_booked' ? 'このお時間は、もうご予約済みです。「次回予約」でご確認ください。'
         : hold === 'hold_expired' || hold === 'hold_not_found' ? 'すみません、お取りしていたお時間が過ぎてしまいました。またキャンセルが出たら、お知らせしますね。'
         : 'お取りしている枠を、通信の具合で確認できませんでした。電波の良い所で、お知らせからもう一度開いてくださいね。')
