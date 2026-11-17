@@ -83,15 +83,18 @@ export type VisitStatus = 'loading' | 'ok' | 'failed'
 /** later：別の日のこれからのご予約（お連れ様だけ別の日に取った など・11/11 点検：次回予約に出ていなかった） */
 type Visit = { next: CustomerReservation | null; companions: CustomerReservation[]; later: CustomerReservation[]; status: VisitStatus; reload: () => void }
 
-/** 画面に戻った時の読み直し：同じ会員の読み込みが途中なら、それを待つ（復帰の合図が重なっても照会は1回・SR-10） */
-let resumeFetch: { owner: string | null; list: Promise<CustomerReservation[]> } | null = null
+/** 画面に戻った時の読み直し（SR-10）：1回の復帰で visibilitychange・pageshow が続けて来ても照会は1回。
+ *  同じ会員の照会が途中か、終わって RESUME_SHARE_MS 以内なら、その結果を使う */
+const RESUME_SHARE_MS = 3000
+let resumeFetch: { owner: string | null; list: Promise<CustomerReservation[]>; at: number } | null = null
 function reservationsOnResume(owner: string | null): Promise<CustomerReservation[]> {
-  if (resumeFetch && resumeFetch.owner === owner) return resumeFetch.list
+  if (resumeFetch && resumeFetch.owner === owner && !(Date.now() - resumeFetch.at >= RESUME_SHARE_MS)) return resumeFetch.list
   const list = bookingAssistantApi().reservations()
-  const mine = { owner, list }
+  // 途中は必ず共有。終わってから RESUME_SHARE_MS 数える（応答の遅い時に、続いて来た合図で2回目を出さない）
+  const mine = { owner, list, at: Infinity }
   resumeFetch = mine
-  const clear = () => { if (resumeFetch === mine) resumeFetch = null }
-  list.then(clear, clear)
+  const done = () => { mine.at = Date.now() }
+  list.then(done, done)
   return list
 }
 
