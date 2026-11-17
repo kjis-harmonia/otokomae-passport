@@ -162,7 +162,7 @@ drop trigger if exists black_monday_resync on app_private.black_monday_settings;
 create trigger black_monday_resync after update on app_private.black_monday_settings
   for each statement execute function app_private.black_monday_on_settings();
 
--- お客様・SB・店舗端末に出す Black Monday（予約ごと）。印が無い・取消/無断キャンセルなら null。
+-- お客様・SB・店舗端末に出す Black Monday（予約ごと）。印が無い・取消/無断キャンセル・会計済みなら null（会計済みは会計の記録が正。点検 11/18）。
 --   予約に Welcome・再来店パーマクーポンを付けていれば amount は 0（券を優先。会計でも引かない）
 create or replace function app_private.black_monday_json(p_id uuid)
  returns jsonb
@@ -176,10 +176,11 @@ as $function$
   left join app_private.black_monday_marks k on k.reservation_id = r.id
   cross join lateral (select exists (select 1 from app_private.reservation_ticket_plans tp join public.tickets t on t.id = any(tp.ticket_ids)
                                      where tp.reservation_id = r.id and not t.used and app_private.is_perm_coupon(t)) as perm) p
-  where r.id = p_id and r.status not in ('cancelled', 'no_show')
+  where r.id = p_id and r.status not in ('cancelled', 'no_show', 'completed')
 $function$;
 
--- 店舗端末の会計用：この予約が対象か・1メニューの額・対象メニュー（会計の明細のどれが対象かを端末が出すため）。引く額は finalize_sale が決める
+-- 店舗端末の会計用：この予約が対象か・1メニューの額・対象メニュー（会計の明細のどれが対象かを端末が出すため）。引く額は finalize_sale が決める。
+--   perm_coupon_ids：お客様の券のうち DB が Welcome・再来店パーマクーポンと見なすもの（端末が名前で決めると finalize_sale とずれて会計できない・点検 11/18）
 create or replace function app_private.black_monday_checkout_json(p_id uuid)
  returns jsonb
  language sql
@@ -188,7 +189,10 @@ create or replace function app_private.black_monday_checkout_json(p_id uuid)
 as $function$
   select case when p_id is null then null else jsonb_build_object('label', 'Black Monday',
            'eligible', k.reservation_id is not null and r.status not in ('cancelled', 'no_show'),
-           'unit', coalesce(k.unit_amount, s.amount), 'amount', coalesce(k.amount, 0), 'menu_codes', to_jsonb(s.menu_codes)) end
+           'unit', coalesce(k.unit_amount, s.amount), 'amount', coalesce(k.amount, 0), 'menu_codes', to_jsonb(s.menu_codes),
+           'perm_coupon_ids', coalesce((select jsonb_agg(t.id order by t.id) from public.tickets t
+             where r.client_id is not null and not t.used and app_private.is_perm_coupon(t)
+               and t.user_id = any(app_private.member_user_ids(app_private.client_members(app_private.client_family(app_private.client_root(r.client_id)))))), '[]'::jsonb)) end
   from app_private.black_monday_settings s
   left join public.reservations r on r.id = p_id
   left join app_private.black_monday_marks k on k.reservation_id = r.id

@@ -182,7 +182,9 @@ export function Checkout({ api, customers, reservationId, clientId = null, initi
   const gachaOf = ctx?.reservation ? ctx.gacha ?? null : null
   // Black Monday（11/17）：月曜来店のアプリの予約。対象メニューの明細1つにつき自動で引く（DB と同じ計算。確定のとき DB が決めて照合する）。
   //   Welcome・再来店パーマクーポンを選んだら外す（券を優先）
-  const permPicked = !!clientInfo && (ctx?.tickets ?? []).some(t => ticketIds.includes(t.id) && isPermOnlyCoupon({ title: t.title, amount: t.amount, issued_by: '' }))
+  const permIds = ctx?.reservation ? ctx.black_monday?.perm_coupon_ids : undefined
+  const permPicked = !!clientInfo && (ctx?.tickets ?? []).some(t => ticketIds.includes(t.id)
+    && (permIds ? permIds.includes(t.id) : isPermOnlyCoupon({ title: t.title, amount: t.amount, issued_by: '' })))
   const bmOffs = blackMondayLineOffs(lines, ctx?.reservation ? ctx.black_monday : null, permPicked)
   const bmTotal = bmOffs.reduce((n, v) => n + v, 0)
   // ガチャの無料券は Black Monday のあとの明細の残り

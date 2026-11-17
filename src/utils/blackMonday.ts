@@ -14,7 +14,11 @@ export interface BlackMondayRule { starts_on: string; amount: number; menu_codes
 export interface BlackMondayInfo { label?: string; unit: number; amount: number; menu_codes: string[]; perm_coupon?: boolean }
 
 /** 会計の情報（checkout_context_json）の black_monday：この予約が対象か・1メニューの額・対象メニュー */
-export interface BlackMondayCheckout { eligible: boolean; unit: number; amount: number; menu_codes: string[]; label?: string }
+export interface BlackMondayCheckout {
+  eligible: boolean; unit: number; amount: number; menu_codes: string[]; label?: string
+  /** お客様の券のうち、DB が Welcome・再来店パーマクーポンと見なすもの（is_perm_coupon。名前だけで決めると DB とずれて会計できない） */
+  perm_coupon_ids?: string[]
+}
 
 /** 来店の日時（日本時間）が、開始日以降の月曜か */
 export function isBlackMondayDay(rule: Pick<BlackMondayRule, 'starts_on'>, startsAt: string): boolean {

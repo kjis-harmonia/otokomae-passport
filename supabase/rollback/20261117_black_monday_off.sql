@@ -405,3 +405,7 @@ commit;
 
 -- メニュー名を元に戻す
 update public.service_menus set name = 'ツイスト系' where code = 'perm-twist' and name = 'ツイストパーマ';
+
+-- ピンパーマも予約・料金表に出さない（会計の記録があるので消さずに止める）。migration の記録も消す（点検 11/18）
+update public.service_menus set is_active = false, booking_enabled = false where code = 'perm-pin';
+delete from supabase_migrations.schema_migrations where version = '20261117120000';
