@@ -29,6 +29,7 @@ import { askUsualAi } from '../features/johnny/usualAi'
 import { askAgentVoice, type AgentTurn } from '../features/johnny/agentClient'
 import { useVoice } from '../features/johnny/useVoice'
 import { spreadSlots } from '../features/johnny/dayAdvisor'
+import { changeTimes } from '../features/johnny/spreadSlots'
 import { forgetReservation, isUpcoming, rememberReservation } from '../features/johnny/nextReservation'
 import { callCustomerRpc, getCustomerSession } from '../utils/customerSession'
 import { SHOP_PHONE_TEL } from '../data/wallet'
@@ -1594,7 +1595,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         for (const d of days) {
           const free = await changeSlots(d)
           if (!free) { setTyping(false); return endWithoutAvailability() }
-          times = [...times, ...spreadSlots(free.map(s => ({ starts_at: s })), days.length === 1 ? 6 : 2).map(s => s.starts_at)]
+          // 日時だけの変更は、元の時刻を外してから間引く（SR-08：10:00 が元で 10:20 が空いていても「空きなし」になっていた）
+          times = [...times, ...changeTimes(free, r.starts_at, sameMenus(), days.length === 1 ? 6 : 2)]
           if (times.length >= 4) break
         }
         setTyping(false)
