@@ -35,6 +35,7 @@ import { FirstGuide } from './v2/FirstGuide'
 import { LaunchClock } from './v2/LaunchClock'
 import { GinChat, type GinMode } from './v2/GinChat'
 import { fetchVisitsToConfirm } from './v2/visitConfirm'
+import { takePendingHold } from './v2/pendingHold'
 import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 import { refreshPushIfGranted } from './utils/webPush'
@@ -377,9 +378,21 @@ function App() {
       const holdId = (e as CustomEvent<{ holdId?: string } | null>).detail?.holdId
       if (holdId) setGinChat({ kind: 'offer', holdId })
     }
+    // ログインの前に開いたキャンセル待ちのお知らせ：ログインできたら1回だけ枠を聞く（SR-06）
+    const resumeOffer = () => {
+      if (!getCustomerSession()) return
+      const holdId = takePendingHold()
+      if (holdId) setGinChat({ kind: 'offer', holdId })
+    }
+    resumeOffer()
     window.addEventListener('ginjiro:gin-book', onBook)
     window.addEventListener('ginjiro:gin-offer', onOffer)
-    return () => { window.removeEventListener('ginjiro:gin-book', onBook); window.removeEventListener('ginjiro:gin-offer', onOffer) }
+    window.addEventListener('ginjiro:customer-session-changed', resumeOffer)
+    return () => {
+      window.removeEventListener('ginjiro:gin-book', onBook)
+      window.removeEventListener('ginjiro:gin-offer', onOffer)
+      window.removeEventListener('ginjiro:customer-session-changed', resumeOffer)
+    }
   }, [phase, setActiveTab])
   useEffect(() => {
     if (phase !== 'app' || !customerAccessSession || !ginFlow()) return
