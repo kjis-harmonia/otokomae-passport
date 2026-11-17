@@ -631,3 +631,5 @@
 .sb-text-link { align-self: flex-start; padding: 6px 0; border: 0; background: none; color: var(--sb-muted); font-size: 13px; text-decoration: underline; cursor: pointer; }
 .sb-board-note { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--sb-gold); background: var(--sb-gold-tint); font-size: 14px; line-height: 1.6; }
 .sb-board-tag { flex: none; font-style: normal; font-size: 12px; font-weight: 600; color: var(--sb-gold); white-space: nowrap; }
+/* 会計待ちの予約（11/18 SR-02） */
+.sb-await-note { align-self: center; font-size: 14px; color: #6b6b66; }

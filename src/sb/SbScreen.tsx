@@ -407,7 +407,9 @@ function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onE
     </dl>
     {noShow ? <p className="sb-confirm-note">{personName(r)}様を不来店にします。AI予約の受付にも影響します。</p> : cancel ? <>{boardWarnBefore(r) && <p className="sb-board-note">{r.source === 'hotpepper' ? 'ホットペッパーの予約です。' : 'サロンボードに入れてある予約です。'}キャンセルしたら、サロンボードでもキャンセルしてください。</p>}<label className="sb-field">キャンセル理由（任意）<input value={reason} maxLength={100} disabled={busy} onChange={e => setReason(e.target.value)} /></label></> : <>
       <div className="sb-quick-actions">{r.status === 'confirmed' && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'checked_in' })}>来店済みにする</button>}
-        {['checked_in', 'in_service', 'awaiting_payment'].includes(r.status) && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'completed' })}>施術完了</button>}
+        {['checked_in', 'in_service'].includes(r.status) && <button className="sb-secondary" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'completed' })}>施術完了</button>}
+        {/* 会計待ち（11/18 SR-02）：完了はお会計の確定で。押しても変わらないボタンは出さない */}
+        {r.status === 'awaiting_payment' && <span className="sb-await-note">お会計で完了になります</span>}
         {r.status === 'confirmed' && <span className="sb-quick-danger">{Date.parse(r.starts_at) <= openedAt && <button className="sb-text-danger" disabled={blocked} onClick={() => setNoShow(true)}>不来店</button>}<button className="sb-text-danger" disabled={blocked} onClick={() => setCancel(true)}>予約をキャンセルする</button></span>}</div>
       {/* サロンボードでやること（11/12）：やることを見出しに、押すボタンは1つ。済んだら小さく「済み」だけ */}
       {task ? <section className="sb-transfer sb-board-task"><h3>{BOARD_TASK_TITLE[task]}</h3>

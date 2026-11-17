@@ -9,7 +9,7 @@ const RECEIPTED_ERRORS = new Set([
   'staff_name_required', 'not_found', 'reservation_changed', 'invalid_status', 'invalid_customer_name',
   'invalid_phone', 'invalid_note', 'invalid_source', 'invalid_external_ref', 'client_mismatch', 'invalid_request',
   'invalid_menu', 'invalid_starts_at', 'date_not_open', 'too_late', 'slot_taken', 'preview_changed',
-  'client_not_found', 'duplicate_external_ref', 'not_started',
+  'client_not_found', 'duplicate_external_ref', 'not_started', 'check_in_required', 'checkout_required',
 ])
 export type SbOutcome = { ok: true; reservation: SbReservation } | { ok: false; error: string; terminal: boolean }
 
@@ -76,6 +76,9 @@ export function sbError(err: unknown): string {
     result_unknown: '通信結果を確認できません。同じ内容で結果を確認してください。',
     staff_auth_required: '端末認証の期限が切れました。PINを入力し直してください。',
     staff_locked: 'いまは本部の操作で SB が止まっています。本部に確かめてください。',
+    // 11/18 SR-02：会計の要る予約（銀Pay の押さえ・券・Black Monday）
+    check_in_required: '先に「来店済みにする」で受付してから、施術完了にしてください。',
+    checkout_required: 'この予約はお会計で完了になります。店舗端末でお会計を確定してください。',
   }
   if (messages[code]) return messages[code]
   if (BOOKING_ERROR_MESSAGE[code]) return BOOKING_ERROR_MESSAGE[code]
