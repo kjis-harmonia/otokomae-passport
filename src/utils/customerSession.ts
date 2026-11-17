@@ -42,7 +42,7 @@ export function hasCustomerSession(): boolean {
 export const MEMBER_LOCAL_KEYS = [
   'otokomae_coupons', 'otokomae_gacha_date', 'otokomae_gacha_result', 'ginjiro_active_ticket', 'ginjiro_pending_contact', 'ginjiro_current_reservation',
   'ginjiro_companion_reservations', 'ginjiro_member_issued_at', 'ginjiro_next_reservation', 'ginjiro_companion_names',
-  'ginjiro_usual_menu', 'ginjiro_usual_staff', 'ginjiro_usual_members', 'ginjiro_guide_seen_customer', 'ginjiro_first_guide', 'ginjiro_johnny_ai_count', 'ginjiro_pending_hold',
+  'ginjiro_usual_menu', 'ginjiro_usual_staff', 'ginjiro_usual_members', 'ginjiro_guide_seen_customer', 'ginjiro_first_guide', 'ginjiro_johnny_ai_count',
 ]
 export function clearMemberLocal(): void {
   for (const key of MEMBER_LOCAL_KEYS) { try { localStorage.removeItem(key) } catch { /* 保存できない端末 */ } }

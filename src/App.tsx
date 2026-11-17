@@ -35,9 +35,11 @@ import { FirstGuide } from './v2/FirstGuide'
 import { LaunchClock } from './v2/LaunchClock'
 import { GinChat, type GinMode } from './v2/GinChat'
 import { fetchVisitsToConfirm } from './v2/visitConfirm'
-import { takePendingHold } from './v2/pendingHold'
+import { clearPendingHold, peekPendingHold } from './v2/pendingHold'
 import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
+/** ログインのあとに開いたキャンセル待ちの枠（この画面の間に同じ枠を2回開かない・SR-06） */
+const offeredHolds = new Set<string>()
 import { refreshPushIfGranted } from './utils/webPush'
 
 const SERIF = '"Shippori Mincho","Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif'
@@ -379,10 +381,13 @@ function App() {
       if (holdId) setGinChat({ kind: 'offer', holdId })
     }
     // ログインの前に開いたキャンセル待ちのお知らせ：ログインできたら1回だけ枠を聞く（SR-06）
+    //   預かりは銀ちゃんが聞き始めた時に消す（Face ID のあとの読み込み直しで失わない）。同じ画面で2回は開かない
     const resumeOffer = () => {
       if (!getCustomerSession()) return
-      const holdId = takePendingHold()
-      if (holdId) setGinChat({ kind: 'offer', holdId })
+      const holdId = peekPendingHold()
+      if (!holdId || offeredHolds.has(holdId)) return
+      offeredHolds.add(holdId)
+      setGinChat({ kind: 'offer', holdId })
     }
     resumeOffer()
     window.addEventListener('ginjiro:gin-book', onBook)
@@ -415,7 +420,7 @@ function App() {
     window.addEventListener('ginjiro:gin-change', onChange)
     return () => window.removeEventListener('ginjiro:gin-change', onChange)
   }, [phase])
-  const closeGinChat = () => { try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
+  const closeGinChat = () => { if (ginChat?.kind === 'offer') clearPendingHold(ginChat.holdId); try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
 
   return (
     <>

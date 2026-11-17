@@ -11,6 +11,7 @@ import { once } from 'node:events'
 import { createServer } from 'node:http'
 import { createRequire } from 'node:module'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -76,7 +77,7 @@ function makeRpcFixture(scenario) {
   return { calls, respond }
 }
 
-async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, pendingAt }) {
+async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, pendingAt, noUser = false }) {
   const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' })
   const rpc = makeRpcFixture(scenario)
   try {
@@ -90,11 +91,11 @@ async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, 
       if (request.method() !== 'GET' && request.method() !== 'HEAD') return route.abort()
       return route.continue()
     })
-    await context.addInitScript(({ user, token, signedIn, firstGuide, holdId, pendingAt }) => {
+    await context.addInitScript(({ user, token, signedIn, firstGuide, holdId, pendingAt, noUser }) => {
       if (sessionStorage.getItem('qa_entry_init')) return // 1回目の読み込みだけ整える
       sessionStorage.setItem('qa_entry_init', '1')
       Object.defineProperty(navigator, 'standalone', { configurable: true, value: true })
-      localStorage.setItem('ginjiro_user_id', JSON.stringify(user))
+      if (!noUser) localStorage.setItem('ginjiro_user_id', JSON.stringify(user))
       if (signedIn) localStorage.setItem('ginjiro_customer_session', token)
       localStorage.setItem('ginjiro:onboarding_done', 'true')
       localStorage.setItem('ginjiro_campaign_hidden', JSON.stringify('black-monday-2026'))
@@ -107,7 +108,7 @@ async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, 
       if (firstGuide) localStorage.setItem('ginjiro_first_guide', JSON.stringify({ visited: true }))
       // 前にログイン前で預かったままの枠（SR-06 の古い預かり）
       if (pendingAt) localStorage.setItem('ginjiro_pending_hold', JSON.stringify({ holdId, at: pendingAt }))
-    }, { user, token, signedIn, firstGuide, holdId, pendingAt })
+    }, { user, token, signedIn, firstGuide, holdId, pendingAt, noUser })
     const page = await context.newPage()
     await page.clock.setFixedTime(fixedTime)
     page.setDefaultTimeout(9000)
@@ -122,6 +123,30 @@ async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, 
 
 const chat = page => page.locator('.gc-log')
 const holdCalls = fixture => fixture.calls.filter(name => name === 'customer_get_hold').length
+/** 会員が変わった時に端末から消すもの（customerSession.ts の MEMBER_LOCAL_KEYS をそのまま読む） */
+const memberLocalKeys = [...(/MEMBER_LOCAL_KEYS = \[([\s\S]*?)\]/.exec(fs.readFileSync(new URL('../src/utils/customerSession.ts', import.meta.url), 'utf8'))?.[1] ?? '').matchAll(/'([^']+)'/g)].map(m => m[1])
+if (memberLocalKeys.length < 10) throw new Error('MEMBER_LOCAL_KEYS を読めませんでした')
+/** Face ID のログインと同じ順（adoptMember → saveCustomerSession の合図 → 画面の読み込み直し）。
+ *  newMember：端末に会員情報が無い・別の会員だった時は、会員ごとの保存を消す */
+const passkeyLogin = (page, newMember = false) => page.evaluate(({ token, user, keys, newMember }) => {
+  if (newMember) for (const k of keys) localStorage.removeItem(k)
+  localStorage.setItem('ginjiro_user_id', JSON.stringify(user))
+  localStorage.setItem('ginjiro_customer_session', token)
+  window.dispatchEvent(new Event('ginjiro:customer-session-changed'))
+  window.location.reload()
+}, { token, user, keys: memberLocalKeys, newMember })
+/** 枠の案内がちょうど1つ出ている */
+async function offeredOnce(page) {
+  await chat(page).getByText(/キャンセルが出ました/).waitFor()
+  await page.waitForTimeout(500)
+  assert.equal(await chat(page).getByText(/キャンセルが出ました/).count(), 1)
+}
+/** 【今回は見送る】と答えたら、預かりは消える */
+async function answerOffer(page) {
+  await page.getByRole('button', { name: '今回は見送る', exact: true }).click()
+  await chat(page).getByText(/キャンセル待ちを外しておきました/).waitFor()
+  assert.equal(await page.evaluate(() => localStorage.getItem('ginjiro_pending_hold')), null)
+}
 /** ログインできた時と同じ合図（saveCustomerSession が出すもの） */
 const signIn = page => page.evaluate(token => {
   localStorage.setItem('ginjiro_customer_session', token)
@@ -184,6 +209,32 @@ const cases = {
       assert.equal(await panel.getByText('10:00〜').count(), 0)
       await f.page.waitForTimeout(400)
       assert.equal(lists(f) - before, 1)
+    } finally { await f.close() }
+  },
+  // SR-10（再検査）：1回の復帰で visibilitychange の応答が返ったあとに pageshow が来ても、照会は1回。
+  //   しばらくして本当にもう一度戻ってきた時は、また読み直す
+  async nextResumeSequential(browser, origin) {
+    fixtureState.resv = '10:00'
+    const f = await prepare(browser, origin, 'next', { signedIn: true, path: '/?tab=next' })
+    fixtureState.resv = '10:00'
+    try {
+      const panel = f.page.getByRole('region', { name: '次のご予約' })
+      await panel.getByText('10:00〜').waitFor()
+      await f.page.waitForTimeout(400)
+      const before = lists(f)
+      fixtureState.resv = '11:00'
+      await f.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+      await panel.getByText('11:00〜').waitFor()
+      await f.page.waitForTimeout(300) // 応答が返ったあと
+      await f.page.evaluate(() => { const e = new Event('pageshow'); Object.defineProperty(e, 'persisted', { value: true }); window.dispatchEvent(e) })
+      await f.page.waitForTimeout(500)
+      assert.equal(lists(f) - before, 1)
+      // 1分後にまた戻ってきた（取り消されていた）
+      fixtureState.resv = '12:00'
+      await f.page.clock.setFixedTime(new Date(fixedTime.getTime() + 60_000))
+      await f.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+      await panel.getByText('12:00〜').waitFor()
+      assert.equal(lists(f) - before, 2)
     } finally { await f.close() }
   },
   async nextResumeFailed(browser, origin) {
@@ -258,7 +309,45 @@ const cases = {
       await signIn(f.page)
       await f.page.waitForTimeout(500)
       assert.equal(holdCalls(f), 1)
-      assert.equal(await f.page.evaluate(() => localStorage.getItem('ginjiro_pending_hold')), null)
+      await answerOffer(f.page)
+    } finally { await f.close() }
+  },
+  // SR-06（再検査）：Face ID のログインは成功のあと読み込み直す。同じ会員の端末・会員情報の無い端末の両方で、読み込み直したあとに枠を1回聞く
+  async holdPasskeySameMember(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: false, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
+    try {
+      await f.page.getByRole('heading', { name: 'ログインと引き継ぎ' }).waitFor()
+      await Promise.all([f.page.waitForEvent('load'), passkeyLogin(f.page)])
+      await offeredOnce(f.page)
+      await answerOffer(f.page)
+    } finally { await f.close() }
+  },
+  async holdPasskeyNewMember(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: false, noUser: true, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
+    try {
+      await f.page.getByRole('heading', { name: 'ログインと引き継ぎ' }).waitFor()
+      await Promise.all([f.page.waitForEvent('load'), passkeyLogin(f.page, true)])
+      await offeredOnce(f.page)
+      await answerOffer(f.page)
+      // 答えたあとに読み込み直しても、もう聞かない
+      const n = holdCalls(f)
+      await f.page.reload()
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.waitForTimeout(800)
+      assert.equal(holdCalls(f), n)
+      assert.equal(await chat(f.page).count(), 0)
+    } finally { await f.close() }
+  },
+  // SR-06：通信が速く、読み込み直しの前に枠の答えが届いても、読み込み直したあとにもう一度聞ける
+  async holdAnsweredBeforeReload(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: false, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
+    try {
+      await f.page.getByRole('heading', { name: 'ログインと引き継ぎ' }).waitFor()
+      await signIn(f.page)
+      await chat(f.page).getByText(/キャンセルが出ました/).waitFor()
+      await f.page.reload()
+      await offeredOnce(f.page)
+      await answerOffer(f.page)
     } finally { await f.close() }
   },
   // SR-06：ログイン済みは今までどおり、すぐ枠を聞く（1回）

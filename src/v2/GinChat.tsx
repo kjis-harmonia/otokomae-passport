@@ -22,6 +22,7 @@ import { ReservationMutationClient, reservationMenuCodes, type Confirmation, typ
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
 import { MenuPickerSheet } from './MenuPickerSheet'
+import { clearPendingHold } from './pendingHold'
 import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
 import { loadUsual } from './usualPicks'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
@@ -1306,6 +1307,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const hold = await api.getHold(holdId).catch((e: unknown) => (e instanceof RpcBusinessError ? e.code : 'network'))
     setTyping(false)
     if (typeof hold === 'string') {
+      clearPendingHold(holdId) // 枠が無い・期限切れ：預かりも消す（SR-06）
       await say(hold === 'already_booked' ? 'このお時間は、もうご予約済みです。「次回予約」でご確認ください。'
         : hold === 'hold_expired' || hold === 'hold_not_found' ? 'すみません、お取りしていたお時間が過ぎてしまいました。またキャンセルが出たら、お知らせしますね。'
         : 'お取りしている枠を、通信の具合で確認できませんでした。電波の良い所で、お知らせからもう一度開いてくださいね。')
@@ -1315,6 +1317,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     for (;;) {
       const a = await ask(`キャンセルが出ました！\n${slotLabel(hold.starts_at)} ${hold.menu_names ?? 'ご希望のメニュー'}${hold.total_price != null ? ` ${yen(hold.total_price)}` : ''}\n${hm(hold.expires_at)}までお取りしています。よろしければ、下の【${BOOK}】を押してくださいね。`,
         [{ label: BOOK, strong: true }, { label: '今回は見送る' }])
+      // お客様が答えた：ログイン前に預かった枠なら、ここで預かりを消す。
+      //   （Face ID のあとの読み込み直しで、聞く途中で切れても、読み込み直したあとにもう一度聞ける・SR-06）
+      clearPendingHold(holdId)
       if (!fromChip.current) { await say(`ご予約は【${BOOK}】、見送るときは【今回は見送る】を押してくださいね。`); continue }
       if (a === '今回は見送る') {
         // 外せたか確かめてから言う（503 でも「外しておきますね」と言っていた・11/9 Codex 検査 中）
