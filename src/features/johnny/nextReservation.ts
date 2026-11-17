@@ -83,6 +83,22 @@ export type VisitStatus = 'loading' | 'ok' | 'failed'
 /** later：別の日のこれからのご予約（お連れ様だけ別の日に取った など・11/11 点検：次回予約に出ていなかった） */
 type Visit = { next: CustomerReservation | null; companions: CustomerReservation[]; later: CustomerReservation[]; status: VisitStatus; reload: () => void }
 
+/** 画面に戻った時の読み直し（SR-10）：1回の復帰で visibilitychange・pageshow が続けて来ても照会は1回。
+ *  「1回の復帰」＝画面を離れてから（hidden・pagehide）次に離れるまで。時間では区切らない（3秒以内の別の復帰も読み直す・再検査）
+ *  照会には通し番号を付け、その画面がもっと新しい照会をもう頼んでいたら、古い照会の結果は使わない（取消の反映を古い応答で戻さない・再検査） */
+let fetchSeq = 0
+let awayCount = 0
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') awayCount++ })
+  window.addEventListener('pagehide', () => { awayCount++ })
+}
+let resumeFetch: { owner: string | null; away: number; seq: number; list: Promise<CustomerReservation[]> } | null = null
+function sharedResume(owner: string | null): { seq: number; list: Promise<CustomerReservation[]> } {
+  if (resumeFetch && resumeFetch.owner === owner && resumeFetch.away === awayCount) return resumeFetch
+  resumeFetch = { owner, away: awayCount, seq: ++fetchSeq, list: bookingAssistantApi().reservations() }
+  return resumeFetch
+}
+
 /** 次の来店：自分の予約と、同じ日のお連れ様の予約（10/30 慶一郎さん「お連れ様追加の情報がのってない」）。
  *  予約はおひとり1つまでなので、同じ日のほかの予約はお連れ様の分。自分の分は、お連れ様として覚えた予約を除いたいちばん早いもの */
 export function useNextVisit(): Visit {
@@ -91,14 +107,20 @@ export function useNextVisit(): Visit {
   useEffect(() => {
     let alive = true
     let gen = 0
-    const load = () => {
+    let lastSeq = 0 // この画面がいちばん新しく頼んだ照会の通し番号
+    const load = (resume = false) => {
+      // 同じ復帰の2つ目の合図：この画面がその照会か、もっと新しい照会をもう頼んでいたら何もしない
+      const shared = resume && hasCustomerSession() ? sharedResume(currentOwner()) : null
+      if (shared && shared.seq <= lastSeq) return
+      const seq = shared ? shared.seq : ++fetchSeq
+      lastSeq = seq
       // 会員の切替・遅い応答：頼んだときの会員と、いちばん新しい頼みの応答だけ使う（10/30 監査 R1）
       const my = ++gen
       const owner = currentOwner()
       const cached = readCached()
       if (!hasCustomerSession()) { setVisit({ next: cached, companions: [], later: [], status: 'ok' }); return }
       setVisit(v => ({ next: cached, companions: cached && v.next?.id === cached.id ? v.companions : [], later: cached && v.next?.id === cached.id ? v.later : [], status: v.status === 'ok' && v.next?.id === cached?.id ? 'ok' : 'loading' }))
-      bookingAssistantApi().reservations()
+      ;(shared ? shared.list : bookingAssistantApi().reservations())
         .then(list => {
           if (!alive || my !== gen || owner !== currentOwner()) return
           const n = pickNext(list.filter(r => !isCompanion(r))) ?? pickNext(list)
@@ -109,12 +131,25 @@ export function useNextVisit(): Visit {
         })
         .catch(() => { if (alive && my === gen) setVisit(v => ({ ...v, status: 'failed' })) }) // 覚えている予約はそのまま見せる
     }
-    load()
+    const fresh = () => load()
+    fresh()
     const onStorage = (e: StorageEvent) => { if (e.key === null || e.key === 'ginjiro_customer_session' || e.key === USER_ID_KEY) load() }
-    window.addEventListener(EVENT, load)
-    window.addEventListener('ginjiro:customer-session-changed', load)
+    // 画面に戻った時（ほかの端末で変更・取消されたかもしれない）は読み直す。失敗したら「前に確認した内容」の表示になる（SR-10）
+    const onResume = () => { if (document.visibilityState === 'visible') load(true) }
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) load(true) }
+    window.addEventListener(EVENT, fresh)
+    window.addEventListener('ginjiro:customer-session-changed', fresh)
     window.addEventListener('storage', onStorage)
-    return () => { alive = false; window.removeEventListener(EVENT, load); window.removeEventListener('ginjiro:customer-session-changed', load); window.removeEventListener('storage', onStorage) }
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('pageshow', onPageShow)
+    return () => {
+      alive = false
+      window.removeEventListener(EVENT, fresh)
+      window.removeEventListener('ginjiro:customer-session-changed', fresh)
+      window.removeEventListener('storage', onStorage)
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('pageshow', onPageShow)
+    }
   }, [reloadKey])
   return { ...visit, reload: () => setReloadKey(k => k + 1) }
 }

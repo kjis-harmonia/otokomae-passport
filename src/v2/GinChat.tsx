@@ -22,6 +22,7 @@ import { ReservationMutationClient, reservationMenuCodes, type Confirmation, typ
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
 import { MenuPickerSheet } from './MenuPickerSheet'
+import { clearPendingHold } from './pendingHold'
 import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
 import { loadUsual } from './usualPicks'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
@@ -29,6 +30,7 @@ import { askUsualAi } from '../features/johnny/usualAi'
 import { askAgentVoice, type AgentTurn } from '../features/johnny/agentClient'
 import { useVoice } from '../features/johnny/useVoice'
 import { spreadSlots } from '../features/johnny/dayAdvisor'
+import { changeTimes } from '../features/johnny/spreadSlots'
 import { forgetReservation, isUpcoming, rememberReservation } from '../features/johnny/nextReservation'
 import { callCustomerRpc, getCustomerSession } from '../utils/customerSession'
 import { SHOP_PHONE_TEL } from '../data/wallet'
@@ -47,10 +49,12 @@ type Who = { kind: 'me' } | { kind: 'mate'; id: string | null; name: string }
 type Chip = { label: string; sub?: string; strong?: boolean }
 type Msg = { id: number; from: 'gin' | 'you'; text: string } | { id: number; from: 'cal'; open: string[]; first: string; last: string }
 /** book.menuCode：ホームの髪型の写真から来たときのメニュー（label は髪型の名前） */
-export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string; group?: boolean } | { kind: 'change'; reservationId?: string } | { kind: 'offer'; holdId: string }
+export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; menuCode?: string | null; label?: string; group?: boolean } | { kind: 'change'; reservationId?: string } | { kind: 'offer'; holdId: string; /** ログイン＋枠。ログインし直して聞き直す時は、銀ちゃんを開き直す */ tag?: string }
 
 const HOTPEPPER_MENU_URL = 'https://beauty.hotpepper.jp/slnH000583749/coupon/'
 // お客様向けの言葉（システムの言葉を出さない・11/9 点検）
+/** キャンセル待ちの枠の案内文の書き出し（これが画面に出たら「お見せした」・SR-06） */
+const OFFER_HEAD = 'キャンセルが出ました！'
 const CHECK_DONE = '済んだか確かめる'
 const SEND_AGAIN = 'もう一度送る'
 const CHECK_BOOKED = '取れたか確かめる'
@@ -174,6 +178,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const [sheet, setSheet] = useState<Menu[] | null>(null)
   /** 一覧の一番上に出す「いつものメニュー」（その人の。チャットの「いつもの〇〇ですね」と同じ・11/18 慶一郎さん）。無ければ null */
   const [sheetTop, setSheetTop] = useState<string | null>(null)
+  /** 一覧のメニューを読めなかった（通信）。0件と分けて「読み込み直す」を出す（SR-07） */
+  const [sheetFailed, setSheetFailed] = useState(false)
   const [finished, setFinished] = useState(false)
   const [bookingComplete, setBookingComplete] = useState(false)
   const nextId = useRef(1)
@@ -184,10 +190,25 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const sheetRef = useRef<((m: Menu | null) => void) | null>(null)
   const calRef = useRef<((d: string | null) => void) | null>(null)
   const menusRef = useRef<Menu[]>([])
+  /** メニューを一度でも読めたか（最初の読み込みが 503 でも、後で読めたら会話・一覧の両方で使う・SR-07） */
+  const menusLoaded = useRef(false)
   const started = useRef(false)
   // いまの答えがボタンを押したものか（予約の確定はボタンだけ・11/8 慶一郎さん）
   const fromChip = useRef(false)
+  /** キャンセル待ちの枠をお客様にお見せした（SR-06）。お見せしてから閉じたら預かりを消す。
+   *  通信の失敗・ログイン切れで枠をお見せできずに閉じた時は残す（ログインし直す・開き直すと聞ける・再検査3） */
+  const offerShown = useRef(false)
+  useEffect(() => () => { if (mode.kind === 'offer' && offerShown.current) clearPendingHold(mode.holdId) }, []) // eslint-disable-line react-hooks/exhaustive-deps -- 閉じた時に1回だけ
   const api = bookingAssistantApi()
+  /** 予約の選択肢を読み、読めたらメニューを入れ替える（読めなければ前のまま・null を返す） */
+  const loadMenus = async () => {
+    const opts = await api.options().catch(() => null)
+    if (opts) {
+      menusRef.current = usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[]
+      menusLoaded.current = true
+    }
+    return opts
+  }
 
   useLayoutEffect(() => { const el = logRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? 'auto' : 'smooth' }) }, [msgs, chips, typing, reduce])
   useEffect(() => {
@@ -218,6 +239,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     turns.current.push({ role: from === 'gin' ? 'assistant' : 'user', text: t })
   }
   const pause = (ms: number) => new Promise(r => setTimeout(r, reduce ? 0 : ms))
+  // 枠の案内文が実際に画面に出たら「お見せした」（取れてから案内文が出るまでの間に閉じた時は預かりを残す・SR-06 再検査4）
+  useEffect(() => {
+    if (mode.kind === 'offer' && !offerShown.current && msgs.some(m => m.from === 'gin' && m.text.startsWith(OFFER_HEAD))) offerShown.current = true
+  }, [msgs]) // eslint-disable-line react-hooks/exhaustive-deps -- mode は開いている間変わらない
   const say = async (t: string) => { setTyping(true); await pause(460); setTyping(false); push('gin', t) }
   const ask = async (t: string, options: Chip[]): Promise<string> => {
     await say(t)
@@ -249,7 +274,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     push('you', t.trim())
     w(t.trim())
   }, [])
-  const pickFromList = (top: string | null = null): Promise<Menu | null> => { setSheetTop(top); setSheet(menusRef.current); return new Promise(res => { sheetRef.current = res }) }
+  const pickFromList = async (top: string | null = null): Promise<Menu | null> => {
+    // まだ読めていなければ、開く前にもう一度読む（最初だけ 503 → 一覧が空、を防ぐ・SR-07）
+    if (!menusLoaded.current) await loadMenus()
+    setSheetTop(top)
+    setSheetFailed(!menusLoaded.current)
+    setSheet(menusRef.current)
+    return new Promise(res => { sheetRef.current = res })
+  }
+  const retrySheet = async () => {
+    await loadMenus()
+    setSheetFailed(!menusLoaded.current)
+    setSheet(cur => (cur ? menusRef.current : cur))
+  }
   /** 会話の中にカレンダーを出して、日付を待つ（選んだらカレンダーは畳んで、選んだ日だけ残す） */
   //   カレンダーの間も文字・声で答えられる（満席の日は押せないので「11月20日」と送ってキャンセル待ちへ・11/10 Codex 再検査）
   const pickDate = async (open: string[]): Promise<{ day: string } | { text: string } | null> => {
@@ -286,12 +323,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
   /** メニューを聞く：AI が相談に乗る。決まったら名前と料金で確かめる（「ちがう」は何が違うか聞き直す・同じものを押しつけない） */
   const hearMenu = async (who: Who, opener: string, visitDate: string | null, top: string | null = null): Promise<Menu | null> => {
-    const all = menusRef.current
     const rejected = new Set<string>()
     let line = opener
     let sugg: Menu[] = []
     for (let turn = 0; turn < 14; turn++) {
       const t = await ask(line, [...sugg.map(m => ({ label: m.name, sub: yen(m.price) })), { label: '一覧から選ぶ' }])
+      const all = menusRef.current // 途中で読み直せたメニューも使う（SR-07）
       // ボタン・一覧から押して選んだメニューは、そのまま決める（もう一度「よろしいですか？」は聞かない・11/9 磨き）。
       //   聞き直すのは、話した・打った言葉から読み取ったときだけ（聞き間違いを防ぐ）
       let tapped = fromChip.current
@@ -507,6 +544,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-people' } }))
     }
     if (preset?.group && !allMates.length) return guidePeople()
+    /** 【お連れ様の予約をする】から来た：人を選ぶ時の初めの選択をお連れ様にする（ご本人が選ばれていた・SR-03） */
+    let mateIntent = false
     if (askExisting && upcoming.length) {
       const r = upcoming[0]
       const CHANGE = '今の予約を変更する', MATE = 'お連れ様の予約をする'
@@ -517,6 +556,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (a === MATE || (!fromChip.current && /連れ|家族|子/.test(a))) {
         if (!allMates.length) return guidePeople()
         if (!mates.length) { await say('ご登録のお連れ様は、みなさんもうご予約があります。変更は「今の予約を変更する」からどうぞ。'); return endChange() }
+        mateIntent = true
       } else if (!ownerFree) {
         await say('ご予約は、お一人さま1件までです。日時やメニューを変えるときは「今の予約を変更する」からどうぞ。'); return endChange()
       }
@@ -526,8 +566,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       await say('みなさん、もうご予約があります。日時やメニューを変えるときは「次回予約」の「変更・キャンセル」からどうぞ。'); return endChange()
     }
     const everyone = [...(ownerFree ? [owner] : []), ...mates]
-    const opts = await api.options().catch(() => null)
-    const all = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : menusRef.current
+    const opts = await loadMenus()
+    const all = menusRef.current
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const staffList = opts?.staff ?? []
     // その人のメニューを担当できる人だけを選択肢に（11/11：ヨンピルは顔そりだけ）。顔そりは専任の人を先に【ヨンピル】【テイテイ】【銀二郎】（11/11 慶一郎さん）
@@ -726,9 +766,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const l = await (st ? api.staffSlots(day, menus[0].code, st) : api.slots(day, menus[0].code))
         return l.some(x => Date.parse(x.starts_at) === t) ? { staff: { [who[0].key]: st }, times: { [who[0].key]: at } } : null
       }
+      let failed = false
       const free = await Promise.all(who.map((_, i) => Promise.all(staffList.map(st => !canDo(st, menus[i].code) ? Promise.resolve(new Set<number>()) : api.staffSlots(day, menus[i].code, st.id)
-        .then(l => new Set(l.map(x => Date.parse(x.starts_at)))).catch(() => new Set<number>())))))
-      return partyAt(t, free)
+        .then(l => new Set(l.map(x => Date.parse(x.starts_at))), () => { failed = true; return new Set<number>() })))))
+      const plan = partyAt(t, free)
+      // 読めなかった担当がいて、そろう形が見つからない：満席ではなく通信の不具合（SR-09）
+      if (!plan && failed) throw new Error('slots_unreachable')
+      return plan
     }
     /** 人ごとの開始時刻（続けての方は前の方のあと）。案内した時間と同じときだけ */
     const startOf = (p: BookPerson) => (d.at && d.times?.at === d.at ? d.times.map[p.key] ?? d.at : d.at!)
@@ -763,7 +807,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const m = d.menus[p.key]
       return d.at && m.price != null ? priceFor(m.code, m.price, startOf(p), [])?.base ?? m.price : m.price
     }
-    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${chargeOf(p) != null ? ` ${yen(chargeOf(p)!)}` : ''}${d.who!.length > 1 && planned(p) ? `（担当：${planned(p)}${staggered() ? `・${hm(startOf(p))}〜` : ''}）` : ''}`).join('\n')
+    // 1人でも、ご本人以外の予約なら「〇〇さん：」を付けて、誰の予約か確定の前に分かるように（SR-03）
+    const summary = () => d.who!.map(p => `${d.who!.length > 1 || p.key !== 'me' ? p.label + '：' : ''}${d.menus[p.key].name}${chargeOf(p) != null ? ` ${yen(chargeOf(p)!)}` : ''}${d.who!.length > 1 && planned(p) ? `（担当：${planned(p)}${staggered() ? `・${hm(startOf(p))}〜` : ''}）` : ''}`).join('\n')
       + (staffOf() ? `\n担当：${staffName(staffOf())}` : d.who!.length === 1 && staffFor(d.who![0]).length > 1 ? '\n担当：どちらでも' : '')
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
@@ -841,7 +886,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         await say('どなたのご予約ですか？\nご一緒の方の分も、まとめてお取りできますよ。')
         const a = await new Promise<string>(res => {
           whoChosen.current = null
-          setWhoPick({ list: pickList, sel: [ownerFree ? 'me' : everyone[0].key] })
+          setWhoPick({ list: pickList, sel: [mateIntent ? mates[0].key : ownerFree ? 'me' : everyone[0].key] })
           setWaiting(true)
           waitRef.current = res
         })
@@ -849,7 +894,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const w = (chosenKeys ? everyone.filter(p => chosenKeys.includes(p.key)) : null) ?? (fromChip.current ? byChip.get(a) : undefined) ?? whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
         if (w) { d.who = w; continue }
         if (await change(a)) continue
-        d.who = ownerFree ? [owner] : [mates[0]]; continue
+        d.who = ownerFree && !mateIntent ? [owner] : [mates[0]]; continue
       }
       // メニュー（決まっとらん人だけ）
       const need = d.who.find(p => !d.menus[p.key])
@@ -1002,8 +1047,13 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const { at, note, why } = d.recheck
         d.recheck = null
         setTyping(true)
-        const plan = await planAt(at).catch(() => null)
+        const plan = await planAt(at).catch(() => 'network' as const)
         setTyping(false)
+        // 通信で確かめられなかった：「入れなくなった」とは言わない。時間と新しいメニューのまま、もう一度確かめる（SR-09）
+        if (plan === 'network') {
+          if (await retryAfterNetwork()) { d.recheck = { at, note, why }; continue }
+          break
+        }
         if (plan) {
           const r = await askYN(`${note}${note ? '\n' : ''}${slotLabel(at)}のままでよろしいですか？`, 'そのまま', '時間を変更')
           if (r === 'yes') { takeAt(at, plan); continue }
@@ -1267,6 +1317,14 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const hold = await api.getHold(holdId).catch((e: unknown) => (e instanceof RpcBusinessError ? e.code : 'network'))
     setTyping(false)
     if (typeof hold === 'string') {
+      // ログインが外れた（期限切れ）：預かりは残し、ログインし直したら聞く（SR-06 再検査）
+      if (getCustomerSession() !== session) {
+        await say('ログインの期限が切れていました。ログインし直していただくと、お取りしている枠をもう一度ご案内しますね。')
+        return endChange()
+      }
+      // 枠が無い・期限切れ・予約済み：預かりも消す（SR-06）。通信の失敗では消さない
+      //   （Face ID のあとの読み込み直しで、途中の照会が切れて「通信の失敗」になり、預かりを消していた・再検査2）
+      if (hold !== 'network') clearPendingHold(holdId)
       await say(hold === 'already_booked' ? 'このお時間は、もうご予約済みです。「次回予約」でご確認ください。'
         : hold === 'hold_expired' || hold === 'hold_not_found' ? 'すみません、お取りしていたお時間が過ぎてしまいました。またキャンセルが出たら、お知らせしますね。'
         : 'お取りしている枠を、通信の具合で確認できませんでした。電波の良い所で、お知らせからもう一度開いてくださいね。')
@@ -1274,8 +1332,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     }
     const BOOK = 'この内容で予約する'
     for (;;) {
-      const a = await ask(`キャンセルが出ました！\n${slotLabel(hold.starts_at)} ${hold.menu_names ?? 'ご希望のメニュー'}${hold.total_price != null ? ` ${yen(hold.total_price)}` : ''}\n${hm(hold.expires_at)}までお取りしています。よろしければ、下の【${BOOK}】を押してくださいね。`,
+      const a = await ask(`${OFFER_HEAD}\n${slotLabel(hold.starts_at)} ${hold.menu_names ?? 'ご希望のメニュー'}${hold.total_price != null ? ` ${yen(hold.total_price)}` : ''}\n${hm(hold.expires_at)}までお取りしています。よろしければ、下の【${BOOK}】を押してくださいね。`,
         [{ label: BOOK, strong: true }, { label: '今回は見送る' }])
+      // お客様が答えた：ログイン前に預かった枠なら、ここで預かりを消す。
+      //   （Face ID のあとの読み込み直しで、聞く途中で切れても、読み込み直したあとにもう一度聞ける・SR-06）
+      clearPendingHold(holdId)
       if (!fromChip.current) { await say(`ご予約は【${BOOK}】、見送るときは【今回は見送る】を押してくださいね。`); continue }
       if (a === '今回は見送る') {
         // 外せたか確かめてから言う（503 でも「外しておきますね」と言っていた・11/9 Codex 検査 中）
@@ -1392,8 +1453,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const session = getCustomerSession()
     if (await checkBookingAccess(session) === 'closed') return
     const client = mutationClient()
+    const opts = await loadMenus()
     const all = menusRef.current
-    const opts = await api.options().catch(() => null)
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const people = await fetchPeople().catch(() => null)
     const end = endChange
@@ -1569,7 +1630,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         for (const d of days) {
           const free = await changeSlots(d)
           if (!free) { setTyping(false); return endWithoutAvailability() }
-          times = [...times, ...spreadSlots(free.map(s => ({ starts_at: s })), days.length === 1 ? 6 : 2).map(s => s.starts_at)]
+          // 日時だけの変更は、元の時刻を外してから間引く（SR-08：10:00 が元で 10:20 が空いていても「空きなし」になっていた）
+          times = [...times, ...changeTimes(free, r.starts_at, sameMenus(), days.length === 1 ? 6 : 2)]
           if (times.length >= 4) break
         }
         setTyping(false)
@@ -1694,8 +1756,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           return endChange()
         }
       }
-      const opts = await api.options().catch(() => null)
-      menusRef.current = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : []
+      await loadMenus()
       if (mode.kind === 'welcome') await runWelcome(mode.pending)
       else if (mode.kind === 'change') await runChange(mode.reservationId)
       else if (mode.kind === 'offer') await runOffer(mode.holdId)
@@ -1810,7 +1871,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
               <div className="gc-grab" />
               <GinNavigationMark step="menu-list" />
               {/* いつもの・検索・種類のタブ・所要時間・Black Monday（11/17 慶一郎さん「親切設計で」） */}
-              <MenuPickerSheet menus={sheet} usualCode={sheetTop} bm={blackMondayMenus()}
+              <MenuPickerSheet menus={sheet} usualCode={sheetTop} bm={blackMondayMenus()} failed={sheetFailed} onRetry={retrySheet}
                 onPick={m => { setSheet(null); sheetRef.current?.(m as Menu); sheetRef.current = null }}
                 onClose={() => { setSheet(null); sheetRef.current?.(null); sheetRef.current = null }} />
               <a className="gc-quiet gc-sheet-link" href={HOTPEPPER_MENU_URL} target="_blank" rel="noopener noreferrer">HOT PEPPER Beauty で写真を見る</a>

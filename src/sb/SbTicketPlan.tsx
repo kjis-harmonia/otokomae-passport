@@ -3,12 +3,13 @@ import { yen } from '../utils/bookingApi'
 import { callRpc, callStaffRpc, getStaffToken } from './sbRpc'
 import type { SbReservation } from './sbTypes'
 import { BLACK_MONDAY_LABEL, blackMondayAmount } from '../utils/blackMonday'
+import { planGachaOff } from './sbPlanGacha'
 
 // AI予約でお客様が選んだ券（使う予定）と、券を引いたお支払い予定。予約の詳細の「予約時の金額」の下に出す
 // （11/6 慶一郎さん「予め構えられる」）。券もお金も動かさない（使うのは会計の確定のとき）
 
 type Ticket = { id: string; title: string; amount: number }
-type Context = { tickets?: Ticket[]; gacha?: { title: string; amount: number | null; free_menu: string | null } | null }
+type Context = { tickets?: Ticket[]; gacha?: { title: string; amount: number | null; free_menu: string | null; menu_codes?: string[] | null } | null }
 type Line = { label: string; amount: number | null }
 
 export function SbTicketPlan({ reservation: r }: { reservation: SbReservation }) {
@@ -36,10 +37,8 @@ export function SbTicketPlan({ reservation: r }: { reservation: SbReservation })
       if (bm > 0) out.unshift({ label: BLACK_MONDAY_LABEL, amount: bm })
       const gacha = ctx?.gacha
       if (gacha) {
-        // 無料券は対象メニューの料金を引く（予約に無ければ金額は出さない）
-        const item = gacha.amount === null ? r.items.find(i => i.menu_code === gacha.free_menu) : undefined
-        const free = gacha.amount === null ? (item?.price == null ? null : Math.max(0, item.price - (bmCodes.split(',').includes(item.menu_code) ? bmUnit : 0))) : gacha.amount
-        out.push({ label: gacha.title, amount: free })
+        // 無料券は対象メニュー（menu_codes）の料金から Black Monday を引いた残り。予約に無ければ金額は出さない（SR-12）
+        out.push({ label: gacha.title, amount: planGachaOff(gacha, r.items, bmCodes ? bmCodes.split(',') : [], bmUnit) })
       }
       setLines(out)
     })

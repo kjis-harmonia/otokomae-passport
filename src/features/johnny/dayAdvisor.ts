@@ -96,13 +96,5 @@ export function adviceSpeech(a: DayAdvice, dayWord: string, opts: { isToday: boo
   }
 }
 
-/** 近い日の候補から、間をあけて n 件（同じ日なら1時間以上あける。違う日は1件ずつ） */
-export function spreadSlots(slots: Slot[], n = 3): Slot[] {
-  const out: Slot[] = []
-  for (const s of [...slots].sort((a, b) => a.starts_at.localeCompare(b.starts_at))) {
-    const t = new Date(s.starts_at).getTime()
-    if (out.every(o => Math.abs(new Date(o.starts_at).getTime() - t) >= 60 * 60 * 1000)) out.push(s)
-    if (out.length >= n) break
-  }
-  return out
-}
+/** 近い日の候補から、間をあけて n 件（同じ日なら1時間以上あける。違う日は1件ずつ）。中身は spreadSlots.ts */
+export { spreadSlots } from './spreadSlots'

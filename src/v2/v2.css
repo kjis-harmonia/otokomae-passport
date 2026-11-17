@@ -477,6 +477,13 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
   -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
   box-shadow: inset 0 3px 2px rgba(255,255,255,.7), inset 0 16px 28px rgba(255,255,255,.13), inset 0 -6px 14px rgba(0,0,0,.28), inset 0 -16px 28px rgba(255,255,255,.05), inset 0 0 0 1px rgba(255,255,255,.06), 0 24px 48px rgba(20,14,6,.34), 0 2px 6px rgba(20,14,6,.18);
   animation: v2-gacha-in .5s .25s ease-out both; }
+/* 低い横画面・大きい文字（SR-13）：パネルは画面の安全な範囲に収め、はみ出す分は中でスクロール。縦画面の見た目はそのまま */
+.v2-gacha-result { max-height: calc(100% - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 32px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.v2-gacha-result::-webkit-scrollbar { display: none; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .v2-gacha-result { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); max-height: calc(100% - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px); max-width: 520px; padding: 16px 18px 14px; gap: 8px; border-radius: 28px; }
+  .v2-gacha-result .v2-gacha-prize { font-size: clamp(22px, 5vh, 28px); }
+}
 /* The deep-sea result cue starts on this render; reveal the panel on the same frame. */
 .v2-gacha-deep .v2-gacha-result { animation-delay: 0s; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -1039,3 +1046,6 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .mp-price { flex: none; white-space: nowrap; font: 600 15px/1 var(--v2-sans); font-variant-numeric: tabular-nums; color: var(--v2-ink); }
 .mp-chev { flex: none; color: var(--v2-faint); }
 .mp-empty { margin: 4px; padding: 18px 12px; text-align: center; font: 400 14px/1.6 var(--v2-sans); color: var(--v2-sub); }
+.mp-empty-text { margin: 0; }
+.mp-retry { margin-top: 14px; min-height: 44px; padding: 0 20px; display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; border: 1px solid rgba(40,35,30,.16); background: #fff; color: var(--v2-ink); font: 500 14px/1 var(--v2-sans); cursor: pointer; }
+.mp-retry:disabled { opacity: .55; cursor: default; }
