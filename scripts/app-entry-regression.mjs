@@ -1,6 +1,7 @@
 // お客様アプリの入口の回帰（ローカルで作った Staging 版・合成データ・模擬 RPC）
 //   SR-05：古い初回案内（ginjiro_first_guide）が残っていても、新しい銀二郎で予約・変更が開く
 //   SR-07：最初のメニュー取得だけ 503 でも、あとで読めた一覧を出す。続けて失敗したら「読み込み直す」
+//   SR-10：次回予約を開いたまま戻ってきたら読み直す（ほかの端末で 10:00→11:00）。復帰の合図が重なっても照会は1回
 //   SR-06：ログイン前にキャンセル待ちのお知らせを開いても行き先が消えず、ログインできたら1回だけ枠を聞く
 // 使い方：GACHA_CHROMIUM_CHANNEL=chrome node scripts/app-entry-regression.mjs
 import assert from 'node:assert/strict'
@@ -42,12 +43,20 @@ const shellReplies = {
   customer_ginpay_ledger: { balance: 0, consistent: true, accounts: [], transactions: [] },
 }
 
-const fixtureState = { up: false, chat: false, failNext: false }
+const resv = hm => ({
+  id: '00000000-0000-4000-8000-0000000000b1', starts_at: `2026-11-14T${hm}:00+09:00`, ends_at: '2026-11-14T13:00:00+09:00',
+  status: 'confirmed', staff_name: '試験担当', nominated: false, total_price: 4000,
+  items: [{ menu_code: 'cut-standard', name: '試験カット', duration_min: 60, price: 4000 }],
+})
+const fixtureState = { up: false, chat: false, failNext: false, resv: 'off' }
 function makeRpcFixture(scenario) {
-  Object.assign(fixtureState, { up: false, chat: false, failNext: false })
+  Object.assign(fixtureState, { up: false, chat: false, failNext: false, resv: 'off' })
   const calls = []
   const respond = name => {
     calls.push(name)
+    if (name === 'customer_list_reservations' && fixtureState.resv !== 'off') {
+      return fixtureState.resv === 'down' ? outage : ok([resv(fixtureState.resv)])
+    }
     if (name === 'customer_booking_options') {
       // menuRecovers：銀ちゃんを開いた最初の1回だけ 503（アプリの起動時の分は数えない）。
       // menuDown：銀ちゃんを開いてからずっと 503 → 「読み込み直す」を押したら直る
@@ -129,7 +138,46 @@ async function openMenuList(page) {
   return page.getByRole('dialog', { name: 'メニューを選ぶ' })
 }
 
+const lists = f => f.calls.filter(name => name === 'customer_list_reservations').length
+/** 画面を離れて戻ってきた時の合図を、重ねて送る（iPhone はまとめて来ることがある） */
+const comeBack = page => page.evaluate(() => {
+  document.dispatchEvent(new Event('visibilitychange'))
+  document.dispatchEvent(new Event('visibilitychange'))
+  const e = new Event('pageshow'); Object.defineProperty(e, 'persisted', { value: true }); window.dispatchEvent(e)
+})
+
 const cases = {
+  async nextResume(browser, origin) {
+    fixtureState.resv = '10:00'
+    const f = await prepare(browser, origin, 'next', { signedIn: true, path: '/?tab=next' })
+    fixtureState.resv = '10:00'
+    try {
+      const panel = f.page.getByRole('region', { name: '次のご予約' })
+      await panel.getByText('10:00〜').waitFor()
+      await f.page.waitForTimeout(400)
+      const before = lists(f)
+      fixtureState.resv = '11:00' // ほかの端末で変更された
+      await comeBack(f.page)
+      await panel.getByText('11:00〜').waitFor()
+      assert.equal(await panel.getByText('10:00〜').count(), 0)
+      await f.page.waitForTimeout(400)
+      assert.equal(lists(f) - before, 1)
+    } finally { await f.close() }
+  },
+  async nextResumeFailed(browser, origin) {
+    fixtureState.resv = '10:00'
+    const f = await prepare(browser, origin, 'next', { signedIn: true, path: '/?tab=next' })
+    fixtureState.resv = '10:00'
+    try {
+      const panel = f.page.getByRole('region', { name: '次のご予約' })
+      await panel.getByText('ご予約確定').waitFor()
+      fixtureState.resv = 'down'
+      await comeBack(f.page)
+      await panel.getByText(/前に確認した内容を表示しています/).waitFor()
+      assert.equal(await panel.getByText('ご予約確定').count(), 0)
+    } finally { await f.close() }
+  },
+
   async menuRecovers(browser, origin) {
     const f = await prepare(browser, origin, 'menuRecovers', { signedIn: true, path: '/' })
     try {
