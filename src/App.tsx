@@ -35,7 +35,7 @@ import { FirstGuide } from './v2/FirstGuide'
 import { LaunchClock } from './v2/LaunchClock'
 import { GinChat, type GinMode } from './v2/GinChat'
 import { fetchVisitsToConfirm } from './v2/visitConfirm'
-import { clearPendingHold, peekPendingHold } from './v2/pendingHold'
+import { peekPendingHold } from './v2/pendingHold'
 import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 /** ログインのあとに開いたキャンセル待ちの枠（この画面の間に同じ枠を2回開かない・SR-06） */
@@ -426,7 +426,8 @@ function App() {
     window.addEventListener('ginjiro:gin-change', onChange)
     return () => window.removeEventListener('ginjiro:gin-change', onChange)
   }, [phase])
-  const closeGinChat = () => { if (ginChat?.kind === 'offer' && getCustomerSession()) clearPendingHold(ginChat.holdId); try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
+  // キャンセル待ちの枠の預かりは、銀ちゃんの中で決める（枠をお見せしてから閉じた時だけ消す・SR-06 再検査3）
+  const closeGinChat = () => { try { sessionStorage.setItem('ginjiro_ginchat_later', '1') } catch { /* ignore */ } setGinChat(null) }
 
   return (
     <>

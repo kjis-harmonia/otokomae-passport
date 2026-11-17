@@ -193,6 +193,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const started = useRef(false)
   // いまの答えがボタンを押したものか（予約の確定はボタンだけ・11/8 慶一郎さん）
   const fromChip = useRef(false)
+  /** キャンセル待ちの枠をお客様にお見せした（SR-06）。お見せしてから閉じたら預かりを消す。
+   *  通信の失敗・ログイン切れで枠をお見せできずに閉じた時は残す（ログインし直す・開き直すと聞ける・再検査3） */
+  const offerShown = useRef(false)
+  useEffect(() => () => { if (mode.kind === 'offer' && offerShown.current) clearPendingHold(mode.holdId) }, []) // eslint-disable-line react-hooks/exhaustive-deps -- 閉じた時に1回だけ
   const api = bookingAssistantApi()
   /** 予約の選択肢を読み、読めたらメニューを入れ替える（読めなければ前のまま・null を返す） */
   const loadMenus = async () => {
@@ -1322,6 +1326,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     }
     const BOOK = 'この内容で予約する'
     for (;;) {
+      offerShown.current = true
       const a = await ask(`キャンセルが出ました！\n${slotLabel(hold.starts_at)} ${hold.menu_names ?? 'ご希望のメニュー'}${hold.total_price != null ? ` ${yen(hold.total_price)}` : ''}\n${hm(hold.expires_at)}までお取りしています。よろしければ、下の【${BOOK}】を押してくださいね。`,
         [{ label: BOOK, strong: true }, { label: '今回は見送る' }])
       // お客様が答えた：ログイン前に預かった枠なら、ここで預かりを消す。
