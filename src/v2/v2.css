@@ -603,6 +603,36 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .v2-kaikin-title small { font-size: .3em; letter-spacing: .5em; padding-left: .5em; margin-bottom: .18em; font-weight: 700; color: rgba(255,255,255,.92); }
 .v2-kaikin-count { margin: 6px 0 0; padding: 10px 0 0; border-top: 1px solid rgba(231,207,156,.55); min-width: 62%; font: 600 15px/1 var(--v2-sans); letter-spacing: .16em; color: rgba(255,255,255,.9); }
 .v2-kaikin-count b { font: 800 30px/1 var(--v2-serif); color: #e7cf9c; margin: 0 .18em; letter-spacing: 0; vertical-align: -3px; }
+/* Black Monday の告知（11/17 慶一郎さんの見本の並び）：ご案内 → Black Monday → ¥2,000OFF（1行）→ 限定 → 開始日。黒のカード・白い文字。英字・数字 SF、日本語 Noto Sans JP */
+.v2-bm { min-width: 0; position: relative; overflow: hidden; border-radius: 26px; background: #0b0b0b; border: 1px solid rgba(255,255,255,.12); display: grid; justify-items: center; padding: 28px 24px 18px; text-align: center; color: #f5f5f7; font-family: "Noto Sans JP", var(--v2-sans); font-weight: 400; -webkit-font-smoothing: antialiased }
+.v2-bm-eyebrow { margin: 0; font-size: 14px; font-weight: 500; letter-spacing: .04em; color: rgba(255,255,255,.6); }
+.v2-bm-title { margin: 10px 0 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; font-size: clamp(30px, 9.5vw, 38px); font-weight: 600; line-height: 1.1; letter-spacing: -0.015em; color: #fff }
+.v2-bm-week { margin: 20px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(7, 36px); gap: 4px; justify-content: center }
+.v2-bm-week li { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; font-size: 14px; font-weight: 500; color: rgba(255,255,255,.3); animation: bm-day .5s ease-out both; }
+.v2-bm-week li.is-mon { background: #fff; color: #0b0b0b; font-weight: 600; box-shadow: 0 0 0 6px rgba(255,255,255,.08), 0 0 28px rgba(255,255,255,.35); animation: bm-mon .7s cubic-bezier(.2,.9,.25,1.2) .5s both; }
+.v2-bm-price { margin: 12px 0 0; display: flex; align-items: baseline; justify-content: center; gap: .2em; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; color: #fff; white-space: nowrap }
+.v2-bm-price b { font-size: clamp(60px, 19vw, 80px); font-weight: 200; line-height: 1.05; letter-spacing: -0.035em; color: transparent; background: linear-gradient(105deg, #fff 0%, #fff 42%, #8d8d92 50%, #fff 58%, #fff 100%); background-size: 260% 100%; background-position: 0% 0; -webkit-background-clip: text; background-clip: text; animation: bm-shine 1.4s ease-in-out 1.1s both; }
+.v2-bm-price span { font-size: clamp(16px, 5vw, 20px); font-weight: 500; letter-spacing: .1em; color: rgba(255,255,255,.88) }
+.v2-bm-only { margin: 12px 0 0; font-size: 15px; font-weight: 500; line-height: 1.5; letter-spacing: .04em; color: rgba(255,255,255,.62) }
+.v2-bm-hr { width: 100%; margin: 24px 0 0; border: 0; border-top: 1px solid rgba(255,255,255,.12) }
+.v2-bm-start { margin: 20px 0 0; font-size: 14px; font-weight: 500; letter-spacing: .02em; color: rgba(255,255,255,.62) }
+.v2-bm-more { margin-top: 8px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; border: 0; background: transparent; color: rgba(255,255,255,.9); font-family: inherit; font-size: 14px; font-weight: 500; letter-spacing: .02em; white-space: nowrap; cursor: pointer }
+.v2-bm-more span { font-size: 18px; line-height: 1; color: rgba(255,255,255,.55) }
+.v2-bm-detail { margin-top: 6px; width: 100%; text-align: left; border-top: 1px solid rgba(255,255,255,.12); padding: 16px 2px 4px }
+.v2-bm-detail-h { margin: 16px 0 6px; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: #fff }
+.v2-bm-detail-h:first-child { margin-top: 0; }
+.v2-bm-menus { margin: 0; font-size: 14px; font-weight: 400; line-height: 1.8; color: rgba(255,255,255,.78) }
+.v2-bm-rules { margin: 0; padding: 0; list-style: none; font-size: 13px; font-weight: 400; line-height: 1.75; color: rgba(255,255,255,.78) }
+.v2-bm-rules li { position: relative; padding-left: 1.1em; }
+.v2-bm-rules li + li { margin-top: 4px; }
+.v2-bm-rules li::before { content: "・"; position: absolute; left: 0; color: rgba(255,255,255,.55); }
+/* 言葉の途中で改行しない */
+.v2-bm-menus span { display: inline-block; white-space: nowrap; }
+@keyframes bm-day { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes bm-mon { 0% { opacity: 0; transform: scale(.5); } 60% { opacity: 1; transform: scale(1.12); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes bm-shine { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@media (prefers-reduced-motion: reduce) { .v2-bm-week li, .v2-bm-week li.is-mon, .v2-bm-price b { animation: none; } }
+@media (max-width: 340px) { .v2-bm-week { grid-template-columns: repeat(7, 32px); gap: 3px; } .v2-bm-week li { width: 32px; height: 32px; font-size: 13px; } }
 .v2-campaign-go { height: 54px; margin-top: 6px; border: 0; border-radius: 27px; background: #f8f6f1; color: #1d1915; font: 600 16px/1 var(--v2-sans); letter-spacing: .04em; cursor: pointer; }
 .v2-campaign-foot { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
 .v2-campaign-hide { position: relative; display: flex; align-items: center; gap: 8px; min-height: 44px; font: 500 13px/1 var(--v2-sans); color: rgba(255,255,255,.82); cursor: pointer; }
@@ -980,3 +1010,30 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .lc-cal-grid button:active:not(:disabled) { transform: scale(.92); }
 @media (prefers-reduced-motion: reduce) { .lc .gc-chip.gc-chip-on::after, .lc-cal-grid button.lc-day-on::after { animation: none; } }
 .lc-cal-grid button:not(:disabled):active { background: #fff4de; color: #28231e; }
+
+/* 銀ちゃんの「メニューを選ぶ」（11/17）：いつもの・検索・種類のタブ。行は大きく、料金は折り返さない */
+.mp { display: grid; gap: 10px; padding: 0 2px 6px; }
+.mp-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px; }
+.mp-title { margin: 0; font: 600 18px/1.4 var(--v2-sans); color: var(--v2-ink); }
+.mp-x { width: 44px; height: 44px; margin-right: -10px; display: grid; place-items: center; border: 0; background: transparent; color: var(--v2-sub); cursor: pointer; }
+.mp-search { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 12px; border-radius: 14px; background: #fff; border: 1px solid rgba(40,35,30,.12); color: var(--v2-sub); }
+.mp-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 400 16px/1.4 var(--v2-sans); color: var(--v2-ink); }
+.mp-search input::-webkit-search-cancel-button { display: none; }
+.mp-clear { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(40,35,30,.08); color: var(--v2-sub); cursor: pointer; }
+.mp-tabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -2px; padding: 2px; }
+.mp-tabs::-webkit-scrollbar { display: none; }
+.mp-tabs button { flex: none; min-height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(40,35,30,.16); background: #fff; color: var(--v2-ink); font: 500 14px/1 var(--v2-sans); cursor: pointer; }
+.mp-tabs button.is-on { background: #1c1b19; border-color: #1c1b19; color: #fff; }
+.mp-label { margin: 6px 4px -2px; font: 500 12px/1.4 var(--v2-sans); letter-spacing: .04em; color: var(--v2-sub); }
+.mp-list { border-radius: 16px; background: #fff; border: 1px solid rgba(40,35,30,.1); overflow: hidden; }
+.mp-usual { border-color: rgba(40,35,30,.22); }
+.mp-row { width: 100%; min-height: 60px; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border: 0; border-top: 1px solid rgba(40,35,30,.08); background: transparent; text-align: left; color: var(--v2-ink); cursor: pointer; }
+.mp-row:first-child { border-top: 0; }
+.mp-row:active { background: rgba(40,35,30,.05); }
+.mp-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.mp-name { font: 600 16px/1.35 var(--v2-sans); }
+.mp-sub { display: flex; align-items: center; gap: 8px; font: 400 12px/1.4 var(--v2-sans); color: var(--v2-sub); }
+.mp-bm { font-style: normal; font-weight: 600; color: #1c1b19; padding: 1px 6px; border-radius: 6px; background: rgba(28,27,25,.07); }
+.mp-price { flex: none; white-space: nowrap; font: 600 15px/1 var(--v2-sans); font-variant-numeric: tabular-nums; color: var(--v2-ink); }
+.mp-chev { flex: none; color: var(--v2-faint); }
+.mp-empty { margin: 4px; padding: 18px 12px; text-align: center; font: 400 14px/1.6 var(--v2-sans); color: var(--v2-sub); }

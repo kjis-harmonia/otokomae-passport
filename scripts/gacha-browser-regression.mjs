@@ -92,7 +92,9 @@ async function prepare(browser, origin, scenario) {
       localStorage.setItem('ginjiro_customer_session', token)
       localStorage.setItem('ginjiro_user_id', JSON.stringify(user))
       localStorage.setItem('ginjiro:onboarding_done', 'true')
-      localStorage.setItem('ginjiro_campaign_hidden', JSON.stringify('gacha-2026-11-open'))
+      // 告知（Black Monday など）と公開の「解禁」は見たことにする（ガチャの画面だけを試す）
+      localStorage.setItem('ginjiro_campaign_hidden', JSON.stringify('black-monday-2026'))
+      localStorage.setItem('ginjiro_launch_kaikin_seen', String(Date.parse('2026-11-11T12:00:00+09:00')))
       localStorage.setItem('ginjiro_launch_notice_seen', String(Date.parse('2026-11-11T12:00:00+09:00')))
       localStorage.setItem('ginjiro_guide_seen_customer', '1')
       localStorage.setItem('ginjiro_guide_seen', '1')

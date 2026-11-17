@@ -8,6 +8,7 @@ import { loadMemberStatus, getStoredValue, ONBOARDING_NAME_KEY } from '../utils/
 import { getCustomerByUserId, fetchLastVisitDateStrict } from '../utils/customerStore'
 import type { CustomerRow } from '../utils/customerStore'
 import { couponPlanForQr } from '../utils/bookingCoupons'
+import { BLACK_MONDAY_LABEL, blackMondayOffText, blackMondayAmount } from '../utils/blackMonday'
 import { PushToggle } from './PushToggle'
 import { formatVisit, useNextReservation } from '../features/johnny/nextReservation'
 import { heldFor, useGinpayHolds } from '../features/ginpay/holds'
@@ -116,9 +117,9 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
   // 銀Pay の仮支払い（その予約に付いていれば「仮支払い済み」。レジで会員QR を読むと確定）
   const prepaid = heldFor(useGinpayHolds(), aiNext?.id)
   const shownReservation = aiNext
-    ? (() => { const v = formatVisit(aiNext.starts_at); return { title: aiNext.items.map(i => i.name).join('・'), when: `${v.date} ${v.time}〜`, price: aiNext.total_price } })()
+    ? (() => { const v = formatVisit(aiNext.starts_at); return { title: aiNext.items.map(i => i.name).join('・'), when: `${v.date} ${v.time}〜`, price: aiNext.total_price, blackMonday: blackMondayAmount(aiNext) } })()
     : currentReservation
-      ? { title: currentReservation.title, when: `${Number(currentReservation.visitDate.slice(5, 7))}月${Number(currentReservation.visitDate.slice(8, 10))}日・お電話のご予約`, price: currentReservation.memberPrice }
+      ? { title: currentReservation.title, when: `${Number(currentReservation.visitDate.slice(5, 7))}月${Number(currentReservation.visitDate.slice(8, 10))}日・お電話のご予約`, price: currentReservation.memberPrice, blackMonday: 0 }
       : null
 
   useEffect(() => {
@@ -413,6 +414,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                   </span>}
                 </p>
                 <p style={{ fontSize: 12, color: 'rgba(28,31,29,0.7)', marginTop: 2, letterSpacing: '0.04em' }}>{shownReservation.when}</p>
+                {shownReservation.blackMonday > 0 && <p style={{ fontSize: 12, color: '#8a6a22', marginTop: 2, letterSpacing: '0.04em' }}>{BLACK_MONDAY_LABEL} {blackMondayOffText(shownReservation.blackMonday)}</p>}
                 {aiNext && prepaid != null && <p style={{ fontSize: 13, fontWeight: 700, color: '#8a6a22', marginTop: 6, letterSpacing: '0.04em' }}>✓ 銀Pay 仮支払い済み ¥{prepaid.toLocaleString()}</p>}
               </div>
             )}
@@ -568,7 +570,7 @@ export function PassportCard({ compact = false }: { compact?: boolean } = {}) {
                 {shownReservation.title}
               </p>
               <p style={{ fontSize: 12, color: 'rgba(242,230,200,0.64)', lineHeight: 1.6 }}>
-                {shownReservation.when}{shownReservation.price != null ? ` / ¥${shownReservation.price.toLocaleString()}` : ''}
+                {shownReservation.when}{shownReservation.price != null ? ` / ¥${shownReservation.price.toLocaleString()}` : ''}{shownReservation.blackMonday > 0 ? `（${BLACK_MONDAY_LABEL} ${blackMondayOffText(shownReservation.blackMonday)}）` : ''}
               </p>
             </div>
           )}
