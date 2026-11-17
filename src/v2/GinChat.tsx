@@ -53,6 +53,8 @@ export type GinMode = { kind: 'welcome'; pending: Pending } | { kind: 'book'; me
 
 const HOTPEPPER_MENU_URL = 'https://beauty.hotpepper.jp/slnH000583749/coupon/'
 // お客様向けの言葉（システムの言葉を出さない・11/9 点検）
+/** キャンセル待ちの枠の案内文の書き出し（これが画面に出たら「お見せした」・SR-06） */
+const OFFER_HEAD = 'キャンセルが出ました！'
 const CHECK_DONE = '済んだか確かめる'
 const SEND_AGAIN = 'もう一度送る'
 const CHECK_BOOKED = '取れたか確かめる'
@@ -237,6 +239,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     turns.current.push({ role: from === 'gin' ? 'assistant' : 'user', text: t })
   }
   const pause = (ms: number) => new Promise(r => setTimeout(r, reduce ? 0 : ms))
+  // 枠の案内文が実際に画面に出たら「お見せした」（取れてから案内文が出るまでの間に閉じた時は預かりを残す・SR-06 再検査4）
+  useEffect(() => {
+    if (mode.kind === 'offer' && !offerShown.current && msgs.some(m => m.from === 'gin' && m.text.startsWith(OFFER_HEAD))) offerShown.current = true
+  }, [msgs]) // eslint-disable-line react-hooks/exhaustive-deps -- mode は開いている間変わらない
   const say = async (t: string) => { setTyping(true); await pause(460); setTyping(false); push('gin', t) }
   const ask = async (t: string, options: Chip[]): Promise<string> => {
     await say(t)
@@ -1326,8 +1332,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     }
     const BOOK = 'この内容で予約する'
     for (;;) {
-      offerShown.current = true
-      const a = await ask(`キャンセルが出ました！\n${slotLabel(hold.starts_at)} ${hold.menu_names ?? 'ご希望のメニュー'}${hold.total_price != null ? ` ${yen(hold.total_price)}` : ''}\n${hm(hold.expires_at)}までお取りしています。よろしければ、下の【${BOOK}】を押してくださいね。`,
+      const a = await ask(`${OFFER_HEAD}\n${slotLabel(hold.starts_at)} ${hold.menu_names ?? 'ご希望のメニュー'}${hold.total_price != null ? ` ${yen(hold.total_price)}` : ''}\n${hm(hold.expires_at)}までお取りしています。よろしければ、下の【${BOOK}】を押してくださいね。`,
         [{ label: BOOK, strong: true }, { label: '今回は見送る' }])
       // お客様が答えた：ログイン前に預かった枠なら、ここで預かりを消す。
       //   （Face ID のあとの読み込み直しで、聞く途中で切れても、読み込み直したあとにもう一度聞ける・SR-06）
