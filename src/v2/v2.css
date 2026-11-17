@@ -1039,3 +1039,6 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 .mp-price { flex: none; white-space: nowrap; font: 600 15px/1 var(--v2-sans); font-variant-numeric: tabular-nums; color: var(--v2-ink); }
 .mp-chev { flex: none; color: var(--v2-faint); }
 .mp-empty { margin: 4px; padding: 18px 12px; text-align: center; font: 400 14px/1.6 var(--v2-sans); color: var(--v2-sub); }
+.mp-empty-text { margin: 0; }
+.mp-retry { margin-top: 14px; min-height: 44px; padding: 0 20px; display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; border: 1px solid rgba(40,35,30,.16); background: #fff; color: var(--v2-ink); font: 500 14px/1 var(--v2-sans); cursor: pointer; }
+.mp-retry:disabled { opacity: .55; cursor: default; }

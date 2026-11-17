@@ -174,6 +174,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const [sheet, setSheet] = useState<Menu[] | null>(null)
   /** 一覧の一番上に出す「いつものメニュー」（その人の。チャットの「いつもの〇〇ですね」と同じ・11/18 慶一郎さん）。無ければ null */
   const [sheetTop, setSheetTop] = useState<string | null>(null)
+  /** 一覧のメニューを読めなかった（通信）。0件と分けて「読み込み直す」を出す（SR-07） */
+  const [sheetFailed, setSheetFailed] = useState(false)
   const [finished, setFinished] = useState(false)
   const [bookingComplete, setBookingComplete] = useState(false)
   const nextId = useRef(1)
@@ -184,10 +186,21 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const sheetRef = useRef<((m: Menu | null) => void) | null>(null)
   const calRef = useRef<((d: string | null) => void) | null>(null)
   const menusRef = useRef<Menu[]>([])
+  /** メニューを一度でも読めたか（最初の読み込みが 503 でも、後で読めたら会話・一覧の両方で使う・SR-07） */
+  const menusLoaded = useRef(false)
   const started = useRef(false)
   // いまの答えがボタンを押したものか（予約の確定はボタンだけ・11/8 慶一郎さん）
   const fromChip = useRef(false)
   const api = bookingAssistantApi()
+  /** 予約の選択肢を読み、読めたらメニューを入れ替える（読めなければ前のまま・null を返す） */
+  const loadMenus = async () => {
+    const opts = await api.options().catch(() => null)
+    if (opts) {
+      menusRef.current = usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[]
+      menusLoaded.current = true
+    }
+    return opts
+  }
 
   useLayoutEffect(() => { const el = logRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? 'auto' : 'smooth' }) }, [msgs, chips, typing, reduce])
   useEffect(() => {
@@ -249,7 +262,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     push('you', t.trim())
     w(t.trim())
   }, [])
-  const pickFromList = (top: string | null = null): Promise<Menu | null> => { setSheetTop(top); setSheet(menusRef.current); return new Promise(res => { sheetRef.current = res }) }
+  const pickFromList = async (top: string | null = null): Promise<Menu | null> => {
+    // まだ読めていなければ、開く前にもう一度読む（最初だけ 503 → 一覧が空、を防ぐ・SR-07）
+    if (!menusLoaded.current) await loadMenus()
+    setSheetTop(top)
+    setSheetFailed(!menusLoaded.current)
+    setSheet(menusRef.current)
+    return new Promise(res => { sheetRef.current = res })
+  }
+  const retrySheet = async () => {
+    await loadMenus()
+    setSheetFailed(!menusLoaded.current)
+    setSheet(cur => (cur ? menusRef.current : cur))
+  }
   /** 会話の中にカレンダーを出して、日付を待つ（選んだらカレンダーは畳んで、選んだ日だけ残す） */
   //   カレンダーの間も文字・声で答えられる（満席の日は押せないので「11月20日」と送ってキャンセル待ちへ・11/10 Codex 再検査）
   const pickDate = async (open: string[]): Promise<{ day: string } | { text: string } | null> => {
@@ -286,12 +311,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
 
   /** メニューを聞く：AI が相談に乗る。決まったら名前と料金で確かめる（「ちがう」は何が違うか聞き直す・同じものを押しつけない） */
   const hearMenu = async (who: Who, opener: string, visitDate: string | null, top: string | null = null): Promise<Menu | null> => {
-    const all = menusRef.current
     const rejected = new Set<string>()
     let line = opener
     let sugg: Menu[] = []
     for (let turn = 0; turn < 14; turn++) {
       const t = await ask(line, [...sugg.map(m => ({ label: m.name, sub: yen(m.price) })), { label: '一覧から選ぶ' }])
+      const all = menusRef.current // 途中で読み直せたメニューも使う（SR-07）
       // ボタン・一覧から押して選んだメニューは、そのまま決める（もう一度「よろしいですか？」は聞かない・11/9 磨き）。
       //   聞き直すのは、話した・打った言葉から読み取ったときだけ（聞き間違いを防ぐ）
       let tapped = fromChip.current
@@ -526,8 +551,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       await say('みなさん、もうご予約があります。日時やメニューを変えるときは「次回予約」の「変更・キャンセル」からどうぞ。'); return endChange()
     }
     const everyone = [...(ownerFree ? [owner] : []), ...mates]
-    const opts = await api.options().catch(() => null)
-    const all = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : menusRef.current
+    const opts = await loadMenus()
+    const all = menusRef.current
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const staffList = opts?.staff ?? []
     // その人のメニューを担当できる人だけを選択肢に（11/11：ヨンピルは顔そりだけ）。顔そりは専任の人を先に【ヨンピル】【テイテイ】【銀二郎】（11/11 慶一郎さん）
@@ -1392,8 +1417,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const session = getCustomerSession()
     if (await checkBookingAccess(session) === 'closed') return
     const client = mutationClient()
+    const opts = await loadMenus()
     const all = menusRef.current
-    const opts = await api.options().catch(() => null)
     const maintMenu = opts?.menus.find(m => m.code === 'maintenance') as Menu | undefined
     const people = await fetchPeople().catch(() => null)
     const end = endChange
@@ -1694,8 +1719,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           return endChange()
         }
       }
-      const opts = await api.options().catch(() => null)
-      menusRef.current = opts ? usualMenuOrder(opts.menus.filter(m => canBeUsual(m.code))) as Menu[] : []
+      await loadMenus()
       if (mode.kind === 'welcome') await runWelcome(mode.pending)
       else if (mode.kind === 'change') await runChange(mode.reservationId)
       else if (mode.kind === 'offer') await runOffer(mode.holdId)
@@ -1810,7 +1834,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
               <div className="gc-grab" />
               <GinNavigationMark step="menu-list" />
               {/* いつもの・検索・種類のタブ・所要時間・Black Monday（11/17 慶一郎さん「親切設計で」） */}
-              <MenuPickerSheet menus={sheet} usualCode={sheetTop} bm={blackMondayMenus()}
+              <MenuPickerSheet menus={sheet} usualCode={sheetTop} bm={blackMondayMenus()} failed={sheetFailed} onRetry={retrySheet}
                 onPick={m => { setSheet(null); sheetRef.current?.(m as Menu); sheetRef.current = null }}
                 onClose={() => { setSheet(null); sheetRef.current?.(null); sheetRef.current = null }} />
               <a className="gc-quiet gc-sheet-link" href={HOTPEPPER_MENU_URL} target="_blank" rel="noopener noreferrer">HOT PEPPER Beauty で写真を見る</a>

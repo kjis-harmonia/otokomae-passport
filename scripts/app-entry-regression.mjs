@@ -1,5 +1,6 @@
 // お客様アプリの入口の回帰（ローカルで作った Staging 版・合成データ・模擬 RPC）
 //   SR-05：古い初回案内（ginjiro_first_guide）が残っていても、新しい銀二郎で予約・変更が開く
+//   SR-07：最初のメニュー取得だけ 503 でも、あとで読めた一覧を出す。続けて失敗したら「読み込み直す」
 //   SR-06：ログイン前にキャンセル待ちのお知らせを開いても行き先が消えず、ログインできたら1回だけ枠を聞く
 // 使い方：GACHA_CHROMIUM_CHANNEL=chrome node scripts/app-entry-regression.mjs
 import assert from 'node:assert/strict'
@@ -21,6 +22,13 @@ const token = 'synthetic-entry-session-for-local-regression'
 const holdId = '00000000-0000-4000-8000-0000000000a1'
 const fixedTime = new Date('2026-11-12T03:00:00Z') // 日本時間 12:00
 const ok = json => ({ status: 200, json })
+const outage = { status: 503, json: { code: 'PGRST003', message: 'synthetic interruption' } }
+const menus = [
+  { code: 'cut-standard', name: '試験カット', duration_min: 60, price: 4000 },
+  { code: 'perm-punch', name: '試験パンチパーマ', duration_min: 120, price: 9000 },
+  { code: 'shave-face', name: '試験シェービング', duration_min: 30, price: 2500 },
+  { code: 'set-blow', name: '試験セット', duration_min: 30, price: 2000 },
+]
 const hold = {
   hold_id: holdId, waitlist_id: null, starts_at: '2026-11-14T01:00:00Z', expires_at: '2026-11-12T03:30:00Z',
   menu_names: '試験カット', total_price: 4000,
@@ -34,10 +42,19 @@ const shellReplies = {
   customer_ginpay_ledger: { balance: 0, consistent: true, accounts: [], transactions: [] },
 }
 
+const fixtureState = { up: false, chat: false, failNext: false }
 function makeRpcFixture(scenario) {
+  Object.assign(fixtureState, { up: false, chat: false, failNext: false })
   const calls = []
   const respond = name => {
     calls.push(name)
+    if (name === 'customer_booking_options') {
+      // menuRecovers：銀ちゃんを開いた最初の1回だけ 503（アプリの起動時の分は数えない）。
+      // menuDown：銀ちゃんを開いてからずっと 503 → 「読み込み直す」を押したら直る
+      if (scenario === 'menuRecovers' && fixtureState.failNext) { fixtureState.failNext = false; return outage }
+      if (scenario === 'menuDown' && fixtureState.chat && !fixtureState.up) return outage
+      return ok({ menus, staff: [] })
+    }
     if (name === 'customer_get_hold') return ok(scenario === 'holdExpired' ? { error: 'hold_expired' } : hold)
     return ok(shellReplies[name] ?? null)
   }
@@ -96,7 +113,46 @@ const signIn = page => page.evaluate(token => {
   window.dispatchEvent(new Event('ginjiro:customer-session-changed'))
 }, token)
 
+/** 銀ちゃんの予約を開いて、メニューの一覧を開くところまで進める */
+async function openMenuList(page) {
+  await page.getByRole('button', { name: '次回予約', exact: true }).click()
+  fixtureState.chat = true
+  fixtureState.failNext = true
+  await page.getByRole('button', { name: 'AI予約する', exact: true }).click()
+  await chat(page).waitFor()
+  const list = page.getByRole('button', { name: '一覧から選ぶ', exact: true })
+  try { await list.waitFor({ timeout: 6000 }) } catch {
+    // 途中で別の質問が出たら、何を聞いているかを出して止める（試験の作り直し用）
+    throw new Error('一覧から選ぶ が出ない: ' + (await chat(page).innerText()).slice(-300))
+  }
+  await list.click()
+  return page.getByRole('dialog', { name: 'メニューを選ぶ' })
+}
+
 const cases = {
+  async menuRecovers(browser, origin) {
+    const f = await prepare(browser, origin, 'menuRecovers', { signedIn: true, path: '/' })
+    try {
+      const sheet = await openMenuList(f.page)
+      await sheet.getByRole('button', { name: /試験パンチパーマ/ }).waitFor()
+      assert.equal(await sheet.locator('.mp-row').count(), 4)
+      assert.equal(await sheet.getByText('見つかりませんでした', { exact: false }).count(), 0)
+    } finally { await f.close() }
+  },
+  async menuDown(browser, origin) {
+    const f = await prepare(browser, origin, 'menuDown', { signedIn: true, path: '/' })
+    try {
+      const sheet = await openMenuList(f.page)
+      await sheet.getByText(/メニューを読み込めませんでした/).waitFor()
+      if (process.env.ENTRY_SHOTS) await f.page.screenshot({ path: process.env.ENTRY_SHOTS + '/sr07-failed.png' })
+      assert.equal(await sheet.getByText('見つかりませんでした', { exact: false }).count(), 0)
+      fixtureState.up = true
+      await sheet.getByRole('button', { name: '読み込み直す' }).click()
+      await sheet.getByRole('button', { name: /試験カット/ }).waitFor()
+      assert.equal(await sheet.locator('.mp-row').count(), 4)
+    } finally { await f.close() }
+  },
+
   // SR-05：旧値が残ったまま「次回予約」→「AI予約する」で銀ちゃんが開く
   async staleFirstGuideBook(browser, origin) {
     const f = await prepare(browser, origin, 'book', { signedIn: true, firstGuide: true, path: '/' })
