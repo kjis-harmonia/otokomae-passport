@@ -238,6 +238,9 @@ function App() {
     return getStoredValue<{ visited: boolean } | null>(FIRST_GUIDE_KEY, null)
   })
   const closeFirstGuide = () => { setStoredValue(FIRST_GUIDE_KEY, null); setFirstGuide(null) }
+  // 最初の案内は旧フローだけ。新しい銀二郎（ginFlow）では出さないので、残っていた旧版の保存値で
+  // 銀ちゃん・告知・ガイドを止めない（SR-05：更新前に案内を閉じずに離れた方が予約を開けなかった）
+  const firstGuideOpen = !!firstGuide && !ginFlow()
   const [ticketInitialFilter, setTicketInitialFilter] = useState<WalletFilter>('cut')
   const [ticketRefreshKey, setTicketRefreshKey] = useState(0)
   const [hasOpenModal, setHasOpenModal] = useState(false)
@@ -419,19 +422,19 @@ function App() {
         <>
           {/* V2.0：上に正式ロゴと ☰、下にタブ3つ（ホーム｜会員QR｜次回予約）。チケット・ログインは ☰、AI予約は全画面 */}
           <V2App activeTab={activeTab} setActiveTab={setActiveTab} ticketFilter={ticketInitialFilter} ticketKey={ticketRefreshKey}
-            onModalChange={handleModalChange} showCampaign={!welcomeCouponDialog && !firstGuide} />
+            onModalChange={handleModalChange} showCampaign={!welcomeCouponDialog && !firstGuideOpen} />
 
           {/* ホーム画面に追加の案内（Safari などで開いているときだけ。クーポンのあと） */}
           <InstallGuide autoAllowed={!PREVIEW_V2 && activeTab === 'home' && !passkeyOffer && !welcomeCouponDialog} />
 
-          {firstGuide && !welcomeCouponDialog && !ginFlow() && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
-          {ginChat && !firstGuide && !welcomeCouponDialog && <GinChat key={ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
+          {firstGuide && firstGuideOpen && !welcomeCouponDialog && <FirstGuide visited={firstGuide.visited} onClose={closeFirstGuide} />}
+          {ginChat && !firstGuideOpen && !welcomeCouponDialog && <GinChat key={ginChat.kind} mode={ginChat} onClose={closeGinChat} />}
 
           {/* 使い方ガイド：最初の案内・Welcome クーポン・Face ID の案内が出ている間は出さない */}
           {/* 新しい銀二郎の公開（11/11 12:00）：60秒前からの全画面の時計・00:00 の切り替え */}
           <LaunchClock />
 
-          <CustomerGuide paused={!!firstGuide || ginChat?.kind === 'welcome' || !!welcomeCouponDialog || passkeyOffer || appLoading} />
+          <CustomerGuide paused={firstGuideOpen || ginChat?.kind === 'welcome' || !!welcomeCouponDialog || passkeyOffer || appLoading} />
 
           <AnimatePresence>
             {welcomeCouponDialog && (
