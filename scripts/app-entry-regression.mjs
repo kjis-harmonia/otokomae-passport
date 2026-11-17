@@ -2,6 +2,7 @@
 //   SR-05：古い初回案内（ginjiro_first_guide）が残っていても、新しい銀二郎で予約・変更が開く
 //   SR-07：最初のメニュー取得だけ 503 でも、あとで読めた一覧を出す。続けて失敗したら「読み込み直す」
 //   SR-10：次回予約を開いたまま戻ってきたら読み直す（ほかの端末で 10:00→11:00）。復帰の合図が重なっても照会は1回
+//   SR-03：「お連れ様の予約をする」から入ったら、人の初めの選択は予約できるお連れ様（ご本人ではない）
 //   SR-06：ログイン前にキャンセル待ちのお知らせを開いても行き先が消えず、ログインできたら1回だけ枠を聞く
 // 使い方：GACHA_CHROMIUM_CHANNEL=chrome node scripts/app-entry-regression.mjs
 import assert from 'node:assert/strict'
@@ -54,6 +55,11 @@ function makeRpcFixture(scenario) {
   const calls = []
   const respond = name => {
     calls.push(name)
+    if (scenario === 'mate') {
+      if (name === 'customer_people') return ok({ owner: { id: null, name: '試験本人' }, companions: [{ id: 'c-a', name: '試験エー' }, { id: 'c-b', name: '試験ビー' }] })
+      // お連れ様Aだけ予約済み。ご本人とBは予約なし
+      if (name === 'customer_list_reservations') return ok([{ ...resv('10:00'), companion_id: 'c-a', companion_of: null, companion_name: '試験エー' }])
+    }
     if (name === 'customer_list_reservations' && fixtureState.resv !== 'off') {
       return fixtureState.resv === 'down' ? outage : ok([resv(fixtureState.resv)])
     }
@@ -147,6 +153,22 @@ const comeBack = page => page.evaluate(() => {
 })
 
 const cases = {
+  async mateIntent(browser, origin) {
+    const f = await prepare(browser, origin, 'mate', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })))
+      await f.page.getByRole('button', { name: 'お連れ様の予約をする', exact: true }).click()
+      const group = f.page.getByRole('group', { name: 'ご予約の方' })
+      await group.waitFor()
+      const btn = name => group.getByRole('button', { name: new RegExp(name) })
+      assert.equal(await btn('試験ビー').getAttribute('aria-pressed'), 'true')
+      assert.equal(await btn('ご本人').getAttribute('aria-pressed'), 'false')
+      assert(await btn('試験エー').isDisabled()) // 予約済み
+      await f.page.getByRole('button', { name: /次へ（1名）/ }).waitFor()
+    } finally { await f.close() }
+  },
+
   async nextResume(browser, origin) {
     fixtureState.resv = '10:00'
     const f = await prepare(browser, origin, 'next', { signedIn: true, path: '/?tab=next' })
