@@ -533,6 +533,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       window.dispatchEvent(new CustomEvent('ginjiro-guide:run', { detail: { ns: 'customer', task: 'c-people' } }))
     }
     if (preset?.group && !allMates.length) return guidePeople()
+    /** 【お連れ様の予約をする】から来た：人を選ぶ時の初めの選択をお連れ様にする（ご本人が選ばれていた・SR-03） */
+    let mateIntent = false
     if (askExisting && upcoming.length) {
       const r = upcoming[0]
       const CHANGE = '今の予約を変更する', MATE = 'お連れ様の予約をする'
@@ -543,6 +545,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (a === MATE || (!fromChip.current && /連れ|家族|子/.test(a))) {
         if (!allMates.length) return guidePeople()
         if (!mates.length) { await say('ご登録のお連れ様は、みなさんもうご予約があります。変更は「今の予約を変更する」からどうぞ。'); return endChange() }
+        mateIntent = true
       } else if (!ownerFree) {
         await say('ご予約は、お一人さま1件までです。日時やメニューを変えるときは「今の予約を変更する」からどうぞ。'); return endChange()
       }
@@ -793,7 +796,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       const m = d.menus[p.key]
       return d.at && m.price != null ? priceFor(m.code, m.price, startOf(p), [])?.base ?? m.price : m.price
     }
-    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${chargeOf(p) != null ? ` ${yen(chargeOf(p)!)}` : ''}${d.who!.length > 1 && planned(p) ? `（担当：${planned(p)}${staggered() ? `・${hm(startOf(p))}〜` : ''}）` : ''}`).join('\n')
+    // 1人でも、ご本人以外の予約なら「〇〇さん：」を付けて、誰の予約か確定の前に分かるように（SR-03）
+    const summary = () => d.who!.map(p => `${d.who!.length > 1 || p.key !== 'me' ? p.label + '：' : ''}${d.menus[p.key].name}${chargeOf(p) != null ? ` ${yen(chargeOf(p)!)}` : ''}${d.who!.length > 1 && planned(p) ? `（担当：${planned(p)}${staggered() ? `・${hm(startOf(p))}〜` : ''}）` : ''}`).join('\n')
       + (staffOf() ? `\n担当：${staffName(staffOf())}` : d.who!.length === 1 && staffFor(d.who![0]).length > 1 ? '\n担当：どちらでも' : '')
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
@@ -871,7 +875,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         await say('どなたのご予約ですか？\nご一緒の方の分も、まとめてお取りできますよ。')
         const a = await new Promise<string>(res => {
           whoChosen.current = null
-          setWhoPick({ list: pickList, sel: [ownerFree ? 'me' : everyone[0].key] })
+          setWhoPick({ list: pickList, sel: [mateIntent ? mates[0].key : ownerFree ? 'me' : everyone[0].key] })
           setWaiting(true)
           waitRef.current = res
         })
@@ -879,7 +883,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const w = (chosenKeys ? everyone.filter(p => chosenKeys.includes(p.key)) : null) ?? (fromChip.current ? byChip.get(a) : undefined) ?? whoIn(a) ?? (mates.find(p => p.label === a) ? [mates.find(p => p.label === a)!] : null)
         if (w) { d.who = w; continue }
         if (await change(a)) continue
-        d.who = ownerFree ? [owner] : [mates[0]]; continue
+        d.who = ownerFree && !mateIntent ? [owner] : [mates[0]]; continue
       }
       // メニュー（決まっとらん人だけ）
       const need = d.who.find(p => !d.menus[p.key])
