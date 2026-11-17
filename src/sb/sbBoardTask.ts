@@ -52,8 +52,19 @@ export function boardDoneStatus(r: R, task: BoardTask): 'done' | 'not_required' 
 export function boardWarnBefore(r: R): boolean {
   return r.source === 'hotpepper' || r.transfer_status === 'done'
 }
-/** 一番新しい「内容変更」の変更前（変更前：日時・担当を出す） */
+/**
+ * 「変更前」に出す日時・担当：いまサロンボードに入っている内容（SR-11）。
+ *   サロンボードに入っていた時（転記済み done・HOT PEPPER の not_required）の内容から変えた、いちばん新しい変更の「変更前」。
+ *   SB だけで A→B→C と続けて動かすと、前は B を出していた（サロンボードは A のまま）。未転記の A→B→C は A→C、B を転記済みなら B→C。
+ *   入っていた時の記録が無ければ、最初の変更の変更前（HOT PEPPER の元の内容）
+ */
 export function lastBefore(events?: BoardEvent[] | null): { starts_at: string; staff_name: string | null } | null {
-  const e = [...(events ?? [])].reverse().find(x => x.event_type === 'edited' && x.before?.starts_at)
+  const edits = [...(events ?? [])]
+    .map((e, i) => ({ e, i, t: e.created_at ? Date.parse(e.created_at) : NaN }))
+    .sort((a, b) => (Number.isFinite(a.t) && Number.isFinite(b.t) && a.t !== b.t ? a.t - b.t : a.i - b.i))
+    .map(x => x.e)
+    .filter(x => x.event_type === 'edited' && x.before?.starts_at)
+  const onBoardThen = (x: BoardEvent) => x.before?.transfer_status === 'done' || x.before?.transfer_status === 'not_required'
+  const e = [...edits].reverse().find(onBoardThen) ?? edits[0]
   return e?.before?.starts_at ? { starts_at: e.before.starts_at, staff_name: e.before.staff_name ?? null } : null
 }
