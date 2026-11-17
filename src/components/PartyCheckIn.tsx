@@ -19,7 +19,7 @@ export function PartyCheckIn({ userId, party, staffName, onDone }: {
   party: PartyEntry[]
   staffName: string
   /** 閉じる。受付したら新しい一覧 */
-  onDone: (party: PartyEntry[] | null) => void
+  onDone: (party: PartyEntry[] | null, checkedIn?: readonly string[]) => void
 }) {
   const waiting = party.filter(p => p.status === 'confirmed')
   const [mode, setMode] = useState<'ask' | 'choose'>('ask')
@@ -33,7 +33,7 @@ export function PartyCheckIn({ userId, party, staffName, onDone }: {
     setBusy(true); setError(null)
     try {
       const r = await callStaffRpc<{ ok: boolean; party: PartyEntry[] }>('staff_check_in_party', { p_user_id: userId, p_reservation_ids: ids, p_staff_name: staffName || '店舗端末' })
-      onDone(Array.isArray(r.party) ? r.party : null)
+      onDone(Array.isArray(r.party) ? r.party : null, ids)
     } catch (err) {
       const code = err instanceof RpcError ? err.code : ''
       setError(code === 'reservation_mismatch' ? 'このお客様の今日のご予約ではありません。読み取り直してください。'

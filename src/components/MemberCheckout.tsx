@@ -6,6 +6,7 @@ import { Checkout } from './booking/Checkout'
 import { createStaffCheckoutApi, PAYMENT_LABEL, type Sale } from '../utils/checkoutApi'
 import { createStaffCustomerApi } from '../utils/customerApi'
 import { yen } from '../utils/bookingApi'
+import { pickCheckoutReservation } from '../utils/checkoutTarget'
 import { callRpc, callStaffRpc, getStaffToken, rpcErrorMessage } from '../utils/staffSession'
 import { getStoredValue } from '../utils/storage'
 import { readCheckoutAttempt, startNextCheckout } from '../utils/checkoutAttempt'
@@ -20,8 +21,10 @@ const UNPAID = ['checked_in', 'in_service', 'awaiting_payment']
 // 店舗端末の「担当者」（AdminScreen が端末に保存する）。会計の記録には確定した時点の名前を残す
 const readActor = () => getStoredValue<string>('ginjiro_staff_name', '')
 
-export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
+export function MemberCheckout({ userId, staffName, ticketIds, onPaid, checkedIn = null }: {
   userId: string
+  /** 今回の受付で選んだ予約（その方の会計を開く・11/18 SR-01）。無ければ null */
+  checkedIn?: string | null
   /** 店舗端末の「担当者」。会計の記録に残る操作者 */
   staffName: string
   /** お客様が会員QRで選んだ券 */
@@ -59,23 +62,18 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
       const prev = readCheckoutAttempt()
       if (prev?.result) await startNextCheckout(prev.input.idempotency_key)
       // 今日の予約がもう会計済みなら（QR を読み直した・2件目）、予約なしの会計にする
-      let reservationId = again ? null : r.reservation_id ?? null
-      if (reservationId && (await api.context(reservationId, null)).paid_sale_id) reservationId = null
+      let fromServer = again ? null : r.reservation_id ?? null
+      if (fromServer && (await api.context(fromServer, null)).paid_sale_id) fromServer = null
       // 2名様以上：受付済みでまだ会計していない今日のご予約（ご本人が先）。2件目もメニュー・担当が入った会計にする（11/10 慶一郎さん「選び直すのは面倒」）
       // 今日のご予約が読めないとき：前に読めた一覧を使う。2件目なのに一つも分からなければ、予約のない会計を開かずに止める
       const fresh = await fetchTodayPartyOrNull(userId)
       setPartyError(!fresh)
       if (!fresh && again && !party.length) { setError('今日のご予約を確かめられませんでした。通信を確かめて、もう一度押してください。'); return }
       const today = fresh ?? party
-      // 2名様以上・お連れ様の予約がある日は、まだ受付していない予約（confirmed）の会計を開かない。
-      //   お連れ様だけ受付したのに、ご本人の予約・メニュー・金額の会計が開いていた（11/18 Codex 監査 SR-01）
-      const multi = today.length >= 2 || today.some(p => !p.is_owner)
-      if (reservationId && multi && today.find(p => p.id === reservationId)?.status === 'confirmed') reservationId = null
-      const waiting = today.filter(p => UNPAID.includes(p.status)).sort((a, b) => Number(b.is_owner) - Number(a.is_owner) || a.starts_at.localeCompare(b.starts_at))
-      if (prefer && waiting.some(p => p.id === prefer)) reservationId = prefer
-      if (!reservationId) reservationId = waiting[0]?.id ?? null
+      // どの予約の会計を開くか（未受付の予約は開かない・今回受付した予約を開く・11/18 SR-01）
+      const { reservationId, needCheckIn } = pickCheckoutReservation({ fromServer, again, prefer, today })
       // 受付した方がまだいない：ご本人の予約や予約のない会計に進まず、受付をしてもらう
-      if (!reservationId && !again && multi && today.some(p => p.status === 'confirmed')) {
+      if (needCheckIn) {
         setParty(today); setTarget(null)
         setError('来られた方の受付がまだです。下から来られた方を選んでください。')
         return
@@ -93,7 +91,7 @@ export function MemberCheckout({ userId, staffName, ticketIds, onPaid }: {
   // 会員QRを読んだら、そのまま金額を入れる会計を出す（10/26 慶一郎さん：担当で料金が変わるので、店で金額を入れて確定）
   // 開いたときに1回だけ顧客台帳を読む（担当者を選び直したら、下の「お会計に進む」から）
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
-  useEffect(() => { if (staffName.trim()) void open() }, [])
+  useEffect(() => { if (staffName.trim()) void open(false, checkedIn) }, [])
 
   /** まだ受付していないお連れ様の予約を受付して、その方の会計へ（11/11 店舗端末点検：予約のない会計にされていた） */
   async function checkInAndPay(p: PartyEntry) {

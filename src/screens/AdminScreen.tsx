@@ -301,6 +301,8 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
   const [partyAsk, setPartyAsk] = useState<{ userId: string; party: PartyEntry[] } | null>(null)
   /** 来られた方を受付したら、お会計を開き直す（受付した予約の会計にする・11/18 SR-01） */
   const [partyRound, setPartyRound] = useState(0)
+  /** 今回の受付で選んだ予約（ご本人が先） */
+  const [partyPicked, setPartyPicked] = useState<string | null>(null)
   const [checkInDate, setCheckInDate]     = useState<string | null>(null)
   const [, setVisitInfo]         = useState<VisitInfo | null>(null)
 
@@ -419,7 +421,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
           // チケットの QR でも会員QR と同じく来店チェックインまで済ませ、お会計を出す（10/28：チェックインを押さないとお会計が出なかった）
           setCheckInStatus('loading')
           setCheckInDate(null)
-          void fetchTodayParty(tuData.userId).then(p => { if (partyNeedsAsk(p)) setPartyAsk({ userId: tuData.userId, party: p }) })
+          setPartyPicked(null); void fetchTodayParty(tuData.userId).then(p => { if (partyNeedsAsk(p)) setPartyAsk({ userId: tuData.userId, party: p }) })
           try {
             const visit = await checkInVisit(tuData.userId)
             setCheckInDate(visit.date)
@@ -508,7 +510,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
         && (!t.expires_at || new Date(t.expires_at) > now) && canUseDiscountType(ctx.today_used_type, t.type) && !isWelcomeCouponBlockedToday(t)).map(t => t.id))
     }
     // 会員QRの読み取り＝来店の記録（14日は対象メニューの会計の完了から・11/8）。今日のご予約が2名以上・お連れ様なら、来た方を聞いて受付
-    void fetchTodayParty(passportData.userId).then(p => { if (partyNeedsAsk(p)) setPartyAsk({ userId: passportData.userId, party: p }) })
+    setPartyPicked(null); void fetchTodayParty(passportData.userId).then(p => { if (partyNeedsAsk(p)) setPartyAsk({ userId: passportData.userId, party: p }) })
     setCheckInStatus('loading')
     try {
       const visit = await checkInVisit(passportData.userId)
@@ -988,6 +990,7 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
                   key={`${scannedData.userId}:${partyRound}`}
                   userId={scannedData.userId}
                   staffName={staffId}
+                  checkedIn={partyPicked}
                   ticketIds={selectedTicketIds}
                   onPaid={() => {
                     setSelectedTicketIds([])
@@ -1844,7 +1847,14 @@ export function AdminScreen({ mode = 'issue' }: { mode?: AdminScreenMode }) {
 
       {/* ── Confirmation modal ── */}
       {partyAsk && (
-        <PartyCheckIn userId={partyAsk.userId} party={partyAsk.party} staffName={staffId} onDone={p => { setPartyAsk(null); if (p) setPartyRound(n => n + 1) }} />
+        <PartyCheckIn userId={partyAsk.userId} party={partyAsk.party} staffName={staffId} onDone={(p, ids) => {
+          setPartyAsk(null)
+          if (!p) return
+          // 選んだ方のうちご本人が先（1人ならその方）。その予約の会計を開き直す
+          const picked = p.filter(x => ids?.includes(x.id)).sort((a, b) => Number(b.is_owner) - Number(a.is_owner))[0]
+          setPartyPicked(picked?.id ?? null)
+          setPartyRound(n => n + 1)
+        }} />
       )}
 
       {showConfirm && scannedData && (
