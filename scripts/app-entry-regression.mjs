@@ -4,6 +4,7 @@
 //   SR-10：次回予約を開いたまま戻ってきたら読み直す（ほかの端末で 10:00→11:00）。復帰の合図が重なっても照会は1回
 //   SR-03：「お連れ様の予約をする」から入ったら、人の初めの選択は予約できるお連れ様（ご本人ではない）
 //   SR-06：ログイン前にキャンセル待ちのお知らせを開いても行き先が消えず、ログインできたら1回だけ枠を聞く
+//          端末に残ったログインが期限切れでも、ログインし直したら枠を聞く（再検査）
 // 使い方：GACHA_CHROMIUM_CHANNEL=chrome node scripts/app-entry-regression.mjs
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
@@ -22,6 +23,7 @@ const { chromium, devices } = require(process.env.GACHA_PLAYWRIGHT_MODULE || 'pl
 const repo = fileURLToPath(new URL('../', import.meta.url))
 const user = 'qa-entry-user'
 const token = 'synthetic-entry-session-for-local-regression'
+const staleToken = 'synthetic-entry-session-expired-on-this-device'
 const holdId = '00000000-0000-4000-8000-0000000000a1'
 const fixedTime = new Date('2026-11-12T03:00:00Z') // 日本時間 12:00
 const ok = json => ({ status: 200, json })
@@ -54,15 +56,17 @@ const fixtureState = { up: false, chat: false, failNext: false, resv: 'off' }
 function makeRpcFixture(scenario) {
   Object.assign(fixtureState, { up: false, chat: false, failNext: false, resv: 'off' })
   const calls = []
-  const respond = name => {
+  const respond = (name, body) => {
     calls.push(name)
+    // 端末に残った期限切れのログイン：サーバーはどの照会も断る
+    if (body?.p_session === staleToken) return { status: 400, json: { code: 'P0001', message: 'customer_auth_required' } }
     if (scenario === 'mate') {
       if (name === 'customer_people') return ok({ owner: { id: null, name: '試験本人' }, companions: [{ id: 'c-a', name: '試験エー' }, { id: 'c-b', name: '試験ビー' }] })
       // お連れ様Aだけ予約済み。ご本人とBは予約なし
       if (name === 'customer_list_reservations') return ok([{ ...resv('10:00'), companion_id: 'c-a', companion_of: null, companion_name: '試験エー' }])
     }
     if (name === 'customer_list_reservations' && fixtureState.resv !== 'off') {
-      return fixtureState.resv === 'down' ? outage : ok([resv(fixtureState.resv)])
+      return fixtureState.resv === 'down' ? outage : fixtureState.resv === 'none' ? ok([]) : ok([resv(fixtureState.resv)])
     }
     if (name === 'customer_booking_options') {
       // menuRecovers：銀ちゃんを開いた最初の1回だけ 503（アプリの起動時の分は数えない）。
@@ -71,13 +75,15 @@ function makeRpcFixture(scenario) {
       if (scenario === 'menuDown' && fixtureState.chat && !fixtureState.up) return outage
       return ok({ menus, staff: [] })
     }
+    // holdNetwork：最初の枠の照会だけ通信の失敗
+    if (name === 'customer_get_hold' && scenario === 'holdNetwork' && !fixtureState.up) { fixtureState.up = true; return outage }
     if (name === 'customer_get_hold') return ok(scenario === 'holdExpired' ? { error: 'hold_expired' } : hold)
     return ok(shellReplies[name] ?? null)
   }
   return { calls, respond }
 }
 
-async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, pendingAt, noUser = false }) {
+async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, pendingAt, noUser = false, stale = false }) {
   const context = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' })
   const rpc = makeRpcFixture(scenario)
   try {
@@ -86,17 +92,20 @@ async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, 
       const url = new URL(request.url())
       if (url.origin !== origin) return route.abort()
       if (request.method() === 'POST' && url.pathname.startsWith('/rest/v1/rpc/')) {
-        return route.fulfill(rpc.respond(url.pathname.split('/').at(-1)))
+        let body = null
+        try { body = request.postDataJSON() } catch { /* 本文なし */ }
+        return route.fulfill(rpc.respond(url.pathname.split('/').at(-1), body))
       }
       if (request.method() !== 'GET' && request.method() !== 'HEAD') return route.abort()
       return route.continue()
     })
-    await context.addInitScript(({ user, token, signedIn, firstGuide, holdId, pendingAt, noUser }) => {
+    await context.addInitScript(({ user, token, staleToken, stale, signedIn, firstGuide, holdId, pendingAt, noUser }) => {
       if (sessionStorage.getItem('qa_entry_init')) return // 1回目の読み込みだけ整える
       sessionStorage.setItem('qa_entry_init', '1')
       Object.defineProperty(navigator, 'standalone', { configurable: true, value: true })
       if (!noUser) localStorage.setItem('ginjiro_user_id', JSON.stringify(user))
       if (signedIn) localStorage.setItem('ginjiro_customer_session', token)
+      if (stale) localStorage.setItem('ginjiro_customer_session', staleToken)
       localStorage.setItem('ginjiro:onboarding_done', 'true')
       localStorage.setItem('ginjiro_campaign_hidden', JSON.stringify('black-monday-2026'))
       localStorage.setItem('ginjiro_launch_kaikin_seen', String(Date.parse('2026-11-11T12:00:00+09:00')))
@@ -108,7 +117,7 @@ async function prepare(browser, origin, scenario, { signedIn, firstGuide, path, 
       if (firstGuide) localStorage.setItem('ginjiro_first_guide', JSON.stringify({ visited: true }))
       // 前にログイン前で預かったままの枠（SR-06 の古い預かり）
       if (pendingAt) localStorage.setItem('ginjiro_pending_hold', JSON.stringify({ holdId, at: pendingAt }))
-    }, { user, token, signedIn, firstGuide, holdId, pendingAt, noUser })
+    }, { user, token, staleToken, stale, signedIn, firstGuide, holdId, pendingAt, noUser })
     const page = await context.newPage()
     await page.clock.setFixedTime(fixedTime)
     page.setDefaultTimeout(9000)
@@ -171,11 +180,22 @@ async function openMenuList(page) {
 
 const lists = f => f.calls.filter(name => name === 'customer_list_reservations').length
 /** 画面を離れて戻ってきた時の合図を、重ねて送る（iPhone はまとめて来ることがある） */
-const comeBack = page => page.evaluate(() => {
+const goAway = page => page.evaluate(() => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+  document.dispatchEvent(new Event('visibilitychange'))
+  window.dispatchEvent(new Event('pagehide'))
+})
+const showAgain = page => page.evaluate(() => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+  document.dispatchEvent(new Event('visibilitychange'))
+})
+const pageShow = page => page.evaluate(() => { const e = new Event('pageshow'); Object.defineProperty(e, 'persisted', { value: true }); window.dispatchEvent(e) })
+const comeBack = async page => { await goAway(page); await page.evaluate(() => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
   document.dispatchEvent(new Event('visibilitychange'))
   document.dispatchEvent(new Event('visibilitychange'))
   const e = new Event('pageshow'); Object.defineProperty(e, 'persisted', { value: true }); window.dispatchEvent(e)
-})
+}) }
 
 const cases = {
   async mateIntent(browser, origin) {
@@ -223,18 +243,62 @@ const cases = {
       await f.page.waitForTimeout(400)
       const before = lists(f)
       fixtureState.resv = '11:00'
-      await f.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+      await goAway(f.page)
+      await showAgain(f.page)
       await panel.getByText('11:00〜').waitFor()
       await f.page.waitForTimeout(300) // 応答が返ったあと
-      await f.page.evaluate(() => { const e = new Event('pageshow'); Object.defineProperty(e, 'persisted', { value: true }); window.dispatchEvent(e) })
+      await pageShow(f.page)
       await f.page.waitForTimeout(500)
       assert.equal(lists(f) - before, 1)
       // 1分後にまた戻ってきた（取り消されていた）
       fixtureState.resv = '12:00'
       await f.page.clock.setFixedTime(new Date(fixedTime.getTime() + 60_000))
-      await f.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+      await goAway(f.page)
+      await showAgain(f.page)
       await panel.getByText('12:00〜').waitFor()
       assert.equal(lists(f) - before, 2)
+    } finally { await f.close() }
+  },
+  // SR-10（再検査2）：3秒以内でも、一度離れてまた戻ってきたら別の復帰。もう一度読み直す
+  async nextResumeTwiceQuickly(browser, origin) {
+    fixtureState.resv = '10:00'
+    const f = await prepare(browser, origin, 'next', { signedIn: true, path: '/?tab=next' })
+    fixtureState.resv = '10:00'
+    try {
+      const panel = f.page.getByRole('region', { name: '次のご予約' })
+      await panel.getByText('10:00〜').waitFor()
+      await f.page.waitForTimeout(400)
+      const before = lists(f)
+      fixtureState.resv = '11:00'
+      await comeBack(f.page)
+      await panel.getByText('11:00〜').waitFor()
+      fixtureState.resv = '12:00' // すぐ離れて、ほかの端末で変更されてから戻った（時計は進めない＝3秒以内）
+      await comeBack(f.page)
+      await panel.getByText('12:00〜').waitFor()
+      await f.page.waitForTimeout(400)
+      assert.equal(lists(f) - before, 2)
+    } finally { await f.close() }
+  },
+  // SR-10（再検査2）：別の読み直しで取消を反映した直後に、同じ復帰の pageshow が来ても、古い応答で予約を戻さない
+  async nextResumeNoStaleOverwrite(browser, origin) {
+    fixtureState.resv = '10:00'
+    const f = await prepare(browser, origin, 'next', { signedIn: true, path: '/?tab=next' })
+    fixtureState.resv = '10:00'
+    try {
+      const panel = f.page.getByRole('region', { name: '次のご予約' })
+      await panel.getByText('10:00〜').waitFor()
+      await f.page.waitForTimeout(400)
+      fixtureState.resv = '11:00'
+      await goAway(f.page)
+      await showAgain(f.page)
+      await panel.getByText('11:00〜').waitFor()
+      fixtureState.resv = 'none' // 取り消された → 別の読み直し
+      await f.page.evaluate(() => window.dispatchEvent(new Event('ginjiro:reservation-changed')))
+      await f.page.waitForFunction(() => !document.body.innerText.includes('11:00〜'))
+      await pageShow(f.page)
+      await f.page.waitForTimeout(600)
+      assert.equal(await panel.getByText('11:00〜').count(), 0)
+      assert.equal(await panel.getByText('ご予約確定').count(), 0)
     } finally { await f.close() }
   },
   async nextResumeFailed(browser, origin) {
@@ -345,6 +409,36 @@ const cases = {
       await f.page.getByRole('heading', { name: 'ログインと引き継ぎ' }).waitFor()
       await signIn(f.page)
       await chat(f.page).getByText(/キャンセルが出ました/).waitFor()
+      await f.page.reload()
+      await offeredOnce(f.page)
+      await answerOffer(f.page)
+    } finally { await f.close() }
+  },
+  // SR-06（再検査2）：端末に残ったログインが期限切れ。お知らせを開いても枠IDは残り、ログインし直したら1回聞く
+  async holdStaleSession(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: false, stale: true, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
+    const pending = () => f.page.evaluate(() => JSON.parse(localStorage.getItem('ginjiro_pending_hold') ?? 'null')?.holdId ?? null)
+    try {
+      await f.page.waitForFunction(() => localStorage.getItem('ginjiro_customer_session') === null) // 期限切れでログインが外れた
+      await f.page.waitForTimeout(1000)
+      assert.equal(await pending(), holdId)
+      // 銀ちゃんが開いていたら閉じる（ログインが外れたまま閉じても、預かりは消えない）
+      if (await chat(f.page).count()) await f.page.locator('.lc-close').click()
+      await f.page.waitForTimeout(300)
+      assert.equal(await pending(), holdId)
+      const n = holdCalls(f)
+      await Promise.all([f.page.waitForEvent('load'), passkeyLogin(f.page)])
+      await offeredOnce(f.page)
+      assert(holdCalls(f) > n)
+      await answerOffer(f.page)
+    } finally { await f.close() }
+  },
+  // SR-06（再検査2）：枠の照会が通信の失敗（読み込み直しで切れた時も同じ）なら預かりは消さず、開き直したら聞ける
+  async holdNetwork(browser, origin) {
+    const f = await prepare(browser, origin, 'holdNetwork', { signedIn: true, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
+    try {
+      await chat(f.page).getByText(/通信の具合で確認できませんでした/).waitFor()
+      assert.equal(await f.page.evaluate(() => JSON.parse(localStorage.getItem('ginjiro_pending_hold') ?? 'null')?.holdId ?? null), holdId)
       await f.page.reload()
       await offeredOnce(f.page)
       await answerOffer(f.page)
