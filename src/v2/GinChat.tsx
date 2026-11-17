@@ -35,7 +35,7 @@ import { SHOP_PHONE_TEL } from '../data/wallet'
 import { RpcBusinessError, RpcError } from '../utils/staffSession'
 import { longestIn, namesIn } from './ginWords'
 import { planParty } from './partyPlan'
-import { blackMondayFor, blackMondayMenus, gachaNote, gachaOff, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
+import { blackMondayFor, blackMondayMenus, gachaNote, gachaOff, priceFor, saveCouponPlan, usableTickets } from '../utils/bookingCoupons'
 import { BLACK_MONDAY_LABEL, blackMondayOffText } from '../utils/blackMonday'
 import { isPermOnlyCoupon } from '../utils/welcomeCoupon'
 import { attachGacha, loadGacha, type GachaHeld } from '../features/gacha/gachaApi'
@@ -750,7 +750,12 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     const planned = (p: BookPerson) => staffName(d.plan?.[p.key] ?? null)
     // 2人以上で始まりが違う（同じ担当で続けて）ときは、人ごとに「10:50〜」も添える
     const staggered = () => !!d.at && d.who!.length > 1 && d.who!.some(p => startOf(p) !== d.at)
-    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${d.menus[p.key].price != null ? ` ${yen(d.menus[p.key].price)}` : ''}${d.who!.length > 1 && planned(p) ? `（担当：${planned(p)}${staggered() ? `・${hm(startOf(p))}〜` : ''}）` : ''}`).join('\n')
+    /** その日時の料金（土日祝の 17:00〜19:00 以外は通常価格・お客様ごとの料金。お会計と同じ。日時が未定ならメニューの料金）。11/23（月・祝）の日中に安く出ていた（点検） */
+    const chargeOf = (p: BookPerson): number | null => {
+      const m = d.menus[p.key]
+      return d.at && m.price != null ? priceFor(m.code, m.price, startOf(p), [])?.base ?? m.price : m.price
+    }
+    const summary = () => d.who!.map(p => `${d.who!.length > 1 ? p.label + '：' : ''}${d.menus[p.key].name}${chargeOf(p) != null ? ` ${yen(chargeOf(p)!)}` : ''}${d.who!.length > 1 && planned(p) ? `（担当：${planned(p)}${staggered() ? `・${hm(startOf(p))}〜` : ''}）` : ''}`).join('\n')
       + (staffOf() ? `\n担当：${staffName(staffOf())}` : d.who!.length === 1 && staffFor(d.who![0]).length > 1 ? '\n担当：どちらでも' : '')
 
     // 同じ人の施術が重なる場合だけ、新規登録の前に止める。
@@ -770,17 +775,17 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       return gachaHeld.free_menu && !gachaHeld.self_only ? d.who.find(fits) : undefined
     }
     /** Black Monday（11/17）：人ごと（お連れ様の予約もアプリの予約なので対象）。ご本人が Welcome・再来店パーマクーポンを選んだら、ご本人の分は付かない */
-    const bmOf = (p: BookPerson) => p.key === 'me' && picked && isPermOnlyCoupon(picked) ? 0 : blackMondayFor(d.menus[p.key].code, startOf(p), d.menus[p.key].price)
+    const bmOf = (p: BookPerson) => p.key === 'me' && picked && isPermOnlyCoupon(picked) ? 0 : blackMondayFor(d.menus[p.key].code, startOf(p), chargeOf(p))
     /** 券・Black Monday・ガチャ券を引いたお支払い予定の行（引くものが無ければ空） */
     const priceLines = () => {
       const g = gachaFor()
       const bm = d.who!.map(p => ({ p, off: bmOf(p) })).filter(x => x.off > 0)
       // ガチャの無料券は Black Monday のあとの残りをまかなう（サーバーの会計と同じ順）
-      const gOff = g ? gachaOff(gachaHeld, d.menus[g.key].code, d.at!, Math.max(0, (d.menus[g.key].price ?? 0) - bmOf(g))) ?? 0 : 0
+      const gOff = g ? gachaOff(gachaHeld, d.menus[g.key].code, d.at!, Math.max(0, (chargeOf(g) ?? 0) - bmOf(g))) ?? 0 : 0
       const tOff = picked ? picked.amount : 0
       const bmOff = bm.reduce((a, x) => a + x.off, 0)
       if (!gOff && !tOff && !bmOff) return ''
-      const sum = d.who!.reduce((a, p) => a + (d.menus[p.key].price ?? 0), 0)
+      const sum = d.who!.reduce((a, p) => a + (chargeOf(p) ?? 0), 0)
       return [
         ...(picked ? [`${picked.title} −${yen(tOff)}`] : []),
         ...bm.map(x => `${BLACK_MONDAY_LABEL}${d.who!.length > 1 ? `・${x.p.label}` : ''} ${blackMondayOffText(x.off)}`),
@@ -1091,9 +1096,9 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
         const label = (t: TicketRow) => groups.filter(x => x.title === t.title).length > 1 ? `${t.title}（${yen(t.amount)}）` : t.title
         // 2人以上のときは、券が付くのはご本人の予約だけと分かるように（11/10 夜の点検）
         // Black Monday の日（11/17 慶一郎さん「B」）：パーマのクーポン（Welcome・再来店）は出すが、一緒に使えないことを添える。券を選べば Black Monday は外れる
-        const bmMe = me ? blackMondayFor(d.menus.me.code, startOf(me), d.menus.me.price) : 0
+        const bmMe = me ? blackMondayFor(d.menus.me.code, startOf(me), chargeOf(me)) : 0
         const permVsBm = (t: TicketRow) => bmMe > 0 && isPermOnlyCoupon(t)
-        const bmNote = groups.some(permVsBm) ? `\nパーマのクーポン（Welcome・再来店）は、Black Monday（−${yen(bmMe)}）と一緒には使えません。` : ''
+        const bmNote = groups.some(permVsBm) ? `\nパーマのクーポン（Welcome・再来店）は、${BLACK_MONDAY_LABEL} ${blackMondayOffText(bmMe)}と一緒には使えません。` : ''
         const a = await ask(`お持ちの券を、${d.who.length > 1 ? 'ご本人の' : 'この'}ご予約で使いますか？\nご来店のときのお会計で差し引きます。${bmNote}`,
           [...groups.map(t => ({ label: label(t), sub: permVsBm(t) ? `−${yen(t.amount)}（Black Monday なし）` : `−${yen(t.amount)}`, strong: groups.length === 1 && !permVsBm(t) })), { label: NO_TICKET, strong: groups.length > 0 && groups.every(permVsBm) }])
         if (fromChip.current) { picked = groups.find(t => label(t) === a) ?? null; continue }

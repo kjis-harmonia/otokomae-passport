@@ -47,7 +47,7 @@ export function MenuPickerSheet({ menus, usualCode, bm, onPick, onClose }: {
   const tabs = TABS.filter(t => t.id === 'all' || menus.some(m => menuTab(m.code) === t.id))
   const list = useMemo(() => {
     const k = norm(q)
-    return menus.filter(m => (tab === 'all' || menuTab(m.code) === tab) && (!k || norm(m.name).includes(k)))
+    return menus.filter(m => (k ? norm(m.name).includes(k) : tab === 'all' || menuTab(m.code) === tab))
   }, [menus, tab, q])
   const searching = q.trim() !== ''
 
