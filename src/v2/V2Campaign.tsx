@@ -201,7 +201,7 @@ export function V2Campaign({ onGacha }: { onGacha: () => void }) {
             )}
             {CAMPAIGN.lead && <p className="v2-campaign-lead">{CAMPAIGN.lead}</p>}
             <p className="v2-campaign-detail">{CAMPAIGN.detail.map(d => <span key={d}>{d}</span>)}</p>
-            {CAMPAIGN.action && <button type="button" className="v2-campaign-go" onClick={act}>{CAMPAIGN.action.text}</button>}
+            {CAMPAIGN.action && <button type="button" className={CAMPAIGN.blackMonday ? 'v2-campaign-go is-bm' : 'v2-campaign-go'} onClick={act}>{CAMPAIGN.action.text}</button>}
             <div className="v2-campaign-foot">
               <label className="v2-campaign-hide">
                 <input type="checkbox" checked={hide} onChange={e => setHide(e.target.checked)} />
