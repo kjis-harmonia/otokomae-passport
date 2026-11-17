@@ -460,6 +460,34 @@ const cases = {
       await answerOffer(f.page)
     } finally { await f.close() }
   },
+  // SR-06（再検査4）：枠が取れてから案内文が出るまでの間（入力中の表示）に【あとで】で閉じても、預かりは残る
+  async holdClosedBeforeShown(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.evaluate(id => localStorage.setItem('ginjiro_pending_hold', JSON.stringify({ holdId: id, at: Date.now() })), holdId)
+      // 枠の照会の応答が届いて 0.2 秒後（案内文の入力中の表示 0.46 秒の間）に【あとで】を押す
+      await f.page.evaluate(() => {
+        const orig = window.fetch
+        window.fetch = async (...args) => {
+          const res = await orig(...args)
+          if (String(args[0] instanceof Request ? args[0].url : args[0]).endsWith('/rpc/customer_get_hold')) {
+            setTimeout(() => { window.__closedBeforeShown = !document.querySelector('.gc-log')?.innerText.includes('キャンセルが出ました'); document.querySelector('.lc-close')?.click() }, 200)
+          }
+          return res
+        }
+      })
+      await f.page.evaluate(id => window.dispatchEvent(new CustomEvent('ginjiro:gin-offer', { detail: { holdId: id } })), holdId)
+      await chat(f.page).waitFor({ state: 'detached' })
+      assert.equal(await f.page.evaluate(() => window.__closedBeforeShown), true) // 案内文が出る前に閉じた
+      assert.equal(holdCalls(f), 1)
+      assert.equal(await f.page.evaluate(() => JSON.parse(localStorage.getItem('ginjiro_pending_hold') ?? 'null')?.holdId ?? null), holdId)
+      // 次に開いた時（ログインし直し・読み込み直し）に聞ける
+      await f.page.reload()
+      await offeredOnce(f.page)
+      await answerOffer(f.page)
+    } finally { await f.close() }
+  },
   // SR-06（再検査3）：枠をお見せしてから答えずに閉じたら、預かりは消える（次に開いた時にくり返し聞かない）
   async holdShownThenClosed(browser, origin) {
     const f = await prepare(browser, origin, 'hold', { signedIn: true, path: `/?tab=reserve&johnny=1&hold=${holdId}` })
