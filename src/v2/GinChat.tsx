@@ -22,7 +22,7 @@ import { ReservationMutationClient, reservationMenuCodes, type Confirmation, typ
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
 import { MenuPickerSheet } from './MenuPickerSheet'
-import { canBeUsual, getUsualMenu, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
+import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
 import { loadUsual } from './usualPicks'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
 import { askUsualAi } from '../features/johnny/usualAi'
@@ -172,6 +172,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   const [waiting, setWaiting] = useState(false)
   const [text, setText] = useState('')
   const [sheet, setSheet] = useState<Menu[] | null>(null)
+  /** 一覧の一番上に出す「いつものメニュー」（その人の。チャットの「いつもの〇〇ですね」と同じ・11/18 慶一郎さん）。無ければ null */
+  const [sheetTop, setSheetTop] = useState<string | null>(null)
   const [finished, setFinished] = useState(false)
   const [bookingComplete, setBookingComplete] = useState(false)
   const nextId = useRef(1)
@@ -247,7 +249,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     push('you', t.trim())
     w(t.trim())
   }, [])
-  const pickFromList = (): Promise<Menu | null> => { setSheet(menusRef.current); return new Promise(res => { sheetRef.current = res }) }
+  const pickFromList = (top: string | null = null): Promise<Menu | null> => { setSheetTop(top); setSheet(menusRef.current); return new Promise(res => { sheetRef.current = res }) }
   /** 会話の中にカレンダーを出して、日付を待つ（選んだらカレンダーは畳んで、選んだ日だけ残す） */
   //   カレンダーの間も文字・声で答えられる（満席の日は押せないので「11月20日」と送ってキャンセル待ちへ・11/10 Codex 再検査）
   const pickDate = async (open: string[]): Promise<{ day: string } | { text: string } | null> => {
@@ -283,7 +285,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   }, [voice.listen, voice.notice])
 
   /** メニューを聞く：AI が相談に乗る。決まったら名前と料金で確かめる（「ちがう」は何が違うか聞き直す・同じものを押しつけない） */
-  const hearMenu = async (who: Who, opener: string, visitDate: string | null): Promise<Menu | null> => {
+  const hearMenu = async (who: Who, opener: string, visitDate: string | null, top: string | null = null): Promise<Menu | null> => {
     const all = menusRef.current
     const rejected = new Set<string>()
     let line = opener
@@ -294,7 +296,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       //   聞き直すのは、話した・打った言葉から読み取ったときだけ（聞き間違いを防ぐ）
       let tapped = fromChip.current
       let menu: Menu | null = sugg.find(m => m.name === t) ?? null
-      if (!menu && t === '一覧から選ぶ') { menu = await pickFromList(); tapped = true; if (menu) push('you', menu.name); else { line = 'では、お話ししながら決めましょう。どんなことでもお聞かせください。'; sugg = []; continue } }
+      if (!menu && t === '一覧から選ぶ') { menu = await pickFromList(top); tapped = true; if (menu) push('you', menu.name); else { line = 'では、お話ししながら決めましょう。どんなことでもお聞かせください。'; sugg = []; continue } }
       if (menu && tapped) return menu
       if (!menu) {
         const plain = t.normalize('NFKC').replace(/[\s。、！!]/g, '').replace(/(でお願い(します)?|にする|でええ|で)$/, '')
@@ -626,13 +628,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       return false
     }
 
+    /** その人の「いつもの」のメニューの code（チャットの「いつもの〇〇ですね」・一覧の一番上で同じものを使う）。
+     *  ご本人：登録したいつもの → ホームの「いつものでAI予約する」と同じ探し方（端末の記録・来店の記録）。お連れ様：その方の登録だけ */
+    const usualCodeOf = async (key: string, person: Person | null | undefined): Promise<string | null> => {
+      if (person?.menu_code) return person.menu_code
+      if (key !== 'me') return null
+      setTyping(true)
+      try { return (await loadUsual().catch(() => null))?.menu?.code ?? null } finally { setTyping(false) }
+    }
     /** その人のメニュー（いつもの・メンテナンス・ほか） */
     const askMenuFor = async (p: BookPerson): Promise<Menu | null | 'changed'> => {
       // ご本人で「いつもの」を登録していないときは、ホームの「いつものでAI予約する」と同じ探し方（端末の記録・前回のご来店）にそろえる
       //   （11/10 夜の点検：ホームは「いつもの アイパー」なのに、押すと「メニューは、何にされますか？」と聞き直していた）
-      let homeCode: string | null = null
-      if (!p.person?.menu_code && p.key === 'me') { setTyping(true); homeCode = (await loadUsual().catch(() => null))?.menu?.code ?? null; setTyping(false) }
-      const usualCode = p.person?.menu_code ?? homeCode
+      const usualCode = await usualCodeOf(p.key, p.person)
       const usual = usualCode ? all.find(m => m.code === usualCode) ?? null : null
       const maint = p.person?.maintenance_ok ? maintMenu : undefined
       const whoText = d.who && (d.who.length > 1 || p.key !== 'me') ? `${p.label}は` : ''
@@ -651,7 +659,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (k === 'ambiguous') { await say(`「${a}」は、いつもの「${usual.name}」でよろしいということですか？ボタンで教えてくださいね。`); return await askMenuFor(p) }
       const direct = menuIn(a)
       if (direct && a !== 'ほかのメニュー') return direct
-      return await hearMenu(p.id ? { kind: 'mate', id: p.id, name: p.name } : { kind: 'me' }, '何のメニューにされますか？', null)
+      return await hearMenu(p.id ? { kind: 'mate', id: p.id, name: p.name } : { kind: 'me' }, '何のメニューにされますか？', null, usual.code)
     }
 
     /** 予約メモの人・メニュー・いつ から、空いている時間を探す（人数・施術時間ごとに今の予約エンジンで確かめる）。
@@ -856,7 +864,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           if (a === 'yes') { d.menus[need.key] = pm; continue }
           if (a !== 'no' && await change(a)) continue
         } else {
-          const m = await hearMenu(need.id ? { kind: 'mate', id: need.id, name: need.name } : { kind: 'me' }, `「${pl}」の髪型ですね。メニューは何にされますか？`, null)
+          const m = await hearMenu(need.id ? { kind: 'mate', id: need.id, name: need.name } : { kind: 'me' }, `「${pl}」の髪型ですね。メニューは何にされますか？`, null, await usualCodeOf(need.key, need.person))
           if (m) { d.menus[need.key] = m; continue }
         }
       }
@@ -1422,7 +1430,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (a === 'yes') window.location.href = SHOP_PHONE_TEL
       return end()
     }
-    const person = r.companion_id ? people?.companions.find(c => c.id === r.companion_id) ?? null : people?.owner ?? null
+    // お連れ様の予約（companion_id の無い古い予約も、お名前・親予約で分かる）はご本人として扱わない。
+    //   その方が分からなければ null（ご本人のいつもの・メンテナンスを出さない・11/18 Codex 検査）
+    const forMate = !!(r.companion_id || r.companion_of || r.companion_name)
+    const person = r.companion_id ? people?.companions.find(c => c.id === r.companion_id) ?? null : forMate ? null : people?.owner ?? null
     const whoArg: Who = r.companion_id ? { kind: 'mate', id: r.companion_id, name: r.companion_name ?? '' } : { kind: 'me' }
     let menu: Menu | null = all.find(m => m.code === r.items[0]?.menu_code) ?? (r.items[0]?.menu_code === 'maintenance' ? maintMenu ?? null : null)
     const originalCodes = reservationMenuCodes(r)
@@ -1501,16 +1512,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       // メニューを変更
       if (/メニュー/.test(action) && !/日時|日にち/.test(action)) {
         const maintOk = !!person?.maintenance_ok && !!maintMenu
-        const usual = person?.menu_code ? all.find(m => m.code === person.menu_code) ?? null : null
+        // いつもの：ご本人は登録 → 来店の記録（予約のときと同じ探し方）。お連れ様はその方の登録だけ
+        let usualCode = person?.menu_code ?? null
+        if (!usualCode && !forMate) { setTyping(true); usualCode = (await loadUsual().catch(() => null))?.menu?.code ?? null; setTyping(false) }
+        const usual = usualCode ? all.find(m => m.code === usualCode) ?? null : null
         const chips: Chip[] = [...(usual && usual.code !== menu?.code ? [{ label: usual.name, sub: yen(usual.price) }] : []), ...(maintOk && menu?.code !== 'maintenance' ? [{ label: 'メンテナンスカット', sub: person?.days_left != null ? `あと${person.days_left}日` : undefined }] : []), { label: 'ほかのメニュー' }]
         // 「何のメニューに？」を2回聞かない（11/17 慶一郎さん「二度手間」）：
         //   選べるのが【ほかのメニュー】だけなら最初から聞き取りへ。【ほかのメニュー】を押したらすぐ一覧を開く
         const OTHER = 'ほかのメニュー'
         const a = chips.length === 1 ? OTHER : await ask(`${who(r)}何のメニューに変更されますか？`, chips)
-        const picked = a === OTHER && chips.length > 1 && fromChip.current ? await pickFromList() : null
+        const picked = a === OTHER && chips.length > 1 && fromChip.current ? await pickFromList(usual?.code ?? null) : null
         if (picked) push('you', picked.name)
         const next = picked ?? (a === 'メンテナンスカット' || /メンテ/.test(a) ? maintMenu ?? null : usual && a === usual.name ? usual
-          : (a !== OTHER ? all.find(m => m.name === a) ?? longestIn(a, all, m => m.name) : null) ?? await hearMenu(whoArg, `${who(r)}何のメニューに変更されますか？`, null))
+          : (a !== OTHER ? all.find(m => m.name === a) ?? longestIn(a, all, m => m.name) : null) ?? await hearMenu(whoArg, `${who(r)}何のメニューに変更されますか？`, null, usual?.code ?? null))
         if (!next) { action = '日時を変更'; continue }
         menu = next
         menuCodes = [next.code]
@@ -1796,7 +1810,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
               <div className="gc-grab" />
               <GinNavigationMark step="menu-list" />
               {/* いつもの・検索・種類のタブ・所要時間・Black Monday（11/17 慶一郎さん「親切設計で」） */}
-              <MenuPickerSheet menus={sheet} usualCode={getUsualMenu()?.code ?? null} bm={blackMondayMenus()}
+              <MenuPickerSheet menus={sheet} usualCode={sheetTop} bm={blackMondayMenus()}
                 onPick={m => { setSheet(null); sheetRef.current?.(m as Menu); sheetRef.current = null }}
                 onClose={() => { setSheet(null); sheetRef.current?.(null); sheetRef.current = null }} />
               <a className="gc-quiet gc-sheet-link" href={HOTPEPPER_MENU_URL} target="_blank" rel="noopener noreferrer">HOT PEPPER Beauty で写真を見る</a>
