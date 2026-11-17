@@ -50,7 +50,7 @@ function makeRpcFixture(scenario) {
       if (scenario === 'keepStale') return ok(counts.keep ? { ...pending, today: laterPending } : pending)
       if (scenario === 'keepNoHeld') return ok({ ...pending, held: null })
       if (scenario === 'keepLost') return ok(counts.keep ? received : pending)
-      if (scenario === 'keep503' || scenario === 'keepOldReplay') return ok(pending)
+      if (scenario === 'keep503' || scenario === 'keepOldReplay' || scenario.startsWith('landscape')) return ok(pending)
       if (scenario === 'malformed' && counts.state === 1) return ok({ today: { ...pending.today, prize: {} }, held: [] })
       if (scenario === 'drawUnconfirmed' && counts.draw) return outage
       // SR-04：今日はもう回して券を受け取った状態。翌日になったら「まだ回していない」に変わる
@@ -161,6 +161,33 @@ async function checkScenario(scenario, fixture) {
   const result = page.locator('.v2-gacha-result')
   const resultButton = name => result.getByRole('button', { name, exact: typeof name === 'string' })
   const issued = () => result.getByText(/ガチャ券をお渡ししました/).waitFor()
+
+  // SR-13：低い横画面（667×320）と大きい文字でも、当選名・両券の条件・決定・閉じるに届く
+  if (scenario.startsWith('landscape')) {
+    if (scenario === 'landscapeLargeText') await page.addStyleTag({ content: '.v2-gacha-result span { font-size: 18px !important; } .v2-gacha-pick small, .v2-gacha-fine { font-size: 16px !important; } .v2-gacha-pick strong { font-size: 23px !important; } .v2-gacha-pick em { font-size: 18px !important; } .v2-gacha-result .v2-gacha-prize { font-size: 34px !important; }' }) // 文字の大きさを各1.25倍に（入れ子で重ねない）
+    await page.setViewportSize({ width: 667, height: 320 })
+    await button('当選した券を選ぶ').click()
+    await result.waitFor({ timeout: 12_000 })
+    await page.waitForTimeout(900) // 出てくる動きのあと
+    const box = await result.boundingBox()
+    assert(box && box.y >= 0 && box.y + box.height <= 320 + 0.5, `パネルが画面外: ${JSON.stringify(box)}`)
+    if (process.env.GACHA_SHOTS) await page.screenshot({ path: `${process.env.GACHA_SHOTS}/sr13-${scenario}.png` })
+    const reach = async locator => {
+      await locator.scrollIntoViewIfNeeded()
+      const b = await locator.boundingBox()
+      assert(b && b.y >= box.y - 0.5 && b.y + b.height <= box.y + box.height + 0.5, '届かない')
+    }
+    await reach(result.getByText(pending.today.prize.title, { exact: true }).first())
+    await reach(resultButton(/現在お持ちのガチャ券/))
+    await reach(resultButton(/新しいガチャ券/))
+    await reach(resultButton('決定する'))
+    await reach(result.getByText(/閉じても、あとから選べます/))
+    // 右上の閉じる（パネルの外）も画面の中
+    const x = await page.getByRole('button', { name: '閉じる', exact: true }).boundingBox()
+    assert(x && x.y >= 0 && x.y + x.height <= 320 && x.x + x.width <= 667, '閉じるが画面外')
+    assert.equal(counts.draw, 0)
+    return
+  }
 
   // SR-04：「本日の結果をもう一度見る」は抽選しない。開いたまま日付をまたいだら、今日の状態を読み直す
   if (scenario.startsWith('replay')) {
@@ -315,7 +342,7 @@ try {
   browser = await chromium.launch({ headless: true, channel: process.env.GACHA_CHROMIUM_CHANNEL || undefined })
   const scenarios = ['keep503', 'keepLost', 'keepStale', 'keepNoHeld', 'keepOldReplay',
     'malformed', 'frameAll', 'frameMissing', 'drawLost', 'drawUnconfirmed',
-    'replaySameDay', 'replayNextDayReturn', 'replayNextDayStale']
+    'replaySameDay', 'replayNextDayReturn', 'replayNextDayStale', 'landscape', 'landscapeLargeText']
   let passed = 0
   for (const scenario of scenarios) {
     let fixture
