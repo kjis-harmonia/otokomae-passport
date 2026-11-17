@@ -634,6 +634,8 @@ html:has(.v2-home), body:has(.v2-home) { background: #f9f8f3; height: 100%; over
 @media (prefers-reduced-motion: reduce) { .v2-bm-week li, .v2-bm-week li.is-mon, .v2-bm-price b { animation: none; } }
 @media (max-width: 340px) { .v2-bm-week { grid-template-columns: repeat(7, 32px); gap: 3px; } .v2-bm-week li { width: 32px; height: 32px; font-size: 13px; } }
 .v2-campaign-go { height: 54px; margin-top: 6px; border: 0; border-radius: 27px; background: #f8f6f1; color: #1d1915; font: 600 16px/1 var(--v2-sans); letter-spacing: .04em; cursor: pointer; }
+/* Black Monday の「AI予約する」は真っ白（11/18 慶一郎さん） */
+.v2-campaign-go.is-bm { background: #fff; color: #000; }
 .v2-campaign-foot { display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
 .v2-campaign-hide { position: relative; display: flex; align-items: center; gap: 8px; min-height: 44px; font: 500 13px/1 var(--v2-sans); color: rgba(255,255,255,.82); cursor: pointer; }
 .v2-campaign-hide input { position: absolute; opacity: 0; width: 1px; height: 1px; }
