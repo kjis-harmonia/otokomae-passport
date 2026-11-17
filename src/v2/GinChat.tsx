@@ -22,7 +22,7 @@ import { ReservationMutationClient, reservationMenuCodes, type Confirmation, typ
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
 import { MenuPickerSheet } from './MenuPickerSheet'
-import { canBeUsual, getUsualMenu, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
+import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
 import { loadUsual } from './usualPicks'
 import { fetchPeople, MAX_COMPANIONS, saveCompanion, setOwnerMaintenance, type People, type Person } from '../features/johnny/usualMembers'
 import { askUsualAi } from '../features/johnny/usualAi'
@@ -628,13 +628,19 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       return false
     }
 
+    /** その人の「いつもの」のメニューの code（チャットの「いつもの〇〇ですね」・一覧の一番上で同じものを使う）。
+     *  ご本人：登録したいつもの → ホームの「いつものでAI予約する」と同じ探し方（端末の記録・来店の記録）。お連れ様：その方の登録だけ */
+    const usualCodeOf = async (key: string, person: Person | null | undefined): Promise<string | null> => {
+      if (person?.menu_code) return person.menu_code
+      if (key !== 'me') return null
+      setTyping(true)
+      try { return (await loadUsual().catch(() => null))?.menu?.code ?? null } finally { setTyping(false) }
+    }
     /** その人のメニュー（いつもの・メンテナンス・ほか） */
     const askMenuFor = async (p: BookPerson): Promise<Menu | null | 'changed'> => {
       // ご本人で「いつもの」を登録していないときは、ホームの「いつものでAI予約する」と同じ探し方（端末の記録・前回のご来店）にそろえる
       //   （11/10 夜の点検：ホームは「いつもの アイパー」なのに、押すと「メニューは、何にされますか？」と聞き直していた）
-      let homeCode: string | null = null
-      if (!p.person?.menu_code && p.key === 'me') { setTyping(true); homeCode = (await loadUsual().catch(() => null))?.menu?.code ?? null; setTyping(false) }
-      const usualCode = p.person?.menu_code ?? homeCode
+      const usualCode = await usualCodeOf(p.key, p.person)
       const usual = usualCode ? all.find(m => m.code === usualCode) ?? null : null
       const maint = p.person?.maintenance_ok ? maintMenu : undefined
       const whoText = d.who && (d.who.length > 1 || p.key !== 'me') ? `${p.label}は` : ''
@@ -858,7 +864,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           if (a === 'yes') { d.menus[need.key] = pm; continue }
           if (a !== 'no' && await change(a)) continue
         } else {
-          const m = await hearMenu(need.id ? { kind: 'mate', id: need.id, name: need.name } : { kind: 'me' }, `「${pl}」の髪型ですね。メニューは何にされますか？`, null, need.person?.menu_code ?? (need.key === 'me' ? getUsualMenu()?.code ?? null : null))
+          const m = await hearMenu(need.id ? { kind: 'mate', id: need.id, name: need.name } : { kind: 'me' }, `「${pl}」の髪型ですね。メニューは何にされますか？`, null, await usualCodeOf(need.key, need.person))
           if (m) { d.menus[need.key] = m; continue }
         }
       }
@@ -1424,7 +1430,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       if (a === 'yes') window.location.href = SHOP_PHONE_TEL
       return end()
     }
-    const person = r.companion_id ? people?.companions.find(c => c.id === r.companion_id) ?? null : people?.owner ?? null
+    // お連れ様の予約（companion_id の無い古い予約も、お名前・親予約で分かる）はご本人として扱わない。
+    //   その方が分からなければ null（ご本人のいつもの・メンテナンスを出さない・11/18 Codex 検査）
+    const forMate = !!(r.companion_id || r.companion_of || r.companion_name)
+    const person = r.companion_id ? people?.companions.find(c => c.id === r.companion_id) ?? null : forMate ? null : people?.owner ?? null
     const whoArg: Who = r.companion_id ? { kind: 'mate', id: r.companion_id, name: r.companion_name ?? '' } : { kind: 'me' }
     let menu: Menu | null = all.find(m => m.code === r.items[0]?.menu_code) ?? (r.items[0]?.menu_code === 'maintenance' ? maintMenu ?? null : null)
     const originalCodes = reservationMenuCodes(r)
@@ -1503,7 +1512,10 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       // メニューを変更
       if (/メニュー/.test(action) && !/日時|日にち/.test(action)) {
         const maintOk = !!person?.maintenance_ok && !!maintMenu
-        const usual = person?.menu_code ? all.find(m => m.code === person.menu_code) ?? null : null
+        // いつもの：ご本人は登録 → 来店の記録（予約のときと同じ探し方）。お連れ様はその方の登録だけ
+        let usualCode = person?.menu_code ?? null
+        if (!usualCode && !forMate) { setTyping(true); usualCode = (await loadUsual().catch(() => null))?.menu?.code ?? null; setTyping(false) }
+        const usual = usualCode ? all.find(m => m.code === usualCode) ?? null : null
         const chips: Chip[] = [...(usual && usual.code !== menu?.code ? [{ label: usual.name, sub: yen(usual.price) }] : []), ...(maintOk && menu?.code !== 'maintenance' ? [{ label: 'メンテナンスカット', sub: person?.days_left != null ? `あと${person.days_left}日` : undefined }] : []), { label: 'ほかのメニュー' }]
         // 「何のメニューに？」を2回聞かない（11/17 慶一郎さん「二度手間」）：
         //   選べるのが【ほかのメニュー】だけなら最初から聞き取りへ。【ほかのメニュー】を押したらすぐ一覧を開く
