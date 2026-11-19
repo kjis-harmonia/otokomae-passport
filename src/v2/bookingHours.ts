@@ -13,7 +13,7 @@ export function appBookingOpen(now: number = Date.now()): boolean {
 
 // 言い方は慶一郎さんの文（11/19）そのまま
 export const APP_BOOKING_HOURS_TEXT = [
-  'ただいま、AI予約の受付時間外です。',
+  'ただいま受付時間外です。',
   '受付時間は営業日の8:00〜21:00となっております。',
   'お急ぎの方は、HOT PEPPER Beautyをご利用ください。',
 ].join('\n')
