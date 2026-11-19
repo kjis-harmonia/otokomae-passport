@@ -1,4 +1,5 @@
--- アプリの新しい予約は、毎日 8:00〜21:00（日本時間）だけ受け付ける（11/19 慶一郎さん）
+-- アプリの新しい予約は、営業日の 8:00〜21:00（日本時間）だけ受け付ける（11/19 慶一郎さん）
+--   営業日でない日（お正月などの休業日 business_closures・定休日 business_hours.is_closed）は、一日じゅう受け付けない
 --   アプリの予約はお店の人が HOT PEPPER（サロンボード）へ手で入れる。夜のあいだに入ると、朝まで HOT PEPPER 側が空いたままで二重予約になる。
 --   止めるのは「新しい予約の枠を押さえる」所だけ。変更・取り消し・キャンセル待ちの申し込みはそのまま（キャンセル待ちのお知らせはもともと 8:00〜21:00）
 --   押さえた枠の確定（2分以内）は止めない（20:59 に押さえた方が確定できなくならないように）
@@ -9,9 +10,22 @@ language sql
 stable
 set search_path to 'pg_catalog'
 as $$
-  select (now() at time zone 'Asia/Tokyo')::time >= time '08:00' and (now() at time zone 'Asia/Tokyo')::time < time '21:00'
+  with n as (select (now() at time zone 'Asia/Tokyo') t)
+  select n.t::time >= time '08:00' and n.t::time < time '21:00'
+    and not exists (select 1 from public.business_closures c where c.closure_date = n.t::date)
+    and not exists (select 1 from public.business_hours b where b.weekday = extract(dow from n.t)::int and b.is_closed)
+  from n
 $$;
 revoke all on function app_private.app_booking_hours_ok() from public;
+
+-- 銀ちゃんが予約を始める時に「いま受け付けているか」を聞く（日時を選んでから断られないように。本当に止めるのは下の押さえ）
+create or replace function public.customer_app_booking_open()
+returns boolean
+language sql
+stable
+security definer
+set search_path to ''
+as $$ select app_private.app_booking_hours_ok() $$;
 
 create or replace function public.customer_create_hold(p_session text, p_starts_at timestamp with time zone, p_menu_codes text[], p_staff_id uuid default null::uuid)
  returns json
