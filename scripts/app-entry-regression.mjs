@@ -207,7 +207,7 @@ const cases = {
       await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
       await f.page.clock.setFixedTime(new Date('2026-11-12T21:00:00+09:00'))
       await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })))
-      await chat(f.page).getByText(/アプリのご予約は、営業日の 8:00〜21:00 に承っています/).waitFor()
+      await chat(f.page).getByText(/ただいま、AI予約の受付時間外です/).waitFor()
       await f.page.getByRole('button', { name: 'HOT PEPPER で予約', exact: true }).waitFor()
       assert.equal(await f.page.getByRole('button', { name: 'お連れ様の予約をする', exact: true }).count(), 0)
       assert.equal(f.calls.filter(n => n.startsWith('customer_create_hold')).length, 0)
@@ -221,7 +221,7 @@ const cases = {
     try {
       await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
       await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })))
-      await chat(f.page).getByText(/営業日の 8:00〜21:00 に承っています/).waitFor()
+      await chat(f.page).getByText(/受付時間は営業日の8:00〜21:00となっております/).waitFor()
       assert.equal(await f.page.getByRole('button', { name: 'お連れ様の予約をする', exact: true }).count(), 0)
       assert.equal(f.calls.filter(n => n.startsWith('customer_create_hold')).length, 0)
     } finally { await f.close() }
