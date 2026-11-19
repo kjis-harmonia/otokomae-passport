@@ -8,10 +8,14 @@
  * install/activate は即時に反映させるため skipWaiting + clients.claim を使用。
  */
 
-// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-11-19a
+// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-11-19b
 
 /** キャンセル待ちのお知らせ（?hold=…）か */
 const isHoldUrl = (url) => { try { return new URL(url, self.location.href).searchParams.has('hold') } catch { return false } }
+/** キャンセル待ちの枠を、端末の中の受け箱に置く。アプリは前に出た時・画面に出ている間に見に来る（src/v2/holdBox.ts）。
+ *  iPhone では、裏で開いたアプリへの読み込み直しも直接の受け渡しも届かなかった（11/19 Staging・本番の実機） */
+const keepHold = (url) => (typeof caches === 'undefined' ? Promise.resolve()
+  : caches.open('ginjiro-hold-box').then((c) => c.put('/__gin-hold', new Response(JSON.stringify({ url, at: Date.now() })))).catch(() => {}))
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -41,6 +45,7 @@ self.addEventListener('push', (event) => {
     sb ? clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: data.kind }))) : null,
     // キャンセル待ち：アプリを画面に出している時は、iPhone がお知らせを出さないことがある（11/19 本番の実機）。
     //   出している画面へ直接渡して、銀ちゃんがその場で枠を聞く（同じ枠は1回だけ・アプリ側で見る）
+    data.url && isHoldUrl(data.url) ? keepHold(new URL(data.url, self.location.href).href) : null,
     data.url && isHoldUrl(data.url)
       ? clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => list.filter((c) => c.visibilityState === 'visible').forEach((c) => c.postMessage({ type: 'gin-hold', url: data.url })))
       : null,
@@ -61,6 +66,7 @@ self.addEventListener('notificationclick', (event) => {
     })
     // キャンセル待ち：アプリが裏で開いたままだと、iPhone では画面の読み込み直し（navigate）が効かず、
     //   前の画面（会員QR など）のままだった（11/19 本番の実機）。開いている画面へ直接渡して、前に出す
+    if (destination.searchParams.has('hold')) await keepHold(destination.href)
     if (existing && destination.searchParams.has('hold')) {
       existing.postMessage({ type: 'gin-hold', url: destination.href })
       try { return await existing.focus() } catch { return clients.openWindow(destination.href) }

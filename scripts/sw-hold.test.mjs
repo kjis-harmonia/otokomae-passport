@@ -22,7 +22,11 @@ function load(windows) {
     skipWaiting: () => {},
     registration: { showNotification: async (title, opts) => { log.push(['show', opts.data.url]) } },
   }
-  vm.runInNewContext(code, { self, clients, caches: { delete: async () => true }, URL, console })
+  const caches = {
+    delete: async () => true,
+    open: async name => ({ put: async (key, res) => { log.push(['box', name, key, JSON.parse(await res.text()).url]) } }),
+  }
+  vm.runInNewContext(code, { self, clients, caches, Response, URL, Date, console })
   return { handlers, log }
 }
 function win(log, { url = `${ORIGIN}/`, visible = true, navigate = true } = {}) {
@@ -49,13 +53,13 @@ const cases = {
     const { handlers, log } = load(windows)
     windows.push(win(log, { visible: false }))
     await fire(handlers, 'notificationclick', click(HOLD))
-    assert.deepEqual(log, [['message', 'gin-hold', `${ORIGIN}${HOLD}`], ['focus']])
+    assert.deepEqual(log, [['box', 'ginjiro-hold-box', '/__gin-hold', `${ORIGIN}${HOLD}`], ['message', 'gin-hold', `${ORIGIN}${HOLD}`], ['focus']])
   },
   // アプリが閉じている：今までどおり新しく開く
   async clickHoldClosed() {
     const { handlers, log } = load([])
     await fire(handlers, 'notificationclick', click(HOLD))
-    assert.deepEqual(log, [['open', `${ORIGIN}${HOLD}`]])
+    assert.deepEqual(log, [['box', 'ginjiro-hold-box', '/__gin-hold', `${ORIGIN}${HOLD}`], ['open', `${ORIGIN}${HOLD}`]])
   },
   // キャンセル待ち以外（予約のお知らせなど）は今までどおり読み込み直す
   async clickOtherNavigates() {
@@ -81,6 +85,7 @@ const cases = {
     await fire(handlers, 'push', push({ title: 't', body: 'b', url: HOLD, tag: 'x' }))
     assert.deepEqual(log.filter(x => x[0] === 'message'), [['message', 'gin-hold', HOLD]])
     assert.equal(log.filter(x => x[0] === 'show').length, 1)
+    assert.deepEqual(log.filter(x => x[0] === 'box'), [['box', 'ginjiro-hold-box', '/__gin-hold', `${ORIGIN}${HOLD}`]])
   },
   // キャンセル待ち以外のお知らせは渡さない
   async pushOtherNoMessage() {
@@ -89,6 +94,7 @@ const cases = {
     windows.push(win(log))
     await fire(handlers, 'push', push({ title: 't', body: 'b', url: '/?tab=next' }))
     assert.equal(log.filter(x => x[0] === 'message').length, 0)
+    assert.equal(log.filter(x => x[0] === 'box').length, 0)
   },
 }
 

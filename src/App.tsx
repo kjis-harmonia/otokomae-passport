@@ -36,6 +36,7 @@ import { LaunchClock } from './v2/LaunchClock'
 import { GinChat, type GinMode } from './v2/GinChat'
 import { fetchVisitsToConfirm } from './v2/visitConfirm'
 import { peekPendingHold, savePendingHold } from './v2/pendingHold'
+import { takeHoldBox } from './v2/holdBox'
 import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 /** ログインのあとに開いたキャンセル待ちの枠（この画面の間に同じ枠を2回開かない・SR-06） */
@@ -398,11 +399,9 @@ function App() {
     }
     // アプリを開いたまま（画面に出ている・裏で開いている）キャンセル待ちのお知らせが来た／押した：
     //   お知らせの係（sw.js）から枠を受け取って、その場で1回だけ聞く（11/19 本番の実機で、会員QRのまま何も出なかった）
-    const onSwMessage = (e: MessageEvent) => {
-      const m = e.data as { type?: unknown; url?: unknown } | null
-      if (m?.type !== 'gin-hold' || typeof m.url !== 'string') return
+    const takeHoldUrl = (url: string) => {
       let holdId: string | null = null
-      try { holdId = new URL(m.url, window.location.href).searchParams.get('hold') } catch { /* 壊れた URL */ }
+      try { holdId = new URL(url, window.location.href).searchParams.get('hold') } catch { /* 壊れた URL */ }
       if (!holdId || !/^[0-9a-f-]{36}$/i.test(holdId)) return
       const session = getCustomerSession()
       if (session && offeredHolds.has(`${session}:${holdId}`)) return // もう聞いた枠（お知らせと押した時の2回分など）
@@ -410,7 +409,21 @@ function App() {
       if (!session) { setActiveTab('mypage'); return } // ログインできたら resumeOffer が聞く
       resumeOffer()
     }
+    const onSwMessage = (e: MessageEvent) => {
+      const m = e.data as { type?: unknown; url?: unknown } | null
+      if (m?.type === 'gin-hold' && typeof m.url === 'string') takeHoldUrl(m.url)
+      checkBox() // 直接の受け渡しと受け箱の両方に来ても、同じ枠は1回だけ
+    }
+    // 受け箱：前に出た時と、画面に出ている間は数秒ごとに見る（iPhone では直接の受け渡しが届かない）
+    let alive = true
+    const checkBox = () => { void takeHoldBox().then(url => { if (alive && url) takeHoldUrl(url) }) }
+    const onVisible = () => { if (document.visibilityState === 'visible') checkBox() }
+    const boxTimer = window.setInterval(onVisible, 4000)
     resumeOffer()
+    checkBox()
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', checkBox)
+    window.addEventListener('pageshow', checkBox)
     navigator.serviceWorker?.addEventListener('message', onSwMessage)
     window.addEventListener('ginjiro:gin-book', onBook)
     window.addEventListener('ginjiro:gin-offer', onOffer)
@@ -420,6 +433,11 @@ function App() {
       window.removeEventListener('ginjiro:gin-offer', onOffer)
       window.removeEventListener('ginjiro:customer-session-changed', resumeOffer)
       navigator.serviceWorker?.removeEventListener('message', onSwMessage)
+      alive = false
+      clearInterval(boxTimer)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', checkBox)
+      window.removeEventListener('pageshow', checkBox)
     }
   }, [phase, setActiveTab])
   useEffect(() => {

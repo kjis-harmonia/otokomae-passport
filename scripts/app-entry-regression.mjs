@@ -158,6 +158,11 @@ async function answerOffer(page) {
 }
 /** お知らせの係（sw.js）からの「キャンセル待ちの枠」（アプリを開いたまま、お知らせが来た・押した） */
 const swHold = (page, id = holdId) => page.evaluate(url => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'gin-hold', url } })), `/?tab=reserve&johnny=1&hold=${id}`)
+/** お知らせの係が受け箱に置いた枠（sw.js keepHold と同じ形） */
+const putHoldBox = (page, at = 0) => page.evaluate(async ({ url, at }) => {
+  const box = await caches.open('ginjiro-hold-box')
+  await box.put('/__gin-hold', new Response(JSON.stringify({ url, at: Date.now() - at })))
+}, { url: `${new URL('/', 'http://x').pathname}?tab=reserve&johnny=1&hold=${holdId}`, at })
 /** ログインできた時と同じ合図（saveCustomerSession が出すもの） */
 const signIn = page => page.evaluate(token => {
   localStorage.setItem('ginjiro_customer_session', token)
@@ -374,6 +379,45 @@ const cases = {
       await swHold(f.page) // 答えたあとに、もう一度押しても聞き直さない
       await f.page.waitForTimeout(500)
       assert.equal(holdCalls(f), 1)
+    } finally { await f.close() }
+  },
+  // 11/19 Staging の実機：iPhone では直接の受け渡しも届かない。受け箱に置かれた枠を、前に出た時に拾って1回だけ聞く
+  async holdBoxOnResume(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '会員QR' }).first().click()
+      await goAway(f.page)
+      await putHoldBox(f.page)
+      await showAgain(f.page)
+      await offeredOnce(f.page)
+      assert.equal(holdCalls(f), 1)
+      assert.equal(await f.page.evaluate(async () => (await caches.open('ginjiro-hold-box')).match('/__gin-hold').then(r => !!r)), false)
+      await answerOffer(f.page)
+      await f.page.waitForTimeout(4500) // 数秒ごとの見回りでも、もう聞かない
+      assert.equal(holdCalls(f), 1)
+    } finally { await f.close() }
+  },
+  // 画面に出したまま届いた（前に出る合図が無い）：数秒ごとの見回りで拾う
+  async holdBoxWhileVisible(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: true, path: '/' })
+    try {
+      await f.page.waitForTimeout(500)
+      await putHoldBox(f.page)
+      await chat(f.page).getByText(/キャンセルが出ました/).waitFor({ timeout: 8000 })
+      await offeredOnce(f.page)
+      await answerOffer(f.page)
+    } finally { await f.close() }
+  },
+  // 古い枠（15分より前）は拾わない
+  async holdBoxTooOld(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: true, path: '/' })
+    try {
+      await putHoldBox(f.page, 16 * 60e3)
+      await goAway(f.page)
+      await showAgain(f.page)
+      await f.page.waitForTimeout(1000)
+      assert.equal(holdCalls(f), 0)
+      assert.equal(await chat(f.page).count(), 0)
     } finally { await f.close() }
   },
   // 同じく、ログインしていない時：ログインの画面へ。ログインできたら1回だけ聞く。関係ない合図・壊れた枠IDは何もしない
