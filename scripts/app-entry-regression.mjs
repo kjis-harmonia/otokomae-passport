@@ -198,6 +198,32 @@ const comeBack = async page => { await goAway(page); await page.evaluate(() => {
 }) }
 
 const cases = {
+  // 11/19 慶一郎さん：21:00〜8:00 はアプリの新しい予約を受けない（HOT PEPPER への転記が朝までできない）。日時を選ぶ前に伝え、押さえに行かない
+  async bookAtNight(browser, origin) {
+    const f = await prepare(browser, origin, 'mate', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.clock.setFixedTime(new Date('2026-11-12T21:00:00+09:00'))
+      await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })))
+      await chat(f.page).getByText(/アプリのご予約は、毎日 8:00〜21:00 に承っています/).waitFor()
+      await f.page.getByRole('button', { name: 'HOT PEPPER で予約', exact: true }).waitFor()
+      assert.equal(await f.page.getByRole('button', { name: 'お連れ様の予約をする', exact: true }).count(), 0)
+      assert.equal(f.calls.filter(n => n.startsWith('customer_create_hold')).length, 0)
+      await f.page.getByRole('button', { name: 'ホームへ', exact: true }).click()
+      await chat(f.page).waitFor({ state: 'detached' })
+    } finally { await f.close() }
+  },
+  // 20:59 はふだんどおり予約を始められる
+  async bookJustBeforeNine(browser, origin) {
+    const f = await prepare(browser, origin, 'mate', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.clock.setFixedTime(new Date('2026-11-12T20:59:00+09:00'))
+      await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })))
+      await f.page.getByRole('button', { name: 'お連れ様の予約をする', exact: true }).waitFor()
+      assert.equal(await chat(f.page).getByText(/8:00〜21:00/).count(), 0)
+    } finally { await f.close() }
+  },
   async mateIntent(browser, origin) {
     const f = await prepare(browser, origin, 'mate', { signedIn: true, path: '/' })
     try {

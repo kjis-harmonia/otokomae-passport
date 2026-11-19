@@ -15,7 +15,7 @@ import type { TicketRow } from '../../data/ticket'
 import type { BlackMondayInfo } from '../../utils/blackMonday'
 import { askAgent, askAgentVoice, type AgentAnswer, type AgentShown, type AgentTurn, type VoiceAnswer } from './agentClient'
 
-export function isBookingRejection(error: unknown, code: 'reservation_person_overlap' | 'slot_taken' | 'person_has_reservation'): boolean {
+export function isBookingRejection(error: unknown, code: 'reservation_person_overlap' | 'slot_taken' | 'person_has_reservation' | 'app_booking_hours'): boolean {
   return error instanceof RpcBusinessError && error.code === code
 }
 

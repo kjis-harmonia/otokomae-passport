@@ -17,6 +17,7 @@ function GinText({ text }: { text: string }) {
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowUp, ChevronLeft, ChevronRight, Mic, X } from 'lucide-react'
 import { bookingAssistantApi, hasPendingBookingConfirmation, isBookingRejection, linkCompanion, recoverBookingConfirmation, type CustomerReservation } from '../features/johnny/bookingAssistantApi'
+import { APP_BOOKING_HOURS_TEXT, appBookingOpen } from './bookingHours'
 import { matchMenu } from '../features/johnny/menuMatcher'
 import { ReservationMutationClient, reservationMenuCodes, type Confirmation, type MutationReply } from '../features/johnny/reservationMutation'
 import { getStoredValue, setStoredValue } from '../utils/storage'
@@ -505,10 +506,21 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
   // ── book：予約。「誰が・何を・いつ」を1枚の予約メモにして、足りんところだけ聞く（11/8 慶一郎さん「変えたところだけ直す」）
   //   どの質問の途中でも「やっぱり朔耶だけ」「土曜がええ」「アイパーにする」で、そこだけ直す（ボタン・声・文字どれでも）
   //   人・メニューが変わったら施術時間も変わるので、時間は必ず選び直し（前の時間で取れると決めつけない）
+  // 21:00〜8:00 はアプリの新しい予約を受けない（11/19 慶一郎さん・HOT PEPPER への転記が朝までできない）
+  const bookingHoursClosed = async () => {
+    const HPB = 'HOT PEPPER で予約'
+    const answer = await ask(APP_BOOKING_HOURS_TEXT, [{ label: HPB, strong: true }, { label: 'ホームへ' }])
+    onClose()
+    const pick = fromChip.current ? answer : /いい(です|よ|わ)?$|いら|じゃな|ではな|やめ/.test(answer) ? '' : /ホットペッパー|hot\s*pepper/i.test(answer) ? HPB : ''
+    if (pick === HPB) { if (fromChip.current) window.open(HOTPEPPER_MENU_URL, '_blank', 'noopener'); else window.location.href = HOTPEPPER_MENU_URL }
+  }
+
   const runBook = async (known?: People | null, preset?: { menuCode?: string | null; label?: string; group?: boolean }, askExisting = false) => {
     const session = getCustomerSession()
     if (await checkBookingAccess(session) === 'closed') return
     if (hasPendingBookingConfirmation()) return checkPreviousBooking()
+    // 日時まで決めてから断られないよう、先に伝える（本当に止めるのはサーバー）
+    if (!appBookingOpen()) return bookingHoursClosed()
     // AI予約がお休み中（当日キャンセル・無断キャンセルのあと）は、日時まで決めてから断られないよう、先に伝える（11/11 点検）
     const paused = await api.aiStatus?.().catch(() => null)
     if (paused?.paused) {
@@ -1239,6 +1251,11 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
           }
           setTyping(false)
           const confirmed = confirmedPeople()
+          // 選んでいる間に 21:00 を過ぎた（サーバーが断った）
+          if (isBookingRejection(error, 'app_booking_hours')) {
+            await say(`${confirmed ? confirmed + 'のご予約は確定しました。\n' : ''}${APP_BOOKING_HOURS_TEXT}`)
+            return endChange()
+          }
           await say(`${confirmed ? confirmed + 'のご予約は確定しました。\n' : ''}${p.label}の空き枠を押さえられませんでした。次回予約を確認してから、もう一度お試しください。`)
           return endChange()
         }
