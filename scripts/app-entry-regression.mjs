@@ -60,7 +60,9 @@ function makeRpcFixture(scenario) {
     calls.push(name)
     // 端末に残った期限切れのログイン：サーバーはどの照会も断る
     if (body?.p_session === staleToken) return { status: 400, json: { code: 'P0001', message: 'customer_auth_required' } }
-    if (scenario === 'mate') {
+    // 休業日（お正月など）：サーバーは「いまは受け付けていない」と返す
+    if (name === 'customer_app_booking_open') return ok(scenario !== 'closedDay')
+    if (scenario === 'mate' || scenario === 'closedDay') {
       if (name === 'customer_people') return ok({ owner: { id: null, name: '試験本人' }, companions: [{ id: 'c-a', name: '試験エー' }, { id: 'c-b', name: '試験ビー' }] })
       // お連れ様Aだけ予約済み。ご本人とBは予約なし
       if (name === 'customer_list_reservations') return ok([{ ...resv('10:00'), companion_id: 'c-a', companion_of: null, companion_name: '試験エー' }])
@@ -198,6 +200,43 @@ const comeBack = async page => { await goAway(page); await page.evaluate(() => {
 }) }
 
 const cases = {
+  // 11/19 慶一郎さん：21:00〜8:00 はアプリの新しい予約を受けない（HOT PEPPER への転記が朝までできない）。日時を選ぶ前に伝え、押さえに行かない
+  async bookAtNight(browser, origin) {
+    const f = await prepare(browser, origin, 'mate', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.clock.setFixedTime(new Date('2026-11-12T21:00:00+09:00'))
+      await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })))
+      await chat(f.page).getByText(/ただいま受付時間外です/).waitFor()
+      await f.page.getByRole('button', { name: 'HOT PEPPER で予約', exact: true }).waitFor()
+      assert.equal(await f.page.getByRole('button', { name: 'お連れ様の予約をする', exact: true }).count(), 0)
+      assert.equal(f.calls.filter(n => n.startsWith('customer_create_hold')).length, 0)
+      await f.page.getByRole('button', { name: 'ホームへ', exact: true }).click()
+      await chat(f.page).waitFor({ state: 'detached' })
+    } finally { await f.close() }
+  },
+  // 休業日（お正月など）は、昼でも予約を始める前に伝える
+  async bookOnClosedDay(browser, origin) {
+    const f = await prepare(browser, origin, 'closedDay', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })))
+      await chat(f.page).getByText(/受付時間は営業日の8:00〜21:00となっております/).waitFor()
+      assert.equal(await f.page.getByRole('button', { name: 'お連れ様の予約をする', exact: true }).count(), 0)
+      assert.equal(f.calls.filter(n => n.startsWith('customer_create_hold')).length, 0)
+    } finally { await f.close() }
+  },
+  // 20:59 はふだんどおり予約を始められる
+  async bookJustBeforeNine(browser, origin) {
+    const f = await prepare(browser, origin, 'mate', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
+      await f.page.clock.setFixedTime(new Date('2026-11-12T20:59:00+09:00'))
+      await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } })))
+      await f.page.getByRole('button', { name: 'お連れ様の予約をする', exact: true }).waitFor()
+      assert.equal(await chat(f.page).getByText(/8:00〜21:00/).count(), 0)
+    } finally { await f.close() }
+  },
   async mateIntent(browser, origin) {
     const f = await prepare(browser, origin, 'mate', { signedIn: true, path: '/' })
     try {

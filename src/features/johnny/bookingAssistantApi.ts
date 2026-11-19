@@ -15,7 +15,7 @@ import type { TicketRow } from '../../data/ticket'
 import type { BlackMondayInfo } from '../../utils/blackMonday'
 import { askAgent, askAgentVoice, type AgentAnswer, type AgentShown, type AgentTurn, type VoiceAnswer } from './agentClient'
 
-export function isBookingRejection(error: unknown, code: 'reservation_person_overlap' | 'slot_taken' | 'person_has_reservation'): boolean {
+export function isBookingRejection(error: unknown, code: 'reservation_person_overlap' | 'slot_taken' | 'person_has_reservation' | 'app_booking_hours'): boolean {
   return error instanceof RpcBusinessError && error.code === code
 }
 
@@ -137,6 +137,8 @@ export interface BookingAssistantApi {
   reservations(): Promise<CustomerReservation[]>
   /** AI 予約が止まっているか。仕組みが無い環境では無い */
   aiStatus?(): Promise<AiBookingStatus>
+  /** いまアプリで新しい予約を受け付けているか（営業日の 8:00〜21:00） */
+  bookingOpen?(): Promise<boolean>
   /** 最後に来店した日（QR の来店登録、YYYY-MM-DD）。無ければ null */
   lastVisit(): Promise<string | null>
   /** 手持ちの券（割引券・漢トク券など、使用済みも含む） */
@@ -185,6 +187,7 @@ export const customerBookingApi: BookingAssistantApi = {
   reservations: () => callCustomerRpc<CustomerReservation[]>('customer_list_reservations'),
   cancel: id => callCustomerRpc<CustomerReservation>('customer_cancel_reservation_explicit', { p_reservation_id: id }),
   aiStatus: () => callCustomerRpc<AiBookingStatus>('customer_ai_booking_status'),
+  bookingOpen: () => callCustomerRpc<boolean>('customer_app_booking_open'),
   joinWaitlist: (date, from, to, menuCode, staffId) => callCustomerRpc<WaitlistJoin>('customer_join_waitlist', { p_date: date, p_from: from, p_to: to, p_menu_codes: [menuCode], p_staff_id: staffId }),
   leaveWaitlist: async id => { await callCustomerRpc('customer_leave_waitlist', { p_id: id }) },
   getHold: holdId => callCustomerRpc<HoldOffer>('customer_get_hold', { p_hold_id: holdId }),
