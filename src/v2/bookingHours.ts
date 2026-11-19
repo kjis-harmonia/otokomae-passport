@@ -11,5 +11,9 @@ export function appBookingOpen(now: number = Date.now()): boolean {
   return h >= APP_BOOKING_OPEN && h < APP_BOOKING_CLOSE
 }
 
-// 言い方はお店のお知らせ（11/19 ストーリーズ「銀二郎App AI予約 受付時間変更のお知らせ」）に合わせる
-export const APP_BOOKING_HOURS_TEXT = 'アプリのご予約は、営業日の 8:00〜21:00 に承っています。\n時間外のご予約は、HOT PEPPER Beauty をご利用ください。\nご不便をおかけしますが、よろしくお願いいたします。'
+// 言い方は慶一郎さんの文（11/19）そのまま
+export const APP_BOOKING_HOURS_TEXT = [
+  'ただいま、AI予約の受付時間外です。',
+  '受付時間は営業日の8:00〜21:00となっております。',
+  'お急ぎの方は、HOT PEPPER Beautyをご利用ください。',
+].join('\n')
