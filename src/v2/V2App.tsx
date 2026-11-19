@@ -20,6 +20,8 @@ import { V2Account } from './V2Account'
 import { V2Ginpay } from './V2Ginpay'
 import { LaunchNotice } from './LaunchClock'
 import { V2Campaign, hasCampaign } from './V2Campaign'
+import { getCustomerSession } from '../utils/customerSession'
+import { savePendingHold } from './pendingHold'
 import './v2.css'
 
 /** お知らせのリンクの ?hold=…（キャンセル待ちで押さえた枠）を1回だけ読む（読んだら URL から消す） */
@@ -79,6 +81,15 @@ export function V2App({ activeTab, setActiveTab, ticketFilter, ticketKey, onModa
     // 起動直後は App の受け口（親の effect）がまだ無いので、1拍おいて送る（タブも同じときに戻す）
     const t = setTimeout(() => {
       const holdId = takeHoldParam()
+      // お知らせの枠は、ログインの有無にかかわらず先に預かる（SR-06）。
+      //   端末に残ったログインが期限切れだと、銀ちゃんを開いた所でログインが外れる。預かっておけば、ログインし直したあとに聞ける（再検査）
+      if (holdId) savePendingHold(holdId)
+      // ログインがまだなら、ログインの画面へ。ログインできたら銀ちゃんが聞く
+      //   （前は App がログインへ送った直後に、ここでホームへ戻して行き先が消えていた）
+      if (!getCustomerSession()) {
+        setActiveTab('mypage')
+        return
+      }
       if (holdId) window.dispatchEvent(new CustomEvent('ginjiro:gin-offer', { detail: { holdId } }))
       else window.dispatchEvent(new CustomEvent('ginjiro:gin-book', { detail: { menuCode: null, label: '' } }))
       setActiveTab(lastTab.current === 'reserve' ? 'home' : lastTab.current)

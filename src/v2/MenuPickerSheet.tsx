@@ -3,7 +3,7 @@
 //   ・検索と、カット／パーマ／セット／カラー／シェービングのタブで、すぐ見つかる
 //   ・料金は折り返さない。所要時間も小さく添える。Black Monday の対象には「月曜 −¥2,000」
 import { useMemo, useState } from 'react'
-import { ChevronRight, Search, X } from 'lucide-react'
+import { ChevronRight, RotateCw, Search, X } from 'lucide-react'
 
 export type PickMenu = { code: string; name: string; duration_min: number; price: number | null }
 
@@ -32,17 +32,21 @@ const mins = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}時間${m % 60 ? `$
 /** ひらがな・カタカナ・大文字小文字・空白の違いをならして比べる */
 const norm = (t: string) => t.normalize('NFKC').toLowerCase().replace(/\s+/g, '').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
 
-export function MenuPickerSheet({ menus, usualCode, bm, onPick, onClose }: {
+export function MenuPickerSheet({ menus, usualCode, bm, failed = false, onRetry, onPick, onClose }: {
   menus: PickMenu[]
   /** いつものメニュー（無ければ null） */
   usualCode: string | null
   /** Black Monday の対象（codes が空なら出さない） */
   bm: { codes: string[]; amount: number }
+  /** 通信でメニューを読めなかった（0件とは分ける・SR-07） */
+  failed?: boolean
+  onRetry?: () => Promise<void>
   onPick: (m: PickMenu) => void
   onClose: () => void
 }) {
   const [tab, setTab] = useState<Tab>('all')
   const [q, setQ] = useState('')
+  const [retrying, setRetrying] = useState(false)
   const usual = usualCode ? menus.find(m => m.code === usualCode) ?? null : null
   const tabs = TABS.filter(t => t.id === 'all' || menus.some(m => menuTab(m.code) === t.id))
   const list = useMemo(() => {
@@ -64,6 +68,26 @@ export function MenuPickerSheet({ menus, usualCode, bm, onPick, onClose }: {
       <ChevronRight size={16} aria-hidden="true" className="mp-chev" />
     </button>
   )
+
+  if (failed && !menus.length) {
+    return (
+      <div className="mp">
+        <div className="mp-head">
+          <p className="mp-title">メニューを選ぶ</p>
+          <button type="button" className="mp-x" aria-label="閉じる" onClick={onClose}><X size={20} /></button>
+        </div>
+        <div className="mp-empty" role="alert">
+          <p className="mp-empty-text">メニューを読み込めませんでした。<br />電波のよい所で、もう一度お試しください。</p>
+          {onRetry && (
+            <button type="button" className="mp-retry" disabled={retrying}
+              onClick={() => { setRetrying(true); void onRetry().finally(() => setRetrying(false)) }}>
+              <RotateCw size={15} aria-hidden="true" />{retrying ? '読み込んでいます…' : '読み込み直す'}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mp">

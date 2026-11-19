@@ -35,3 +35,31 @@ test('キャンセル：サロンボードにあればキャンセル、入れ�
   // 履歴をまだ読んでいない一覧では、安全な方（キャンセル）に寄せる
   assert.equal(boardTask(res({ status: 'cancelled' })), 'cancel')
 })
+
+// SR-11：SB だけで続けて動かしても、「変更前」はサロンボードに入っている内容
+const edit = (from, transfer, at) => ({ event_type: 'edited', created_at: at, before: { transfer_status: transfer, starts_at: from, staff_name: '担当' + from.slice(11, 13) } })
+const A = '2026-11-20T01:00:00Z', B = '2026-11-20T02:00:00Z'
+test('未転記のまま A→B→C：変更前は A（サロンボードは A のまま）', () => {
+  const ev = [
+    { event_type: 'transfer_updated', created_at: '2026-11-18T00:00:00Z', after: { transfer_status: 'done' } },
+    edit(A, 'done', '2026-11-18T01:00:00Z'),
+    edit(B, 'pending', '2026-11-18T02:00:00Z'),
+  ]
+  assert.deepEqual(lastBefore(ev), { starts_at: A, staff_name: '担当01' })
+})
+test('B を転記したあと B→C：変更前は B', () => {
+  const ev = [
+    edit(A, 'done', '2026-11-18T01:00:00Z'),
+    { event_type: 'transfer_updated', created_at: '2026-11-18T01:30:00Z', after: { transfer_status: 'done' } },
+    edit(B, 'done', '2026-11-18T02:00:00Z'),
+  ]
+  assert.deepEqual(lastBefore(ev), { starts_at: B, staff_name: '担当02' })
+})
+test('履歴の並びが新しい順でも、日時で並べ直して同じ答え', () => {
+  const ev = [edit(B, 'pending', '2026-11-18T02:00:00Z'), edit(A, 'done', '2026-11-18T01:00:00Z')]
+  assert.deepEqual(lastBefore(ev), { starts_at: A, staff_name: '担当01' })
+})
+test('HOT PEPPER を続けて動かした：最初の内容（not_required の時）から', () => {
+  const ev = [edit(A, 'not_required', '2026-11-18T01:00:00Z'), edit(B, 'pending', '2026-11-18T02:00:00Z')]
+  assert.deepEqual(lastBefore(ev), { starts_at: A, staff_name: '担当01' })
+})
