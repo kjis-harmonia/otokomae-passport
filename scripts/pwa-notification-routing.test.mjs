@@ -17,6 +17,7 @@ async function clickNotification(url, paths, { navigationFails = false } = {}) {
       return this
     },
     async focus() { calls.push(['focus', path]) },
+    postMessage(message) { calls.push(['message', path, message.type, message.url]) },
   }))
   runInNewContext(worker, {
     URL,
@@ -45,9 +46,17 @@ test('an SB notification reuses the SB window even if the terminal is listed fir
 })
 
 test('a customer notification preserves the full link and reuses the customer window', async () => {
-  const url = '/?tab=reserve&johnny=1&hold=test'
+  const url = '/?tab=next'
   assert.deepEqual(await clickNotification(url, ['/headquarters', '/?tab=tickets']), [
     ['close'], ['navigate', '/?tab=tickets', origin + url], ['focus', '/?tab=tickets'],
+  ])
+})
+
+// 11/19 本番の実機：iPhone では裏で開いたアプリの読み込み直しが効かず、会員QRのままだった。枠は開いている画面へ直接渡す
+test('a waitlist notification hands the full link to the open customer window instead of reloading it', async () => {
+  const url = '/?tab=reserve&johnny=1&hold=test'
+  assert.deepEqual(await clickNotification(url, ['/headquarters', '/?tab=tickets']), [
+    ['close'], ['message', '/?tab=tickets', 'gin-hold', origin + url], ['focus', '/?tab=tickets'],
   ])
 })
 

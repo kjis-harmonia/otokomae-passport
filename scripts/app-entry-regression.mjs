@@ -156,6 +156,8 @@ async function answerOffer(page) {
   await chat(page).getByText(/キャンセル待ちを外しておきました/).waitFor()
   assert.equal(await page.evaluate(() => localStorage.getItem('ginjiro_pending_hold')), null)
 }
+/** お知らせの係（sw.js）からの「キャンセル待ちの枠」（アプリを開いたまま、お知らせが来た・押した） */
+const swHold = (page, id = holdId) => page.evaluate(url => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'gin-hold', url } })), `/?tab=reserve&johnny=1&hold=${id}`)
 /** ログインできた時と同じ合図（saveCustomerSession が出すもの） */
 const signIn = page => page.evaluate(token => {
   localStorage.setItem('ginjiro_customer_session', token)
@@ -354,6 +356,41 @@ const cases = {
       await f.page.getByRole('button', { name: '次回予約', exact: true }).waitFor()
       await f.page.evaluate(() => window.dispatchEvent(new CustomEvent('ginjiro:gin-change', { detail: {} })))
       await chat(f.page).waitFor()
+    } finally { await f.close() }
+  },
+  // 11/19 本番の実機：アプリを開いたまま（会員QR）お知らせを押すと、何も出なかった。
+  //   お知らせの係から枠を受け取ったら、その場で1回だけ聞く（来た時と押した時の2回届いても1回）
+  async holdWhileOpen(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: true, path: '/' })
+    try {
+      await f.page.getByRole('button', { name: '会員QR' }).first().click()
+      await f.page.waitForTimeout(400)
+      assert.equal(await chat(f.page).count(), 0)
+      await swHold(f.page)
+      await swHold(f.page)
+      await offeredOnce(f.page)
+      assert.equal(holdCalls(f), 1)
+      await answerOffer(f.page)
+      await swHold(f.page) // 答えたあとに、もう一度押しても聞き直さない
+      await f.page.waitForTimeout(500)
+      assert.equal(holdCalls(f), 1)
+    } finally { await f.close() }
+  },
+  // 同じく、ログインしていない時：ログインの画面へ。ログインできたら1回だけ聞く。関係ない合図・壊れた枠IDは何もしない
+  async holdWhileOpenSignedOut(browser, origin) {
+    const f = await prepare(browser, origin, 'hold', { signedIn: false, path: '/' })
+    try {
+      await f.page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'gin-hold', url: '/?hold=not-a-hold' } })))
+      await f.page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'sb-cancel' } })))
+      await f.page.waitForTimeout(300)
+      assert.equal(await f.page.evaluate(() => localStorage.getItem('ginjiro_pending_hold')), null)
+      await swHold(f.page)
+      await f.page.getByRole('heading', { name: 'ログインと引き継ぎ' }).waitFor()
+      assert.equal(holdCalls(f), 0)
+      await signIn(f.page)
+      await offeredOnce(f.page)
+      assert.equal(holdCalls(f), 1)
+      await answerOffer(f.page)
     } finally { await f.close() }
   },
   // SR-06：ログイン前 → ログインの画面に残る（ホームへ戻らない）→ ログインできたら1回だけ枠を聞く

@@ -35,7 +35,7 @@ import { FirstGuide } from './v2/FirstGuide'
 import { LaunchClock } from './v2/LaunchClock'
 import { GinChat, type GinMode } from './v2/GinChat'
 import { fetchVisitsToConfirm } from './v2/visitConfirm'
-import { peekPendingHold } from './v2/pendingHold'
+import { peekPendingHold, savePendingHold } from './v2/pendingHold'
 import { CustomerGuide } from './components/guide/CustomerGuide'
 const FIRST_GUIDE_KEY = 'ginjiro_first_guide'
 /** ログインのあとに開いたキャンセル待ちの枠（この画面の間に同じ枠を2回開かない・SR-06） */
@@ -396,7 +396,22 @@ function App() {
       offeredHolds.add(tag)
       setGinChat({ kind: 'offer', holdId, tag })
     }
+    // アプリを開いたまま（画面に出ている・裏で開いている）キャンセル待ちのお知らせが来た／押した：
+    //   お知らせの係（sw.js）から枠を受け取って、その場で1回だけ聞く（11/19 本番の実機で、会員QRのまま何も出なかった）
+    const onSwMessage = (e: MessageEvent) => {
+      const m = e.data as { type?: unknown; url?: unknown } | null
+      if (m?.type !== 'gin-hold' || typeof m.url !== 'string') return
+      let holdId: string | null = null
+      try { holdId = new URL(m.url, window.location.href).searchParams.get('hold') } catch { /* 壊れた URL */ }
+      if (!holdId || !/^[0-9a-f-]{36}$/i.test(holdId)) return
+      const session = getCustomerSession()
+      if (session && offeredHolds.has(`${session}:${holdId}`)) return // もう聞いた枠（お知らせと押した時の2回分など）
+      savePendingHold(holdId)
+      if (!session) { setActiveTab('mypage'); return } // ログインできたら resumeOffer が聞く
+      resumeOffer()
+    }
     resumeOffer()
+    navigator.serviceWorker?.addEventListener('message', onSwMessage)
     window.addEventListener('ginjiro:gin-book', onBook)
     window.addEventListener('ginjiro:gin-offer', onOffer)
     window.addEventListener('ginjiro:customer-session-changed', resumeOffer)
@@ -404,6 +419,7 @@ function App() {
       window.removeEventListener('ginjiro:gin-book', onBook)
       window.removeEventListener('ginjiro:gin-offer', onOffer)
       window.removeEventListener('ginjiro:customer-session-changed', resumeOffer)
+      navigator.serviceWorker?.removeEventListener('message', onSwMessage)
     }
   }, [phase, setActiveTab])
   useEffect(() => {

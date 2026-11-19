@@ -8,7 +8,10 @@
  * install/activate は即時に反映させるため skipWaiting + clients.claim を使用。
  */
 
-// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-10-23b
+// 版（中身を変えたら書きかえる。ファイルが変わると、スマホが新しい SW を入れ直す）: 2026-11-19a
+
+/** キャンセル待ちのお知らせ（?hold=…）か */
+const isHoldUrl = (url) => { try { return new URL(url, self.location.href).searchParams.has('hold') } catch { return false } }
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -36,6 +39,11 @@ self.addEventListener('push', (event) => {
       data: { url: data.url || '/?tab=reserve&johnny=1' },
     }),
     sb ? clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: data.kind }))) : null,
+    // キャンセル待ち：アプリを画面に出している時は、iPhone がお知らせを出さないことがある（11/19 本番の実機）。
+    //   出している画面へ直接渡して、銀ちゃんがその場で枠を聞く（同じ枠は1回だけ・アプリ側で見る）
+    data.url && isHoldUrl(data.url)
+      ? clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => list.filter((c) => c.visibilityState === 'visible').forEach((c) => c.postMessage({ type: 'gin-hold', url: data.url })))
+      : null,
   ]))
 })
 
@@ -51,7 +59,13 @@ self.addEventListener('notificationclick', (event) => {
       const current = new URL(client.url)
       return current.origin === destination.origin && current.pathname === destination.pathname
     })
-    if (existing) {
+    // キャンセル待ち：アプリが裏で開いたままだと、iPhone では画面の読み込み直し（navigate）が効かず、
+    //   前の画面（会員QR など）のままだった（11/19 本番の実機）。開いている画面へ直接渡して、前に出す
+    if (existing && destination.searchParams.has('hold')) {
+      existing.postMessage({ type: 'gin-hold', url: destination.href })
+      try { return await existing.focus() } catch { return clients.openWindow(destination.href) }
+    }
+    if (existing && typeof existing.navigate === 'function') {
       const navigated = await existing.navigate(destination.href).catch(() => null)
       if (navigated) return navigated.focus()
     }
