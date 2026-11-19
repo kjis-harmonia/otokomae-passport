@@ -521,6 +521,8 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     if (hasPendingBookingConfirmation()) return checkPreviousBooking()
     // 日時まで決めてから断られないよう、先に伝える（本当に止めるのはサーバー）
     if (!appBookingOpen()) return bookingHoursClosed()
+    // 休業日（お正月など）はサーバーに聞く。聞けない時は進めて、押さえる所でサーバーが止める
+    if (await api.bookingOpen?.().catch(() => true) === false) return bookingHoursClosed()
     // AI予約がお休み中（当日キャンセル・無断キャンセルのあと）は、日時まで決めてから断られないよう、先に伝える（11/11 点検）
     const paused = await api.aiStatus?.().catch(() => null)
     if (paused?.paused) {
