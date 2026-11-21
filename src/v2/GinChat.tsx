@@ -1400,6 +1400,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       rememberReservation(r)
       setBookingComplete(true)
       await say(`ご予約を承りました！\n${slotLabel(r.starts_at)} ${r.items.map(i => i.name).join('・')}\nお待ちしております。`)
+      await askKanaOnce() // 変更・キャンセル待ちから取れた予約のあとでも、フリガナが無ければ一度だけ聞く（11/21）
     } catch (error) {
       setTyping(false)
       const code = error instanceof RpcError ? error.code : ''
@@ -1461,6 +1462,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       } else {
         rememberReservation(result)
         await say(`ご予約を変更しました！\n${slotLabel(result.starts_at)} ${result.items.map(i => i.name).join('・')}${result.ai_paused_until ? `\n※AI予約は ${md(result.ai_paused_until)} から、また使えます。` : ''}`)
+        await askKanaOnce() // 変更・キャンセル待ちから取れた予約のあとでも、フリガナが無ければ一度だけ聞く（11/21）
       }
     } else if (reply.state === 'rejected') {
       await say(reply.code === 'call_shop' ? '開始の30分前を過ぎたので、変更・キャンセルはお電話でお願いします。'
