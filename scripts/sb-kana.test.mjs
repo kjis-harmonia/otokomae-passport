@@ -18,3 +18,14 @@ test('分からない人・名前がカナの人は出さない', () => {
 test('お連れ様の枠は出さない（台帳はご本人のもの）', () => {
   assert.equal(kanaOf({ customer_name: '田中 太郎', customer_kana: 'タナカ タロウ', note: 'お連れ様：鈴木様' }), null)
 })
+
+// アプリ会員のフリガナ（会員登録・銀ちゃん）
+import { isKana } from '../src/utils/kana.ts'
+test('フリガナとして受け取れるのはカタカナ（ひらがなはカタカナにしてから）', () => {
+  assert.equal(isKana(toKatakana('たなか たろう')), true)
+  assert.equal(isKana(toKatakana('ヴォーン・ジョー')), true)
+  assert.equal(isKana(toKatakana('田中 たろう')), false)
+  assert.equal(isKana(toKatakana('tanaka')), false)
+  assert.equal(isKana(''), false)
+  assert.equal(isKana('ア'.repeat(41)), false)
+})

@@ -2,6 +2,8 @@
 //   お連れ様の予約はメモの「お連れ様：〇〇様」で分かる。ご本人とは予約した会員（user_id）と日が同じ
 //   台帳の形は変えず、画面の側で組を作る（DB の変更なし）
 type Row = { id: string; note?: string | null; customer_name: string; user_id?: string | null; starts_at: string; status: string }
+import { toKatakana } from '../utils/kana.ts'
+export { toKatakana }
 
 /** お連れ様の予約なら、お連れ様のお名前。ご本人・電話・HOT PEPPER の予約は null */
 export function companionOf(r: { note?: string | null }): string | null {
@@ -9,8 +11,6 @@ export function companionOf(r: { note?: string | null }): string | null {
   return m ? m[1].trim() || null : null
 }
 
-/** ひらがな・半角カナを全角カタカナに */
-export const toKatakana = (v: string) => v.normalize('NFKC').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).replace(/s+/g, ' ').trim()
 
 /**
  * SB に出すフリガナ（11/21 慶一郎さん：漢字の名前が読めないとスタッフさんから）。

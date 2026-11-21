@@ -22,6 +22,8 @@ import { matchMenu } from '../features/johnny/menuMatcher'
 import { ReservationMutationClient, reservationMenuCodes, type Confirmation, type MutationReply } from '../features/johnny/reservationMutation'
 import { getStoredValue, setStoredValue } from '../utils/storage'
 import { USER_ID_KEY } from '../utils/userId'
+import { fetchContact, saveKana } from '../utils/customerContact'
+import { isKana, toKatakana } from '../utils/kana'
 import { MenuPickerSheet } from './MenuPickerSheet'
 import { clearPendingHold } from './pendingHold'
 import { canBeUsual, getUsualStaff, setUsualMenu, setUsualStaff, usualMenuOrder } from '../features/johnny/usualMenu'
@@ -249,6 +251,26 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
     await say(t)
     setChips(options); setWaiting(true)
     return new Promise(res => { waitRef.current = res })
+  }
+  /** フリガナがまだ無い会員さんに、予約のあとで一度だけ聞く（11/21 慶一郎さん：SB で漢字の名前が読めないとスタッフさんから）。
+   *  「あとで」でも二度は聞かない。サーバーがまだフリガナを返さない環境（kana が無い）では聞かない */
+  const askKanaOnce = async () => {
+    const key = 'ginjiro_kana_asked:' + (getStoredValue<string | null>(USER_ID_KEY, null) ?? '')
+    try { if (localStorage.getItem(key) === '1') return } catch { return }
+    const c = await fetchContact().catch(() => null)
+    if (!c || c.kana !== null) return
+    try { localStorage.setItem(key, '1') } catch { /* 保存できん端末は次も聞く */ }
+    let a = await ask('最後にひとつだけ。お店でお名前を読み間違えないように、フリガナを教えてもらえますか？\n（例：タナカ タロウ）', [{ label: 'あとで' }])
+    for (let i = 0; i < 2; i++) {
+      if (a === 'あとで') { await say('かしこまりました。'); return }
+      const k = toKatakana(a)
+      if (isKana(k)) {
+        await say(await saveKana(k) ? `${k}さまですね。ありがとうございます！` : 'すみません、うまく保存できませんでした。ご来店のときに、スタッフにお伝えください。')
+        return
+      }
+      if (i === 0) a = await ask('すみません、カタカナかひらがなで教えてもらえますか？', [{ label: 'あとで' }])
+    }
+    await say('かしこまりました。ご来店のときに、スタッフにお伝えください。')
   }
   /** はい／いいえ を聞く。「ええわ」だけ のような どっちとも取れる答えは「『ええわ』って、〇〇って意味？それとも〇〇？」と聞き直す。
    *  関係ない言葉はそのまま返す（呼んだ側が変更として読む） */
@@ -1316,6 +1338,7 @@ export function GinChat({ mode, onClose }: { mode: GinMode; onClose: () => void 
       // 予約が取れたことを先に、券が付かなかった案内はそのあと（11/10 確認）
       if (ticketFailed) await say(`ただ、選んだ券（${picked!.title}）を、通信の具合でご予約に付けられませんでした。ご来店のときに、お会計で券をお見せください。`)
       if (gachaFailed) await say('ガチャ券も、このご予約に付けられませんでした。券はお手元に残っていますので、ご来店のときにお会計でお見せください。'.replace(/^ガチャ券も/, ticketFailed ? 'ガチャ券も' : 'ただ、ガチャ券は'))
+      if (done.some(x => x.r)) await askKanaOnce()
       setBookingComplete(okAll)
       break
     }

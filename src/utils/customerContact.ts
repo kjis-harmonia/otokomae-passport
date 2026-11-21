@@ -4,8 +4,10 @@ import { callCustomerRpc, hasCustomerSession } from './customerSession'
 import { isMissingRpc, RpcError } from './staffSession'
 import { normalizePhone } from './phone'
 import { getUserId } from './userId'
+import { isKana, toKatakana } from './kana'
 
-export interface CustomerContact { name: string; phone: string | null; registered: boolean }
+/** kana：フリガナ（11/21）。undefined＝サーバーがまだ返さない（聞かない）・null＝まだ入れていない */
+export interface CustomerContact { name: string; phone: string | null; registered: boolean; kana?: string | null }
 
 const PENDING_KEY = 'ginjiro_pending_contact'
 // 入力の誤りは送り直しても通らないので、端末に残さない
@@ -49,6 +51,16 @@ export async function saveContact(name: string, phoneRaw: string): Promise<'save
     if (!isInputError(err)) keep()
     throw err
   }
+}
+
+/** フリガナを保存する（会員登録・銀ちゃん）。仕組みがまだ無い環境では何もしない。失敗は呼んだ側で黙って流す */
+export async function saveKana(kana: string): Promise<boolean> {
+  const k = toKatakana(kana)
+  if (!isKana(k) || !hasCustomerSession()) return false
+  try {
+    const r = await callCustomerRpc<{ kana?: string }>('customer_set_kana', { p_kana: k })
+    return r?.kana === k
+  } catch { return false }
 }
 
 function clearPending(): void {

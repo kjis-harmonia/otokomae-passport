@@ -9,7 +9,8 @@ import { setStoredValue, ONBOARDING_DONE_KEY, ONBOARDING_NAME_KEY } from '../uti
 import { getUserId, getMemberIssuedAt } from '../utils/userId'
 import { completeCustomerOnboarding } from '../utils/ticketStore'
 import { RpcError } from '../utils/staffSession'
-import { normalizePhone, saveContact } from '../utils/customerContact'
+import { normalizePhone, saveContact, saveKana } from '../utils/customerContact'
+import { isKana, toKatakana } from '../utils/kana'
 
 type Step = 0 | 1 | 2
 
@@ -175,8 +176,9 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
   const [step, setStep] = useState<Step>(0)
   const [hasVisitedBefore, setHasVisitedBefore] = useState<boolean | null>(null)
   const [name, setName] = useState('')
+  const [kana, setKana] = useState('')
   const [phone, setPhone] = useState('')
-  const [focusedField, setFocusedField] = useState<'name' | 'phone' | null>(null)
+  const [focusedField, setFocusedField] = useState<'name' | 'kana' | 'phone' | null>(null)
   const [authBusy,setAuthBusy]=useState(false)
   const [submitting, setSubmitting] = useState(false)
   const submitInFlight = useRef(false)
@@ -206,6 +208,11 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       setSubmitError('お名前を入力してください。')
       return
     }
+    // フリガナ（11/21）：お店でお名前を読み間違えないように。ひらがなでもカタカナにする
+    if (!isKana(toKatakana(kana))) {
+      setSubmitError('フリガナを、カタカナかひらがなで入力してください。')
+      return
+    }
     if (!normalizePhone(phone)) {
       setSubmitError('電話番号を確認してください（例：090-1234-5678）。')
       return
@@ -221,6 +228,8 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
       const result = await completeCustomerOnboarding(userId, trimmedName, hasVisitedBefore)
       // 連絡先（本名・電話番号）。会員登録は済んでいるので、ここで失敗しても入場は止めない（次の起動で送り直す）
       await saveContact(trimmedName, phone).catch(err => console.warn('[Onboarding] contact not saved:', err))
+      // 入らなくても入場は止めない（銀ちゃんでの予約のあとにもう一度聞く）
+      await saveKana(kana)
       const nextStatus: MemberStatus = { ...memberStatus, memberName: trimmedName }
       setStoredValue(ONBOARDING_DONE_KEY, true)
       setStoredValue(ONBOARDING_NAME_KEY, trimmedName)
@@ -243,6 +252,7 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
     <form onSubmit={event=>{event.preventDefault();void handleFinish()}}>
       <h2>はじめての登録</h2>
       <label htmlFor="access-name">お名前</label><input id="access-name" autoComplete="name" value={name} maxLength={20} required disabled={submitting||authBusy} onChange={event=>setName(event.target.value)}/>
+      <label htmlFor="access-kana">フリガナ</label><input id="access-kana" autoComplete="off" value={kana} maxLength={40} required placeholder="タナカ タロウ" disabled={submitting||authBusy} onChange={event=>setKana(event.target.value)}/>
       <label htmlFor="access-phone">電話番号</label><input id="access-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} maxLength={16} required disabled={submitting||authBusy} onChange={event=>setPhone(event.target.value)}/>
       <fieldset disabled={submitting||authBusy}><legend>銀二郎へのご来店は初めてですか？</legend><div className="access-radio"><label><input type="radio" name="first-visit" required checked={hasVisitedBefore===false} onChange={()=>setHasVisitedBefore(false)}/>初めて</label><label><input type="radio" name="first-visit" required checked={hasVisitedBefore===true} onChange={()=>setHasVisitedBefore(true)}/>来店したことがある</label></div></fieldset>
       {submitError&&<p role="alert" className="access-error">{submitError}</p>}
@@ -635,6 +645,18 @@ export function OnboardingScreen({ memberStatus, onDone }: Props) {
                   ariaLabel="お名前（本名）"
                   autoComplete="name"
                   maxLength={20}
+                  disabled={submitting||authBusy}
+                />
+                <GoldField
+                  focused={focusedField === 'kana'}
+                  onFocus={() => setFocusedField('kana')}
+                  onBlur={() => setFocusedField(null)}
+                  value={kana}
+                  onChange={setKana}
+                  placeholder="例：タナカ　タロウ"
+                  ariaLabel="フリガナ"
+                  autoComplete="off"
+                  maxLength={40}
                   disabled={submitting||authBusy}
                 />
                 <GoldField
