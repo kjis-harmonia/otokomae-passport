@@ -9,6 +9,7 @@ import { SbModal } from './SbModal'
 import { SbMenuPicker } from './SbMenuPicker'
 import { recordMenuUsage } from './sbMenuUsage'
 import { boardWarnBefore } from './sbBoardTask'
+import { companionOf, kanaOf, toKatakana } from './sbParty'
 
 /** 新規予約の初期値。draft は「話して予約登録」で読み取った内容（スタッフがフォームで確かめてから送る） */
 /** 名前を言わずに入れた予約（サロンボードに電話予約が入ったときの枠埋め） */
@@ -24,6 +25,7 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
   const r = reservation
   const d = r ? undefined : preset.draft
   const [name, setName] = useState(r?.customer_name ?? d?.customerName ?? '')
+  const [kana, setKana] = useState(r ? kanaOf(r) ?? '' : '')
   const [phone, setPhone] = useState(r?.customer_phone ?? d?.phone ?? '')
   const [source, setSource] = useState<SbInput['source']>(r?.source === 'hotpepper' ? 'hotpepper' : r?.source === 'phone' ? 'phone' : r ? 'staff' : d?.source ?? 'staff')
   const [externalRef, setExternalRef] = useState(r?.external_ref ?? d?.externalRef ?? '')
@@ -70,7 +72,8 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
       const input: SbInput = { starts_at: jstIsoFromMinutes(date, h * 60 + m), menu_codes: [...codes], staff_id: staffId,
         // 予約の正本はサロンボード。SB は枠埋めの補助なので、新しい予約は名前なしでよい（「電話予約」で入れる）
         customer_name: name.trim() || (r ? '' : PHONE_PLACEHOLDER), customer_phone: phone.trim() || undefined, source: !r && !name.trim() && source === 'staff' ? 'phone' : source,
-        external_ref: source === 'hotpepper' ? externalRef.trim() : undefined, note: note.trim() || undefined, client_id: client?.id }
+        external_ref: source === 'hotpepper' ? externalRef.trim() : undefined, note: note.trim() || undefined, client_id: client?.id,
+        customer_kana: toKatakana(kana) && name.trim() ? toKatakana(kana) : undefined }
       const value = await sbApi.preview(input, r?.id)
       // Freeze the reviewed request, not the mutable controls.
       setPreview({ input: JSON.parse(JSON.stringify(input)), value, actor })
@@ -91,7 +94,7 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
       <button className="sb-primary" data-guide="sb-register" disabled={busy} onClick={submit}><Check size={18} />{sending ? '送信中…' : r ? '変更を保存' : '予約を登録'}</button>
     </> : <button className="sb-primary sb-grow" data-guide="sb-review" disabled={busy || !options.menus.length} onClick={() => void review()}>{checking ? '内容を確認中…' : '内容を確認'}</button>}</div>}>
     {preview ? <><dl className="sb-facts">
-      <dt>お客様</dt><dd>{preview.input.customer_name}{preview.input.customer_phone && <small>{preview.input.customer_phone}</small>}</dd>
+      <dt>お客様</dt><dd>{preview.input.customer_kana && <small>{preview.input.customer_kana}</small>}{preview.input.customer_name}{preview.input.customer_phone && <small>{preview.input.customer_phone}</small>}</dd>
       <dt>日時</dt><dd>{jstDateLabel(date)} {jstTime(preview.input.starts_at)}〜</dd>
       <dt>担当</dt><dd>{options.staff.find(s => s.id === preview.value.staff_id)?.name}{preview.input.staff_id === null ? '（指名なし）' : '（指名）'}</dd>
       <dt>メニュー</dt><dd>{preview.value.items.map(i => <span className="sb-line" key={i.menu_code}>{i.name}<small>{i.duration_min}分 / {yen(i.price)}</small></span>)}</dd>
@@ -102,6 +105,8 @@ export function SbBookingEditor({ options, preset, reservation, actor, busy: sen
       <fieldset disabled={busy} className="sb-fieldset">
         {d && <p className="sb-understood">{d.understood.length ? `読み取った内容：${d.understood.join("・")}` : "読み取れた内容がありません"}。足りないところを入れて確かめてください。</p>}
         <label className="sb-field">お客様名<input value={name} onChange={e => { setName(e.target.value); if (!r) setClient(null) }} required={!!r} maxLength={60} autoComplete="off" placeholder={r ? 'お名前' : '空なら「電話予約」で入れます'} /></label>
+        {/* フリガナ：漢字の名前が読めないスタッフさん向けに SB に出す（11/21）。ひらがなで入れてもカタカナにする。お連れ様の枠は台帳がご本人のものなので出さない */}
+        {!(r && companionOf(r)) && <label className="sb-field">フリガナ（任意）<input value={kana} onChange={e => setKana(e.target.value)} maxLength={60} autoComplete="off" placeholder="タナカ タロウ" /></label>}
         <label className="sb-field">電話番号（任意）<input type="tel" value={phone} onChange={e => { setPhone(e.target.value); if (!r) setClient(null) }} maxLength={20} autoComplete="off" /></label>
         {!r && !client && query && candidates.length > 0 && <div className="sb-candidates">{candidates.map(c => <button type="button" className="sb-candidate" key={c.id} onClick={() => { setClient(c); setName(c.name); if (c.phone) setPhone(c.phone) }}><span>{c.name}<small>{c.phone || (c.phone_last4 ? `電話 下4桁 ${c.phone_last4}` : '')}{c.last_visit ? ` / 前回 ${c.last_visit}` : ''}</small></span><span>選択</span></button>)}</div>}
         {client && <div className="sb-client">既存顧客：{client.name}{!r && <button type="button" onClick={() => setClient(null)}>解除</button>}</div>}

@@ -17,7 +17,7 @@ import { useReservationDrag, type SbMoveTarget } from './sbDrag'
 import { SbHotpepper } from './SbHotpepper'
 import { SbTicketPlan } from './SbTicketPlan'
 import { BLACK_MONDAY_LABEL, blackMondayOffText, blackMondayAmount } from '../utils/blackMonday'
-import { companionOf, partyOf, personName } from './sbParty'
+import { companionOf, partyOf, personName, kanaOf } from './sbParty'
 import { hpbApi, type HpbList } from './sbHotpepperApi'
 import { sbPushOff, sbPushOn, sbPushRefresh, sbPushState, type SbPushState } from './sbPush'
 import { announceVoice, checkSound, onSoundBlocked, playChime, soundBlocked, unlockChime } from './sbChime'
@@ -359,12 +359,12 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
         const dragging = drag.view?.id === r.id ? drag.view : null
         // 同時枠の外（4本目〜）：HOT PEPPER が枠を超えて受けた予約。赤く出して段取りを組めるように（11/1 慶一郎さん）
         const over = r.booking_lane >= staff.capacity
-        const companion = companionOf(r), party = parties.get(r.id)
+        const companion = companionOf(r), party = parties.get(r.id), kana = kanaOf(r)
         return <div key={r.id}><button className={`sb-reservation sb-reservation-${r.status}${r.source === 'app' ? ' sb-src-ai' : ''}${dragging ? ' sb-dragging' : ''}${over ? ' sb-over' : ''}`} aria-label={`${over ? '枠オーバー ' : ''}${jstTime(r.starts_at)} ${companion ? `${companion}様（${r.customer_name}様のお連れ様）` : r.customer_name} ${r.items.map(i => i.name).join('・')} ${r.staff_name} ${STATUS_LABEL[r.status]}`}
           onPointerDown={e => drag.start(e, r)} onClick={() => { if (drag.clicked()) onOpen(r.id) }} onContextMenu={e => { if (r.status === 'confirmed') e.preventDefault() }}
           style={{ left: x(start) + 2, width: Math.max(12, x(end) - x(start) - 4), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10, ...(dragging ? { transform: `translate(${dragging.dx}px, ${dragging.dy}px)` } : {}) }}>
           {dragging && <em className="sb-drag-time">{`${Math.floor(dragging.minutes / 60)}:${String(dragging.minutes % 60).padStart(2, '0')}`}</em>}
-          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{over && <b className="sb-over-mark">枠オーバー</b>}{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}<BlackMondayMark r={r} /></strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="サロンボード作業" />}</small>
+          <strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{kana && <small className="sb-kana">{kana}</small>}{over && <b className="sb-over-mark">枠オーバー</b>}{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}<BlackMondayMark r={r} /></strong><span>{r.items.map(i => i.name).join('・')}{companion && <em className="sb-companion-of">／{r.customer_name}様のお連れ様</em>}</span><small>{jstTime(r.starts_at)}–{jstTime(r.ends_at)}{!r.nominated ? ' / 指名なし' : ''}{r.transfer_status === 'pending' && <i className="sb-dot sb-gold-dot" aria-label="サロンボード作業" />}</small>
         </button>{until > end && <div className="sb-buffer" aria-label="片付け時間" style={{ left: x(end), width: x(until) - x(end), top: r.booking_lane * LANE_H + 5, height: LANE_H - 10 }} />}</div>
       })}
       {nowMin !== null && nowMin >= range.start && nowMin < range.end && <div className="sb-now" style={{ left: x(nowMin) }} aria-hidden="true" />}
@@ -373,7 +373,7 @@ function StaffRow({ drag, staff, lanes, reservations, ledger, date, range, nowMi
 
 function ReservationList({ reservations, onPick }: { reservations: SbReservation[]; onPick: (id: string) => void }) {
   const parties = partyOf(reservations)
-  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => { const companion = companionOf(r), party = parties.get(r.id); return <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}<BlackMondayMark r={r} /></strong><small>{r.items.map(i => i.name).join('・')}{companion ? `／${r.customer_name}様のお連れ様` : ''}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{(() => { const t = boardTask(r); return t && <em className="sb-board-tag">{BOARD_TASK_TAG[t]}</em> })()}<ChevronRight size={18} /></button> })}</div> : <p className="sb-muted">予約はありません。</p>
+  return reservations.length ? <div className="sb-reservation-list">{reservations.map(r => { const companion = companionOf(r), party = parties.get(r.id), kana = kanaOf(r); return <button key={r.id} onClick={() => onPick(r.id)}><time>{jstTime(r.starts_at)}<small>{jstTime(r.ends_at)}</small></time><span><strong className="sb-res-name"><span>{companion ?? r.customer_name}</span>{kana && <small className="sb-kana">{kana}</small>}{party ? <PartyMark p={party} /> : companion && <CompanionMark />}{r.ginpay_paid && <GinpayMark />}<BlackMondayMark r={r} /></strong><small>{r.items.map(i => i.name).join('・')}{companion ? `／${r.customer_name}様のお連れ様` : ''}</small><small>{r.staff_name}{!r.nominated ? ' / 指名なし' : ''} / {STATUS_LABEL[r.status]}</small></span>{(() => { const t = boardTask(r); return t && <em className="sb-board-tag">{BOARD_TASK_TAG[t]}</em> })()}<ChevronRight size={18} /></button> })}</div> : <p className="sb-muted">予約はありません。</p>
 }
 
 function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onEdit, onSend }: {
@@ -399,7 +399,7 @@ function ReservationDetails({ reservation: r, actor, busy, blocked, onClose, onE
   const labels: Record<string, string> = { created: '登録', edited: '内容変更', transfer_updated: 'サロンボード作業', rescheduled: '日時変更', staff_changed: '担当変更', checked_in: '来店', completed: '完了', cancelled: 'キャンセル', no_show: '不来店' }
   return <SbModal title={`${jstTime(r.starts_at)}–${jstTime(r.ends_at)} ${STATUS_LABEL[r.status]}`} busy={busy} onClose={onClose}
     footer={noShow ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setNoShow(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'status', status: 'no_show' })}>不来店にする</button></div> : cancel ? <div className="sb-actions"><button className="sb-secondary" disabled={busy} onClick={() => setCancel(false)}>戻る</button><button className="sb-danger" disabled={blocked} onClick={() => void onSend({ ...base, kind: 'cancel', reason })}>予約をキャンセルする</button></div> : ['confirmed', 'checked_in'].includes(r.status) ? <button className="sb-primary sb-grow" disabled={blocked} onClick={onEdit}>内容を変更</button> : undefined}>
-    <h3 className="sb-customer-name">{personName(r)}{companionOf(r) && <small className="sb-companion-of">（{r.customer_name}様のお連れ様）</small>}</h3>{r.customer_phone && <a className="sb-phone" href={`tel:${r.customer_phone}`}>{r.customer_phone}</a>}
+    <h3 className="sb-customer-name">{kanaOf(r) && <small className="sb-kana-ruby">{kanaOf(r)}</small>}{personName(r)}{companionOf(r) && <small className="sb-companion-of">（{r.customer_name}様のお連れ様）</small>}</h3>{r.customer_phone && <a className="sb-phone" href={`tel:${r.customer_phone}`}>{r.customer_phone}</a>}
     {r.source === 'app' && <AiPause reservationId={r.id} actor={actor} blocked={blocked} />}
     <dl className="sb-facts"><dt>日付</dt><dd>{jstDateLabel(getJapanDateString(new Date(r.starts_at)))}</dd><dt>担当</dt><dd>{r.staff_name}{r.nominated ? '（指名）' : '（指名なし）'}</dd>
       <dt>メニュー</dt><dd>{r.items.map(i => <span className="sb-line" key={i.menu_code}>{i.name}<small>{i.duration_min}分 / {yen(i.price)}</small></span>)}</dd>

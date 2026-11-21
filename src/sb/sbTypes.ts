@@ -2,7 +2,9 @@ import type { BookingOptions, Ledger, NewReservationInput, Reservation } from '.
 
 export type TransferStatus = 'pending' | 'done' | 'not_required'
 /** ginpay_paid：銀Pay で前もって支払い済み（仮支払い中・会計で確定済み） */
-export type SbReservation = Reservation & { booking_lane: number; transfer_status: TransferStatus; updated_at: string; ginpay_paid?: boolean }
+export type SbReservation = Reservation & { booking_lane: number; transfer_status: TransferStatus; updated_at: string; ginpay_paid?: boolean
+  /** お客様のフリガナ（顧客台帳・HOT PEPPER のメール）。分からなければ null（11/21） */
+  customer_kana?: string | null }
 export type SbOptions = Omit<BookingOptions, 'staff' | 'menus'> & {
   actors: { id: string; name: string }[]
   staff: (BookingOptions['staff'][number] & { capacity: number })[]
@@ -12,7 +14,8 @@ export type SbLedger = Omit<Ledger, 'reservations' | 'staff'> & {
   reservations: SbReservation[]
   staff: (Ledger['staff'][number] & { capacity: number })[]
 }
-export type SbInput = NewReservationInput
+/** customer_kana：フォームで入れたフリガナ。予約の DB には送らず、登録のあとで顧客台帳に入れる（11/21） */
+export type SbInput = NewReservationInput & { customer_kana?: string }
 export interface SbPlanItem { menu_code: string; name: string; duration_min: number; price: number | null }
 export interface SbPreview {
   staff_id: string

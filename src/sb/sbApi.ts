@@ -1,5 +1,5 @@
 import { callStaffRpc, expectRpcResult, RpcError } from './sbRpc'
-import { companionOf, personName } from './sbParty'
+import { companionOf, personName, toKatakana } from './sbParty'
 import { BOOKING_ERROR_MESSAGE, bookingErrorMessage, jstDateLabel, jstTime, yen } from '../utils/bookingApi'
 import type { SbCommand, SbInput, SbLedger, SbOptions, SbPending, SbPreview, SbReservation } from './sbTypes'
 
@@ -32,11 +32,15 @@ function matchesCommand(v: Record<string, unknown>, c: SbCommand): boolean {
   return v.transfer_status === c.transfer_status
 }
 
+/** フリガナは予約の DB に送らない（顧客台帳に入れる）。プレビューと登録で同じ形にする */
+function plain(input: SbInput): SbInput { const { customer_kana: _kana, ...rest } = input; void _kana; return rest }
+function plainCommand(c: SbCommand): SbCommand { return c.kind === 'create' || c.kind === 'edit' ? { ...c, input: plain(c.input) } : c }
+
 export const sbApi = {
   options: () => callStaffRpc<SbOptions>('staff_sb_options'),
   ledger: (date: string) => callStaffRpc<SbLedger>('staff_sb_ledger', { p_date: date }),
   preview: async (input: SbInput, id?: string): Promise<SbPreview> => {
-    const value = await callStaffRpc<SbPreview>('staff_sb_preview', { p_input: input, p_reservation_id: id ?? null })
+    const value = await callStaffRpc<SbPreview>('staff_sb_preview', { p_input: plain(input), p_reservation_id: id ?? null })
     return expectRpcResult(value, 'staff_sb_preview', v => typeof v.plan_hash === 'string' && /^[a-f0-9]{64}$/.test(v.plan_hash)
       && typeof v.staff_id === 'string' && UUID.test(v.staff_id) && Number.isInteger(v.duration_min)
       && Number(v.duration_min) > 0 && Array.isArray(v.items)
@@ -46,10 +50,19 @@ export const sbApi = {
     'staff_sb_slots', { p_date: date, p_menu_codes: codes, p_staff_id: staff, p_reservation_id: id ?? null }),
   mutate: async (pending: SbPending): Promise<SbOutcome> => {
     try {
-      const value = await callStaffRpc<SbReservation>('staff_sb_mutate', {
-        p_request_id: pending.id, p_command: pending.command, p_staff_name: pending.actor,
+      let value = await callStaffRpc<SbReservation>('staff_sb_mutate', {
+        p_request_id: pending.id, p_command: plainCommand(pending.command), p_staff_name: pending.actor,
       })
       expectRpcResult(value, 'staff_sb_mutate', v => matchesCommand(v, pending.command))
+      // フォームで入れたフリガナは、予約のお客様の顧客台帳へ（11/21）。入らなくても予約はできているので、失敗は黙って次に回す
+      const c = pending.command
+      const kana = c.kind === 'create' || c.kind === 'edit' ? toKatakana(c.input.customer_kana ?? '') : ''
+      if (kana && value.client_id && kana !== value.customer_kana) {
+        try {
+          await callStaffRpc('staff_update_client', { p_client_id: value.client_id, p: { kana }, p_staff_name: pending.actor })
+          value = { ...value, customer_kana: kana }
+        } catch { /* 顧客台帳でも入れられる */ }
+      }
       return { ok: true, reservation: value }
     } catch (err) {
       if (err instanceof RpcError && err.source === 'rpc_result') {

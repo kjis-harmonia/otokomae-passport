@@ -9,6 +9,19 @@ export function companionOf(r: { note?: string | null }): string | null {
   return m ? m[1].trim() || null : null
 }
 
+/** ひらがな・半角カナを全角カタカナに */
+export const toKatakana = (v: string) => v.normalize('NFKC').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).replace(/s+/g, ' ').trim()
+
+/**
+ * SB に出すフリガナ（11/21 慶一郎さん：漢字の名前が読めないとスタッフさんから）。
+ * お連れ様の枠は出さない（台帳のフリガナは予約したご本人のもの）。名前がもともとカナなら同じものは出さない
+ */
+export function kanaOf(r: { note?: string | null; customer_name: string; customer_kana?: string | null }): string | null {
+  if (companionOf(r)) return null
+  const k = toKatakana(r.customer_kana ?? '')
+  return k && k.replace(/ /g, '') !== toKatakana(r.customer_name).replace(/ /g, '') ? k : null
+}
+
 /** その枠で来られる方のお名前（お連れ様の枠はお連れ様のお名前） */
 export const personName = (r: { note?: string | null; customer_name: string }) => companionOf(r) ?? r.customer_name
 

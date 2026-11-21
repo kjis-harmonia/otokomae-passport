@@ -631,3 +631,7 @@
 .sb-text-link { align-self: flex-start; padding: 6px 0; border: 0; background: none; color: var(--sb-muted); font-size: 13px; text-decoration: underline; cursor: pointer; }
 .sb-board-note { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--sb-gold); background: var(--sb-gold-tint); font-size: 14px; line-height: 1.6; }
 .sb-board-tag { flex: none; font-style: normal; font-size: 12px; font-weight: 600; color: var(--sb-gold); white-space: nowrap; }
+/* お客様のフリガナ（11/21）：名前の横に小さく。狭い枠では名前と分け合って省略する */
+.sb-res-name > .sb-kana { display: block; flex: 0 1 auto; min-width: 3em; margin-left: 6px; font-size: 11px; font-weight: 500; color: #4d5750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-res-name > span { flex: 0 1 auto; min-width: 2em; }
+.sb-customer-name .sb-kana-ruby { display: block; font-size: 14px; font-weight: 500; color: #4d5750; margin: 0 0 2px; letter-spacing: 0.04em; }
